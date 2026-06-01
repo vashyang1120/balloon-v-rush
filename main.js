@@ -466,22 +466,34 @@ function generateOrangeNemeses() {
 
 // ── Tutorial Hints (MVP 0.7) ──────────────────
 // 依玩家 x 位置顯示一次性教學提示
+// ── Tutorial Hints 觸發位置說明 ──────────────
+// triggerX：玩家 x 到達此值時觸發（世界座標）
+// duration：顯示幀數（60fps 下，180 = 3 秒，240 = 4 秒）
+//
+// 小怪首次出現 x ≈ 1000，提示在 x=680 觸發（提前 ~320px）
+// 尖刺首次出現 x ≈ 2050，提示在 x=1700 觸發（提前 ~350px）
+// 橘子怪出現   x ≈ 3820，提示在 x=3350 觸發（提前 ~470px）
+//
+// TODO（未來正式版）：
+//   - 加入「跳過教學關」按鈕，可在第 1 關開始時選擇略過提示
+//   - 記錄 localStorage 中 tutorialComplete 旗標，重複遊玩後不再顯示提示
+//   - 支援多語言提示文字
 const HINTS = [
-  { triggerX:   80, msg: '← → 移動　空白鍵 跳躍',       shown: false, duration: 240 },
-  { triggerX:  850, msg: 'Z 鍵 使用氣球劍攻擊小怪！',    shown: false, duration: 220 },
-  { triggerX: 1900, msg: '⚠️ 尖刺不能攻擊，請跳過！',    shown: false, duration: 220 },
-  { triggerX: 3650, msg: '🍊 橘子怪會噴果皮油！等空檔通過', shown: false, duration: 260 },
+  { triggerX:   30, msg: '← → 移動　空白鍵 跳躍',             shown: false, duration: 270 },
+  { triggerX:  680, msg: '⚔️ Z 鍵 使用氣球劍攻擊小怪！',      shown: false, duration: 240 },
+  { triggerX: 1700, msg: '⚠️ 尖刺不能攻擊，請跳過！',          shown: false, duration: 240 },
+  { triggerX: 3350, msg: '🍊 橘子怪會噴果皮油！等空檔再通過', shown: false, duration: 270 },
 ];
-// 手機版文字簡化（由 drawHintBox 判斷）
+// 手機版文字簡化（較短，避免遮擋手機較小的畫面）
 const HINTS_MOBILE = [
   '← → 移動　↑ 跳躍',
-  '🎈 攻擊按鈕　打小怪',
+  '⚔️ 攻擊按鈕　打小怪',
   '⚠️ 尖刺請跳過',
   '🍊 等空檔通過橘子怪',
 ];
 
-let activeHint   = null; // { msg, framesLeft }
-let hintQueue    = [];   // 待顯示的提示
+let activeHint = null; // { msg, duration, framesLeft }
+let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
 
 function checkHints() {
   // 只在 playing 時觸發
@@ -495,7 +507,7 @@ function checkHints() {
 }
 
 function showHint(msg, duration = 200) {
-  activeHint = { msg, framesLeft: duration };
+  activeHint = { msg, duration, framesLeft: duration };
 }
 
 function tickHint() {
@@ -507,23 +519,32 @@ function tickHint() {
 function drawHintBox() {
   if (!activeHint) return;
   const msg      = activeHint.msg;
-  const progress = activeHint.framesLeft / 200; // fade out
-  const alpha    = Math.min(1, progress * 4) * 0.92; // 快速淡入，緩慢淡出
+  const dur      = activeHint.duration || 200;
+  const progress = activeHint.framesLeft / dur; // 0=消失 → 1=剛出現
+  // 前 15% 快速淡入，後段緩慢淡出
+  const alpha    = Math.min(1, (1 - progress) < 0.15
+    ? (1 - progress) / 0.15
+    : progress / 0.85
+  ) * 0.93;
 
-  const bw  = Math.min(CANVAS_W - 40, 520);
-  const bh  = 40;
-  const bx  = (CANVAS_W - bw) / 2;
-  const by  = CANVAS_H - 90; // HUD 之上，手機操作按鈕之上
+  const bw = Math.min(CANVAS_W - 40, 540);
+  const bh = 42;
+  const bx = (CANVAS_W - bw) / 2;
+  // 畫面底部偏上，避免手機橫向時被操作按鈕遮住
+  const by = CANVAS_H - 100;
 
-  ctx.fillStyle = `rgba(10,20,50,${alpha * 0.85})`;
+  ctx.fillStyle = `rgba(5,15,45,${alpha * 0.88})`;
   ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 10);
+  ctx.roundRect(bx, by, bw, bh, 11);
   ctx.fill();
+  ctx.strokeStyle = `rgba(120,200,255,${alpha * 0.5})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  ctx.fillStyle = `rgba(200,240,255,${alpha})`;
+  ctx.fillStyle = `rgba(210,245,255,${alpha})`;
   ctx.font      = 'bold 14px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(msg, CANVAS_W / 2, by + bh * 0.65);
+  ctx.fillText(msg, CANVAS_W / 2, by + bh * 0.66);
 }
 
 function resetHints() {
