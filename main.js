@@ -122,8 +122,50 @@ function inp(action) {
 const INVENTORY_DEFAULTS = {
   coins:      0,
   balloon260: 0,
-  // 未來可在此擴充：balloon160, roundBalloon5, roundBalloon12, recipeCards, craftedItems ...
+  // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12, recipeCards ...
+  craftedItems: {
+    basicSword: 0,
+    // 未來可在此擴充更多道具
+  },
 };
+
+// ── 氣球秘笈配方定義 (MVP 0.3) ────────────────
+// 新增道具只需在此加一筆，UI 會自動讀取
+const RECIPES = [
+  {
+    id:       'basicSword',
+    name:     '基礎氣球劍',
+    effect:   '可以攻擊一般小怪',
+    durability: 10,
+    cost: { balloon260: 2 },   // 材料需求
+    emoji:    '⚔️',
+  },
+  // 未來可繼續擴充
+];
+
+// 製作道具
+function craftItem(recipeId) {
+  const recipe = RECIPES.find(r => r.id === recipeId);
+  if (!recipe) return false;
+
+  // 檢查材料是否足夠
+  for (const [mat, qty] of Object.entries(recipe.cost)) {
+    if ((playerInventory[mat] || 0) < qty) return false;
+  }
+
+  // 扣除材料
+  for (const [mat, qty] of Object.entries(recipe.cost)) {
+    playerInventory[mat] -= qty;
+  }
+
+  // 新增道具
+  if (!playerInventory.craftedItems) playerInventory.craftedItems = {};
+  playerInventory.craftedItems[recipeId] =
+    (playerInventory.craftedItems[recipeId] || 0) + 1;
+
+  saveInventory();
+  return true;
+}
 
 const SAVE_KEY = 'balloonV_inventory';
 
@@ -131,11 +173,19 @@ function loadInventory() {
   try {
     const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
-      // 合併：確保舊存檔缺少新欄位時也能正常運作
-      return Object.assign({}, INVENTORY_DEFAULTS, JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      const merged = Object.assign({}, INVENTORY_DEFAULTS, parsed);
+      // craftedItems 需深度合併，避免舊存檔缺少新道具欄位
+      merged.craftedItems = Object.assign(
+        {}, INVENTORY_DEFAULTS.craftedItems, parsed.craftedItems || {}
+      );
+      return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
-  return Object.assign({}, INVENTORY_DEFAULTS);
+  // 深複製 defaults（避免共用同一個 craftedItems 物件參考）
+  const d = Object.assign({}, INVENTORY_DEFAULTS);
+  d.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  return d;
 }
 
 function saveInventory() {
@@ -144,6 +194,7 @@ function saveInventory() {
 
 function resetInventory() {
   Object.assign(playerInventory, INVENTORY_DEFAULTS);
+  playerInventory.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
   saveInventory();
 }
 
@@ -868,10 +919,15 @@ function drawResultBox() {
   row += 8;
 
   // ── 目前背包 ──
-  drawSection('【目前背包】', [
+  const ci = playerInventory.craftedItems || {};
+  const bagRows = [
     ['🪙 金幣總計',          `${playerInventory.coins} 枚`,      '#FFD700'],
     ['🎈 260 長條氣球總計',  `${playerInventory.balloon260} 條`, '#FF69B4'],
-  ]);
+  ];
+  if ((ci.basicSword || 0) > 0) {
+    bagRows.push(['⚔️ 基礎氣球劍',  `${ci.basicSword} 把`, '#c8f0ff']);
+  }
+  drawSection('【目前背包】', bagRows);
 
   // Trivia
   const trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
@@ -971,6 +1027,17 @@ function hideResultButtons() {
     );
   }
 
+  // 氣球秘笈
+  const btnGuidebook = document.getElementById('btn-guidebook');
+  if (btnGuidebook) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnGuidebook.addEventListener(ev, e => {
+        e.preventDefault();
+        openGuidebook();
+      })
+    );
+  }
+
   // 清除存檔
   const btnReset = document.getElementById('btn-result-reset');
   if (btnReset) {
@@ -984,6 +1051,103 @@ function hideResultButtons() {
           if (el) el.dataset.resetDone = '1';
         }
       })
+    );
+  }
+})();
+
+
+// ── Guidebook (氣球秘笈) HTML overlay ────────
+function openGuidebook() {
+  renderGuidebook();
+  const el = document.getElementById('guidebook-overlay');
+  if (el) el.style.display = 'flex';
+}
+
+function closeGuidebook() {
+  const el = document.getElementById('guidebook-overlay');
+  if (el) el.style.display = 'none';
+}
+
+function renderGuidebook() {
+  const list = document.getElementById('guidebook-recipe-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  RECIPES.forEach(recipe => {
+    const ci    = playerInventory.craftedItems || {};
+    const owned = ci[recipe.id] || 0;
+
+    // 計算材料是否足夠
+    let canCraft = true;
+    const matLines = [];
+    for (const [mat, qty] of Object.entries(recipe.cost)) {
+      const have = playerInventory[mat] || 0;
+      const ok   = have >= qty;
+      if (!ok) canCraft = false;
+      // 材料名稱對照
+      const matName = mat === 'balloon260' ? '260 長條氣球' : mat;
+      matLines.push({ matName, have, qty, ok });
+    }
+
+    const card = document.createElement('div');
+    card.className = 'recipe-card';
+
+    // 材料 HTML
+    const matsHtml = matLines.map(m =>
+      `<span class="recipe-mat ${m.ok ? '' : 'recipe-mat--low'}">
+        ${m.ok ? '✅' : '⚠️'} ${m.matName}：${m.have} / ${m.qty}
+      </span>`
+    ).join('');
+
+    card.innerHTML = `
+      <div class="recipe-card__header">
+        <span class="recipe-card__emoji">${recipe.emoji}</span>
+        <span class="recipe-card__name">${recipe.name}</span>
+        ${owned > 0 ? `<span class="recipe-card__owned">已擁有 ${owned} 把</span>` : ''}
+      </div>
+      <div class="recipe-card__effect">效果：${recipe.effect}</div>
+      <div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>
+      <div class="recipe-card__mats">${matsHtml}</div>
+      <button class="recipe-card__btn ${canCraft ? '' : 'recipe-card__btn--disabled'}"
+              data-id="${recipe.id}" ${canCraft ? '' : 'disabled'}>
+        ${canCraft ? '製作' : '材料不足'}
+      </button>
+    `;
+
+    // 製作按鈕事件
+    const btn = card.querySelector('.recipe-card__btn');
+    if (btn && canCraft) {
+      ['click', 'touchstart'].forEach(ev =>
+        btn.addEventListener(ev, e => {
+          e.preventDefault();
+          const ok = craftItem(recipe.id);
+          if (ok) {
+            showCraftMessage(`成功製作 ${recipe.name}！`);
+            renderGuidebook(); // 重新渲染更新數量
+          }
+        })
+      );
+    }
+
+    list.appendChild(card);
+  });
+}
+
+function showCraftMessage(msg) {
+  const el = document.getElementById('craft-message');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2200);
+}
+
+// 關閉秘笈按鈕
+(function() {
+  const btn = document.getElementById('btn-close-guidebook');
+  if (btn) {
+    ['click', 'touchstart'].forEach(ev =>
+      btn.addEventListener(ev, e => { e.preventDefault(); closeGuidebook(); })
     );
   }
 })();

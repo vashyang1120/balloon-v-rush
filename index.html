@@ -10,16 +10,34 @@
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 結算畫面按鈕 overlay（JS 控制顯示/隱藏） -->
+    <!-- 結算畫面按鈕 overlay -->
     <div id="result-buttons">
       <button id="btn-play-again" class="result-btn result-btn--primary">
         再玩一次
         <span class="result-btn-sub">Play Again</span>
       </button>
+      <button id="btn-guidebook" class="result-btn result-btn--guide">
+        氣球秘笈
+        <span class="result-btn-sub">Balloon Guidebook</span>
+      </button>
       <button id="btn-result-reset" class="result-btn result-btn--danger">
         清除背包資料
         <span class="result-btn-sub">Reset Inventory</span>
       </button>
+    </div>
+
+    <!-- 氣球秘笈 overlay -->
+    <div id="guidebook-overlay">
+      <div id="guidebook-panel">
+        <div id="guidebook-header">
+          <span id="guidebook-title">📖 氣球秘笈</span>
+          <button id="btn-close-guidebook">✕</button>
+        </div>
+        <div id="craft-message"></div>
+        <div id="guidebook-recipe-list">
+          <!-- 由 renderGuidebook() 動態產生 -->
+        </div>
+      </div>
     </div>
 
     <!-- Mobile controls -->
