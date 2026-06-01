@@ -484,12 +484,14 @@ function triggerGameOver() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
+  showResultButtons();
 }
 
 function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'clear';
+  showResultButtons();
 }
 
 // ── Draw ──────────────────────────────────────
@@ -878,10 +880,7 @@ function drawResultBox() {
   ctx.textAlign = 'center';
   wrapText(ctx, '💡 ' + trivia, CANVAS_W / 2, by + bh - 36, bw - 48, 16);
 
-  // Restart hint
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('按任意鍵 / 點擊重新開始', CANVAS_W / 2, by + bh - 12);
+  // (按鈕由 HTML overlay 負責，不在 canvas 繪製)
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -902,6 +901,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart() {
+  hideResultButtons();
   // Reset player stats (本局)
   Object.assign(player, {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
@@ -934,22 +934,59 @@ function restart() {
   const btn = document.getElementById('btn-reset-save');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    if (confirm('確定要清除所有存檔資料嗎？')) {
+    if (confirm('確定要清除背包資料嗎？')) {
       resetInventory();
-      alert('存檔已清除！');
     }
   });
 })();
 
-window.addEventListener('keydown', () => {
-  if (gameState !== 'playing') restart();
-});
-canvas.addEventListener('click', () => {
-  if (gameState !== 'playing') restart();
-});
-canvas.addEventListener('touchstart', () => {
-  if (gameState !== 'playing') restart();
-});
+// 結算畫面操作改由 HTML 按鈕負責（見 showResultButtons / hideResultButtons）
+// 鍵盤與 canvas 點擊不再直接觸發 restart，避免誤觸
+
+
+// ── Result Screen Buttons (HTML overlay) ─────
+// Canvas 無法做可點擊按鈕，改用浮動 div 覆蓋在 canvas 上
+// 按鈕在 gameState 進入 gameover/clear 時顯示，restart 時隱藏
+
+function showResultButtons() {
+  const el = document.getElementById('result-buttons');
+  if (el) el.style.display = 'flex';
+}
+
+function hideResultButtons() {
+  const el = document.getElementById('result-buttons');
+  if (el) el.style.display = 'none';
+}
+
+// 綁定結算按鈕（DOM 載入後執行）
+(function bindResultButtons() {
+  // 再玩一次
+  const btnPlay = document.getElementById('btn-play-again');
+  if (btnPlay) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnPlay.addEventListener(ev, e => {
+        e.preventDefault();
+        if (gameState !== 'playing') restart();
+      })
+    );
+  }
+
+  // 清除存檔
+  const btnReset = document.getElementById('btn-result-reset');
+  if (btnReset) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnReset.addEventListener(ev, e => {
+        e.preventDefault();
+        if (confirm('確定要清除背包資料嗎？')) {
+          resetInventory();
+          // 立即更新畫面上的背包數字
+          const el = document.getElementById('result-buttons');
+          if (el) el.dataset.resetDone = '1';
+        }
+      })
+    );
+  }
+})();
 
 // ── Game loop ─────────────────────────────────
 function loop(timestamp) {

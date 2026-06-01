@@ -10,6 +10,18 @@
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
+    <!-- 結算畫面按鈕 overlay（JS 控制顯示/隱藏） -->
+    <div id="result-buttons">
+      <button id="btn-play-again" class="result-btn result-btn--primary">
+        再玩一次
+        <span class="result-btn-sub">Play Again</span>
+      </button>
+      <button id="btn-result-reset" class="result-btn result-btn--danger">
+        清除背包資料
+        <span class="result-btn-sub">Reset Inventory</span>
+      </button>
+    </div>
+
     <!-- Mobile controls -->
     <div id="mobile-controls">
       <div id="ctrl-left-group">
@@ -21,23 +33,6 @@
         <button class="ctrl-btn action-btn" id="btn-attack">🎈</button>
       </div>
     </div>
-  </div>
-
-  <!-- Reset Save 按鈕（右下角浮動，測試用） -->
-  <div id="reset-save-area" style="
-    position: fixed; bottom: 10px; right: 10px;
-    z-index: 999; pointer-events: all;">
-    <button id="btn-reset-save" style="
-      background: rgba(60,20,20,0.75);
-      color: rgba(255,100,100,0.8);
-      border: 1px solid rgba(255,80,80,0.4);
-      border-radius: 8px;
-      padding: 5px 12px;
-      font-size: 11px;
-      cursor: pointer;
-      backdrop-filter: blur(4px);">
-      🗑 清除存檔
-    </button>
   </div>
 
   <script src="main.js"></script>
