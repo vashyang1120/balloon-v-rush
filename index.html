@@ -20,7 +20,7 @@
     </div>
   </div>
 
-  <!-- 全螢幕按鈕（遊戲外，桌機 / 橫向手機顯示） -->
+  <!-- 全螢幕按鈕列（遊戲上方，非全螢幕時顯示） -->
   <div id="fullscreen-bar">
     <button id="btn-fullscreen" class="fs-btn">⛶ 全螢幕</button>
   </div>
@@ -74,7 +74,45 @@
 
   <script src="main.js"></script>
   <script>
-  // ── 全螢幕邏輯 ──────────────────────────────
+  // ─────────────────────────────────────────────
+  //  全螢幕 + 遊戲容器尺寸管理
+  // ─────────────────────────────────────────────
+
+  const ASPECT = 16 / 9;
+  const wrapper = document.getElementById('game-wrapper');
+  const fsBar   = document.getElementById('fullscreen-bar');
+  const btnFS   = document.getElementById('btn-fullscreen');
+  const btnFSPortrait = document.getElementById('btn-fullscreen-portrait');
+
+  // ── 計算並套用 16:9 最大尺寸 ──────────────────
+  function resizeGame() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let w, h;
+    if (vw / vh > ASPECT) {
+      // 視窗比 16:9 更寬 → 以高度為基準
+      h = vh;
+      w = h * ASPECT;
+    } else {
+      // 視窗比 16:9 更窄 → 以寬度為基準
+      w = vw;
+      h = w / ASPECT;
+    }
+
+    wrapper.style.width  = w + 'px';
+    wrapper.style.height = h + 'px';
+    // 清除 max-width / max-height（改用 JS 控制）
+    wrapper.style.maxWidth  = 'none';
+    wrapper.style.maxHeight = 'none';
+  }
+
+  // ── 判斷目前是否在全螢幕 ──────────────────────
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  // ── 進入全螢幕 ────────────────────────────────
   function enterFullscreen() {
     const el = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen
@@ -82,33 +120,75 @@
     if (req) req.call(el).catch(() => {});
     // 嘗試鎖定橫向（不支援時靜默失敗）
     try {
-      const lock = screen.orientation && screen.orientation.lock;
-      if (lock) screen.orientation.lock('landscape').catch(() => {});
-    } catch(e) {}
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (e) {}
   }
 
-  document.getElementById('btn-fullscreen').addEventListener('click', enterFullscreen);
-  document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFullscreen);
+  // ── 離開全螢幕 ────────────────────────────────
+  function exitFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen
+               || document.mozCancelFullScreen || document.msExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
+  }
 
-  // ── 直式遮罩：只在觸控裝置直式時顯示 ────────
+  // ── 全螢幕按鈕點擊：進入 / 離開切換 ──────────
+  function onFullscreenBtnClick() {
+    if (isFullscreen()) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }
+
+  btnFS.addEventListener('click', onFullscreenBtnClick);
+  btnFSPortrait.addEventListener('click', enterFullscreen);
+
+  // ── fullscreenchange：更新按鈕文字 + 重算尺寸 ─
+  function onFullscreenChange() {
+    if (isFullscreen()) {
+      btnFS.textContent = '✕ 離開全螢幕';
+    } else {
+      btnFS.textContent = '⛶ 全螢幕';
+    }
+    resizeGame();
+    checkOrientation();
+  }
+
+  document.addEventListener('fullscreenchange',       onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  document.addEventListener('mozfullscreenchange',    onFullscreenChange);
+  document.addEventListener('MSFullscreenChange',     onFullscreenChange);
+
+  // ── 直式遮罩：手機直拿時顯示 ──────────────────
+  const portraitMask = document.getElementById('portrait-mask');
+
   function checkOrientation() {
-    const isTouch = navigator.maxTouchPoints > 0;
+    const isTouch   = navigator.maxTouchPoints > 0;
     const isPortrait = window.innerHeight > window.innerWidth;
-    const mask = document.getElementById('portrait-mask');
-    const fsBar = document.getElementById('fullscreen-bar');
-    if (mask) mask.style.display = (isTouch && isPortrait) ? 'flex' : 'none';
-    if (fsBar) fsBar.style.display = (isTouch && isPortrait) ? 'none' : 'flex';
+    const inFS      = isFullscreen();
+
+    // 直式遮罩：觸控裝置 + 直式 + 非全螢幕時顯示
+    if (portraitMask) {
+      portraitMask.style.display = (isTouch && isPortrait && !inFS) ? 'flex' : 'none';
+    }
+    // 全螢幕列：非全螢幕時顯示（CSS :fullscreen 也會隱藏它，雙重保險）
+    if (fsBar) {
+      fsBar.style.display = inFS ? 'none' : 'flex';
+    }
   }
 
-  window.addEventListener('resize', checkOrientation);
-  window.addEventListener('orientationchange', checkOrientation);
-  checkOrientation();
-
-  // ── 全螢幕 icon 切換 ─────────────────────────
-  document.addEventListener('fullscreenchange', () => {
-    const btn = document.getElementById('btn-fullscreen');
-    if (btn) btn.textContent = document.fullscreenElement ? '✕ 離開全螢幕' : '⛶ 全螢幕';
+  // ── resize / orientationchange 時重算 ─────────
+  window.addEventListener('resize', () => { resizeGame(); checkOrientation(); });
+  window.addEventListener('orientationchange', () => {
+    // orientationchange 後稍等 200ms 讓瀏覽器完成旋轉
+    setTimeout(() => { resizeGame(); checkOrientation(); }, 200);
   });
+
+  // ── 初始化 ────────────────────────────────────
+  resizeGame();
+  checkOrientation();
   </script>
 </body>
 </html>

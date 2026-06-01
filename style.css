@@ -59,32 +59,29 @@ html, body {
   line-height: 1.6;
 }
 
-/* ── Game wrapper：16:9 contain ── */
+/* ── Game wrapper：尺寸由 JS resizeGame() 動態填入 ── */
 #game-wrapper {
   position: relative;
-  /* 優先填滿寬度，高度不超出螢幕；反之亦然 */
-  width: 100vw;
-  max-width: calc(100vh * 16 / 9);
-  height: calc(100vw * 9 / 16);
-  max-height: 100vh;
   flex-shrink: 0;
+  /* width / height 由 JS 控制，此處不設定避免衝突 */
 }
 
-/* 全螢幕時拿掉 max-height 限制讓畫面更大 */
-:fullscreen #game-wrapper,
-:-webkit-full-screen #game-wrapper {
-  width: 100vw;
-  height: 100vh;
-  max-width: none;
-  max-height: none;
-}
+/* 全螢幕時：body 置中，尺寸由 JS resizeGame() 動態計算填入 */
 :fullscreen body,
 :-webkit-full-screen body {
   justify-content: center;
+  align-items: center;
 }
+/* 全螢幕時隱藏外部按鈕列（遊戲內的 overlay 按鈕仍可用） */
 :fullscreen #fullscreen-bar,
 :-webkit-full-screen #fullscreen-bar {
-  display: none; /* 全螢幕內不需要此列 */
+  display: none;
+}
+/* 全螢幕時 game-wrapper 的尺寸完全由 JS 控制，CSS 不限制 */
+:fullscreen #game-wrapper,
+:-webkit-full-screen #game-wrapper {
+  max-width: none;
+  max-height: none;
 }
 
 #gameCanvas {
