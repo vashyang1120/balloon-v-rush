@@ -24,11 +24,18 @@ const CONFIG = {
   JUMP_FORCE:      13,    // 跳躍初速（數值越大跳越高）
   GRAVITY:         0.55,  // 重力（數值越大下落越快）
 
-  // -- 攻擊 --
+  // -- projectile（子彈，保留給未來氣球槍使用）--
   PROJECTILE_W:    22,    // 氣球彈射物寬度 (px)
   PROJECTILE_H:    22,    // 氣球彈射物高度 (px)
   PROJECTILE_SPD:  9,     // 彈射物飛行速度
   PROJECTILE_LIFE: 40,    // 彈射物存活幀數（越大飛越遠）
+
+  // -- basicSword 近戰攻擊範圍 --
+  BASIC_SWORD_ATTACK_RANGE:    55,   // 攻擊框從角色前緣往前延伸的距離 (px)
+  BASIC_SWORD_ATTACK_WIDTH:    55,   // 攻擊框寬度 (px)
+  BASIC_SWORD_ATTACK_HEIGHT:   60,   // 攻擊框高度 (px)
+  BASIC_SWORD_ATTACK_DURATION: 14,   // 攻擊框存活幀數（約 230ms @ 60fps）
+  BASIC_SWORD_ATTACK_COOLDOWN: 28,   // 攻擊冷卻幀數
 
   // -- 小怪 --
   ENEMY_W:         48,    // 小怪顯示寬度 (px)
@@ -294,9 +301,11 @@ const player = {
   onGround: false,
   facingRight: true,
   hp: 5, maxHp: 5,
-  invincible: 0,     // frames of invincibility after hit
+  invincible: 0,        // frames of invincibility after hit
   attackCooldown: 0,
-  attackActive: 0,   // frames the hitbox is live
+  attackActive: 0,      // frames the projectile flash is live (no-sword)
+  meleeActive: 0,       // frames the melee hitbox is live (basicSword)
+  meleeHit: false,      // 本次揮擊是否已命中過（每揮一次只扣一次耐久）
   // Stats
   coinsCollected: 0,
   balloonsCollected: 0,
@@ -411,6 +420,7 @@ function update(dt, dtMs = 16.667) {
   updatePlayer(dt);
   updateEnemies();
   updateProjectiles();
+  updateMeleeAttack();
   checkCollectibles();
   checkHazards();
   checkFinish();
@@ -480,11 +490,20 @@ function updatePlayer(dt) {
   // Attack
   if (player.attackCooldown > 0) player.attackCooldown--;
   if (player.attackActive > 0)   player.attackActive--;
+  if (player.meleeActive > 0)    player.meleeActive--;
 
   if (inp('attack') && player.attackCooldown === 0) {
-    player.attackCooldown = 30;
-    player.attackActive = 12;
-    fireProjectile();
+    if (equippedSword.id === 'basicSword') {
+      // ── 近戰攻擊（basicSword）──
+      player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
+      player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
+      player.meleeHit       = false; // 重置命中旗標
+    } else {
+      // ── 無裝備：保留舊攻擊視覺效果，但不發射子彈，也不打傷敵人 ──
+      player.attackCooldown = 30;
+      player.attackActive   = 12;
+      // （projectile 系統保留，留給未來氣球槍；此處刻意不呼叫 fireProjectile）
+    }
   }
 
   // Invincibility frames
@@ -525,6 +544,38 @@ function updateProjectiles() {
       }
     });
   }
+}
+
+
+// ── Melee attack check (basicSword) ──────────
+// 每幀在 meleeActive > 0 時檢查命中；每次揮擊只扣一次耐久（meleeHit 旗標）
+function updateMeleeAttack() {
+  if (player.meleeActive <= 0) return;
+
+  // 攻擊框世界座標
+  const atkX = player.facingRight
+    ? player.x + player.w                          // 面右：從角色右緣往前
+    : player.x - CONFIG.BASIC_SWORD_ATTACK_RANGE;  // 面左：從角色左緣往前
+  const atkY = player.y + (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
+  const atkW = CONFIG.BASIC_SWORD_ATTACK_RANGE;
+  const atkH = CONFIG.BASIC_SWORD_ATTACK_HEIGHT;
+
+  enemies.forEach(e => {
+    if (!e.active) return;
+    if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
+      e.hp--;
+      e.hitFlash = 8;
+      e.vx = (player.facingRight ? 3.5 : -3.5); // knockback
+      if (e.hp <= 0) {
+        e.active = false;
+        player.enemiesDefeated++;
+      }
+      if (!player.meleeHit) {
+        player.meleeHit = true;
+        consumeSwordDurability(); // 每次揮擊只扣一次耐久
+      }
+    }
+  });
 }
 
 function updateEnemies() {
@@ -746,13 +797,26 @@ function drawPlayer(cx) {
   }
 
   // Attack effect
-  if (player.attackActive > 0) {
-    const dir = player.facingRight ? 1 : -1;
-    ctx.fillStyle = 'rgba(255,20,147,0.4)';
+  if (player.meleeActive > 0) {
+    // basicSword 近戰攻擊框（placeholder：半透明矩形 + 亮框）
+    const atkLocalX = player.facingRight ? player.w : -CONFIG.BASIC_SWORD_ATTACK_RANGE;
+    const atkLocalY = (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
+    const progress  = player.meleeActive / CONFIG.BASIC_SWORD_ATTACK_DURATION;
+    const alpha     = 0.25 + 0.35 * progress;
+    ctx.fillStyle = `rgba(180,240,255,${alpha})`;
+    ctx.strokeStyle = `rgba(100,220,255,${alpha + 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(atkLocalX, atkLocalY, CONFIG.BASIC_SWORD_ATTACK_RANGE, CONFIG.BASIC_SWORD_ATTACK_HEIGHT, 6);
+    ctx.fill();
+    ctx.stroke();
+  } else if (player.attackActive > 0) {
+    // 無裝備：小範圍拳擊視覺（比氣球劍短），無命中判定
+    ctx.fillStyle = 'rgba(255,220,100,0.3)';
     ctx.beginPath();
     ctx.ellipse(
-      (player.facingRight ? player.w + 20 : -20), player.h * 0.4,
-      28, 18, 0, 0, Math.PI * 2
+      (player.facingRight ? player.w + 10 : -10), player.h * 0.45,
+      18, 14, 0, 0, Math.PI * 2
     );
     ctx.fill();
   }
@@ -1064,6 +1128,7 @@ function restart() {
     onGround: false, facingRight: true,
     hp: 5, invincible: 0,
     attackCooldown: 0, attackActive: 0,
+    meleeActive: 0, meleeHit: false,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
   // Reset currentRunStats（本局歸零，inventory 不動）
