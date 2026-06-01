@@ -1,27 +1,45 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-  <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-      <title>氣球小V：派對島大作戰</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>氣球小V：派對島大作戰</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
 <body>
-    <div id="game-wrapper">
-          <canvas id="gameCanvas"></canvas>canvas>
-          <div id="mobile-controls">
-                  <div id="ctrl-left-group">
-                            <button class="ctrl-btn" id="btn-left">◄</button>button>
-                            <button class="ctrl-btn" id="btn-right">►</button>button>
-                  </div>div>
-                  <div id="ctrl-right-group">
-                            <button class="ctrl-btn" id="btn-jump">跳</button>button>
-                            <button class="ctrl-btn action-btn" id="btn-attack">🎈</button>button>
-                  </div>div>
-          </div>div>
-    </div>div>
-    <script src="main.js"></script>
+  <div id="game-wrapper">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Mobile controls -->
+    <div id="mobile-controls">
+      <div id="ctrl-left-group">
+        <button class="ctrl-btn" id="btn-left">◀</button>
+        <button class="ctrl-btn" id="btn-right">▶</button>
+      </div>
+      <div id="ctrl-right-group">
+        <button class="ctrl-btn" id="btn-jump">跳</button>
+        <button class="ctrl-btn action-btn" id="btn-attack">🎈</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Save 按鈕（右下角浮動，測試用） -->
+  <div id="reset-save-area" style="
+    position: fixed; bottom: 10px; right: 10px;
+    z-index: 999; pointer-events: all;">
+    <button id="btn-reset-save" style="
+      background: rgba(60,20,20,0.75);
+      color: rgba(255,100,100,0.8);
+      border: 1px solid rgba(255,80,80,0.4);
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 11px;
+      cursor: pointer;
+      backdrop-filter: blur(4px);">
+      🗑 清除存檔
+    </button>
+  </div>
+
+  <script src="main.js"></script>
 </body>
-</html>html>
-</body></title>
-  </head>
+</html>

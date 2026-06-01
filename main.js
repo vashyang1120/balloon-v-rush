@@ -115,6 +115,47 @@ function inp(action) {
   }
 }
 
+
+// ── Inventory & Save (MVP 0.2) ────────────────
+// playerInventory: 跨局累積的背包資料
+// 新增材料時只需在此物件與 INVENTORY_DEFAULTS 加欄位即可
+const INVENTORY_DEFAULTS = {
+  coins:      0,
+  balloon260: 0,
+  // 未來可在此擴充：balloon160, roundBalloon5, roundBalloon12, recipeCards, craftedItems ...
+};
+
+const SAVE_KEY = 'balloonV_inventory';
+
+function loadInventory() {
+  try {
+    const saved = localStorage.getItem(SAVE_KEY);
+    if (saved) {
+      // 合併：確保舊存檔缺少新欄位時也能正常運作
+      return Object.assign({}, INVENTORY_DEFAULTS, JSON.parse(saved));
+    }
+  } catch(e) { /* 存檔損壞時直接用預設值 */ }
+  return Object.assign({}, INVENTORY_DEFAULTS);
+}
+
+function saveInventory() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(playerInventory)); } catch(e) {}
+}
+
+function resetInventory() {
+  Object.assign(playerInventory, INVENTORY_DEFAULTS);
+  saveInventory();
+}
+
+let playerInventory = loadInventory();
+
+// currentRunStats: 本局獲得（每次 restart 清零）
+let currentRunStats = {
+  coins:      0,
+  balloon260: 0,
+  enemiesDefeated: 0,
+};
+
 // ── Asset loading ─────────────────────────────
 const playerImg = new Image();
 playerImg.src = 'assets/player.png'; // place your image here
@@ -390,7 +431,9 @@ function checkCollectibles() {
     if (c.collected) return;
     if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R*2, CONFIG.COIN_R*2)) {
       c.collected = true;
-      player.coinsCollected++;
+      currentRunStats.coins++;
+      player.coinsCollected++;      // HUD 顯示用（與 currentRunStats 同步）
+      playerInventory.coins++;
     }
   });
 
@@ -398,7 +441,9 @@ function checkCollectibles() {
     if (b.collected) return;
     if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W/2, b.y - CONFIG.BALLOON_H/2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) {
       b.collected = true;
-      player.balloonsCollected++;
+      currentRunStats.balloon260++;
+      player.balloonsCollected++;   // HUD 顯示用
+      playerInventory.balloon260++;
     }
   });
 }
@@ -436,10 +481,14 @@ function checkFinish() {
 }
 
 function triggerGameOver() {
+  currentRunStats.enemiesDefeated = player.enemiesDefeated;
+  saveInventory();
   gameState = 'gameover';
 }
 
 function triggerClear() {
+  currentRunStats.enemiesDefeated = player.enemiesDefeated;
+  saveInventory();
   gameState = 'clear';
 }
 
@@ -749,64 +798,90 @@ function drawOverlay(text, color) {
 }
 
 function drawResultBox() {
-  const bx = CANVAS_W / 2 - 230;
-  const by = CANVAS_H / 2 - 60;
-  const bw = 460;
-  const bh = 260;
+  const bw = 500;
+  const bh = 340;
+  const bx = CANVAS_W / 2 - bw / 2;
+  const by = CANVAS_H / 2 - bh / 2 + 20;
 
-  ctx.fillStyle = 'rgba(20,20,40,0.92)';
+  // Background
+  ctx.fillStyle = 'rgba(15,15,35,0.94)';
   ctx.beginPath();
   ctx.roundRect(bx, by, bw, bh, 16);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
+  const pad  = 28;
+  const col2 = bx + bw - pad; // right-align value column
+  let   row  = by + 30;
+  const ROW  = 28;
+
+  function drawSection(title, rows) {
+    // Section title
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(title, bx + pad, row);
+    row += 4;
+    // Underline
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx + pad, row); ctx.lineTo(bx + bw - pad, row);
+    ctx.stroke();
+    row += 18;
+    // Rows
+    rows.forEach(([label, val, color]) => {
+      ctx.fillStyle = '#aaa';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, bx + pad, row);
+      ctx.fillStyle = color || '#fff';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(val, col2, row);
+      row += ROW;
+    });
+    row += 8; // section gap
+  }
+
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
 
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 15px sans-serif';
+  // ── 本關獲得 ──
+  drawSection('【本關獲得】', [
+    ['🪙 金幣',          `${currentRunStats.coins} 枚`,      '#FFD700'],
+    ['🎈 260 長條氣球',  `${currentRunStats.balloon260} 條`, '#FF69B4'],
+    ['💥 擊退小怪',      `${currentRunStats.enemiesDefeated} 隻`, '#ff9966'],
+    ['❤️ 剩餘生命',      `${player.hp} / ${player.maxHp}`,  '#ff6b6b'],
+    ['⏱  剩餘時間',      `${timeLeft} 秒`,                   '#adf'],
+  ]);
 
-  const lines = [
-    ['🪙 金幣收集',       `${player.coinsCollected} 枚`],
-    ['🎈 260氣球收集',    `${player.balloonsCollected} 條`],
-    ['💥 擊退小怪',       `${player.enemiesDefeated} 隻`],
-    ['❤️ 剩餘生命',       `${player.hp} / ${player.maxHp}`],
-    ['⏱  剩餘時間',       `${timeLeft} 秒`],
-  ];
-
-  lines.forEach(([label, val], i) => {
-    const row = by + 22 + i * 34;
-    ctx.fillStyle = '#aaa';
-    ctx.font = '14px sans-serif';
-    ctx.fillText(label, bx + 24, row);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(val, bx + bw - 24, row);
-    ctx.textAlign = 'left';
-  });
-
-  // Divider
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  // Divider between sections
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(bx + 16, by + bh - 72);
-  ctx.lineTo(bx + bw - 16, by + bh - 72);
+  ctx.moveTo(bx + pad, row - 4); ctx.lineTo(bx + bw - pad, row - 4);
   ctx.stroke();
+  row += 8;
+
+  // ── 目前背包 ──
+  drawSection('【目前背包】', [
+    ['🪙 金幣總計',          `${playerInventory.coins} 枚`,      '#FFD700'],
+    ['🎈 260 長條氣球總計',  `${playerInventory.balloon260} 條`, '#FF69B4'],
+  ]);
 
   // Trivia
-  const trivia = TRIVIA[Math.floor(player.coinsCollected + player.balloonsCollected) % TRIVIA.length];
-  ctx.fillStyle = '#adf';
-  ctx.font = 'italic 12px sans-serif';
+  const trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
+  ctx.fillStyle = 'rgba(170,221,255,0.75)';
+  ctx.font = 'italic 11px sans-serif';
   ctx.textAlign = 'center';
-  wrapText(ctx, '💡 ' + trivia, CANVAS_W / 2, by + bh - 50, bw - 40, 18);
+  wrapText(ctx, '💡 ' + trivia, CANVAS_W / 2, by + bh - 36, bw - 48, 16);
 
   // Restart hint
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = '13px sans-serif';
-  ctx.fillText('按任意鍵 / 點擊重新開始', CANVAS_W / 2, by + bh - 14);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('按任意鍵 / 點擊重新開始', CANVAS_W / 2, by + bh - 12);
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -827,7 +902,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart() {
-  // Reset player
+  // Reset player stats (本局)
   Object.assign(player, {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
     vx: 0, vy: 0,
@@ -836,8 +911,13 @@ function restart() {
     attackCooldown: 0, attackActive: 0,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
+  // Reset currentRunStats（本局歸零，inventory 不動）
+  currentRunStats.coins           = 0;
+  currentRunStats.balloon260      = 0;
+  currentRunStats.enemiesDefeated = 0;
+
   // Reset world
-  cameraX   = 0;
+  cameraX    = 0;
   frameCount = 0;
   elapsedSec = 0;
   gameState  = 'playing';
@@ -847,6 +927,19 @@ function restart() {
   enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
   projectiles.length = 0;
 }
+
+// ── Reset Save ────────────────────────────────
+// 綁定 HTML 中 id="btn-reset-save" 的按鈕（在 index.html 加即可）
+(function() {
+  const btn = document.getElementById('btn-reset-save');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (confirm('確定要清除所有存檔資料嗎？')) {
+      resetInventory();
+      alert('存檔已清除！');
+    }
+  });
+})();
 
 window.addEventListener('keydown', () => {
   if (gameState !== 'playing') restart();
