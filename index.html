@@ -7,41 +7,47 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+  <!-- 直式遮罩：手機直拿時顯示提示 -->
+  <div id="portrait-mask">
+    <div id="portrait-msg">
+      <div style="font-size:48px;margin-bottom:16px;">📱↔️</div>
+      <div>請旋轉手機橫向遊玩</div>
+      <div style="font-size:13px;opacity:0.6;margin-top:8px;">或點擊下方進入全螢幕</div>
+      <button id="btn-fullscreen-portrait" class="fs-btn" style="margin-top:20px;">
+        ⛶ 全螢幕遊玩
+      </button>
+    </div>
+  </div>
+
+  <!-- 全螢幕按鈕（遊戲外，桌機 / 橫向手機顯示） -->
+  <div id="fullscreen-bar">
+    <button id="btn-fullscreen" class="fs-btn">⛶ 全螢幕</button>
+  </div>
+
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- ── 結算畫面 overlay（JS 控制顯示/隱藏） ── -->
+    <!-- 結算畫面 overlay -->
     <div id="result-overlay">
       <div id="result-panel">
-
-        <!-- 標題（由 JS 依 gameState 設定） -->
         <div id="result-panel-title">關卡結算</div>
-
-        <!-- 主要內容（由 populateResultPanel() 填入） -->
-        <div id="result-panel-body">
-          <!-- 動態填入 -->
-        </div>
-
-        <!-- 操作按鈕區：固定在面板底部 -->
+        <div id="result-panel-body"></div>
         <div id="result-action-bar">
           <button id="btn-play-again" class="result-btn result-btn--primary">
-            再玩一次
-            <span class="result-btn-sub">Play Again</span>
+            再玩一次<span class="result-btn-sub">Play Again</span>
           </button>
           <button id="btn-guidebook" class="result-btn result-btn--guide">
-            氣球秘笈
-            <span class="result-btn-sub">Balloon Guidebook</span>
+            氣球秘笈<span class="result-btn-sub">Guidebook</span>
           </button>
           <button id="btn-result-reset" class="result-btn result-btn--danger">
-            清除背包資料
-            <span class="result-btn-sub">Reset Inventory</span>
+            清除背包<span class="result-btn-sub">Reset</span>
           </button>
         </div>
-
       </div>
     </div>
 
-    <!-- ── 氣球秘笈 overlay ── -->
+    <!-- 氣球秘笈 overlay -->
     <div id="guidebook-overlay">
       <div id="guidebook-panel">
         <div id="guidebook-header">
@@ -53,7 +59,7 @@
       </div>
     </div>
 
-    <!-- ── 手機操作按鈕 ── -->
+    <!-- 手機操作按鈕 -->
     <div id="mobile-controls">
       <div id="ctrl-left-group">
         <button class="ctrl-btn" id="btn-left">◀</button>
@@ -67,15 +73,42 @@
   </div>
 
   <script src="main.js"></script>
-
-  <!-- 依 gameState 設定結算標題 -->
   <script>
-    // 在 main.js 的 triggerClear/GameOver 呼叫 showResultButtons() 前，
-    // 這裡監聽 result-overlay 的顯示並更新標題
-    const _titleEl = document.getElementById('result-panel-title');
-    const _origShow = window.showResultButtons;
-    // showResultButtons 在 main.js 中定義，等 DOMContentLoaded 後 patch
-    document.addEventListener('DOMContentLoaded', () => {});
+  // ── 全螢幕邏輯 ──────────────────────────────
+  function enterFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen
+              || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) req.call(el).catch(() => {});
+    // 嘗試鎖定橫向（不支援時靜默失敗）
+    try {
+      const lock = screen.orientation && screen.orientation.lock;
+      if (lock) screen.orientation.lock('landscape').catch(() => {});
+    } catch(e) {}
+  }
+
+  document.getElementById('btn-fullscreen').addEventListener('click', enterFullscreen);
+  document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFullscreen);
+
+  // ── 直式遮罩：只在觸控裝置直式時顯示 ────────
+  function checkOrientation() {
+    const isTouch = navigator.maxTouchPoints > 0;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const mask = document.getElementById('portrait-mask');
+    const fsBar = document.getElementById('fullscreen-bar');
+    if (mask) mask.style.display = (isTouch && isPortrait) ? 'flex' : 'none';
+    if (fsBar) fsBar.style.display = (isTouch && isPortrait) ? 'none' : 'flex';
+  }
+
+  window.addEventListener('resize', checkOrientation);
+  window.addEventListener('orientationchange', checkOrientation);
+  checkOrientation();
+
+  // ── 全螢幕 icon 切換 ─────────────────────────
+  document.addEventListener('fullscreenchange', () => {
+    const btn = document.getElementById('btn-fullscreen');
+    if (btn) btn.textContent = document.fullscreenElement ? '✕ 離開全螢幕' : '⛶ 全螢幕';
+  });
   </script>
 </body>
 </html>
