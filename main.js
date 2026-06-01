@@ -127,6 +127,8 @@ const INVENTORY_DEFAULTS = {
     basicSword: 0,
     // 未來可在此擴充更多道具
   },
+  // 目前裝備的劍耐久（localStorage 持久化，關卡結束後保留）
+  equippedSwordDur: 0,
 };
 
 // ── 氣球秘笈配方定義 (MVP 0.3) ────────────────
@@ -194,8 +196,14 @@ function saveInventory() {
 
 function resetInventory() {
   Object.assign(playerInventory, INVENTORY_DEFAULTS);
-  playerInventory.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.craftedItems    = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.equippedSwordDur = 0;
   saveInventory();
+  // 清除執行期裝備狀態
+  equippedSword.id = null;
+  equippedSword.name = '';
+  equippedSword.maxDur = 0;
+  equippedSword.currentDur = 0;
 }
 
 let playerInventory = loadInventory();
@@ -217,6 +225,67 @@ let cameraX   = 0;
 let frameCount = 0;
 let lastTime   = 0;
 let elapsedSec = 0;
+
+// ── Equipped sword (MVP 0.4) ──────────────────
+// 執行期裝備狀態（從 inventory 載入，關卡中即時更新）
+const equippedSword = {
+  id:        null,  // 'basicSword' | null
+  name:      '',
+  maxDur:    0,
+  currentDur:0,
+};
+
+// 從 inventory 初始化裝備（每次 restart 時呼叫）
+function initEquippedSword() {
+  const ci  = playerInventory.craftedItems || {};
+  const qty = ci.basicSword || 0;
+  const recipe = RECIPES.find(r => r.id === 'basicSword');
+
+  if (qty > 0 && recipe) {
+    equippedSword.id   = 'basicSword';
+    equippedSword.name = recipe.name;
+    equippedSword.maxDur = recipe.durability;
+    // 若 inventory 有保存耐久且 > 0，使用該值；否則初始化為最大值
+    const savedDur = playerInventory.equippedSwordDur || 0;
+    equippedSword.currentDur = (savedDur > 0 && savedDur <= recipe.durability)
+      ? savedDur
+      : recipe.durability;
+  } else {
+    equippedSword.id = null;
+    equippedSword.name = '';
+    equippedSword.maxDur = 0;
+    equippedSword.currentDur = 0;
+  }
+}
+
+// 打中敵人時呼叫：扣耐久、處理斷裂
+function consumeSwordDurability() {
+  if (!equippedSword.id) return;
+  equippedSword.currentDur--;
+
+  if (equippedSword.currentDur <= 0) {
+    // 這把劍耗盡
+    const ci = playerInventory.craftedItems;
+    ci.basicSword = Math.max(0, (ci.basicSword || 1) - 1);
+
+    if (ci.basicSword > 0) {
+      // 還有備用劍，自動裝下一把
+      equippedSword.currentDur = equippedSword.maxDur;
+    } else {
+      // 沒有劍了
+      equippedSword.id = null;
+      equippedSword.name = '';
+      equippedSword.maxDur = 0;
+      equippedSword.currentDur = 0;
+    }
+    playerInventory.equippedSwordDur = equippedSword.currentDur;
+    saveInventory();
+  } else {
+    // 儲存目前耐久
+    playerInventory.equippedSwordDur = equippedSword.currentDur;
+    saveInventory();
+  }
+}
 
 const player = {
   x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
@@ -451,6 +520,7 @@ function updateProjectiles() {
           e.active = false;
           player.enemiesDefeated++;
         }
+        consumeSwordDurability(); // 打中才扣耐久
         projectiles.splice(i, 1);
       }
     });
@@ -833,6 +903,30 @@ function drawHUD() {
   ctx.fillStyle = '#FF69B4';
   ctx.fillText(`🎈 ${player.balloonsCollected}`, CANVAS_W - pad, 28);
 
+  // 裝備顯示（右側 HUD 下方）
+  if (equippedSword.id) {
+    ctx.textAlign = 'right';
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#c8f0ff';
+    ctx.fillText(`⚔️ ${equippedSword.name}`, CANVAS_W - pad, 58);
+    // 耐久條
+    const durBarW = 80;
+    const durBarX = CANVAS_W - pad - durBarW;
+    const durFrac = equippedSword.currentDur / equippedSword.maxDur;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(durBarX, 62, durBarW, 5);
+    ctx.fillStyle = durFrac > 0.4 ? '#60d080' : '#e08040';
+    ctx.fillRect(durBarX, 62, durBarW * durFrac, 5);
+    ctx.fillStyle = 'rgba(200,240,255,0.6)';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(`${equippedSword.currentDur}/${equippedSword.maxDur}`, CANVAS_W - pad, 76);
+  } else {
+    ctx.textAlign = 'right';
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillText('目前道具：無', CANVAS_W - pad, 60);
+  }
+
   // Progress bar
   const progress = Math.min(1, (cameraX / (LEVEL_LENGTH - CANVAS_W)));
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
@@ -924,8 +1018,13 @@ function drawResultBox() {
     ['🪙 金幣總計',          `${playerInventory.coins} 枚`,      '#FFD700'],
     ['🎈 260 長條氣球總計',  `${playerInventory.balloon260} 條`, '#FF69B4'],
   ];
-  if ((ci.basicSword || 0) > 0) {
-    bagRows.push(['⚔️ 基礎氣球劍',  `${ci.basicSword} 把`, '#c8f0ff']);
+  const swordQty = ci.basicSword || 0;
+  if (swordQty > 0 || equippedSword.id === 'basicSword') {
+    const durInfo = equippedSword.id === 'basicSword'
+      ? `（耐久 ${equippedSword.currentDur}/${equippedSword.maxDur}）`
+      : '';
+    const totalSwords = equippedSword.id === 'basicSword' ? swordQty : swordQty;
+    bagRows.push([`⚔️ 基礎氣球劍 ${durInfo}`, `${totalSwords} 把`, '#c8f0ff']);
   }
   drawSection('【目前背包】', bagRows);
 
@@ -971,6 +1070,15 @@ function restart() {
   currentRunStats.coins           = 0;
   currentRunStats.balloon260      = 0;
   currentRunStats.enemiesDefeated = 0;
+
+  // 儲存目前耐久到 inventory（下局可繼續）
+  if (equippedSword.id) {
+    playerInventory.equippedSwordDur = equippedSword.currentDur;
+    saveInventory();
+  }
+
+  // 重新初始化裝備
+  initEquippedSword();
 
   // Reset world
   cameraX    = 0;
@@ -1161,7 +1269,8 @@ function loop(timestamp) {
   update(dt, dtMs);
   draw();
 
-  requestAnimationFrame(loop);
+  initEquippedSword(); // 頁面載入時從 inventory 初始化裝備
+requestAnimationFrame(loop);
 }
 
 requestAnimationFrame(loop);
