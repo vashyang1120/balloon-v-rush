@@ -13,15 +13,50 @@ const CANVAS_H = 540;
 canvas.width  = CANVAS_W;
 canvas.height = CANVAS_H;
 
-// ── Constants ─────────────────────────────────
-const GRAVITY      = 0.55;
-const PLAYER_SPEED = 3.8;
-const JUMP_FORCE   = 13;
-const GROUND_Y     = CANVAS_H - 80; // top of ground surface
+// =============================================
+//  CONFIG - 可調參數區（在這裡微調數值）
+// =============================================
+const CONFIG = {
+  // -- 角色 --
+  PLAYER_W:        60,    // 角色顯示寬度 (px)
+  PLAYER_H:        80,    // 角色顯示高度 (px)
+  PLAYER_SPEED:    3.8,   // 移動速度（數值越大越快）
+  JUMP_FORCE:      13,    // 跳躍初速（數值越大跳越高）
+  GRAVITY:         0.55,  // 重力（數值越大下落越快）
 
-const LEVEL_LENGTH   = 14400; // total world width in px
-const SCROLL_SPEED   = 2.2;   // camera auto-advance px/frame
-const LEVEL_DURATION = 60;    // seconds
+  // -- 攻擊 --
+  PROJECTILE_W:    22,    // 氣球彈射物寬度 (px)
+  PROJECTILE_H:    22,    // 氣球彈射物高度 (px)
+  PROJECTILE_SPD:  9,     // 彈射物飛行速度
+  PROJECTILE_LIFE: 40,    // 彈射物存活幀數（越大飛越遠）
+
+  // -- 小怪 --
+  ENEMY_W:         48,    // 小怪顯示寬度 (px)
+  ENEMY_H:         50,    // 小怪顯示高度 (px)
+  ENEMY_SPEED:     1.2,   // 小怪巡邏速度
+
+  // -- 收集物 --
+  COIN_R:          10,    // 金幣半徑 (px)，顯示大小 = COIN_R*2
+  BALLOON_W:       18,    // 260氣球碰撞寬度 (px)
+  BALLOON_H:       40,    // 260氣球碰撞高度 (px)
+
+  // -- 鏡頭 --
+  SCROLL_SPEED:    2.2,   // 鏡頭自動推進速度（px/幀）
+
+  // -- 關卡 --
+  LEVEL_DURATION:  60,    // 關卡時間限制（秒）
+  LEVEL_LENGTH:    14400, // 關卡世界總寬度 (px)
+};
+// =============================================
+
+// -- 從 CONFIG 展開（內部使用，不需修改）--
+const GRAVITY        = CONFIG.GRAVITY;
+const PLAYER_SPEED   = CONFIG.PLAYER_SPEED;
+const JUMP_FORCE     = CONFIG.JUMP_FORCE;
+const SCROLL_SPEED   = CONFIG.SCROLL_SPEED;
+const LEVEL_LENGTH   = CONFIG.LEVEL_LENGTH;
+const LEVEL_DURATION = CONFIG.LEVEL_DURATION;
+const GROUND_Y       = CANVAS_H - 80; // 地面頂部 Y 座標（不建議輕易修改）
 
 const COLORS = {
   sky:        '#87CEEB',
@@ -92,8 +127,8 @@ let lastTime   = 0;
 let elapsedSec = 0;
 
 const player = {
-  x: 100, y: GROUND_Y - 80,
-  w: 60,  h: 80,
+  x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
+  w: CONFIG.PLAYER_W, h: CONFIG.PLAYER_H,
   vx: 0,  vy: 0,
   onGround: false,
   facingRight: true,
@@ -180,9 +215,9 @@ function generateEnemies() {
   positions.forEach(x => {
     list.push({
       x: x + Math.random() * 50,
-      y: GROUND_Y - 50,
-      w: 48, h: 50,
-      vx: (Math.random() > 0.5 ? 1 : -1) * 1.2,
+      y: GROUND_Y - CONFIG.ENEMY_H,
+      w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+      vx: (Math.random() > 0.5 ? 1 : -1) * CONFIG.ENEMY_SPEED,
       hp: 2,
       patrol: x,
       patrolRange: 120,
@@ -300,9 +335,9 @@ function fireProjectile() {
   projectiles.push({
     x: player.x + (player.facingRight ? player.w : -16),
     y: player.y + player.h * 0.35,
-    w: 22, h: 22,
-    vx: dir * 9,
-    life: 40,
+    w: CONFIG.PROJECTILE_W, h: CONFIG.PROJECTILE_H,
+    vx: dir * CONFIG.PROJECTILE_SPD,
+    life: CONFIG.PROJECTILE_LIFE,
   });
 }
 
@@ -353,7 +388,7 @@ function checkCollectibles() {
 
   coins.forEach(c => {
     if (c.collected) return;
-    if (rectsOverlap(px, py, pw, ph, c.x - 12, c.y - 12, 24, 24)) {
+    if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R*2, CONFIG.COIN_R*2)) {
       c.collected = true;
       player.coinsCollected++;
     }
@@ -361,7 +396,7 @@ function checkCollectibles() {
 
   balloons260.forEach(b => {
     if (b.collected) return;
-    if (rectsOverlap(px, py, pw, ph, b.x - 14, b.y - 20, 18, 40)) {
+    if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W/2, b.y - CONFIG.BALLOON_H/2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) {
       b.collected = true;
       player.balloonsCollected++;
     }
@@ -794,7 +829,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 function restart() {
   // Reset player
   Object.assign(player, {
-    x: 100, y: GROUND_Y - 80,
+    x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
     vx: 0, vy: 0,
     onGround: false, facingRight: true,
     hp: 5, invincible: 0,
