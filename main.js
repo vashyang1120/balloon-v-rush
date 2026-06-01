@@ -53,6 +53,15 @@ const CONFIG = {
   // -- 關卡 --
   LEVEL_DURATION:  60,    // 關卡時間限制（秒）
   LEVEL_LENGTH:    14400, // 關卡世界總寬度 (px)
+
+  // -- 橘子怪 (balloonNemesis) --
+  ORANGE_W:           44,   // 橘子怪寬度 (px)
+  ORANGE_H:           44,   // 橘子怪高度 (px)
+  ORANGE_SPRAY_W:    140,   // 噴油範圍寬度 (px)
+  ORANGE_SPRAY_H:     28,   // 噴油範圍高度 (px)
+  ORANGE_WINDUP_MS:  600,   // 預備動作時間 (ms)
+  ORANGE_SPRAY_MS:   500,   // 噴油持續時間 (ms)
+  ORANGE_COOLDOWN_MS:3000,  // 兩次噴油間隔 (ms)
 };
 // =============================================
 
@@ -90,6 +99,7 @@ const TRIVIA = [
   '高溫會加速乳膠氣球老化，要存放在陰涼處。',
   '柑橘類果皮中的油分可能讓乳膠氣球更容易破裂。',
   '一條 260 氣球可以扭出超過 20 個基本泡泡。',
+  '柑橘類果皮中的油分，可能讓乳膠氣球更容易破裂，所以氣球要盡量遠離橘子皮喔！',
 ];
 
 // ── Input state ───────────────────────────────
@@ -332,8 +342,9 @@ const platforms = [
 
 const coins = generateCoins();
 const balloons260 = generateBalloons();
-const spikes = generateSpikes();
-const enemies = generateEnemies();
+const spikes      = generateSpikes();
+const enemies     = generateEnemies();
+const orangeNemeses = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
 const projectiles = []; // player-fired balloons
 
 // Finish line position
@@ -399,6 +410,24 @@ function generateEnemies() {
   return list;
 }
 
+
+function generateOrangeNemeses() {
+  // 只放兩隻，位置明顯、可以跳過
+  const positions = [1250, 3000];
+  return positions.map(x => ({
+    x,
+    y: GROUND_Y - CONFIG.ORANGE_H,
+    w: CONFIG.ORANGE_W,
+    h: CONFIG.ORANGE_H,
+    // 噴油方向：固定朝左（玩家通常從左往右跑）
+    sprayDir: -1,
+    // 狀態機：'idle' | 'windup' | 'spraying'
+    phase:    'idle',
+    phaseTimer: 0,        // 目前 phase 已過的 ms
+    sprayActive: false,   // 目前是否有傷害範圍
+  }));
+}
+
 // ── Rect collision helper ─────────────────────
 function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
@@ -422,6 +451,7 @@ function update(dt, dtMs = 16.667) {
   updateEnemies();
   updateProjectiles();
   updateMeleeAttack();
+  updateOrangeNemeses(dtMs);
   checkCollectibles();
   checkHazards();
   checkFinish();
@@ -579,6 +609,43 @@ function updateMeleeAttack() {
   });
 }
 
+
+// ── Orange Nemesis update ────────────────────
+function updateOrangeNemeses(dtMs) {
+  orangeNemeses.forEach(o => {
+    o.phaseTimer += dtMs;
+
+    switch (o.phase) {
+      case 'idle':
+        o.sprayActive = false;
+        if (o.phaseTimer >= CONFIG.ORANGE_COOLDOWN_MS) {
+          o.phase      = 'windup';
+          o.phaseTimer = 0;
+        }
+        break;
+
+      case 'windup':
+        // 預備：抖動視覺由 drawOrangeNemesis 處理
+        o.sprayActive = false;
+        if (o.phaseTimer >= CONFIG.ORANGE_WINDUP_MS) {
+          o.phase      = 'spraying';
+          o.phaseTimer = 0;
+          o.sprayActive = true;
+        }
+        break;
+
+      case 'spraying':
+        o.sprayActive = true;
+        if (o.phaseTimer >= CONFIG.ORANGE_SPRAY_MS) {
+          o.phase      = 'idle';
+          o.phaseTimer = 0;
+          o.sprayActive = false;
+        }
+        break;
+    }
+  });
+}
+
 function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
@@ -637,6 +704,25 @@ function checkHazards() {
     if (!e.active) return;
     if (rectsOverlap(px, py, pw, ph, e.x + 4, e.y + 4, e.w - 8, e.h - 8)) {
       damagePlayer();
+    }
+  });
+
+  // Orange nemesis: body contact + spray damage
+  orangeNemeses.forEach(o => {
+    // 碰到本體也受傷
+    if (rectsOverlap(px, py, pw, ph, o.x + 4, o.y + 4, o.w - 8, o.h - 8)) {
+      damagePlayer();
+      return; // 同幀只扣一次
+    }
+    // 噴油範圍
+    if (o.sprayActive) {
+      const sx = o.sprayDir < 0
+        ? o.x - CONFIG.ORANGE_SPRAY_W
+        : o.x + o.w;
+      const sy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
+      if (rectsOverlap(px, py, pw, ph, sx, sy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H)) {
+        damagePlayer();
+      }
     }
   });
 }
@@ -751,6 +837,13 @@ function drawWorld() {
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
     drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0);
+  });
+
+  // Orange nemeses (balloonNemesis)
+  orangeNemeses.forEach(o => {
+    const sx = o.x - cx;
+    if (sx > CANVAS_W + 60 || sx + o.w < -CONFIG.ORANGE_SPRAY_W) return;
+    drawOrangeNemesis(sx, o);
   });
 
   // Projectiles
@@ -942,6 +1035,80 @@ function drawEnemy(x, y, w, h, flashing) {
     ctx.fillStyle = i < 2 ? '#e00' : '#444';  // always show 2 since max is 2
     ctx.fillRect(x + 8 + i * 18, y - 10, 14, 6);
   }
+}
+
+
+function drawOrangeNemesis(sx, o) {
+  const cx_local = cameraX; // 已在呼叫前轉為螢幕 x
+
+  // ── 噴油範圍（先畫，在本體之下）──
+  if (o.sprayActive) {
+    const spx = o.sprayDir < 0
+      ? sx - CONFIG.ORANGE_SPRAY_W
+      : sx + o.w;
+    const spy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
+    const sprayProgress = o.phaseTimer / CONFIG.ORANGE_SPRAY_MS;
+    const alpha = 0.45 - sprayProgress * 0.25;
+    ctx.fillStyle = `rgba(255,140,0,${alpha})`;
+    ctx.beginPath();
+    ctx.roundRect(spx, spy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H, 8);
+    ctx.fill();
+    // 油滴粒子（簡單三顆）
+    ctx.fillStyle = `rgba(255,180,30,${alpha + 0.1})`;
+    [0.2, 0.5, 0.8].forEach(t => {
+      const px = spx + CONFIG.ORANGE_SPRAY_W * t;
+      const py = spy + CONFIG.ORANGE_SPRAY_H / 2 + Math.sin(frameCount * 0.3 + t * 10) * 5;
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // ── 預備光暈（windup 時閃爍）──
+  if (o.phase === 'windup') {
+    const t = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS;
+    const glow = Math.sin(t * Math.PI * 6) * 0.3 + 0.3; // 快速閃爍
+    ctx.fillStyle = `rgba(255,180,0,${glow})`;
+    ctx.beginPath();
+    ctx.arc(sx + o.w / 2, o.y + o.h / 2, o.w * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── 本體：橘色圓形 ──
+  // 抖動（windup 時）
+  const shakeX = o.phase === 'windup'
+    ? (Math.random() - 0.5) * 4 : 0;
+
+  ctx.fillStyle = '#e87020';
+  ctx.beginPath();
+  ctx.arc(sx + o.w / 2 + shakeX, o.y + o.h / 2, o.w / 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 橘子紋路
+  ctx.strokeStyle = 'rgba(200,100,0,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(sx + o.w / 2 + shakeX, o.y + o.h / 2, o.w / 2 - 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 橘子蒂頭
+  ctx.fillStyle = '#4a8a20';
+  ctx.fillRect(sx + o.w / 2 - 3 + shakeX, o.y + 2, 6, 7);
+
+  // 噴油方向指示箭頭（idle 時顯示）
+  if (o.phase === 'idle') {
+    const arrowX = o.sprayDir < 0 ? sx + 4 : sx + o.w - 4;
+    ctx.fillStyle = 'rgba(255,160,0,0.5)';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(o.sprayDir < 0 ? '💨' : '💨', arrowX, o.y - 4);
+  }
+
+  // 標籤
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('橘子怪', sx + o.w / 2 + shakeX, o.y - 6);
 }
 
 function drawFinishFlag(cx) {
@@ -1183,6 +1350,7 @@ function restart() {
   coins.forEach(c => { c.collected = false; });
   balloons260.forEach(b => { b.collected = false; });
   enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
+  orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   projectiles.length = 0;
 }
 
