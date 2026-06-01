@@ -217,9 +217,10 @@ let playerInventory = loadInventory();
 
 // currentRunStats: 本局獲得（每次 restart 清零）
 let currentRunStats = {
-  coins:      0,
-  balloon260: 0,
+  coins:           0,
+  balloon260:      0,
   enemiesDefeated: 0,
+  damageTaken:     0,  // 受傷次數（本局）
 };
 
 // ── Asset loading ─────────────────────────────
@@ -642,7 +643,8 @@ function checkHazards() {
 
 function damagePlayer() {
   player.hp--;
-  player.invincible = 90;
+  player.invincible = 90; // 約 1.5 秒無敵（90 幀 @ 60fps）
+  currentRunStats.damageTaken++;
   if (player.hp <= 0) triggerGameOver();
 }
 
@@ -877,17 +879,42 @@ function drawBalloon260(x, y) {
 }
 
 function drawSpike(x, y, w, h) {
-  const count = Math.floor(w / 16);
-  ctx.fillStyle = COLORS.spike;
+  const count  = Math.max(1, Math.floor(w / 16));
+  const tipW   = w / count;
+
+  // 底座
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(x, y + h - 6, w, 6);
+
+  // 尖刺本體（紅色，加深色邊緣）
   for (let i = 0; i < count; i++) {
-    const bx = x + i * (w / count);
-    const bw = w / count;
+    const bx = x + i * tipW;
+
+    // 填色
+    const grad = ctx.createLinearGradient(bx, y + h, bx + tipW / 2, y);
+    grad.addColorStop(0, '#c0180a');
+    grad.addColorStop(1, '#ff4422');
+    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(bx, y + h);
-    ctx.lineTo(bx + bw / 2, y);
-    ctx.lineTo(bx + bw, y + h);
+    ctx.moveTo(bx + 1,       y + h - 6);
+    ctx.lineTo(bx + tipW / 2, y);
+    ctx.lineTo(bx + tipW - 1, y + h - 6);
     ctx.closePath();
     ctx.fill();
+
+    // 亮邊
+    ctx.strokeStyle = 'rgba(255,180,100,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx + tipW / 2, y + 2);
+    ctx.lineTo(bx + 2,       y + h - 7);
+    ctx.stroke();
+  }
+
+  // 警告底線（閃爍，每 40 幀交替）
+  if (frameCount % 40 < 20) {
+    ctx.fillStyle = 'rgba(255,80,40,0.22)';
+    ctx.fillRect(x - 4, y - 6, w + 8, h + 8);
   }
 }
 
@@ -1010,7 +1037,7 @@ function drawOverlay(text, color) {
 
 function drawResultBox() {
   const bw = 500;
-  const bh = 340;
+  const bh = 370;  // 多一行：受傷次數
   const bx = CANVAS_W / 2 - bw / 2;
   const by = CANVAS_H / 2 - bh / 2 + 20;
 
@@ -1061,11 +1088,12 @@ function drawResultBox() {
 
   // ── 本關獲得 ──
   drawSection('【本關獲得】', [
-    ['🪙 金幣',          `${currentRunStats.coins} 枚`,      '#FFD700'],
-    ['🎈 260 長條氣球',  `${currentRunStats.balloon260} 條`, '#FF69B4'],
+    ['🪙 金幣',          `${currentRunStats.coins} 枚`,           '#FFD700'],
+    ['🎈 260 長條氣球',  `${currentRunStats.balloon260} 條`,      '#FF69B4'],
     ['💥 擊退小怪',      `${currentRunStats.enemiesDefeated} 隻`, '#ff9966'],
-    ['❤️ 剩餘生命',      `${player.hp} / ${player.maxHp}`,  '#ff6b6b'],
-    ['⏱  剩餘時間',      `${timeLeft} 秒`,                   '#adf'],
+    ['🩹 受傷次數',      `${currentRunStats.damageTaken} 次`,     '#ffaaaa'],
+    ['❤️ 剩餘生命',      `${player.hp} / ${player.maxHp}`,       '#ff6b6b'],
+    ['⏱  剩餘時間',      `${timeLeft} 秒`,                        '#adf'],
   ]);
 
   // Divider between sections
@@ -1135,6 +1163,7 @@ function restart() {
   currentRunStats.coins           = 0;
   currentRunStats.balloon260      = 0;
   currentRunStats.enemiesDefeated = 0;
+  currentRunStats.damageTaken     = 0;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
