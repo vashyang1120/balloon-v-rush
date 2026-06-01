@@ -244,7 +244,8 @@ const playerImg = new Image();
 playerImg.src = 'assets/player.png'; // place your image here
 
 // ── Game state ────────────────────────────────
-let gameState = 'playing'; // 'playing' | 'paused' | 'gameover' | 'clear'
+// gameState 用 var 使其成為全域變數，讓 index.html script 也可讀取
+var gameState = 'playing'; // 'playing' | 'paused' | 'gameover' | 'clear'
 let cameraX   = 0;
 let frameCount = 0;
 let lastTime   = 0;
@@ -770,6 +771,7 @@ function triggerGameOver() {
   gameState = 'gameover';
   populateResultPanel();
   showResultButtons();
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
 
 function triggerClear() {
@@ -778,6 +780,7 @@ function triggerClear() {
   gameState = 'clear';
   populateResultPanel();
   showResultButtons();
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
 
 // ── Draw ──────────────────────────────────────
@@ -1315,6 +1318,8 @@ function restart() {
   // 確保暫停 overlay 也關掉
   const pauseEl = document.getElementById('pause-overlay');
   if (pauseEl) pauseEl.style.display = 'none';
+  // 恢復暫停按鈕顯示
+  if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
   // Reset player stats (本局)
   Object.assign(player, {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
@@ -1424,8 +1429,9 @@ function hideResultButtons() {
 
 
 
-// ── Pause overlay button bindings ─────────────
-(function bindPauseButtons() {
+// ── Pause overlay 內部按鈕綁定 ────────────────
+// 注意：外部暫停按鈕的事件在 index.html script 中綁定（DOM 已存在時執行）
+(function bindPauseOverlayButtons() {
   // 繼續遊戲
   const btnResume = document.getElementById('btn-resume');
   if (btnResume) {
@@ -1444,17 +1450,7 @@ function hideResultButtons() {
       })
     );
   }
-  // 暫停按鈕（右上角）
-  const btnPause = document.getElementById('btn-pause');
-  if (btnPause) {
-    ['click', 'touchstart'].forEach(ev =>
-      btnPause.addEventListener(ev, e => {
-        e.preventDefault();
-        if (gameState === 'playing') pauseGame();
-        else if (gameState === 'paused') resumeGame();
-      })
-    );
-  }
+  // 外部 #btn-pause 與 #btn-pause-ingame 的事件已在 index.html 綁定，勿重複
 })();
 
 // ── Guidebook (氣球秘笈) HTML overlay ────────

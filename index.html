@@ -20,19 +20,19 @@
     </div>
   </div>
 
-  <!-- 右上角按鈕列（桌機 / 非全螢幕時顯示） -->
+  <!-- 外部按鈕列（非全螢幕時在 game-wrapper 上方） -->
   <div id="top-bar">
-    <button id="btn-pause"      class="top-btn">Ⅱ 暫停</button>
+    <button id="btn-pause" class="top-btn">Ⅱ 暫停</button>
     <button id="btn-fullscreen" class="top-btn">⛶ 全螢幕</button>
   </div>
 
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 遊戲內右上角按鈕（全螢幕時用，疊在 Canvas 上） -->
+    <!-- 遊戲內右上角按鈕（全螢幕時顯示，疊在 canvas 上） -->
     <div id="ingame-top-bar">
-      <button id="btn-pause-ingame"  class="ingame-top-btn">Ⅱ</button>
-      <button id="btn-fs-ingame"     class="ingame-top-btn">×FS</button>
+      <button id="btn-pause-ingame" class="ingame-top-btn">Ⅱ 暫停</button>
+      <button id="btn-fs-ingame"    class="ingame-top-btn">× 離開全螢幕</button>
     </div>
 
     <!-- 暫停 overlay -->
@@ -43,7 +43,7 @@
           <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續遊戲</button>
           <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重新開始</button>
         </div>
-        <div id="pause-hint">按 ESC 也可繼續</div>
+        <div id="pause-hint">桌機可按 ESC 繼續</div>
       </div>
     </div>
 
@@ -94,17 +94,11 @@
   <script src="main.js"></script>
   <script>
   // ─────────────────────────────────────────────
-  //  全螢幕 + 遊戲容器尺寸管理
+  //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
   // ─────────────────────────────────────────────
 
   const ASPECT  = 16 / 9;
   const wrapper = document.getElementById('game-wrapper');
-  const topBar  = document.getElementById('top-bar');
-  const inFSBar = document.getElementById('ingame-top-bar');
-  const btnFS         = document.getElementById('btn-fullscreen');
-  const btnFSIngame   = document.getElementById('btn-fs-ingame');
-  const btnFSPortrait = document.getElementById('btn-fullscreen-portrait');
-  const btnPauseIngame = document.getElementById('btn-pause-ingame');
 
   // ── 遊戲容器維持 16:9 ─────────────────────────
   function resizeGame() {
@@ -119,12 +113,11 @@
     wrapper.style.maxHeight = 'none';
   }
 
-  // ── 全螢幕狀態判斷 ────────────────────────────
+  // ── 全螢幕狀態 ───────────────────────────────
   function isFS() {
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
 
-  // ── 進入全螢幕 ────────────────────────────────
   function enterFS() {
     const el  = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen
@@ -136,26 +129,27 @@
     } catch(e) {}
   }
 
-  // ── 離開全螢幕 ────────────────────────────────
   function exitFS() {
     const fn = document.exitFullscreen || document.webkitExitFullscreen
              || document.mozCancelFullScreen || document.msExitFullscreen;
     if (fn) fn.call(document).catch(() => {});
   }
 
-  // ── 全螢幕切換 ────────────────────────────────
   function toggleFS() { isFS() ? exitFS() : enterFS(); }
 
-  // ── fullscreenchange：更新 UI + 重算尺寸 ──────
+  // ── fullscreenchange：更新按鈕文字 + UI 切換 ──
   function onFSChange() {
     const fs = isFS();
-    // 外部按鈕列：非全螢幕時顯示
-    topBar.style.display = fs ? 'none' : 'flex';
+
+    // 外部按鈕列：非全螢幕時顯示（CSS :fullscreen 也會隱藏）
+    document.getElementById('top-bar').style.display = fs ? 'none' : 'flex';
     // 遊戲內按鈕列：全螢幕時顯示
-    inFSBar.style.display = fs ? 'flex' : 'none';
+    document.getElementById('ingame-top-bar').style.display = fs ? 'flex' : 'none';
+
     // 按鈕文字
-    btnFS.textContent       = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
-    btnFSIngame.textContent = fs ? '×FS' : '⛶';
+    document.getElementById('btn-fullscreen').textContent  = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
+    document.getElementById('btn-fs-ingame').textContent   = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
+
     resizeGame();
     checkOrientation();
   }
@@ -165,43 +159,51 @@
     document.addEventListener(ev, onFSChange)
   );
 
-  // 外部按鈕
-  btnFS.addEventListener('click', toggleFS);
-  btnFSPortrait.addEventListener('click', enterFS);
-  // 遊戲內按鈕
-  btnFSIngame.addEventListener('click', toggleFS);
-  ['touchstart'].forEach(ev =>
-    btnFSIngame.addEventListener(ev, e => { e.preventDefault(); toggleFS(); })
-  );
-
-  // 暫停按鈕（遊戲內）
-  btnPauseIngame.addEventListener('click', () => {
-    if (typeof pauseGame === 'function' && typeof resumeGame === 'function') {
-      if (window.gameState === 'playing') pauseGame();
-      else if (window.gameState === 'paused') resumeGame();
-    }
+  // ── 全螢幕按鈕事件 ───────────────────────────
+  document.getElementById('btn-fullscreen').addEventListener('click', toggleFS);
+  document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFS);
+  document.getElementById('btn-fs-ingame').addEventListener('click', toggleFS);
+  document.getElementById('btn-fs-ingame').addEventListener('touchstart', e => {
+    e.preventDefault(); toggleFS();
   });
-  ['touchstart'].forEach(ev =>
-    btnPauseIngame.addEventListener(ev, e => {
-      e.preventDefault();
-      if (typeof pauseGame === 'function') {
-        if (window.gameState === 'playing') pauseGame();
-        else if (window.gameState === 'paused') resumeGame();
-      }
-    })
-  );
+
+  // ── 暫停按鈕事件（外部 + 遊戲內，DOM 已存在才綁定）──
+  function handlePauseClick(e) {
+    e.preventDefault();
+    // pauseGame / resumeGame 由 main.js 定義，此時已載入
+    if (typeof pauseGame !== 'function') return;
+    if (gameState === 'playing')       pauseGame();
+    else if (gameState === 'paused')   resumeGame();
+  }
+
+  const btnPauseOuter  = document.getElementById('btn-pause');
+  const btnPauseIngame = document.getElementById('btn-pause-ingame');
+
+  btnPauseOuter.addEventListener('click',      handlePauseClick);
+  btnPauseOuter.addEventListener('touchstart', handlePauseClick);
+  btnPauseIngame.addEventListener('click',      handlePauseClick);
+  btnPauseIngame.addEventListener('touchstart', handlePauseClick);
+
+  // ── 結算畫面時隱藏暫停按鈕，離開結算時恢復 ──
+  // 這由 main.js 的 triggerClear/GameOver 呼叫 hidePauseBtn()，
+  // 由 restart() 呼叫 showPauseBtn()
+  window.hidePauseBtn = function() {
+    btnPauseOuter.style.display  = 'none';
+    btnPauseIngame.style.display = 'none';
+  };
+  window.showPauseBtn = function() {
+    btnPauseOuter.style.display  = '';
+    btnPauseIngame.style.display = '';
+  };
 
   // ── 直式遮罩 ──────────────────────────────────
   const portraitMask = document.getElementById('portrait-mask');
-
   function checkOrientation() {
     const isTouch    = navigator.maxTouchPoints > 0;
     const isPortrait = window.innerHeight > window.innerWidth;
     const fs         = isFS();
-    if (portraitMask)
-      portraitMask.style.display = (isTouch && isPortrait && !fs) ? 'flex' : 'none';
-    // 非全螢幕時才顯示外部按鈕列
-    topBar.style.display = fs ? 'none' : 'flex';
+    portraitMask.style.display = (isTouch && isPortrait && !fs) ? 'flex' : 'none';
+    document.getElementById('top-bar').style.display = fs ? 'none' : 'flex';
   }
 
   window.addEventListener('resize', () => { resizeGame(); checkOrientation(); });
@@ -210,7 +212,7 @@
   });
 
   // ── 初始化 ────────────────────────────────────
-  inFSBar.style.display = 'none'; // 預設隱藏遊戲內按鈕列
+  document.getElementById('ingame-top-bar').style.display = 'none';
   resizeGame();
   checkOrientation();
   </script>

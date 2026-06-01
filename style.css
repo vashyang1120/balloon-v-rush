@@ -164,7 +164,7 @@ html, body {
   position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.6);
-  z-index: 150;
+  z-index: 9000;
   align-items: center;
   justify-content: center;
   padding: 8px;
@@ -314,7 +314,7 @@ html, body {
   position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.72);
-  z-index: 200;
+  z-index: 9200;
   align-items: center;
   justify-content: center;
   padding: 12px;
@@ -443,7 +443,7 @@ html, body {
   display: none; /* onFSChange() 控制 */
   flex-direction: row;
   gap: 6px;
-  z-index: 120; /* 高於 canvas，但低於 overlay（150+） */
+  z-index: 10000; /* 永遠在最上層，不被任何 overlay 蓋住 */
   pointer-events: all;
 }
 
@@ -480,7 +480,7 @@ html, body {
   position: absolute;
   inset: 0;
   background: rgba(0,0,20,0.55);
-  z-index: 160; /* 高於遊戲內按鈕(120)，低於結算(150)→改為160 */
+  z-index: 9500; /* 高於結算(9000)，低於 ingame-top-bar(10000) */
   align-items: center;
   justify-content: center;
 }
