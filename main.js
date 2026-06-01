@@ -199,11 +199,11 @@ function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
 }
 
 // ── Update ────────────────────────────────────
-function update(dt) {
+function update(dt, dtMs = 16.667) {
   if (gameState !== 'playing') return;
 
   frameCount++;
-  elapsedSec += dt;
+  elapsedSec += dtMs / 1000; // real seconds
 
   // Time up → game over
   if (elapsedSec >= LEVEL_DURATION) {
@@ -825,10 +825,11 @@ canvas.addEventListener('touchstart', () => {
 
 // ── Game loop ─────────────────────────────────
 function loop(timestamp) {
-  const dt = lastTime ? Math.min((timestamp - lastTime) / 16.667, 3) : 1;
-  lastTime = timestamp;
+  const dtMs = lastTime ? Math.min(timestamp - lastTime, 50) : 16.667;
+  const dt   = dtMs / 16.667; // frame multiplier for physics (1.0 at 60fps)
+  lastTime   = timestamp;
 
-  update(dt);
+  update(dt, dtMs);
   draw();
 
   requestAnimationFrame(loop);
