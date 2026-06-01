@@ -403,3 +403,151 @@ html, body {
   border-color: rgba(255,255,255,0.12);
   background: rgba(40,40,40,0.6); color: #666; cursor: not-allowed;
 }
+
+/* =============================================
+   右上角按鈕列（外部，非全螢幕時）
+   ============================================= */
+
+#top-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: calc(100vh * 16 / 9);
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.top-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.8);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.top-btn:hover  { background: rgba(255,255,255,0.22); color: #fff; }
+.top-btn:active { transform: scale(0.95); }
+
+/* ── 遊戲內右上角按鈕（全螢幕時，疊在 canvas 上） ── */
+#ingame-top-bar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: none; /* onFSChange() 控制 */
+  flex-direction: row;
+  gap: 6px;
+  z-index: 120; /* 高於 canvas，但低於 overlay（150+） */
+  pointer-events: all;
+}
+
+.ingame-top-btn {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.85);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.12s;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 36px;
+  text-align: center;
+}
+.ingame-top-btn:hover  { background: rgba(255,255,255,0.2); color: #fff; }
+.ingame-top-btn:active { transform: scale(0.93); }
+
+/* 手機橫向時略縮 */
+@media (max-height: 500px) and (orientation: landscape) {
+  #ingame-top-bar    { top: 4px; right: 4px; gap: 4px; }
+  .ingame-top-btn    { padding: 3px 8px; font-size: 11px; }
+}
+
+/* =============================================
+   暫停 overlay
+   ============================================= */
+
+#pause-overlay {
+  display: none; /* pauseGame() 設為 flex */
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,20,0.55);
+  z-index: 160; /* 高於遊戲內按鈕(120)，低於結算(150)→改為160 */
+  align-items: center;
+  justify-content: center;
+}
+
+#pause-panel {
+  background: rgba(10,12,35,0.95);
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 16px;
+  padding: 28px 36px;
+  text-align: center;
+  min-width: 220px;
+  max-width: 320px;
+  width: 80%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#pause-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+
+#pause-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pause-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.2);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-btn:active { transform: scale(0.97); }
+
+.pause-btn--primary {
+  background: rgba(20,70,35,0.9);
+  border-color: rgba(100,220,130,0.6);
+  color: #a0ffb0;
+}
+.pause-btn--primary:hover { background: rgba(30,90,50,0.95); }
+
+.pause-btn--secondary {
+  background: rgba(30,30,60,0.9);
+  border-color: rgba(150,150,255,0.4);
+  color: #c8c8ff;
+}
+.pause-btn--secondary:hover { background: rgba(40,40,80,0.95); }
+
+#pause-hint {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+
+/* 手機橫向：縮小暫停面板 */
+@media (max-height: 500px) and (orientation: landscape) {
+  #pause-panel   { padding: 16px 24px; gap: 10px; }
+  #pause-title   { font-size: 16px; }
+  .pause-btn     { padding: 9px 12px; font-size: 13px; }
+  #pause-hint    { display: none; }
+}

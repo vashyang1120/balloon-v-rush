@@ -107,6 +107,12 @@ const keys = {};
 const mobileBtn = { left: false, right: false, jump: false, attack: false };
 
 window.addEventListener('keydown', e => {
+  // Esc：playing ↔ paused 切換（結算/秘笈時不處理）
+  if (e.code === 'Escape') {
+    if (gameState === 'playing') { pauseGame(); return; }
+    if (gameState === 'paused')  { resumeGame(); return; }
+    return; // gameover / clear 狀態 Esc 不做事
+  }
   keys[e.code] = true;
   if (['Space','ArrowLeft','ArrowRight','ArrowUp','KeyZ'].includes(e.code)) e.preventDefault();
 });
@@ -238,7 +244,7 @@ const playerImg = new Image();
 playerImg.src = 'assets/player.png'; // place your image here
 
 // ── Game state ────────────────────────────────
-let gameState = 'playing'; // 'playing' | 'gameover' | 'clear'
+let gameState = 'playing'; // 'playing' | 'paused' | 'gameover' | 'clear'
 let cameraX   = 0;
 let frameCount = 0;
 let lastTime   = 0;
@@ -740,6 +746,24 @@ function checkFinish() {
   }
 }
 
+
+// ── Pause / Resume ────────────────────────────
+function pauseGame() {
+  if (gameState !== 'playing') return;
+  gameState = 'paused';
+  const el = document.getElementById('pause-overlay');
+  if (el) el.style.display = 'flex';
+}
+
+function resumeGame() {
+  if (gameState !== 'paused') return;
+  gameState = 'playing';
+  const el = document.getElementById('pause-overlay');
+  if (el) el.style.display = 'none';
+  // lastTime 重置，避免暫停後 dt 爆炸大
+  lastTime = 0;
+}
+
 function triggerGameOver() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
@@ -763,14 +787,20 @@ function draw() {
   if (gameState === 'playing') {
     drawWorld();
     drawHUD();
+  } else if (gameState === 'paused') {
+    drawWorld();
+    drawHUD();
+    // 暫停遮罩（半透明）：overlay 由 HTML 負責，Canvas 只畫模糊底
+    ctx.fillStyle = 'rgba(0,0,20,0.45)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   } else if (gameState === 'gameover') {
     drawWorld();
     drawHUD();
-    drawResultBox(); // 只畫背景遮罩，標題由 HTML 面板顯示
+    drawResultBox();
   } else if (gameState === 'clear') {
     drawWorld();
     drawHUD();
-    drawResultBox(); // 只畫背景遮罩
+    drawResultBox();
   }
 }
 
@@ -1282,6 +1312,9 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 // ── Restart ───────────────────────────────────
 function restart() {
   hideResultButtons();
+  // 確保暫停 overlay 也關掉
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) pauseEl.style.display = 'none';
   // Reset player stats (本局)
   Object.assign(player, {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
@@ -1390,6 +1423,40 @@ function hideResultButtons() {
 })();
 
 
+
+// ── Pause overlay button bindings ─────────────
+(function bindPauseButtons() {
+  // 繼續遊戲
+  const btnResume = document.getElementById('btn-resume');
+  if (btnResume) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnResume.addEventListener(ev, e => { e.preventDefault(); resumeGame(); })
+    );
+  }
+  // 重新開始（從暫停畫面）
+  const btnRestart = document.getElementById('btn-pause-restart');
+  if (btnRestart) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnRestart.addEventListener(ev, e => {
+        e.preventDefault();
+        gameState = 'playing'; // 先設回 playing 讓 restart() 不被擋
+        restart();
+      })
+    );
+  }
+  // 暫停按鈕（右上角）
+  const btnPause = document.getElementById('btn-pause');
+  if (btnPause) {
+    ['click', 'touchstart'].forEach(ev =>
+      btnPause.addEventListener(ev, e => {
+        e.preventDefault();
+        if (gameState === 'playing') pauseGame();
+        else if (gameState === 'paused') resumeGame();
+      })
+    );
+  }
+})();
+
 // ── Guidebook (氣球秘笈) HTML overlay ────────
 function openGuidebook() {
   renderGuidebook();
@@ -1495,7 +1562,7 @@ function loop(timestamp) {
   update(dt, dtMs);
   draw();
 
-  initEquippedSword(); // 頁面載入時從 inventory 初始化裝備
+  initEquippedSword(); // 頁面載入時初始化裝備（只執行一次）
 requestAnimationFrame(loop);
 }
 
