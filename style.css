@@ -551,3 +551,13 @@ html, body {
   .pause-btn     { padding: 9px 12px; font-size: 13px; }
   #pause-hint    { display: none; }
 }
+
+/* ── 結算畫面：關卡名稱 ── */
+.rp-level-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(160,255,180,0.85);
+  text-align: center;
+  padding: 4px 0 10px;
+  letter-spacing: 0.04em;
+}

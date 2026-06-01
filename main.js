@@ -1,6 +1,6 @@
 // =============================================
 //  氣球小V：派對島大作戰 — main.js
-//  MVP 0.1
+//  MVP 0.7 — 第 1 關：氣球森林小徑
 // =============================================
 
 // ── Canvas setup ──────────────────────────────
@@ -52,7 +52,7 @@ const CONFIG = {
 
   // -- 關卡 --
   LEVEL_DURATION:  60,    // 關卡時間限制（秒）
-  LEVEL_LENGTH:    14400, // 關卡世界總寬度 (px)
+  LEVEL_LENGTH:    6400,  // 第 1 關世界寬度（約 60 秒）
 
   // -- 橘子怪 (balloonNemesis) --
   ORANGE_W:           44,   // 橘子怪寬度 (px)
@@ -71,6 +71,7 @@ const PLAYER_SPEED   = CONFIG.PLAYER_SPEED;
 const JUMP_FORCE     = CONFIG.JUMP_FORCE;
 const SCROLL_SPEED   = CONFIG.SCROLL_SPEED;
 const LEVEL_LENGTH   = CONFIG.LEVEL_LENGTH;
+const LEVEL_NAME     = '第 1 關：氣球森林小徑'; // 關卡名稱
 const LEVEL_DURATION = CONFIG.LEVEL_DURATION;
 const GROUND_Y       = CANVAS_H - 80; // 地面頂部 Y 座標（不建議輕易修改）
 
@@ -333,18 +334,25 @@ const player = {
 // ── Level generation ──────────────────────────
 // All positions are in world coordinates.
 
+// 第 1 關平台（配合 5 段節奏，世界寬 6400）
 const platforms = [
-  // { x, y, w, h }
-  { x: 400,  y: GROUND_Y - 100, w: 120, h: 18 },
-  { x: 650,  y: GROUND_Y - 160, w: 100, h: 18 },
-  { x: 900,  y: GROUND_Y - 110, w: 140, h: 18 },
-  { x: 1200, y: GROUND_Y - 150, w: 120, h: 18 },
-  { x: 1500, y: GROUND_Y - 120, w: 160, h: 18 },
-  { x: 1800, y: GROUND_Y - 180, w: 100, h: 18 },
-  { x: 2100, y: GROUND_Y - 130, w: 130, h: 18 },
-  { x: 2400, y: GROUND_Y - 160, w: 110, h: 18 },
-  { x: 2800, y: GROUND_Y - 120, w: 180, h: 18 },
-  { x: 3200, y: GROUND_Y - 150, w: 140, h: 18 },
+  // 段 1：安全區平台，低跳可上，引導移動
+  { x:  420, y: GROUND_Y - 90,  w: 130, h: 18 },
+  { x:  680, y: GROUND_Y - 130, w: 110, h: 18 },
+  // 段 2：小怪區，平台讓玩家有制高點
+  { x: 1050, y: GROUND_Y - 100, w: 140, h: 18 },
+  { x: 1380, y: GROUND_Y - 140, w: 120, h: 18 },
+  // 段 3：尖刺區，平台讓玩家可以跳越尖刺
+  { x: 2000, y: GROUND_Y - 110, w: 150, h: 18 },
+  { x: 2300, y: GROUND_Y - 100, w: 130, h: 18 },
+  { x: 2700, y: GROUND_Y - 130, w: 120, h: 18 },
+  { x: 3100, y: GROUND_Y - 110, w: 140, h: 18 },
+  // 段 4：橘子怪區，平台讓玩家可以跳過噴油
+  { x: 3600, y: GROUND_Y - 120, w: 160, h: 18 },
+  { x: 4000, y: GROUND_Y - 100, w: 140, h: 18 },
+  // 段 5：終點獎勵區
+  { x: 4800, y: GROUND_Y - 100, w: 180, h: 18 },
+  { x: 5300, y: GROUND_Y - 120, w: 140, h: 18 },
 ];
 
 const coins = generateCoins();
@@ -358,81 +366,169 @@ const projectiles = []; // player-fired balloons
 const FINISH_X = LEVEL_LENGTH - 200;
 
 function generateCoins() {
-  const list = [];
-  for (let i = 0; i < 60; i++) {
-    list.push({
-      x: 300 + i * 200 + Math.random() * 80,
-      y: GROUND_Y - 50 - Math.random() * 80,
-      collected: false,
-      bobOffset: Math.random() * Math.PI * 2,
-    });
-  }
-  // Also place some on platforms
-  platforms.forEach(p => {
-    list.push({ x: p.x + p.w / 2, y: p.y - 30, collected: false, bobOffset: Math.random() * Math.PI * 2 });
-    list.push({ x: p.x + p.w / 2 - 28, y: p.y - 30, collected: false, bobOffset: Math.random() * Math.PI * 2 });
-  });
-  return list;
+  // 第 1 關：精確配置 ~28 枚，引導玩家前進
+  // 格式：[x, y偏移(從地面往上)]
+  const placements = [
+    // 段 1：安全區 — 地面引導線 + 平台上
+    [200, 55], [280, 55], [360, 55],
+    [440, 130], [520, 55],
+    [600, 55], [700, 170], [760, 55],
+    // 段 2：小怪區
+    [1000, 55], [1100, 55],
+    [1060, 140], // 平台上方
+    [1250, 55], [1420, 180],
+    // 段 3：尖刺區（空隙引導）
+    [1950, 55], [2060, 150], [2180, 55],
+    [2380, 55], [2500, 55],
+    [2750, 170], [2900, 55],
+    // 段 4：橘子怪前後
+    [3400, 55], [3650, 160],
+    [4100, 140], [4300, 55],
+    // 段 5：終點獎勵區（較密集）
+    [4820, 55], [4870, 55], [4920, 55],
+    [5000, 140], [5100, 55], [5200, 160],
+    [5400, 55], [5600, 55], [5800, 55],
+  ];
+  return placements.map(([x, yOff]) => ({
+    x,
+    y: GROUND_Y - yOff,
+    collected: false,
+    bobOffset: Math.random() * Math.PI * 2,
+  }));
 }
 
 function generateBalloons() {
-  const list = [];
-  const positions = [500, 900, 1300, 1700, 2100, 2500, 2900, 3300, 3700, 4100, 4500];
-  positions.forEach(x => {
-    list.push({
-      x: x + Math.random() * 60,
-      y: GROUND_Y - 80 - Math.random() * 60,
-      collected: false,
-      bobOffset: Math.random() * Math.PI * 2,
-    });
-  });
-  return list;
+  // 第 1 關：8 個 260 長條氣球，分散各段
+  const positions = [
+    480,   // 段 1：早早出現讓玩家認識
+    780,   // 段 1 尾
+    1200,  // 段 2：小怪區
+    1600,  // 段 2 尾
+    2200,  // 段 3：尖刺區
+    3000,  // 段 3 尾
+    3700,  // 段 4：橘子怪旁（跳過後獎勵）
+    5100,  // 段 5：終點前
+  ];
+  return positions.map(x => ({
+    x: x + 20,
+    y: GROUND_Y - 85,
+    collected: false,
+    bobOffset: Math.random() * Math.PI * 2,
+  }));
 }
 
 function generateSpikes() {
-  const list = [];
-  const positions = [700, 1000, 1400, 1900, 2300, 2700, 3100, 3500, 4000, 4400, 4800];
-  positions.forEach(x => {
-    list.push({ x: x + Math.random() * 40, y: GROUND_Y - 24, w: 40, h: 24 });
-  });
-  return list;
+  // 第 1 關：4 組尖刺，集中在段 3（1920～3360），單組，間距足夠
+  return [
+    { x: 2050, y: GROUND_Y - 24, w: 40, h: 24 },
+    { x: 2350, y: GROUND_Y - 24, w: 40, h: 24 },
+    { x: 2680, y: GROUND_Y - 24, w: 40, h: 24 },
+    { x: 3150, y: GROUND_Y - 24, w: 40, h: 24 },
+  ];
 }
 
 function generateEnemies() {
-  const list = [];
-  const positions = [600, 1100, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4400, 4800, 5200];
-  positions.forEach(x => {
-    list.push({
-      x: x + Math.random() * 50,
-      y: GROUND_Y - CONFIG.ENEMY_H,
-      w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
-      vx: (Math.random() > 0.5 ? 1 : -1) * CONFIG.ENEMY_SPEED,
-      hp: 2,
-      patrol: x,
-      patrolRange: 120,
-      active: true,
-      hitFlash: 0,
-    });
-  });
-  return list;
+  // 第 1 關：4 隻小怪，段 2（960～1920）為主，1 隻在段 4 後方
+  const defs = [
+    { x: 1000, patrol: 1000, range: 100 }, // 段 2 第一隻，範圍小，讓玩家有準備
+    { x: 1250, patrol: 1250, range: 120 }, // 段 2 第二隻
+    { x: 1600, patrol: 1600, range: 100 }, // 段 2 第三隻
+    { x: 4400, patrol: 4400, range: 140 }, // 段 4 後：橘子怪通過後的額外考驗
+  ];
+  return defs.map(d => ({
+    x: d.x,
+    y: GROUND_Y - CONFIG.ENEMY_H,
+    w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+    vx: -CONFIG.ENEMY_SPEED, // 統一朝左（朝向玩家）
+    hp: 2,
+    patrol: d.patrol,
+    patrolRange: d.range,
+    active: true,
+    hitFlash: 0,
+  }));
 }
 
 
 function generateOrangeNemeses() {
-  // 只放兩隻，位置明顯、可以跳過
-  const positions = [1250, 3000];
-  return positions.map(x => ({
-    x,
+  // 第 1 關：1 隻橘子怪，段 4（x=3800），站在平台前方地面
+  return [{
+    x: 3820,
     y: GROUND_Y - CONFIG.ORANGE_H,
     w: CONFIG.ORANGE_W,
     h: CONFIG.ORANGE_H,
-    // 噴油方向：固定朝左（玩家通常從左往右跑）
-    sprayDir: -1,
-    // 狀態機：'idle' | 'windup' | 'spraying'
+    sprayDir: -1, // 朝左噴（朝向玩家來向）
     phase:    'idle',
-    phaseTimer: 0,        // 目前 phase 已過的 ms
-    sprayActive: false,   // 目前是否有傷害範圍
-  }));
+    phaseTimer: 0,
+    sprayActive: false,
+  }];
+}
+
+
+// ── Tutorial Hints (MVP 0.7) ──────────────────
+// 依玩家 x 位置顯示一次性教學提示
+const HINTS = [
+  { triggerX:   80, msg: '← → 移動　空白鍵 跳躍',       shown: false, duration: 240 },
+  { triggerX:  850, msg: 'Z 鍵 使用氣球劍攻擊小怪！',    shown: false, duration: 220 },
+  { triggerX: 1900, msg: '⚠️ 尖刺不能攻擊，請跳過！',    shown: false, duration: 220 },
+  { triggerX: 3650, msg: '🍊 橘子怪會噴果皮油！等空檔通過', shown: false, duration: 260 },
+];
+// 手機版文字簡化（由 drawHintBox 判斷）
+const HINTS_MOBILE = [
+  '← → 移動　↑ 跳躍',
+  '🎈 攻擊按鈕　打小怪',
+  '⚠️ 尖刺請跳過',
+  '🍊 等空檔通過橘子怪',
+];
+
+let activeHint   = null; // { msg, framesLeft }
+let hintQueue    = [];   // 待顯示的提示
+
+function checkHints() {
+  // 只在 playing 時觸發
+  if (gameState !== 'playing') return;
+  HINTS.forEach(h => {
+    if (!h.shown && player.x >= h.triggerX) {
+      h.shown = true;
+      showHint(h.msg, h.duration);
+    }
+  });
+}
+
+function showHint(msg, duration = 200) {
+  activeHint = { msg, framesLeft: duration };
+}
+
+function tickHint() {
+  if (!activeHint) return;
+  activeHint.framesLeft--;
+  if (activeHint.framesLeft <= 0) activeHint = null;
+}
+
+function drawHintBox() {
+  if (!activeHint) return;
+  const msg      = activeHint.msg;
+  const progress = activeHint.framesLeft / 200; // fade out
+  const alpha    = Math.min(1, progress * 4) * 0.92; // 快速淡入，緩慢淡出
+
+  const bw  = Math.min(CANVAS_W - 40, 520);
+  const bh  = 40;
+  const bx  = (CANVAS_W - bw) / 2;
+  const by  = CANVAS_H - 90; // HUD 之上，手機操作按鈕之上
+
+  ctx.fillStyle = `rgba(10,20,50,${alpha * 0.85})`;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 10);
+  ctx.fill();
+
+  ctx.fillStyle = `rgba(200,240,255,${alpha})`;
+  ctx.font      = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(msg, CANVAS_W / 2, by + bh * 0.65);
+}
+
+function resetHints() {
+  HINTS.forEach(h => { h.shown = false; });
+  activeHint = null;
 }
 
 // ── Rect collision helper ─────────────────────
@@ -461,6 +557,8 @@ function update(dt, dtMs = 16.667) {
   updateOrangeNemeses(dtMs);
   checkCollectibles();
   checkHazards();
+  checkHints();
+  tickHint();
   checkFinish();
 }
 
@@ -790,6 +888,7 @@ function draw() {
   if (gameState === 'playing') {
     drawWorld();
     drawHUD();
+    drawHintBox();
   } else if (gameState === 'paused') {
     drawWorld();
     drawHUD();
@@ -1282,6 +1381,7 @@ function populateResultPanel() {
   const panel = document.getElementById('result-panel-body');
   if (!panel) return;
   panel.innerHTML = `
+    <div class="rp-level-name">🌿 ${LEVEL_NAME}</div>
     <div class="rp-section">
       <div class="rp-section-title">📋 本關成果</div>
       ${makeTable(runRows)}
@@ -1356,6 +1456,7 @@ function restart() {
   enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   projectiles.length = 0;
+  resetHints();
 }
 
 // ── Reset Save ────────────────────────────────
