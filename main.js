@@ -744,6 +744,7 @@ function triggerGameOver() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
+  populateResultPanel();
   showResultButtons();
 }
 
@@ -751,6 +752,7 @@ function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'clear';
+  populateResultPanel();
   showResultButtons();
 }
 
@@ -764,13 +766,11 @@ function draw() {
   } else if (gameState === 'gameover') {
     drawWorld();
     drawHUD();
-    drawOverlay('💀 遊戲結束', '#c0392b');
-    drawResultBox();
+    drawResultBox(); // 只畫背景遮罩，標題由 HTML 面板顯示
   } else if (gameState === 'clear') {
     drawWorld();
     drawHUD();
-    drawOverlay('🎉 關卡完成！', '#27ae60');
-    drawResultBox();
+    drawResultBox(); // 只畫背景遮罩
   }
 }
 
@@ -1202,99 +1202,65 @@ function drawOverlay(text, color) {
   ctx.fillText(text, CANVAS_W / 2, CANVAS_H / 2 - 80);
 }
 
+// drawResultBox：Canvas 只畫模糊遮罩，所有內容由 HTML overlay 負責
 function drawResultBox() {
-  const bw = 500;
-  const bh = 370;  // 多一行：受傷次數
-  const bx = CANVAS_W / 2 - bw / 2;
-  const by = CANVAS_H / 2 - bh / 2 + 20;
+  // 僅加深背景，讓 HTML 面板更清楚
+  ctx.fillStyle = 'rgba(10,10,30,0.6)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+}
 
-  // Background
-  ctx.fillStyle = 'rgba(15,15,35,0.94)';
-  ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 16);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  const pad  = 28;
-  const col2 = bx + bw - pad; // right-align value column
-  let   row  = by + 30;
-  const ROW  = 28;
-
-  function drawSection(title, rows) {
-    // Section title
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(title, bx + pad, row);
-    row += 4;
-    // Underline
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + pad, row); ctx.lineTo(bx + bw - pad, row);
-    ctx.stroke();
-    row += 18;
-    // Rows
-    rows.forEach(([label, val, color]) => {
-      ctx.fillStyle = '#aaa';
-      ctx.font = '13px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(label, bx + pad, row);
-      ctx.fillStyle = color || '#fff';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(val, col2, row);
-      row += ROW;
-    });
-    row += 8; // section gap
-  }
-
+// 填充 HTML 結算面板內容（每次 triggerClear/GameOver 時呼叫）
+function populateResultPanel() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
-
-  // ── 本關獲得 ──
-  drawSection('【本關獲得】', [
-    ['🪙 金幣',          `${currentRunStats.coins} 枚`,           '#FFD700'],
-    ['🎈 260 長條氣球',  `${currentRunStats.balloon260} 條`,      '#FF69B4'],
-    ['💥 擊退小怪',      `${currentRunStats.enemiesDefeated} 隻`, '#ff9966'],
-    ['🩹 受傷次數',      `${currentRunStats.damageTaken} 次`,     '#ffaaaa'],
-    ['❤️ 剩餘生命',      `${player.hp} / ${player.maxHp}`,       '#ff6b6b'],
-    ['⏱  剩餘時間',      `${timeLeft} 秒`,                        '#adf'],
-  ]);
-
-  // Divider between sections
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bx + pad, row - 4); ctx.lineTo(bx + bw - pad, row - 4);
-  ctx.stroke();
-  row += 8;
-
-  // ── 目前背包 ──
   const ci = playerInventory.craftedItems || {};
+
+  // 本關成果
+  const runRows = [
+    ['🪙 金幣',         `${currentRunStats.coins} 枚`,            'result-gold'],
+    ['🎈 260 長條氣球', `${currentRunStats.balloon260} 條`,       'result-pink'],
+    ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,  'result-orange'],
+    ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,      'result-red'],
+    ['❤️ 剩餘生命',     `${player.hp} / ${player.maxHp}`,        'result-red'],
+    ['⏱  剩餘時間',     `${timeLeft} 秒`,                         'result-blue'],
+  ];
+
+  // 背包
   const bagRows = [
-    ['🪙 金幣總計',          `${playerInventory.coins} 枚`,      '#FFD700'],
-    ['🎈 260 長條氣球總計',  `${playerInventory.balloon260} 條`, '#FF69B4'],
+    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,        'result-gold'],
+    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,   'result-pink'],
   ];
   const swordQty = ci.basicSword || 0;
   if (swordQty > 0 || equippedSword.id === 'basicSword') {
     const durInfo = equippedSword.id === 'basicSword'
-      ? `（耐久 ${equippedSword.currentDur}/${equippedSword.maxDur}）`
+      ? ` (耐久 ${equippedSword.currentDur}/${equippedSword.maxDur})`
       : '';
-    const totalSwords = equippedSword.id === 'basicSword' ? swordQty : swordQty;
-    bagRows.push([`⚔️ 基礎氣球劍 ${durInfo}`, `${totalSwords} 把`, '#c8f0ff']);
+    bagRows.push([`⚔️ 基礎氣球劍${durInfo}`, `${swordQty} 把`,  'result-cyan']);
   }
-  drawSection('【目前背包】', bagRows);
 
-  // Trivia
+  // 小知識
   const trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
-  ctx.fillStyle = 'rgba(170,221,255,0.75)';
-  ctx.font = 'italic 11px sans-serif';
-  ctx.textAlign = 'center';
-  wrapText(ctx, '💡 ' + trivia, CANVAS_W / 2, by + bh - 36, bw - 48, 16);
 
-  // (按鈕由 HTML overlay 負責，不在 canvas 繪製)
+  function makeTable(rows) {
+    return rows.map(([label, val, cls]) =>
+      `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
+    ).join('');
+  }
+
+  const panel = document.getElementById('result-panel-body');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="rp-section">
+      <div class="rp-section-title">📋 本關成果</div>
+      ${makeTable(runRows)}
+    </div>
+    <div class="rp-section">
+      <div class="rp-section-title">🎒 目前背包</div>
+      ${makeTable(bagRows)}
+    </div>
+    <div class="rp-trivia">
+      💡 ${trivia}
+    </div>
+  `;
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -1375,12 +1341,12 @@ function restart() {
 // 按鈕在 gameState 進入 gameover/clear 時顯示，restart 時隱藏
 
 function showResultButtons() {
-  const el = document.getElementById('result-buttons');
+  const el = document.getElementById('result-overlay');
   if (el) el.style.display = 'flex';
 }
 
 function hideResultButtons() {
-  const el = document.getElementById('result-buttons');
+  const el = document.getElementById('result-overlay');
   if (el) el.style.display = 'none';
 }
 
@@ -1416,9 +1382,7 @@ function hideResultButtons() {
         e.preventDefault();
         if (confirm('確定要清除背包資料嗎？')) {
           resetInventory();
-          // 立即更新畫面上的背包數字
-          const el = document.getElementById('result-buttons');
-          if (el) el.dataset.resetDone = '1';
+          populateResultPanel(); // 清除後刷新面板數字
         }
       })
     );

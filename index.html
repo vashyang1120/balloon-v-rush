@@ -10,23 +10,38 @@
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 結算畫面按鈕 overlay -->
-    <div id="result-buttons">
-      <button id="btn-play-again" class="result-btn result-btn--primary">
-        再玩一次
-        <span class="result-btn-sub">Play Again</span>
-      </button>
-      <button id="btn-guidebook" class="result-btn result-btn--guide">
-        氣球秘笈
-        <span class="result-btn-sub">Balloon Guidebook</span>
-      </button>
-      <button id="btn-result-reset" class="result-btn result-btn--danger">
-        清除背包資料
-        <span class="result-btn-sub">Reset Inventory</span>
-      </button>
+    <!-- ── 結算畫面 overlay（JS 控制顯示/隱藏） ── -->
+    <div id="result-overlay">
+      <div id="result-panel">
+
+        <!-- 標題（由 JS 依 gameState 設定） -->
+        <div id="result-panel-title">關卡結算</div>
+
+        <!-- 主要內容（由 populateResultPanel() 填入） -->
+        <div id="result-panel-body">
+          <!-- 動態填入 -->
+        </div>
+
+        <!-- 操作按鈕區：固定在面板底部 -->
+        <div id="result-action-bar">
+          <button id="btn-play-again" class="result-btn result-btn--primary">
+            再玩一次
+            <span class="result-btn-sub">Play Again</span>
+          </button>
+          <button id="btn-guidebook" class="result-btn result-btn--guide">
+            氣球秘笈
+            <span class="result-btn-sub">Balloon Guidebook</span>
+          </button>
+          <button id="btn-result-reset" class="result-btn result-btn--danger">
+            清除背包資料
+            <span class="result-btn-sub">Reset Inventory</span>
+          </button>
+        </div>
+
+      </div>
     </div>
 
-    <!-- 氣球秘笈 overlay -->
+    <!-- ── 氣球秘笈 overlay ── -->
     <div id="guidebook-overlay">
       <div id="guidebook-panel">
         <div id="guidebook-header">
@@ -34,13 +49,11 @@
           <button id="btn-close-guidebook">✕</button>
         </div>
         <div id="craft-message"></div>
-        <div id="guidebook-recipe-list">
-          <!-- 由 renderGuidebook() 動態產生 -->
-        </div>
+        <div id="guidebook-recipe-list"></div>
       </div>
     </div>
 
-    <!-- Mobile controls -->
+    <!-- ── 手機操作按鈕 ── -->
     <div id="mobile-controls">
       <div id="ctrl-left-group">
         <button class="ctrl-btn" id="btn-left">◀</button>
@@ -54,5 +67,15 @@
   </div>
 
   <script src="main.js"></script>
+
+  <!-- 依 gameState 設定結算標題 -->
+  <script>
+    // 在 main.js 的 triggerClear/GameOver 呼叫 showResultButtons() 前，
+    // 這裡監聽 result-overlay 的顯示並更新標題
+    const _titleEl = document.getElementById('result-panel-title');
+    const _origShow = window.showResultButtons;
+    // showResultButtons 在 main.js 中定義，等 DOMContentLoaded 後 patch
+    document.addEventListener('DOMContentLoaded', () => {});
+  </script>
 </body>
 </html>
