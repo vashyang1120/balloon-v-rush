@@ -147,16 +147,20 @@ function inp(action) {
 // playerInventory: 跨局累積的背包資料
 // 新增材料時只需在此物件與 INVENTORY_DEFAULTS 加欄位即可
 const INVENTORY_DEFAULTS = {
-  coins:      0,
-  balloon260: 0,
-  // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12, recipeCards ...
+  coins:         0,
+  balloon260:    0,
+  roundBalloon:  0,        // MVP 1.0B：圓氣球材料
+  // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12 ...
   craftedItems: {
-    basicSword: 0,
+    basicSword:   0,
+    basicHammer:  0,       // MVP 1.0B：基礎氣球槌
     // 未來可在此擴充更多道具
   },
-  // 目前裝備的劍耐久（localStorage 持久化，關卡結束後保留）
-  equippedSwordDur: 0,
-  // 第 1 關教學劍是否已發放（防止重複刷劍）
+  unlockedRecipes: {
+    basicHammer:  false,   // 第 3 關通關後解鎖
+    // 未來可在此擴充更多解鎖狀態
+  },
+  equippedSwordDur:     0,
   tutorialSwordGranted: false,
 };
 
@@ -164,15 +168,35 @@ const INVENTORY_DEFAULTS = {
 // 新增道具只需在此加一筆，UI 會自動讀取
 const RECIPES = [
   {
-    id:       'basicSword',
-    name:     '基礎氣球劍',
-    effect:   '可以攻擊一般小怪',
+    id:         'basicSword',
+    name:       '基礎氣球劍',
+    effect:     '可以攻擊一般小怪',
     durability: 10,
-    cost: { balloon260: 2 },   // 材料需求
-    emoji:    '⚔️',
+    cost:       { balloon260: 2 },
+    emoji:      '⚔️',
+    unlockKey:  null,            // null = 預設解鎖
+  },
+  {
+    id:         'basicHammer',
+    name:       '基礎氣球槌',
+    effect:     '可以敲擊小怪，也可觸發特定場景機關（下一版開放）',
+    durability: 3,
+    cost:       { roundBalloon: 1, balloon260: 1 },
+    emoji:      '🔨',
+    unlockKey:  'basicHammer',   // 對應 unlockedRecipes.basicHammer
   },
   // 未來可繼續擴充
 ];
+
+
+// ── 材料顯示名稱對照 ──────────────────────────
+const MATERIAL_NAMES = {
+  balloon260:   '260 長條氣球',
+  roundBalloon: '圓氣球',
+  coins:        '金幣',
+  // 未來可在此擴充
+};
+function matName(key) { return MATERIAL_NAMES[key] || key; }
 
 // 製作道具
 function craftItem(recipeId) {
@@ -206,9 +230,12 @@ function loadInventory() {
     if (saved) {
       const parsed = JSON.parse(saved);
       const merged = Object.assign({}, INVENTORY_DEFAULTS, parsed);
-      // craftedItems 需深度合併，避免舊存檔缺少新道具欄位
+      // craftedItems / unlockedRecipes 需深度合併，避免舊存檔缺少新欄位
       merged.craftedItems = Object.assign(
         {}, INVENTORY_DEFAULTS.craftedItems, parsed.craftedItems || {}
+      );
+      merged.unlockedRecipes = Object.assign(
+        {}, INVENTORY_DEFAULTS.unlockedRecipes, parsed.unlockedRecipes || {}
       );
       return merged;
     }
@@ -225,9 +252,10 @@ function saveInventory() {
 
 function resetInventory() {
   Object.assign(playerInventory, INVENTORY_DEFAULTS);
-  playerInventory.craftedItems         = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.craftedItems     = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.unlockedRecipes  = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
   playerInventory.equippedSwordDur     = 0;
-  playerInventory.tutorialSwordGranted = false; // 清除背包後可重領教學劍
+  playerInventory.tutorialSwordGranted = false;
   saveInventory();
   // 清除執行期裝備狀態
   equippedSword.id = null;
@@ -242,8 +270,9 @@ let playerInventory = loadInventory();
 let currentRunStats = {
   coins:           0,
   balloon260:      0,
+  roundBalloon:    0,  // MVP 1.0B
   enemiesDefeated: 0,
-  damageTaken:     0,  // 受傷次數（本局）
+  damageTaken:     0,
 };
 
 // ── Asset loading ─────────────────────────────
@@ -365,7 +394,8 @@ let coins = generateCoins();
 let balloons260 = generateBalloons();
 let spikes      = generateSpikes();
 let enemies     = generateEnemies();
-let orangeNemeses = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
+let orangeNemeses   = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
+let roundBalloons   = [];  // 圓氣球收集物（由 loadLevel 填充）
 const projectiles = []; // player-fired balloons
 
 // Finish line position（由 loadLevel() 更新）
@@ -753,10 +783,14 @@ const LEVELS = [
       active: true, hitFlash: 0,
     })),
     buildOranges: () => [
-      // 選擇性：1 隻在段 4，不是本關主角，位置寬鬆可跳過
       { x: 4600, y: GROUND_Y - CONFIG.ORANGE_H,
         w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
         sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false },
+    ],
+    buildRoundBalloons: () => [
+      // 第 3 關唯一 1 顆圓氣球：上方路線段 2，需跳上高平台才能取得
+      // 平台 x=1350, y=GROUND_Y-150 上方 40px
+      { x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
     ],
   },
 
@@ -813,6 +847,10 @@ function loadLevel(index) {
 
   orangeNemeses.length = 0;
   lv.buildOranges().forEach(o => orangeNemeses.push(o));
+
+  // 圓氣球
+  roundBalloons.length = 0;
+  if (lv.buildRoundBalloons) lv.buildRoundBalloons().forEach(r => roundBalloons.push(r));
 
   // 複製 hints（每次都要 reset shown 狀態）
   HINTS.length = 0;
@@ -1159,8 +1197,20 @@ function checkCollectibles() {
     if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W/2, b.y - CONFIG.BALLOON_H/2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) {
       b.collected = true;
       currentRunStats.balloon260++;
-      player.balloonsCollected++;   // HUD 顯示用
+      player.balloonsCollected++;
       playerInventory.balloon260++;
+    }
+  });
+
+  // 圓氣球
+  roundBalloons.forEach(r => {
+    if (r.collected) return;
+    const R = 16; // 碰撞半徑
+    if (rectsOverlap(px, py, pw, ph, r.x - R, r.y - R, R*2, R*2)) {
+      r.collected = true;
+      currentRunStats.roundBalloon++;
+      playerInventory.roundBalloon++;
+      saveInventory(); // 立即保存
     }
   });
 }
@@ -1246,10 +1296,16 @@ function triggerGameOver() {
 
 function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
+  // 第 3 關（index 2）通關時解鎖基礎氣球槌
+  if (currentLevelIndex === 2) {
+    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+    playerInventory.unlockedRecipes.basicHammer = true;
+    saveInventory();
+  }
   saveInventory();
   gameState = 'clear';
   populateResultPanel();
-  updateNextLevelButton(); // 第1關通關 → 按鈕改「下一關」
+  updateNextLevelButton();
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
@@ -1360,6 +1416,15 @@ function drawWorld() {
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
     drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0);
+  });
+
+  // 圓氣球
+  roundBalloons.forEach(r => {
+    if (r.collected) return;
+    const sx = r.x - cx;
+    if (sx < -30 || sx > CANVAS_W + 30) return;
+    const sy = r.y + Math.sin(bobT * 0.8 + r.bobOffset) * 6;
+    drawRoundBalloon(sx, sy);
   });
 
   // Orange nemeses (balloonNemesis)
@@ -1492,6 +1557,44 @@ function drawBalloon260(x, y) {
   ctx.font = '7px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('260', x, y + 18);
+}
+
+
+function drawRoundBalloon(x, y) {
+  const R = 16;
+  // 主體：藍紫色圓形
+  const grad = ctx.createRadialGradient(x - R*0.3, y - R*0.3, R*0.1, x, y, R);
+  grad.addColorStop(0, '#c8aaff');
+  grad.addColorStop(1, '#7040e0');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#5020b0';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // 光澤
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x - R*0.3, y - R*0.35, R*0.3, R*0.2, -0.5, 0, Math.PI*2);
+  ctx.fill();
+  // 氣球結
+  ctx.fillStyle = '#5020b0';
+  ctx.beginPath();
+  ctx.arc(x, y + R + 2, 3, 0, Math.PI*2);
+  ctx.fill();
+  // 線
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + R + 5);
+  ctx.lineTo(x + 2, y + R + 14);
+  ctx.stroke();
+  // 標籤
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('圓', x, y + 4);
 }
 
 function drawSpike(x, y, w, h) {
@@ -1759,18 +1862,24 @@ function populateResultPanel() {
 
   // 本關成果
   const runRows = [
-    ['🪙 金幣',         `${currentRunStats.coins} 枚`,            'result-gold'],
-    ['🎈 260 長條氣球', `${currentRunStats.balloon260} 條`,       'result-pink'],
-    ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,  'result-orange'],
-    ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,      'result-red'],
-    ['❤️ 目前生命',     `${player.hp} / ${player.maxHp}`,        'result-red'],
-    ['⏱  剩餘時間',     `${timeLeft} 秒`,                         'result-blue'],
+    ['🪙 金幣',         `${currentRunStats.coins} 枚`,                'result-gold'],
+    ['🎈 260 長條氣球', `${currentRunStats.balloon260} 條`,           'result-pink'],
+    ...(currentRunStats.roundBalloon > 0
+      ? [['🎈 圓氣球',  `${currentRunStats.roundBalloon} 顆`,         'result-purple']]
+      : []),
+    ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,      'result-orange'],
+    ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,          'result-red'],
+    ['❤️ 目前生命',     `${player.hp} / ${player.maxHp}`,            'result-red'],
+    ['⏱  剩餘時間',     `${timeLeft} 秒`,                             'result-blue'],
   ];
 
   // 背包
   const bagRows = [
-    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,        'result-gold'],
-    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,   'result-pink'],
+    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,            'result-gold'],
+    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,       'result-pink'],
+    ...(playerInventory.roundBalloon > 0
+      ? [['🎈 圓氣球總計',  `${playerInventory.roundBalloon} 顆`,     'result-purple']]
+      : []),
   ];
   const swordQty = ci.basicSword || 0;
   if (swordQty > 0 || equippedSword.id === 'basicSword') {
@@ -1797,6 +1906,17 @@ function populateResultPanel() {
       `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
     ).join('');
   }
+
+  // 第 3 關：basicHammer 解鎖提示
+  const ur = playerInventory.unlockedRecipes || {};
+  const hammerHint = (currentLevelIndex === 2 && gameState === 'clear' && ur.basicHammer) ? `
+    <div class="rp-guidebook-hint" style="border-color:rgba(160,120,255,0.4);background:rgba(80,40,160,0.15)">
+      <div class="rp-guidebook-hint__title">🔨 新秘笈解鎖：基礎氣球槌！</div>
+      <div class="rp-guidebook-hint__body">
+        你找到圓氣球了！可以用 <strong>圓氣球 x1 + 260 長條氣球 x1</strong> 製作基礎氣球槌。
+      </div>
+    </div>
+  ` : '';
 
   // 第 1 關結算：加入氣球秘笈教學區塊
   const guideBookHint = currentLevelIndex === 0 ? `
@@ -1847,14 +1967,12 @@ function populateResultPanel() {
   // 更新補給按鈕狀態（購買後重刷用）
   updateBandageBtn();
 
-  // 第 1 關結算：輕微強調氣球秘笈按鈕
+  // 秘笈按鈕強調：第 1 關（新手教學）或第 3 關通關（新槌解鎖）
   const btnGuide = document.getElementById('btn-guidebook');
   if (btnGuide) {
-    if (currentLevelIndex === 0) {
-      btnGuide.classList.add('result-btn--guide-highlight');
-    } else {
-      btnGuide.classList.remove('result-btn--guide-highlight');
-    }
+    const shouldHighlight = currentLevelIndex === 0 ||
+      (currentLevelIndex === 2 && gameState === 'clear' && ur.basicHammer);
+    btnGuide.classList.toggle('result-btn--guide-highlight', shouldHighlight);
   }
 }
 
@@ -1947,6 +2065,7 @@ function restart() {
   // Reset currentRunStats（本局歸零，inventory 不動）
   currentRunStats.coins           = 0;
   currentRunStats.balloon260      = 0;
+  currentRunStats.roundBalloon    = 0;
   currentRunStats.enemiesDefeated = 0;
   currentRunStats.damageTaken     = 0;
 
@@ -1969,6 +2088,7 @@ function restart() {
   balloons260.forEach(b => { b.collected = false; });
   enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
+  roundBalloons.forEach(r => { r.collected = false; });
   projectiles.length = 0;
   resetHints();
 }
@@ -2097,6 +2217,12 @@ function renderGuidebook() {
   list.innerHTML = '';
 
   RECIPES.forEach(recipe => {
+    // 未解鎖的配方不顯示
+    if (recipe.unlockKey) {
+      const ur = playerInventory.unlockedRecipes || {};
+      if (!ur[recipe.unlockKey]) return;
+    }
+
     const ci    = playerInventory.craftedItems || {};
     const owned = ci[recipe.id] || 0;
 
@@ -2107,9 +2233,7 @@ function renderGuidebook() {
       const have = playerInventory[mat] || 0;
       const ok   = have >= qty;
       if (!ok) canCraft = false;
-      // 材料名稱對照
-      const matName = mat === 'balloon260' ? '260 長條氣球' : mat;
-      matLines.push({ matName, have, qty, ok });
+      matLines.push({ matName: matName(mat), have, qty, ok });
     }
 
     const card = document.createElement('div');

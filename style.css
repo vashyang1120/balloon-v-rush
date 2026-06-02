@@ -231,6 +231,7 @@ html, body {
 .result-red    { color: #ff8888; }
 .result-blue   { color: #aaddff; }
 .result-cyan   { color: #c8f0ff; }
+.result-purple { color: #c8aaff; }
 
 .rp-trivia {
   background: rgba(100,180,255,0.08);
