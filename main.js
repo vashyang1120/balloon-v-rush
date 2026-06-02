@@ -682,19 +682,8 @@ function loadLevel(index) {
 //   - 加入「跳過教學關」按鈕，可在第 1 關開始時選擇略過提示
 //   - 記錄 localStorage 中 tutorialComplete 旗標，重複遊玩後不再顯示提示
 //   - 支援多語言提示文字
-const HINTS = [
-  { triggerX:   30, msg: '← → 移動　空白鍵 跳躍',             shown: false, duration: 270 },
-  { triggerX:  680, msg: '⚔️ Z 鍵 使用氣球劍攻擊小怪！',      shown: false, duration: 240 },
-  { triggerX: 1700, msg: '⚠️ 尖刺不能攻擊，請跳過！',          shown: false, duration: 240 },
-  { triggerX: 3350, msg: '🍊 橘子怪會噴果皮油！等空檔再通過', shown: false, duration: 270 },
-];
-// 手機版文字簡化（較短，避免遮擋手機較小的畫面）
-const HINTS_MOBILE = [
-  '← → 移動　↑ 跳躍',
-  '⚔️ 攻擊按鈕　打小怪',
-  '⚠️ 尖刺請跳過',
-  '🍊 等空檔通過橘子怪',
-];
+// HINTS 由 loadLevel() 動態填充，初始化後由各關 LEVELS[n].hints 資料填入
+let HINTS = []; // 勿在此直接填資料
 
 let activeHint = null; // { msg, duration, framesLeft }
 let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
@@ -1920,9 +1909,10 @@ function loop(timestamp) {
   update(dt, dtMs);
   draw();
 
-  loadLevel(0);        // 載入第 1 關
-initEquippedSword(); // 頁面載入時初始化裝備（只執行一次）
-requestAnimationFrame(loop);
+  requestAnimationFrame(loop);
 }
 
+// ── 初始化並啟動 ────────────────────────────
+loadLevel(0);        // 載入第 1 關
+initEquippedSword(); // 初始化裝備（只執行一次）
 requestAnimationFrame(loop);
