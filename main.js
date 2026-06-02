@@ -70,8 +70,9 @@ const GRAVITY        = CONFIG.GRAVITY;
 const PLAYER_SPEED   = CONFIG.PLAYER_SPEED;
 const JUMP_FORCE     = CONFIG.JUMP_FORCE;
 const SCROLL_SPEED   = CONFIG.SCROLL_SPEED;
-const LEVEL_LENGTH   = CONFIG.LEVEL_LENGTH;
-const LEVEL_NAME     = '第 1 關：氣球森林小徑'; // 關卡名稱
+// LEVEL_LENGTH / LEVEL_NAME 由 loadLevel() 動態設定
+var LEVEL_LENGTH   = CONFIG.LEVEL_LENGTH;
+var LEVEL_NAME     = '第 1 關：氣球森林小徑';
 const LEVEL_DURATION = CONFIG.LEVEL_DURATION;
 const GROUND_Y       = CANVAS_H - 80; // 地面頂部 Y 座標（不建議輕易修改）
 
@@ -355,15 +356,15 @@ const platforms = [
   { x: 5300, y: GROUND_Y - 120, w: 140, h: 18 },
 ];
 
-const coins = generateCoins();
-const balloons260 = generateBalloons();
-const spikes      = generateSpikes();
-const enemies     = generateEnemies();
-const orangeNemeses = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
+let coins = generateCoins();
+let balloons260 = generateBalloons();
+let spikes      = generateSpikes();
+let enemies     = generateEnemies();
+let orangeNemeses = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
 const projectiles = []; // player-fired balloons
 
-// Finish line position
-const FINISH_X = LEVEL_LENGTH - 200;
+// Finish line position（由 loadLevel() 更新）
+var FINISH_X = LEVEL_LENGTH - 200;
 
 function generateCoins() {
   // 第 1 關：精確配置 ~28 枚，引導玩家前進
@@ -463,6 +464,209 @@ function generateOrangeNemeses() {
   }];
 }
 
+
+
+// ── Level Index ───────────────────────────────
+var currentLevelIndex = 0; // 0 = 第1關, 1 = 第2關
+
+// ── LEVELS 定義 ──────────────────────────────
+// 每關包含自己的物件生成函式與 hints
+// 新增關卡只需在此陣列加一筆
+const LEVELS = [
+
+  // ════════════════════════════════════════════
+  //  關卡 0：氣球森林小徑
+  // ════════════════════════════════════════════
+  {
+    name:   '第 1 關：氣球森林小徑',
+    length: 6400,
+    emoji:  '🌿',
+    hints: [
+      { triggerX:   30, msg: '← → 移動　空白鍵 跳躍',             shown: false, duration: 270 },
+      { triggerX:  680, msg: '⚔️ Z 鍵 使用氣球劍攻擊小怪！',      shown: false, duration: 240 },
+      { triggerX: 1700, msg: '⚠️ 尖刺不能攻擊，請跳過！',          shown: false, duration: 240 },
+      { triggerX: 3350, msg: '🍊 橘子怪會噴果皮油！等空檔再通過', shown: false, duration: 270 },
+    ],
+    buildPlatforms: () => [
+      { x:  420, y: GROUND_Y - 90,  w: 130, h: 18 },
+      { x:  680, y: GROUND_Y - 130, w: 110, h: 18 },
+      { x: 1050, y: GROUND_Y - 100, w: 140, h: 18 },
+      { x: 1380, y: GROUND_Y - 140, w: 120, h: 18 },
+      { x: 2000, y: GROUND_Y - 110, w: 150, h: 18 },
+      { x: 2300, y: GROUND_Y - 100, w: 130, h: 18 },
+      { x: 2700, y: GROUND_Y - 130, w: 120, h: 18 },
+      { x: 3100, y: GROUND_Y - 110, w: 140, h: 18 },
+      { x: 3600, y: GROUND_Y - 120, w: 160, h: 18 },
+      { x: 4000, y: GROUND_Y - 100, w: 140, h: 18 },
+      { x: 4800, y: GROUND_Y - 100, w: 180, h: 18 },
+      { x: 5300, y: GROUND_Y - 120, w: 140, h: 18 },
+    ],
+    buildCoins: () => {
+      const placements = [
+        [200,55],[280,55],[360,55],[440,130],[520,55],
+        [600,55],[700,170],[760,55],
+        [1000,55],[1100,55],[1060,140],[1250,55],[1420,180],
+        [1950,55],[2060,150],[2180,55],[2380,55],[2500,55],
+        [2750,170],[2900,55],
+        [3400,55],[3650,160],[4100,140],[4300,55],
+        [4820,55],[4870,55],[4920,55],[5000,140],
+        [5100,55],[5200,160],[5400,55],[5600,55],[5800,55],
+      ];
+      return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
+    },
+    buildBalloons: () =>
+      [480,780,1200,1600,2200,3000,3700,5100].map(x => ({
+        x: x+20, y: GROUND_Y-85, collected:false, bobOffset:Math.random()*Math.PI*2
+      })),
+    buildSpikes: () => [
+      { x:2050, y:GROUND_Y-24, w:40, h:24 },
+      { x:2350, y:GROUND_Y-24, w:40, h:24 },
+      { x:2680, y:GROUND_Y-24, w:40, h:24 },
+      { x:3150, y:GROUND_Y-24, w:40, h:24 },
+    ],
+    buildEnemies: () => [
+      { x:1000,patrol:1000,patrolRange:100 },
+      { x:1250,patrol:1250,patrolRange:120 },
+      { x:1600,patrol:1600,patrolRange:100 },
+      { x:4400,patrol:4400,patrolRange:140 },
+    ].map(d => ({
+      x:d.x, y:GROUND_Y-CONFIG.ENEMY_H,
+      w:CONFIG.ENEMY_W, h:CONFIG.ENEMY_H,
+      vx:-CONFIG.ENEMY_SPEED, hp:2,
+      patrol:d.patrol, patrolRange:d.patrolRange,
+      active:true, hitFlash:0,
+    })),
+    buildOranges: () => [{
+      x:3820, y:GROUND_Y-CONFIG.ORANGE_H,
+      w:CONFIG.ORANGE_W, h:CONFIG.ORANGE_H,
+      sprayDir:-1, phase:'idle', phaseTimer:0, sprayActive:false,
+    }],
+  },
+
+  // ════════════════════════════════════════════
+  //  關卡 1：橘子果園危機
+  // ════════════════════════════════════════════
+  {
+    name:   '第 2 關：橘子果園危機',
+    length: 6400,
+    emoji:  '🍊',
+    hints: [
+      { triggerX:   30, msg: '🍊 第 2 關：橘子果園危機！',                       shown: false, duration: 270 },
+      { triggerX:  750, msg: '🍊 橘子怪是氣球剋星，不能用氣球劍硬打！',         shown: false, duration: 270 },
+      { triggerX: 1100, msg: '💨 等噴油結束，再安全通過！',                       shown: false, duration: 240 },
+      { triggerX: 2600, msg: '🪜 有些危險可以從上方平台繞過。',                   shown: false, duration: 240 },
+      { triggerX: 3400, msg: '⚠️ 兩隻橘子怪！觀察噴油節奏，選一個方向通過。',   shown: false, duration: 270 },
+    ],
+    buildPlatforms: () => [
+      // 段 1：安全區
+      { x:  350, y: GROUND_Y - 90,  w: 130, h: 18 },
+      { x:  640, y: GROUND_Y - 120, w: 110, h: 18 },
+      // 段 2：第一隻橘子怪前的觀察平台
+      { x: 1000, y: GROUND_Y - 130, w: 150, h: 18 }, // 高平台，可從上繞過
+      { x: 1350, y: GROUND_Y - 100, w: 120, h: 18 },
+      // 段 3：小怪區
+      { x: 1900, y: GROUND_Y - 110, w: 140, h: 18 },
+      { x: 2200, y: GROUND_Y - 130, w: 130, h: 18 },
+      // 段 4：雙橘子怪區 — 高平台繞路
+      { x: 2700, y: GROUND_Y - 160, w: 180, h: 18 }, // 主繞路平台，夠寬
+      { x: 3100, y: GROUND_Y - 140, w: 150, h: 18 },
+      { x: 3600, y: GROUND_Y - 120, w: 160, h: 18 },
+      { x: 4100, y: GROUND_Y - 100, w: 130, h: 18 },
+      // 段 5：獎勵區
+      { x: 4700, y: GROUND_Y - 100, w: 180, h: 18 },
+      { x: 5200, y: GROUND_Y - 120, w: 150, h: 18 },
+    ],
+    buildCoins: () => {
+      const placements = [
+        // 段 1
+        [150,55],[230,55],[310,55],[390,55],
+        [460,130],[550,55],[660,160],[730,55],
+        // 段 2
+        [900,55],[1020,170],[1150,55],[1280,55],[1420,140],
+        // 段 3
+        [1800,55],[1950,55],[2100,55],[2250,170],
+        [2400,55],[2500,55],
+        // 段 4
+        [2720,200],[2850,55],[3000,55],
+        [3150,180],[3400,55],[3600,55],[3800,55],[4150,140],
+        [4300,55],[4450,55],
+        // 段 5
+        [4720,55],[4790,55],[4860,55],[4930,55],
+        [5000,140],[5100,55],[5300,55],[5500,55],[5700,55],
+      ];
+      return placements.map(([x,yOff]) => ({ x, y:GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
+    },
+    buildBalloons: () =>
+      [400,700,1100,1500,2000,2800,3900,5200].map(x => ({
+        x:x+20, y:GROUND_Y-85, collected:false, bobOffset:Math.random()*Math.PI*2
+      })),
+    buildSpikes: () => [
+      { x:1750, y:GROUND_Y-24, w:40, h:24 },
+      { x:2450, y:GROUND_Y-24, w:40, h:24 },
+      { x:4500, y:GROUND_Y-24, w:40, h:24 },
+    ],
+    buildEnemies: () => [
+      { x:2000,patrol:2000,patrolRange:120 },
+      { x:2350,patrol:2350,patrolRange:100 },
+      { x:4300,patrol:4300,patrolRange:130 },
+    ].map(d => ({
+      x:d.x, y:GROUND_Y-CONFIG.ENEMY_H,
+      w:CONFIG.ENEMY_W, h:CONFIG.ENEMY_H,
+      vx:-CONFIG.ENEMY_SPEED, hp:2,
+      patrol:d.patrol, patrolRange:d.patrolRange,
+      active:true, hitFlash:0,
+    })),
+    buildOranges: () => [
+      // 段 2：第一隻，單獨出現，有足夠前置空間
+      { x:1280, y:GROUND_Y-CONFIG.ORANGE_H,
+        w:CONFIG.ORANGE_W, h:CONFIG.ORANGE_H,
+        sprayDir:-1, phase:'idle', phaseTimer:0, sprayActive:false },
+      // 段 4：兩隻，錯開位置，可選平台繞路
+      { x:3450, y:GROUND_Y-CONFIG.ORANGE_H,
+        w:CONFIG.ORANGE_W, h:CONFIG.ORANGE_H,
+        sprayDir:-1, phase:'idle', phaseTimer:1500, sprayActive:false }, // 計時器錯開
+      { x:3700, y:GROUND_Y-CONFIG.ORANGE_H,
+        w:CONFIG.ORANGE_W, h:CONFIG.ORANGE_H,
+        sprayDir:-1, phase:'idle', phaseTimer:0, sprayActive:false },
+    ],
+  },
+
+];  // end LEVELS
+
+// ── loadLevel：載入指定關卡資料 ──────────────
+function loadLevel(index) {
+  const lv = LEVELS[index];
+  if (!lv) return;
+
+  LEVEL_NAME   = lv.name;
+  LEVEL_LENGTH = lv.length;
+  FINISH_X     = LEVEL_LENGTH - 200;
+
+  // 重建物件陣列
+  platforms.length = 0;
+  lv.buildPlatforms().forEach(p => platforms.push(p));
+
+  coins.length = 0;
+  lv.buildCoins().forEach(c => coins.push(c));
+
+  balloons260.length = 0;
+  lv.buildBalloons().forEach(b => balloons260.push(b));
+
+  spikes.length = 0;
+  lv.buildSpikes().forEach(s => spikes.push(s));
+
+  enemies.length = 0;
+  lv.buildEnemies().forEach(e => enemies.push(e));
+
+  orangeNemeses.length = 0;
+  lv.buildOranges().forEach(o => orangeNemeses.push(o));
+
+  // 複製 hints（每次都要 reset shown 狀態）
+  HINTS.length = 0;
+  lv.hints.forEach(h => HINTS.push(Object.assign({}, h, { shown: false })));
+
+  currentLevelIndex = index;
+}
 
 // ── Tutorial Hints (MVP 0.7) ──────────────────
 // 依玩家 x 位置顯示一次性教學提示
@@ -898,8 +1102,27 @@ function triggerClear() {
   saveInventory();
   gameState = 'clear';
   populateResultPanel();
+  updateNextLevelButton(); // 第1關通關 → 按鈕改「下一關」
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+}
+
+// 更新結算畫面「再玩一次」按鈕的文字與功能
+function updateNextLevelButton() {
+  const btn = document.getElementById('btn-play-again');
+  if (!btn) return;
+  const hasNext = currentLevelIndex < LEVELS.length - 1;
+  if (hasNext && gameState === 'clear') {
+    btn.childNodes[0].textContent = '下一關';
+    const sub = btn.querySelector('.result-btn-sub');
+    if (sub) sub.textContent = 'Next Level';
+    btn._nextLevel = true;
+  } else {
+    btn.childNodes[0].textContent = '再玩一次';
+    const sub = btn.querySelector('.result-btn-sub');
+    if (sub) sub.textContent = 'Play Again';
+    btn._nextLevel = false;
+  }
 }
 
 // ── Draw ──────────────────────────────────────
@@ -1390,8 +1613,14 @@ function populateResultPanel() {
     bagRows.push([`⚔️ 基礎氣球劍${durInfo}`, `${swordQty} 把`,  'result-cyan']);
   }
 
-  // 小知識
-  const trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
+  // 小知識（第 2 關提高橘子皮小知識出現機率）
+  let trivia;
+  const orangeIdx = TRIVIA.findIndex(t => t.includes('橘子皮') || t.includes('柑橘'));
+  if (currentLevelIndex === 1 && Math.random() < 0.6 && orangeIdx >= 0) {
+    trivia = TRIVIA[orangeIdx];
+  } else {
+    trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
+  }
 
   function makeTable(rows) {
     return rows.map(([label, val, cls]) =>
@@ -1402,7 +1631,7 @@ function populateResultPanel() {
   const panel = document.getElementById('result-panel-body');
   if (!panel) return;
   panel.innerHTML = `
-    <div class="rp-level-name">🌿 ${LEVEL_NAME}</div>
+    <div class="rp-level-name">${LEVELS[currentLevelIndex]?.emoji || '🌿'} ${LEVEL_NAME}</div>
     <div class="rp-section">
       <div class="rp-section-title">📋 本關成果</div>
       ${makeTable(runRows)}
@@ -1512,13 +1741,24 @@ function hideResultButtons() {
 
 // 綁定結算按鈕（DOM 載入後執行）
 (function bindResultButtons() {
-  // 再玩一次
+  // 再玩一次 / 下一關
   const btnPlay = document.getElementById('btn-play-again');
   if (btnPlay) {
     ['click', 'touchstart'].forEach(ev =>
       btnPlay.addEventListener(ev, e => {
         e.preventDefault();
-        if (gameState !== 'playing') restart();
+        if (gameState !== 'playing') {
+          if (btnPlay._nextLevel) {
+            // 進入下一關：背包保留，關卡 index +1
+            const nextIdx = currentLevelIndex + 1;
+            loadLevel(nextIdx);
+            restart();
+          } else {
+            // 再玩一次：重載同一關
+            loadLevel(currentLevelIndex);
+            restart();
+          }
+        }
       })
     );
   }
@@ -1680,7 +1920,8 @@ function loop(timestamp) {
   update(dt, dtMs);
   draw();
 
-  initEquippedSword(); // 頁面載入時初始化裝備（只執行一次）
+  loadLevel(0);        // 載入第 1 關
+initEquippedSword(); // 頁面載入時初始化裝備（只執行一次）
 requestAnimationFrame(loop);
 }
 
