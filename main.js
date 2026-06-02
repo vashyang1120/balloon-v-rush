@@ -1394,11 +1394,18 @@ function updateHammerMelee() {
   });
 
   // 打可敲倒的樹
+  // 樹幹碰撞框：從地面往上 t.h 高，x 從 t.x 開始，寬 t.trunkW（加大判定寬度至 60px 讓手感好）
   breakableTrees.forEach(t => {
     if (t.state !== 'standing') return;
-    if (rectsOverlap(atkX, atkY, atkW, atkH, t.x, t.y, t.trunkW, t.h)) {
-      t.state    = 'falling';
-      t.fallTimer= 0;
+    const treeHitX = t.x;
+    const treeHitY = GROUND_Y - t.h;        // 樹頂 Y（樹從這裡往下到地面）
+    const treeHitW = Math.max(t.trunkW, 60); // 判定比視覺樹幹寬，手感好
+    const treeHitH = t.h;
+    if (rectsOverlap(atkX, atkY, atkW, atkH, treeHitX, treeHitY, treeHitW, treeHitH)) {
+      console.log('Hammer hit tree:', t.x);
+      t.state     = 'falling';
+      t.fallTimer = 0;
+      console.log('Tree falling');
       if (!player.hammerHit) {
         player.hammerHit = true;
         consumeHammerDurability();
@@ -1436,8 +1443,14 @@ function updateBreakableTrees(dt) {
       t.fallTimer += dt;
       if (t.fallTimer >= TREE_FALL_DURATION) {
         t.state = 'fallen';
-        // 建立 safeZone（倒在右方）
-        t.safeZone = { x: t.x, y: GROUND_Y - 24, w: t.h * 0.8, h: 24 };
+        // safeZone：從樹往右延伸 280px，高 60px（覆蓋玩家整個下半身），Y 從地面往上
+        t.safeZone = {
+          x: t.x,
+          y: GROUND_Y - 60,
+          w: 280,   // 足以覆蓋前方圖釘區（樹到圖釘距離約 150-200px + 圖釘寬 120px）
+          h: 60,    // 覆蓋玩家腳部高度
+        };
+        console.log('Tree fallen, safeZone active:', t.safeZone);
       }
     }
   });
@@ -1516,13 +1529,15 @@ function checkHazards() {
   });
 
   // TackHazards（圖釘區），safeZone 內不受傷
-  if (!isInSafeZone(px, py, pw, ph)) {
-    tackHazards.forEach(t => {
-      if (rectsOverlap(px, py + ph - 12, pw, 12, t.x, t.y, t.w, t.h)) {
+  tackHazards.forEach(t => {
+    if (rectsOverlap(px, py + ph - 12, pw, 12, t.x, t.y, t.w, t.h)) {
+      if (isInSafeZone(px, py, pw, ph)) {
+        console.log('Protected by fallen tree safeZone');
+      } else {
         damagePlayer();
       }
-    });
-  }
+    }
+  });
 
   // Enemies (contact damage)
   enemies.forEach(e => {
@@ -2027,29 +2042,30 @@ function drawTackHazard(x, y, w, h) {
 
 function drawBreakableTree(sx, t) {
   const trunkH = t.h;
-  const trunkW = t.trunkW || 20;
-  const crownR = t.crownR || 35;
+  const trunkW = t.trunkW || 22;
+  const crownR = t.crownR || 38;
+  const baseY  = GROUND_Y; // 樹根在地面
 
   if (t.state === 'standing') {
-    // 樹幹
+    // 樹幹（從地面往上）
     ctx.fillStyle = '#8B6914';
-    ctx.fillRect(sx + trunkW/2 - trunkW/2, GROUND_Y - trunkH, trunkW, trunkH);
-    // 樹冠
+    ctx.fillRect(sx, baseY - trunkH, trunkW, trunkH);
+    // 樹冠（在樹頂）
     ctx.fillStyle = '#3a8a1a';
     ctx.beginPath();
-    ctx.arc(sx + trunkW/2, GROUND_Y - trunkH, crownR, 0, Math.PI * 2);
+    ctx.arc(sx + trunkW/2, baseY - trunkH - crownR * 0.4, crownR, 0, Math.PI * 2);
     ctx.fill();
-    // 可交互標記
-    ctx.fillStyle = 'rgba(255,255,150,0.7)';
-    ctx.font = '9px sans-serif';
+    // 🔨 提示
+    ctx.fillStyle = 'rgba(255,255,150,0.9)';
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🔨?', sx + trunkW/2, GROUND_Y - trunkH - crownR - 4);
+    ctx.fillText('🔨?', sx + trunkW/2, baseY - trunkH - crownR - 8);
   } else if (t.state === 'falling') {
-    // 倒下動畫：往右旋轉
+    // 倒下動畫：繞根部往右旋轉
     const progress = Math.min(1, t.fallTimer / TREE_FALL_DURATION);
-    const angle    = progress * Math.PI / 2;
+    const angle    = progress * (Math.PI / 2);
     ctx.save();
-    ctx.translate(sx + trunkW/2, GROUND_Y);
+    ctx.translate(sx + trunkW/2, baseY);
     ctx.rotate(angle);
     ctx.fillStyle = '#8B6914';
     ctx.fillRect(-trunkW/2, -trunkH, trunkW, trunkH);
@@ -2059,14 +2075,20 @@ function drawBreakableTree(sx, t) {
     ctx.fill();
     ctx.restore();
   } else if (t.state === 'fallen') {
-    // 倒下的樹（水平）+ 安全橋
+    // 水平倒下的樹幹
     ctx.fillStyle = '#8B6914';
-    ctx.fillRect(sx, GROUND_Y - trunkW, trunkH * 0.8, trunkW);
+    ctx.fillRect(sx, baseY - trunkW, trunkH, trunkW);
+    // 樹冠（在右端）
     ctx.fillStyle = '#3a8a1a';
-    ctx.fillRect(sx + trunkH * 0.6, GROUND_Y - trunkW - crownR/2, crownR*1.2, crownR);
-    // 安全提示
-    ctx.fillStyle = 'rgba(100,255,100,0.5)';
-    ctx.fillRect(sx, GROUND_Y - 6, trunkH * 0.8, 6);
+    ctx.beginPath();
+    ctx.arc(sx + trunkH, baseY - trunkW/2, crownR * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    // 安全橋提示（綠色底層）
+    ctx.fillStyle = 'rgba(80,220,80,0.35)';
+    ctx.fillRect(sx, baseY - trunkW - 2, 280, trunkW + 2);
+    ctx.strokeStyle = 'rgba(80,220,80,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx, baseY - trunkW - 2, 280, trunkW + 2);
   }
 }
 
