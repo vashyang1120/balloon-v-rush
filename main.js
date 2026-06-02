@@ -48,7 +48,14 @@ const CONFIG = {
   BALLOON_H:       40,    // 260氣球碰撞高度 (px)
 
   // -- 鏡頭 --
-  SCROLL_SPEED:    2.2,   // 鏡頭自動推進速度（px/幀）
+  SCROLL_SPEED:    2.2,   // 鏡頭自動推進速度（px/幀）（與 AUTO_SCROLL_SPEED_NORMAL 對應）
+
+  // -- 探索速度（氣球狗尋寶用）--
+  AUTO_SCROLL_SPEED_NORMAL:       2.2,   // 一般關卡速度
+  AUTO_SCROLL_SPEED_EXPLORE:      1.87,  // 有隱藏物的關卡（稍慢）
+  AUTO_SCROLL_SPEED_DOG:          1.65,  // 帶狗出門時再慢一點
+  TREASURE_SLOW_ZONE_RADIUS:      320,   // 靠近寶物多少 px 時啟動慢速
+  TREASURE_SLOW_SCROLL_MULTIPLIER:0.55,  // 最慢速倍率（最低不低於 45%）
 
   // -- 關卡 --
   LEVEL_DURATION:  60,    // 關卡時間限制（秒）
@@ -175,9 +182,17 @@ const INVENTORY_DEFAULTS = {
     // 未來可在此擴充更多道具
   },
   unlockedRecipes: {
-    basicHammer:  false,   // 第 3 關通關後解鎖
+    basicHammer:      false,   // 第 3 關通關後解鎖
+    balloonLollipop:  false,   // 第 3 關隱藏秘笈（棒棒糖）
     // 未來可在此擴充更多解鎖狀態
   },
+  // 氣球狗（小V的家）
+  balloonDog: {
+    present:    false, // 家裡有沒有狗
+    turnsLeft:  0,     // 剩餘陪伴回合
+  },
+  // 跨關卡暫存（不保存到 localStorage，每次 triggerClear/loadLevel 時重置）
+  // 這裡只存 persistent 部分
   equippedSwordDur:     0,
   equippedHammerDur:    0,       // 裝備中的氣球槌耐久
   tutorialSwordGranted: false,
@@ -208,6 +223,26 @@ const RECIPES = [
     emoji:      '🔨',
     unlockKey:  'basicHammer',   // 對應 unlockedRecipes.basicHammer
   },
+  {
+    id:         'balloonDog',
+    name:       '氣球小狗',
+    effect:     '可靠近隱藏寶物時讓鼻子發亮，協助小V尋找寶物',
+    durability: 0,             // 無耐久，以 turnsLeft 計算
+    cost:       { balloon260: 1 },
+    emoji:      '🐶',
+    unlockKey:  null,          // 預設解鎖（有製作材料即可）
+    maxOne:     true,          // 家裡最多一隻
+  },
+  {
+    id:         'balloonLollipop',
+    name:       '氣球棒棒糖',
+    effect:     '可愛的氣球點心（未來可作為補血道具）',
+    durability: 0,
+    cost:       { balloon260: 2 },
+    emoji:      '🍭',
+    unlockKey:  'balloonLollipop',
+    comingSoon: true,          // 製作功能尚未開放
+  },
   // 未來可繼續擴充
 ];
 
@@ -223,6 +258,24 @@ function matName(key) { return MATERIAL_NAMES[key] || key; }
 
 // 製作道具
 function craftItem(recipeId) {
+  // 特殊：氣球狗 → 存入 playerHome 結構而非 craftedItems
+  if (recipeId === 'balloonDog') {
+    if (playerInventory.balloonDog?.present) return false; // 已有一隻
+    const recipe = RECIPES.find(r => r.id === 'balloonDog');
+    if (!recipe) return false;
+    for (const [mat, qty] of Object.entries(recipe.cost)) {
+      if ((playerInventory[mat] || 0) < qty) return false;
+    }
+    for (const [mat, qty] of Object.entries(recipe.cost)) {
+      playerInventory[mat] -= qty;
+    }
+    if (!playerInventory.balloonDog) playerInventory.balloonDog = {};
+    playerInventory.balloonDog.present   = true;
+    playerInventory.balloonDog.turnsLeft = 3;
+    saveInventory();
+    return true;
+  }
+// 製作道具（一般）
   const recipe = RECIPES.find(r => r.id === recipeId);
   if (!recipe) return false;
 
@@ -263,6 +316,9 @@ function loadInventory() {
       merged.uniqueCollectibles = Object.assign(
         {}, INVENTORY_DEFAULTS.uniqueCollectibles, parsed.uniqueCollectibles || {}
       );
+      merged.balloonDog = Object.assign(
+        {}, INVENTORY_DEFAULTS.balloonDog, parsed.balloonDog || {}
+      );
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
@@ -281,6 +337,7 @@ function resetInventory() {
   playerInventory.craftedItems       = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
   playerInventory.unlockedRecipes    = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
   playerInventory.uniqueCollectibles = Object.assign({}, INVENTORY_DEFAULTS.uniqueCollectibles);
+  playerInventory.balloonDog         = Object.assign({}, INVENTORY_DEFAULTS.balloonDog);
   playerInventory.equippedSwordDur     = 0;
   playerInventory.tutorialSwordGranted = false;
   saveInventory();
@@ -301,7 +358,9 @@ let currentRunStats = {
   enemiesDefeated:          0,
   damageTaken:              0,
   unlockedHammerThisClear:  false,
-  usedHeartPatch:           false, // 每關限用一次愛心貼布
+  usedHeartPatch:           false,
+  foundHiddenTreasure:      false,  // 本關是否找到隱藏物
+  foundTreasureCoins:       0,      // 本關從寶箱獲得的金幣
 };
 
 // ── Asset loading ─────────────────────────────
@@ -821,13 +880,17 @@ const LEVELS = [
         sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false },
     ],
     buildRoundBalloons: () => {
-      // 第 3 關唯一 1 顆圓氣球：通關後帶走則不再生成（防刷）
       const uc = playerInventory.uniqueCollectibles || {};
-      if (uc.level3RoundBalloon) return []; // 已成功帶走，不再出現
-      return [
-        // 上方路線段 2，需跳上高平台（x=1350, y=GROUND_Y-150）才能取得
-        { x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
-      ];
+      if (uc.level3RoundBalloon) return [];
+      return [{ x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 }];
+    },
+    hiddenTreasure: {
+      type:      'recipe',
+      recipeKey: 'balloonLollipop',
+      x:         2900,            // 段 3 上方路線，需要狗找
+      y:         GROUND_Y - 175,  // 浮在空中的隱藏秘笈
+      found:     false,
+      emoji:     '🍭',
     },
   },
 
@@ -906,8 +969,16 @@ const LEVELS = [
       patrol:d.patrol, patrolRange:d.patrolRange,
       active:true, hitFlash:0,
     })),
-    buildOranges: () => [], // 第 4 關沒有橘子怪
-    buildRoundBalloons: () => [], // 第 4 關沒有額外圓氣球
+    buildOranges: () => [],
+    buildRoundBalloons: () => [],
+    hiddenTreasure: {
+      type:        'goldChest',
+      rewardCoins: 30,
+      x:           2400,           // 段 3 小怪區附近，需要狗才容易察覺
+      y:           GROUND_Y - 70,
+      found:       false,
+      emoji:       '💰',
+    },
   },
 
 ];  // end LEVELS
@@ -947,6 +1018,11 @@ const equippedHammer = {
 
 // 目前裝備槽（'sword' | 'hammer' | null）
 var activeSlot = 'sword'; // 預設劍
+
+// ── Hidden treasure & balloon dog run state ───
+var currentHiddenTreasure = null; // 本關 hiddenTreasure 物件（loadLevel 設定）
+var bringBalloonDog       = false; // 本關是否帶狗出門
+var dogNoseGlow           = 0;    // 0～1，狗鼻子亮度
 
 function initEquippedHammer() {
   const ci  = playerInventory.craftedItems || {};
@@ -1050,6 +1126,15 @@ function loadLevel(index) {
   lv.hints.forEach(h => HINTS.push(Object.assign({}, h, { shown: false })));
 
   currentLevelIndex = index;
+
+  // 隱藏寶物（深拷貝，避免 found 狀態污染 LEVELS 原始資料）
+  const rawTreasure = lv.hiddenTreasure;
+  currentHiddenTreasure = rawTreasure
+    ? Object.assign({}, rawTreasure, { found: false })
+    : null;
+
+  // 探索速度（根據是否有隱藏物調整，帶狗後再 updateCamera 動態調整）
+  // 實際速度在 updateCamera 裡根據 bringBalloonDog 動態計算
 
   // 第 1 關：嘗試發放教學劍（有保護機制，不會重複）
   // 注意：此時 initEquippedSword 尚未被 restart() 呼叫，
@@ -1166,12 +1251,31 @@ function update(dt, dtMs = 16.667) {
   checkHazards();
   checkHints();
   tickHint();
+  updateDogNose();
+  checkHiddenTreasure();
   checkFinish();
 }
 
 function updateCamera() {
-  // Auto-advance camera
-  cameraX += SCROLL_SPEED;
+  // 動態探索速度
+  let scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL;
+  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
+    scrollSpeed = bringBalloonDog
+      ? CONFIG.AUTO_SCROLL_SPEED_DOG
+      : CONFIG.AUTO_SCROLL_SPEED_EXPLORE;
+    // 靠近寶物時再放慢
+    if (bringBalloonDog && currentHiddenTreasure) {
+      const dist = Math.abs(player.x - currentHiddenTreasure.x);
+      if (dist < CONFIG.TREASURE_SLOW_ZONE_RADIUS) {
+        const slowFactor = Math.max(
+          CONFIG.TREASURE_SLOW_SCROLL_MULTIPLIER,
+          dist / CONFIG.TREASURE_SLOW_ZONE_RADIUS
+        );
+        scrollSpeed *= slowFactor;
+      }
+    }
+  }
+  cameraX += scrollSpeed;
 
   // Camera also follows player (lead slightly ahead)
   const targetX = player.x - CANVAS_W * 0.3;
@@ -1463,6 +1567,46 @@ function isInSafeZone(px, py, pw, ph) {
   );
 }
 
+
+// ── 狗鼻子亮度 ──────────────────────────────
+function updateDogNose() {
+  if (!bringBalloonDog || !currentHiddenTreasure || currentHiddenTreasure.found) {
+    dogNoseGlow = 0;
+    return;
+  }
+  const dist = Math.abs(player.x - currentHiddenTreasure.x);
+  if (dist > 400)       dogNoseGlow = 0;
+  else if (dist > 250)  dogNoseGlow = 0.25;
+  else if (dist > 120)  dogNoseGlow = 0.65;
+  else                  dogNoseGlow = 1.0;
+}
+
+// ── 隱藏寶物碰撞 ────────────────────────────
+function checkHiddenTreasure() {
+  if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
+  const t  = currentHiddenTreasure;
+  const R  = 32;
+  if (!rectsOverlap(player.x, player.y, player.w, player.h,
+                    t.x - R, t.y - R, R*2, R*2)) return;
+
+  t.found = true;
+  if (t.type === 'recipe') {
+    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+    if (!playerInventory.unlockedRecipes[t.recipeKey]) {
+      playerInventory.unlockedRecipes[t.recipeKey] = true;
+      saveInventory();
+      showHint(`找到隱藏秘笈：氣球棒棒糖！`, 320);
+      currentRunStats.foundHiddenTreasure = true;
+    }
+  } else if (t.type === 'goldChest') {
+    playerInventory.coins += t.rewardCoins;
+    saveInventory();
+    showHint(`找到隱藏寶箱！獲得 ${t.rewardCoins} 金幣！`, 320);
+    currentRunStats.foundHiddenTreasure = true;
+    currentRunStats.foundTreasureCoins  = t.rewardCoins;
+  }
+}
+
 function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
@@ -1503,6 +1647,12 @@ function checkCollectibles() {
       playerInventory.balloon260++;
     }
   });
+
+  // 隱藏寶物
+  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
+    const tx = currentHiddenTreasure.x - cx;
+    if (tx > -40 && tx < CANVAS_W + 40) drawHiddenTreasure(tx, currentHiddenTreasure);
+  }
 
   // 圓氣球
   roundBalloons.forEach(r => {
@@ -1660,9 +1810,22 @@ function triggerClear() {
     }
   }
 
+  // 氣球狗結算：先回血，再扣回合（最後一回合仍回血）
+  const dog = playerInventory.balloonDog || {};
+  if (dog.present) {
+    player.hp = Math.min(player.maxHp, player.hp + 0.5);
+    currentRunStats.dogHealed = true;
+    dog.turnsLeft = Math.max(0, (dog.turnsLeft || 1) - 1);
+    if (dog.turnsLeft <= 0) {
+      dog.present   = false;
+      dog.turnsLeft = 0;
+      currentRunStats.dogGoneThisClear = true;
+    }
+    playerInventory.balloonDog = dog;
+  }
+
   saveInventory();
   gameState = 'clear';
-  // currentRunStats.unlockedHammerThisClear 在 populateResultPanel 前保持有效
   populateResultPanel();
   updateNextLevelButton();
   showResultButtons();
@@ -1783,6 +1946,12 @@ function drawWorld() {
     drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0);
   });
 
+  // 隱藏寶物
+  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
+    const tx = currentHiddenTreasure.x - cx;
+    if (tx > -40 && tx < CANVAS_W + 40) drawHiddenTreasure(tx, currentHiddenTreasure);
+  }
+
   // 圓氣球
   roundBalloons.forEach(r => {
     if (r.collected) return;
@@ -1850,6 +2019,12 @@ function drawWorld() {
 
   // Player
   drawPlayer(cx);
+  // 氣球狗（跟隨玩家）
+  if (bringBalloonDog) {
+    const dogX = player.x - cx - 30;
+    const dogY = player.y + player.h * 0.5;
+    drawBalloonDog(dogX, dogY, dogNoseGlow);
+  }
 }
 
 function drawPlayer(cx) {
@@ -2012,6 +2187,77 @@ function drawRoundBalloon(x, y) {
   ctx.fillText('圓', x, y + 4);
 }
 
+
+
+function drawHiddenTreasure(sx, t) {
+  // 寶物：輕微上下浮動，帶狗時有輝光
+  const bob = Math.sin(frameCount * 0.05) * 4;
+  const glow = bringBalloonDog ? dogNoseGlow * 0.6 : 0;
+
+  if (glow > 0.1) {
+    ctx.fillStyle = `rgba(255,240,100,${glow * 0.35})`;
+    ctx.beginPath();
+    ctx.arc(sx + 16, t.y + bob + 16, 32, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 圖示
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(t.emoji, sx + 16, t.y + bob + 20);
+  // 問號（帶狗時才顯示，否則完全隱藏）
+  if (!bringBalloonDog) {
+    ctx.fillStyle = 'rgba(255,255,255,0)'; // 完全透明：沒帶狗看不到
+  } else if (dogNoseGlow < 0.5) {
+    ctx.fillStyle = 'rgba(255,255,150,0.3)';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('?', sx + 16, t.y + bob - 8);
+  }
+}
+
+function drawBalloonDog(x, y, glow) {
+  // 簡化版氣球狗（幾何形狀 placeholder）
+  ctx.save();
+  ctx.translate(x, y);
+  // 身體（橢圓）
+  ctx.fillStyle = '#f5c842';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 頭
+  ctx.beginPath();
+  ctx.arc(14, -6, 9, 0, Math.PI * 2);
+  ctx.fill();
+  // 耳朵
+  ctx.fillStyle = '#e8a800';
+  ctx.beginPath();
+  ctx.ellipse(10, -13, 4, 6, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(18, -13, 4, 6, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // 鼻子（依 glow 亮度）
+  const noseAlpha = 0.3 + glow * 0.7;
+  const noseR = 7 + glow * 5;
+  if (glow > 0.6) {
+    // 鼻子光暈
+    ctx.fillStyle = `rgba(255,80,60,${glow * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(22, -5, noseR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = `rgba(220,60,40,${noseAlpha})`;
+  ctx.beginPath();
+  ctx.arc(22, -5, 4, 0, Math.PI * 2);
+  ctx.fill();
+  // 尾巴
+  ctx.strokeStyle = '#f5c842';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-12, -2);
+  ctx.quadraticCurveTo(-22, -14, -16, -20);
+  ctx.stroke();
+  ctx.restore();
+}
 
 function drawTackHazard(x, y, w, h) {
   // 圖釘區：深灰底板 + 多個小圖釘
@@ -2446,6 +2692,15 @@ function populateResultPanel() {
 
   console.log('[populateResultPanel] unlockedHammerThisClear:', currentRunStats.unlockedHammerThisClear);
 
+  // 氣球狗相關
+  const dogData       = playerInventory.balloonDog || {};
+  const hasDog        = dogData.present;
+  const dogTurns      = dogData.turnsLeft || 0;
+  const nextLvIndex   = currentLevelIndex + 1;
+  const nextLvHasTreasure = nextLvIndex < LEVELS.length
+    && !!LEVELS[nextLvIndex].hiddenTreasure;
+  const canBringDog   = hasDog && (playerInventory.balloon260 || 0) >= 1;
+
   // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
   const ur = playerInventory.unlockedRecipes || {};
   const hammerHint = currentRunStats.unlockedHammerThisClear ? `
@@ -2482,7 +2737,37 @@ function populateResultPanel() {
     </div>
     ${hammerHint}
     ${guideBookHint}
-    <div class="rp-section" id="supply-section">
+
+    <!-- 氣球狗區塊 -->
+    ${hasDog ? `
+    <div class="rp-section" id="dog-section">
+      <div class="rp-section-title">🐶 氣球小狗</div>
+      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>
+      <div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">${dogTurns} 回合</span></div>
+      ${currentRunStats.dogHealed ? '<div class="rp-row"><span class="rp-label">❤️ 結算回血</span><span class="rp-val result-red">+0.5</span></div>' : ''}
+      ${currentRunStats.dogGoneThisClear ? '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>' : ''}
+      ${nextLvHasTreasure && !currentRunStats.dogGoneThisClear ? `
+        <div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>
+        <div class="rp-supply-item" style="margin-top:6px">
+          <div class="rp-supply-info">
+            <span class="rp-supply-name">帶氣球小狗出發</span>
+            <span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span>
+          </div>
+          <button id="btn-bring-dog" class="rp-supply-btn ${canBringDog ? '' : 'rp-supply-btn--disabled'}"
+                  ${canBringDog ? '' : 'disabled'}
+                  onclick="bringDogNextLevel()">
+            ${canBringDog ? '帶狗出發 -1 🎈' : '氣球不足'}
+          </button>
+        </div>
+      ` : ''}
+    </div>
+    ` : `
+    <div class="rp-section" id="dog-section">
+      <div class="rp-section-title">🐶 氣球小狗</div>
+      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>
+    </div>
+    `}
+
       <div class="rp-section-title">🏠 小V的家・補給</div>
       <div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">${player.hp} / ${player.maxHp}</span></div>
       <div class="rp-supply-item">
@@ -2583,6 +2868,21 @@ function updateBandageBtn() {
   }
 }
 
+
+// ── 帶氣球小狗出門（結算畫面按鈕）────────────
+function bringDogNextLevel() {
+  if ((playerInventory.balloon260 || 0) < 1) return;
+  if (!(playerInventory.balloonDog?.present)) return;
+  playerInventory.balloon260--;
+  bringBalloonDog = true;
+  saveInventory();
+  // 更新按鈕
+  const btn = document.getElementById('btn-bring-dog');
+  if (btn) { btn.textContent = '已安排出發 🐶'; btn.disabled = true; btn.classList.add('rp-supply-btn--disabled'); }
+  // 更新背包金幣（260 氣球減少）
+  refreshResultBag();
+}
+
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = text.split('');
   let line = '';
@@ -2626,6 +2926,12 @@ function restart() {
   currentRunStats.damageTaken             = 0;
   currentRunStats.unlockedHammerThisClear = false;
   currentRunStats.usedHeartPatch          = false;
+  currentRunStats.foundHiddenTreasure     = false;
+  currentRunStats.foundTreasureCoins      = 0;
+  currentRunStats.dogHealed               = false;
+  currentRunStats.dogGoneThisClear        = false;
+  bringBalloonDog                         = false;
+  dogNoseGlow                             = 0;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
@@ -2785,8 +3091,11 @@ function renderGuidebook() {
       if (!ur[recipe.unlockKey]) return;
     }
 
+    // 氣球狗特殊邏輯
+    const isDog = recipe.id === 'balloonDog';
+    const dogData = playerInventory.balloonDog || {};
     const ci    = playerInventory.craftedItems || {};
-    const owned = ci[recipe.id] || 0;
+    const owned = isDog ? (dogData.present ? 1 : 0) : (ci[recipe.id] || 0);
 
     // 計算材料是否足夠
     let canCraft = true;
@@ -2808,18 +3117,30 @@ function renderGuidebook() {
       </span>`
     ).join('');
 
+    // 製作按鈕文字
+    let craftBtnText = canCraft ? '製作' : '材料不足';
+    let craftDisabled = !canCraft;
+    if (recipe.maxOne && owned >= 1)  { craftBtnText = '已在小V的家'; craftDisabled = true; }
+    if (recipe.comingSoon)            { craftBtnText = '即將開放'; craftDisabled = true; }
+
+    const durLine = recipe.durability > 0
+      ? `<div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>` : '';
+    const ownedLabel = isDog
+      ? (owned > 0 ? '<span class="recipe-card__owned">已在小V的家</span>' : '')
+      : (owned > 0 ? `<span class="recipe-card__owned">已擁有 ${owned} 把</span>` : '');
+
     card.innerHTML = `
       <div class="recipe-card__header">
         <span class="recipe-card__emoji">${recipe.emoji}</span>
         <span class="recipe-card__name">${recipe.name}</span>
-        ${owned > 0 ? `<span class="recipe-card__owned">已擁有 ${owned} 把</span>` : ''}
+        ${ownedLabel}
       </div>
       <div class="recipe-card__effect">效果：${recipe.effect}</div>
-      <div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>
+      ${durLine}
       <div class="recipe-card__mats">${matsHtml}</div>
-      <button class="recipe-card__btn ${canCraft ? '' : 'recipe-card__btn--disabled'}"
-              data-id="${recipe.id}" ${canCraft ? '' : 'disabled'}>
-        ${canCraft ? '製作' : '材料不足'}
+      <button class="recipe-card__btn ${craftDisabled ? 'recipe-card__btn--disabled' : ''}"
+              data-id="${recipe.id}" ${craftDisabled ? 'disabled' : ''}>
+        ${craftBtnText}
       </button>
     `;
 
