@@ -162,6 +162,10 @@ const INVENTORY_DEFAULTS = {
   },
   equippedSwordDur:     0,
   tutorialSwordGranted: false,
+  uniqueCollectibles: {
+    level3RoundBalloon: false,  // 第 3 關圓氣球是否已成功帶回（通關）
+    // 未來可在此擴充更多一次性收集物
+  },
 };
 
 // ── 氣球秘笈配方定義 (MVP 0.3) ────────────────
@@ -237,6 +241,9 @@ function loadInventory() {
       merged.unlockedRecipes = Object.assign(
         {}, INVENTORY_DEFAULTS.unlockedRecipes, parsed.unlockedRecipes || {}
       );
+      merged.uniqueCollectibles = Object.assign(
+        {}, INVENTORY_DEFAULTS.uniqueCollectibles, parsed.uniqueCollectibles || {}
+      );
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
@@ -252,8 +259,9 @@ function saveInventory() {
 
 function resetInventory() {
   Object.assign(playerInventory, INVENTORY_DEFAULTS);
-  playerInventory.craftedItems     = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
-  playerInventory.unlockedRecipes  = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
+  playerInventory.craftedItems       = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.unlockedRecipes    = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
+  playerInventory.uniqueCollectibles = Object.assign({}, INVENTORY_DEFAULTS.uniqueCollectibles);
   playerInventory.equippedSwordDur     = 0;
   playerInventory.tutorialSwordGranted = false;
   saveInventory();
@@ -268,11 +276,12 @@ let playerInventory = loadInventory();
 
 // currentRunStats: 本局獲得（每次 restart 清零）
 let currentRunStats = {
-  coins:           0,
-  balloon260:      0,
-  roundBalloon:    0,  // MVP 1.0B
-  enemiesDefeated: 0,
-  damageTaken:     0,
+  coins:                    0,
+  balloon260:               0,
+  roundBalloon:             0,
+  enemiesDefeated:          0,
+  damageTaken:              0,
+  unlockedHammerThisClear:  false, // 這局是否第一次解鎖氣球槌
 };
 
 // ── Asset loading ─────────────────────────────
@@ -788,11 +797,15 @@ const LEVELS = [
         w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
         sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false },
     ],
-    buildRoundBalloons: () => [
-      // 第 3 關唯一 1 顆圓氣球：上方路線段 2，需跳上高平台才能取得
-      // 平台 x=1350, y=GROUND_Y-150 上方 40px
-      { x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
-    ],
+    buildRoundBalloons: () => {
+      // 第 3 關唯一 1 顆圓氣球：通關後帶走則不再生成（防刷）
+      const uc = playerInventory.uniqueCollectibles || {};
+      if (uc.level3RoundBalloon) return []; // 已成功帶走，不再出現
+      return [
+        // 上方路線段 2，需跳上高平台（x=1350, y=GROUND_Y-150）才能取得
+        { x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+      ];
+    },
   },
 
 ];  // end LEVELS
@@ -1325,15 +1338,29 @@ function triggerGameOver() {
 
 function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
-  // 第 3 關（index 2）通關時解鎖基礎氣球槌
+
   if (currentLevelIndex === 2) {
-    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
-    playerInventory.unlockedRecipes.basicHammer = true;
-    saveInventory();
+    const uc = playerInventory.uniqueCollectibles || {};
+    const ur = playerInventory.unlockedRecipes   || {};
+
+    // 這局是否第一次解鎖 basicHammer？
+    const firstUnlock = !ur.basicHammer;
+    if (firstUnlock) {
+      if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+      playerInventory.unlockedRecipes.basicHammer = true;
+      currentRunStats.unlockedHammerThisClear = true;  // 記錄：這局第一次解鎖
+    }
+
+    // 玩家通關帶回圓氣球：標記 uniqueCollectibles
+    if (currentRunStats.roundBalloon > 0) {
+      if (!playerInventory.uniqueCollectibles) playerInventory.uniqueCollectibles = {};
+      playerInventory.uniqueCollectibles.level3RoundBalloon = true;
+    }
   }
+
   saveInventory();
   gameState = 'clear';
-  populateResultPanel();
+  populateResultPanel();   // 此時 currentRunStats.unlockedHammerThisClear 仍有值
   updateNextLevelButton();
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -1949,13 +1976,14 @@ function populateResultPanel() {
     ).join('');
   }
 
-  // 第 3 關：basicHammer 解鎖提示
+  // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
   const ur = playerInventory.unlockedRecipes || {};
-  const hammerHint = (currentLevelIndex === 2 && gameState === 'clear' && ur.basicHammer) ? `
+  const hammerHint = currentRunStats.unlockedHammerThisClear ? `
     <div class="rp-guidebook-hint" style="border-color:rgba(160,120,255,0.4);background:rgba(80,40,160,0.15)">
       <div class="rp-guidebook-hint__title">🔨 新秘笈解鎖：基礎氣球槌！</div>
       <div class="rp-guidebook-hint__body">
-        你找到圓氣球了！可以用 <strong>圓氣球 x1 + 260 長條氣球 x1</strong> 製作基礎氣球槌。
+        你找到圓氣球了！可以用 <strong>圓氣球 x1 + 260 長條氣球 x1</strong> 製作基礎氣球槌。<br>
+        點選下方「氣球秘笈」查看。
       </div>
     </div>
   ` : '';
@@ -2034,10 +2062,10 @@ function buyBandage() {
 
   // 更新結算畫面數字
   updateBandageBtn();
-  // 更新背包顯示的金幣
-  const coinEl = document.querySelector('#result-panel-body .result-gold');
-  if (coinEl) coinEl.textContent = `${playerInventory.coins} 枚`;
-  // 更新本關成果生命
+  // 更新「目前背包」的金幣（第二個 .result-gold，第一個是本關成果，不能動）
+  const goldEls = document.querySelectorAll('#result-panel-body .result-gold');
+  if (goldEls.length >= 2) goldEls[1].textContent = `${playerInventory.coins} 枚`;
+  // 更新生命顯示（result-red 中含 '/' 的是生命格）
   const hpEls = document.querySelectorAll('#result-panel-body .result-red');
   hpEls.forEach(el => {
     if (el.textContent.includes('/')) el.textContent = `${player.hp} / ${player.maxHp}`;
@@ -2106,11 +2134,12 @@ function restart() {
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
   // Reset currentRunStats（本局歸零，inventory 不動）
-  currentRunStats.coins           = 0;
-  currentRunStats.balloon260      = 0;
-  currentRunStats.roundBalloon    = 0;
-  currentRunStats.enemiesDefeated = 0;
-  currentRunStats.damageTaken     = 0;
+  currentRunStats.coins                   = 0;
+  currentRunStats.balloon260              = 0;
+  currentRunStats.roundBalloon            = 0;
+  currentRunStats.enemiesDefeated         = 0;
+  currentRunStats.damageTaken             = 0;
+  currentRunStats.unlockedHammerThisClear = false;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
