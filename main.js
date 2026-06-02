@@ -1021,8 +1021,9 @@ var activeSlot = 'sword'; // 預設劍
 
 // ── Hidden treasure & balloon dog run state ───
 var currentHiddenTreasure = null; // 本關 hiddenTreasure 物件（loadLevel 設定）
-var bringBalloonDog       = false; // 本關是否帶狗出門
-var dogNoseGlow           = 0;    // 0～1，狗鼻子亮度
+var bringBalloonDog  = false; // 本關是否帶狗出門（loadLevel 後才設定）
+var nextBringDog     = false; // 下一關是否帶狗（帶狗按鈕設定，進下一關時轉移）
+var dogNoseGlow      = 0;     // 0～1，狗鼻子亮度
 
 function initEquippedHammer() {
   const ci  = playerInventory.craftedItems || {};
@@ -1128,10 +1129,12 @@ function loadLevel(index) {
   currentLevelIndex = index;
 
   // 隱藏寶物（深拷貝，避免 found 狀態污染 LEVELS 原始資料）
-  const rawTreasure = lv.hiddenTreasure;
+  const rawTreasure = lv.hiddenTreasure || null;
   currentHiddenTreasure = rawTreasure
     ? Object.assign({}, rawTreasure, { found: false })
     : null;
+  console.log('loadLevel hiddenTreasure:', currentHiddenTreasure);
+  console.log('bringBalloonDog:', bringBalloonDog);
 
   // 探索速度（根據是否有隱藏物調整，帶狗後再 updateCamera 動態調整）
   // 實際速度在 updateCamera 裡根據 bringBalloonDog 動態計算
@@ -1570,7 +1573,10 @@ function isInSafeZone(px, py, pw, ph) {
 
 // ── 狗鼻子亮度 ──────────────────────────────
 function updateDogNose() {
-  if (!bringBalloonDog || !currentHiddenTreasure || currentHiddenTreasure.found) {
+  if (!bringBalloonDog
+      || !currentHiddenTreasure
+      || currentHiddenTreasure.found
+      || typeof currentHiddenTreasure.x !== 'number') {
     dogNoseGlow = 0;
     return;
   }
@@ -1584,6 +1590,7 @@ function updateDogNose() {
 // ── 隱藏寶物碰撞 ────────────────────────────
 function checkHiddenTreasure() {
   if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
+  if (typeof currentHiddenTreasure.x !== 'number') return; // 防呆
   const t  = currentHiddenTreasure;
   const R  = 32;
   if (!rectsOverlap(player.x, player.y, player.w, player.h,
@@ -2638,6 +2645,28 @@ function buildBagRows() {
 
 // ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
 // 使用明確 id="rp-inventory-section"，不猜 querySelectorAll index
+
+// ── refreshResultDog：製作狗後即時更新狗區塊 ──
+function refreshResultDog() {
+  const sec = document.getElementById('dog-section');
+  if (!sec) return;
+  const dog    = playerInventory.balloonDog || {};
+  const hasDog = dog.present;
+  const turns  = dog.turnsLeft || 0;
+  if (hasDog) {
+    sec.innerHTML = `
+      <div class="rp-section-title">🐶 氣球小狗</div>
+      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>
+      <div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">${turns} 回合</span></div>
+    `;
+  } else {
+    sec.innerHTML = `
+      <div class="rp-section-title">🐶 氣球小狗</div>
+      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>
+    `;
+  }
+}
+
 function refreshResultBag() {
   const section = document.getElementById('rp-inventory-section');
   if (!section) return; // 結算畫面未開啟
@@ -2767,7 +2796,7 @@ function populateResultPanel() {
       <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>
     </div>
     `}
-
+    <div class="rp-section" id="supply-section">
       <div class="rp-section-title">🏠 小V的家・補給</div>
       <div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">${player.hp} / ${player.maxHp}</span></div>
       <div class="rp-supply-item">
@@ -2871,16 +2900,28 @@ function updateBandageBtn() {
 
 // ── 帶氣球小狗出門（結算畫面按鈕）────────────
 function bringDogNextLevel() {
-  if ((playerInventory.balloon260 || 0) < 1) return;
-  if (!(playerInventory.balloonDog?.present)) return;
+  const dog = playerInventory.balloonDog || {};
+  console.log('prepare bring dog:', {
+    present: dog.present,
+    turnsLeft: dog.turnsLeft,
+    balloon260: playerInventory.balloon260,
+    nextBringDog
+  });
+  if (!dog.present) { console.warn('no dog'); return; }
+  if ((playerInventory.balloon260 || 0) < 1) {
+    showHint('需要 260 長條氣球 x1 作為牽繩', 180);
+    return;
+  }
   playerInventory.balloon260--;
-  bringBalloonDog = true;
+  nextBringDog = true;  // 下一關才生效，不是現在
   saveInventory();
-  // 更新按鈕
   const btn = document.getElementById('btn-bring-dog');
-  if (btn) { btn.textContent = '已安排出發 🐶'; btn.disabled = true; btn.classList.add('rp-supply-btn--disabled'); }
-  // 更新背包金幣（260 氣球減少）
-  refreshResultBag();
+  if (btn) {
+    btn.textContent = '已安排帶狗出發 🐶';
+    btn.disabled = true;
+    btn.classList.add('rp-supply-btn--disabled');
+  }
+  refreshResultBag(); // 更新 260 氣球數量
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -2930,8 +2971,8 @@ function restart() {
   currentRunStats.foundTreasureCoins      = 0;
   currentRunStats.dogHealed               = false;
   currentRunStats.dogGoneThisClear        = false;
-  bringBalloonDog                         = false;
-  dogNoseGlow                             = 0;
+  // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
+  dogNoseGlow = 0;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
@@ -3003,10 +3044,17 @@ function hideResultButtons() {
           if (btnPlay._nextLevel) {
             // 進入下一關：背包保留，關卡 index +1
             const nextIdx = currentLevelIndex + 1;
+            console.log('next level with dog state:', {
+              nextBringDog, currentLevelIndex, nextIdx
+            });
+            bringBalloonDog = nextBringDog; // 轉移帶狗狀態
+            nextBringDog    = false;
             loadLevel(nextIdx);
             restart();
           } else {
             // 再玩一次：重載同一關
+            nextBringDog    = false;
+            bringBalloonDog = false; // 重玩不帶狗
             loadLevel(currentLevelIndex);
             restart();
           }
@@ -3153,8 +3201,9 @@ function renderGuidebook() {
           const ok = craftItem(recipe.id);
           if (ok) {
             showCraftMessage(`成功製作 ${recipe.name}！`);
-            renderGuidebook();   // 重新渲染秘笈（材料數量）
-            refreshResultBag();  // 即時更新結算背包區塊
+            renderGuidebook();
+            refreshResultBag();
+            if (recipe.id === 'balloonDog') refreshResultDog(); // 狗區塊即時更新
           }
         })
       );
