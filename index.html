@@ -47,7 +47,23 @@
       </div>
     </div>
 
-    <!-- 結算畫面 overlay -->
+    <!-- 挑戰失敗 overlay -->
+    <div id="failed-overlay">
+      <div id="failed-panel">
+        <div id="failed-icon">💔</div>
+        <div id="failed-title">挑戰失敗</div>
+        <div id="failed-body">
+          小V這次沒能完成派對任務。<br>
+          本關取得的材料還留在關卡裡，<br>
+          再挑戰一次把它們帶回家吧！
+        </div>
+        <div id="failed-actions">
+          <button id="btn-retry" class="failed-btn failed-btn--primary">↺ 重試本關</button>
+        </div>
+      </div>
+    </div>
+
+        <!-- 結算畫面 overlay -->
     <div id="result-overlay">
       <div id="result-panel">
         <div id="result-panel-title">關卡結算</div>
@@ -183,6 +199,20 @@
   btnPauseOuter.addEventListener('touchstart', handlePauseClick);
   btnPauseIngame.addEventListener('click',      handlePauseClick);
   btnPauseIngame.addEventListener('touchstart', handlePauseClick);
+
+  // 重試本關（失敗畫面）
+  function handleRetry(e) {
+    e.preventDefault();
+    if (gameState === 'failed') {
+      loadLevel(currentLevelIndex); // 重載同一關
+      restart();
+    }
+  }
+  const btnRetry = document.getElementById('btn-retry');
+  if (btnRetry) {
+    btnRetry.addEventListener('click',      handleRetry);
+    btnRetry.addEventListener('touchstart', handleRetry);
+  }
 
   // ── 結算畫面時隱藏暫停按鈕，離開結算時恢復 ──
   // 這由 main.js 的 triggerClear/GameOver 呼叫 hidePauseBtn()，

@@ -115,7 +115,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape') {
     if (gameState === 'playing') { pauseGame(); return; }
     if (gameState === 'paused')  { resumeGame(); return; }
-    return; // gameover / clear 狀態 Esc 不做事
+    return; // failed / gameover / clear 狀態 Esc 不做事
   }
   keys[e.code] = true;
   if (['Space','ArrowLeft','ArrowRight','ArrowUp','KeyZ'].includes(e.code)) e.preventDefault();
@@ -281,7 +281,8 @@ playerImg.src = 'assets/player.png'; // place your image here
 
 // ── Game state ────────────────────────────────
 // gameState 用 var 使其成為全域變數，讓 index.html script 也可讀取
-var gameState = 'playing'; // 'playing' | 'paused' | 'gameover' | 'clear'
+var gameState = 'playing'; // 'playing' | 'paused' | 'failed' | 'gameover' | 'clear'
+// 注意：'failed' = 死亡失敗（不進結算）；'gameover' = 時間到（進結算但沒下一關按鈕）
 let cameraX   = 0;
 let frameCount = 0;
 let lastTime   = 0;
@@ -886,7 +887,7 @@ let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
 
 function checkHints() {
   // 只在 playing 時觸發
-  if (gameState !== 'playing') return;
+  if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
   HINTS.forEach(h => {
     if (!h.shown && player.x >= h.triggerX) {
       h.shown = true;
@@ -948,7 +949,7 @@ function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
 
 // ── Update ────────────────────────────────────
 function update(dt, dtMs = 16.667) {
-  if (gameState !== 'playing') return;
+  if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
 
   frameCount++;
   elapsedSec += dtMs / 1000; // real seconds
@@ -1258,7 +1259,7 @@ function damagePlayer() {
   player.hp--;
   player.invincible = 90; // 約 1.5 秒無敵（90 幀 @ 60fps）
   currentRunStats.damageTaken++;
-  if (player.hp <= 0) triggerGameOver();
+  if (player.hp <= 0) triggerFailed();
 }
 
 function checkFinish() {
@@ -1270,7 +1271,7 @@ function checkFinish() {
 
 // ── Pause / Resume ────────────────────────────
 function pauseGame() {
-  if (gameState !== 'playing') return;
+  if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
   gameState = 'paused';
   const el = document.getElementById('pause-overlay');
   if (el) el.style.display = 'flex';
@@ -1285,11 +1286,39 @@ function resumeGame() {
   lastTime = 0;
 }
 
+
+// ── 挑戰失敗（死亡）─────────────────────────
+// 規則：死亡時回滾本局收集到的材料（未帶走）
+function triggerFailed() {
+  // 把本局獲得的材料從 inventory 退回（不能帶走）
+  playerInventory.coins       = Math.max(0, playerInventory.coins       - currentRunStats.coins);
+  playerInventory.balloon260  = Math.max(0, playerInventory.balloon260  - currentRunStats.balloon260);
+  playerInventory.roundBalloon= Math.max(0, playerInventory.roundBalloon- currentRunStats.roundBalloon);
+  saveInventory();
+
+  gameState = 'failed';
+  showFailedOverlay();
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+}
+
+function showFailedOverlay() {
+  const el = document.getElementById('failed-overlay');
+  if (el) el.style.display = 'flex';
+}
+function hideFailedOverlay() {
+  const el = document.getElementById('failed-overlay');
+  if (el) el.style.display = 'none';
+}
+
 function triggerGameOver() {
+  // 時間到：同樣回滾本局材料（沒成功帶走）
+  playerInventory.coins        = Math.max(0, playerInventory.coins        - currentRunStats.coins);
+  playerInventory.balloon260   = Math.max(0, playerInventory.balloon260   - currentRunStats.balloon260);
+  playerInventory.roundBalloon = Math.max(0, playerInventory.roundBalloon - currentRunStats.roundBalloon);
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
-  populateResultPanel();
+  populateResultPanel(); // 顯示結算（但 updateNextLevelButton 不會加下一關）
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
@@ -1341,6 +1370,12 @@ function draw() {
     drawHUD();
     // 暫停遮罩（半透明）：overlay 由 HTML 負責，Canvas 只畫模糊底
     ctx.fillStyle = 'rgba(0,0,20,0.45)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  } else if (gameState === 'failed') {
+    drawWorld();
+    drawHUD();
+    // 失敗遮罩（HTML overlay 負責，Canvas 只加暗底）
+    ctx.fillStyle = 'rgba(60,0,0,0.55)';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   } else if (gameState === 'gameover') {
     drawWorld();
@@ -1799,13 +1834,20 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`⏱ ${String(timeLeft).padStart(2,'0')}`, CANVAS_W / 2, 30);
 
-  // Coins & balloons
+  // Coins & balloons & round balloon
   ctx.textAlign = 'right';
   ctx.font = '14px sans-serif';
+  // 圓氣球（只在有圓氣球收集物的關卡顯示，目前為第 3 關）
+  const showRound = roundBalloons.length > 0;
+  const colOffset = showRound ? 150 : 100;
   ctx.fillStyle = '#FFD700';
-  ctx.fillText(`🪙 ${player.coinsCollected}`, CANVAS_W - pad - 100, 28);
+  ctx.fillText(`🪙 ${player.coinsCollected}`, CANVAS_W - pad - colOffset, 28);
   ctx.fillStyle = '#FF69B4';
-  ctx.fillText(`🎈 ${player.balloonsCollected}`, CANVAS_W - pad, 28);
+  ctx.fillText(`🎈 ${player.balloonsCollected}`, CANVAS_W - pad - (showRound ? 50 : 0), 28);
+  if (showRound) {
+    ctx.fillStyle = '#c8aaff';
+    ctx.fillText(`⚪ ${currentRunStats.roundBalloon}`, CANVAS_W - pad, 28);
+  }
 
   // 裝備顯示（右側 HUD 下方）
   if (equippedSword.id) {
@@ -2047,9 +2089,10 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 // ── Restart ───────────────────────────────────
 function restart() {
   hideResultButtons();
-  // 確保暫停 overlay 也關掉
-  const pauseEl = document.getElementById('pause-overlay');
+  // 確保所有 overlay 關掉
+  const pauseEl  = document.getElementById('pause-overlay');
   if (pauseEl) pauseEl.style.display = 'none';
+  hideFailedOverlay();
   // 恢復暫停按鈕顯示
   if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
   // Reset player stats (本局)
