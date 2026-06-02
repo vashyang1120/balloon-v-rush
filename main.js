@@ -325,7 +325,7 @@ const player = {
   vx: 0,  vy: 0,
   onGround: false,
   facingRight: true,
-  hp: 5, maxHp: 5,
+  hp: 3, maxHp: 3,  // MVP 1.0A: 改為 3 格，支援 0.5 單位
   invincible: 0,        // frames of invincibility after hit
   attackCooldown: 0,
   attackActive: 0,      // frames the projectile flash is live (no-sword)
@@ -1658,17 +1658,37 @@ function drawHUD() {
   ctx.fillStyle = COLORS.ui;
   ctx.fillRect(0, 0, CANVAS_W, 46);
 
-  // HP
+  // HP（支援 0.5 單位：整格紅色、半格橘色、空格深灰）
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('❤️', pad, 28);
   for (let i = 0; i < player.maxHp; i++) {
-    ctx.fillStyle = i < player.hp ? COLORS.hpFull : COLORS.hpEmpty;
-    ctx.beginPath();
-    ctx.roundRect(pad + 28 + i * 22, 12, 16, 22, 4);
-    ctx.fill();
+    const bx = pad + 28 + i * 22;
+    const by = 12;
+    const bw = 16;
+    const bh = 22;
+    const filled = player.hp - i; // >1 整格, 0.5~1 半格, <=0 空格
+    if (filled >= 1) {
+      ctx.fillStyle = COLORS.hpFull;
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+    } else if (filled > 0) {
+      // 空格底
+      ctx.fillStyle = COLORS.hpEmpty;
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+      // 半格填色（左半）
+      ctx.fillStyle = '#e08030'; // 橘色代表半格
+      ctx.beginPath(); ctx.roundRect(bx, by, bw / 2, bh, [4,0,0,4]); ctx.fill();
+    } else {
+      ctx.fillStyle = COLORS.hpEmpty;
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+    }
   }
+  // 文字顯示 hp（清楚顯示小數）
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${player.hp}/${player.maxHp}`, pad + 28, 44);
 
   // Timer
   ctx.fillStyle = timeLeft <= 10 ? '#ff6b6b' : '#fff';
@@ -1743,7 +1763,7 @@ function populateResultPanel() {
     ['🎈 260 長條氣球', `${currentRunStats.balloon260} 條`,       'result-pink'],
     ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,  'result-orange'],
     ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,      'result-red'],
-    ['❤️ 剩餘生命',     `${player.hp} / ${player.maxHp}`,        'result-red'],
+    ['❤️ 目前生命',     `${player.hp} / ${player.maxHp}`,        'result-red'],
     ['⏱  剩餘時間',     `${timeLeft} 秒`,                         'result-blue'],
   ];
 
@@ -1801,10 +1821,31 @@ function populateResultPanel() {
       ${makeTable(bagRows)}
     </div>
     ${guideBookHint}
+    <div class="rp-section" id="supply-section">
+      <div class="rp-section-title">🏠 小V的家・補給</div>
+      <div class="rp-supply-item">
+        <div class="rp-supply-info">
+          <span class="rp-supply-name">🩹 愛心貼布</span>
+          <span class="rp-supply-price">20 🪙　+1 ❤️</span>
+        </div>
+        <button id="btn-buy-bandage" class="rp-supply-btn" onclick="buyBandage()">
+          ${playerInventory.coins < 20 ? '金幣不足' : player.hp >= player.maxHp ? '生命已滿' : '購買並使用 -20 🪙'}
+        </button>
+      </div>
+      <div id="bandage-msg" class="rp-supply-msg"></div>
+    </div>
     <div class="rp-trivia">
       💡 ${trivia}
     </div>
+    <!-- TODO: 未來氣球小狗（已實裝於「小V的家」時）
+         每關結算給玩家 +0.5 生命恢復。
+         無耐久，但有陪伴回合數，消失提示：
+         「氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。」
+    -->
   `;
+
+  // 更新補給按鈕狀態（購買後重刷用）
+  updateBandageBtn();
 
   // 第 1 關結算：輕微強調氣球秘笈按鈕
   const btnGuide = document.getElementById('btn-guidebook');
@@ -1814,6 +1855,58 @@ function populateResultPanel() {
     } else {
       btnGuide.classList.remove('result-btn--guide-highlight');
     }
+  }
+}
+
+
+// ── 愛心貼布購買（結算畫面補給區）────────────
+// TODO: 正式版改為在「小V的家」購買，放進背包，關卡中按暫停使用，每關最多一次
+
+const BANDAGE_PRICE = 20;
+const BANDAGE_HEAL  = 1;
+
+function buyBandage() {
+  if (playerInventory.coins < BANDAGE_PRICE) return; // 金幣不足
+  if (player.hp >= player.maxHp) return;             // 生命已滿
+  playerInventory.coins -= BANDAGE_PRICE;
+  player.hp = Math.min(player.maxHp, player.hp + BANDAGE_HEAL);
+  saveInventory();
+
+  // 更新結算畫面數字
+  updateBandageBtn();
+  // 更新背包顯示的金幣
+  const coinEl = document.querySelector('#result-panel-body .result-gold');
+  if (coinEl) coinEl.textContent = `${playerInventory.coins} 枚`;
+  // 更新本關成果生命
+  const hpEls = document.querySelectorAll('#result-panel-body .result-red');
+  hpEls.forEach(el => {
+    if (el.textContent.includes('/')) el.textContent = `${player.hp} / ${player.maxHp}`;
+  });
+  // 顯示訊息
+  const msg = document.getElementById('bandage-msg');
+  if (msg) {
+    msg.textContent = `❤️ 使用愛心貼布，恢復 ${BANDAGE_HEAL} 生命！`;
+    msg.style.opacity = '1';
+    clearTimeout(msg._t);
+    msg._t = setTimeout(() => { msg.style.opacity = '0'; }, 2500);
+  }
+}
+
+function updateBandageBtn() {
+  const btn = document.getElementById('btn-buy-bandage');
+  if (!btn) return;
+  if (player.hp >= player.maxHp) {
+    btn.textContent = '生命已滿';
+    btn.disabled = true;
+    btn.classList.add('rp-supply-btn--disabled');
+  } else if (playerInventory.coins < BANDAGE_PRICE) {
+    btn.textContent = '金幣不足';
+    btn.disabled = true;
+    btn.classList.add('rp-supply-btn--disabled');
+  } else {
+    btn.textContent = `購買並使用 -${BANDAGE_PRICE} 🪙`;
+    btn.disabled = false;
+    btn.classList.remove('rp-supply-btn--disabled');
   }
 }
 
@@ -1846,7 +1939,7 @@ function restart() {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
     vx: 0, vy: 0,
     onGround: false, facingRight: true,
-    hp: 5, invincible: 0,
+    hp: player.maxHp, invincible: 0,  // 使用 maxHp（支援自訂）
     attackCooldown: 0, attackActive: 0,
     meleeActive: 0, meleeHit: false,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
