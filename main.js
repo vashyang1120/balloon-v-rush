@@ -1929,9 +1929,52 @@ function drawResultBox() {
 }
 
 // 填充 HTML 結算面板內容（每次 triggerClear/GameOver 時呼叫）
+
+// ── buildBagRows：產生「目前背包」顯示陣列 ──
+// 製作道具後呼叫 refreshResultBag() 即時更新，不需重跑整個 populateResultPanel
+function buildBagRows() {
+  const ci = playerInventory.craftedItems || {};
+  const rows = [
+    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,          'result-gold'],
+    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,     'result-pink'],
+  ];
+  if (playerInventory.roundBalloon > 0) {
+    rows.push(['⚪ 圓氣球總計', `${playerInventory.roundBalloon} 顆`, 'result-purple']);
+  }
+  // 基礎氣球劍：x數量｜裝備 dur/max（合併，不重複）
+  const swordQty = ci.basicSword || 0;
+  if (swordQty > 0 || equippedSword.id === 'basicSword') {
+    const qty    = Math.max(swordQty, equippedSword.id === 'basicSword' ? 1 : 0);
+    const durStr = equippedSword.id === 'basicSword'
+      ? `｜裝備 ${equippedSword.currentDur}/${equippedSword.maxDur}`
+      : '';
+    rows.push([`⚔️ 基礎氣球劍`, `x${qty}${durStr}`, 'result-cyan']);
+  }
+  // 基礎氣球槌（未來支援裝備耐久時，在此加 durStr）
+  if ((ci.basicHammer || 0) > 0) {
+    rows.push([`🔨 基礎氣球槌`, `x${ci.basicHammer}`, 'result-purple']);
+  }
+  return rows;
+}
+
+// ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
+function refreshResultBag() {
+  const section = document.querySelector('#result-panel-body .rp-section:nth-child(2)');
+  if (!section) return; // 結算畫面未開啟
+  const rows    = buildBagRows();
+  const content = rows.map(([label, val, cls]) =>
+    `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
+  ).join('');
+  // 保留 section-title，只更換內容列
+  const title   = section.querySelector('.rp-section-title');
+  section.innerHTML = '';
+  if (title) section.appendChild(title);
+  section.insertAdjacentHTML('beforeend', content);
+}
+
 function populateResultPanel() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
-  const ci = playerInventory.craftedItems || {};
+  const ci       = playerInventory.craftedItems || {}; // 供 hammerHint 等使用
 
   // 本關成果
   const runRows = [
@@ -1947,26 +1990,8 @@ function populateResultPanel() {
   ];
 
   // 背包
-  const bagRows = [
-    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,            'result-gold'],
-    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,       'result-pink'],
-    ...(playerInventory.roundBalloon > 0
-      ? [['⚪ 圓氣球總計',  `${playerInventory.roundBalloon} 顆`,     'result-purple']]
-      : []),
-    ...((playerInventory.craftedItems?.basicSword  || 0) > 0
-      ? [['⚔️ 基礎氣球劍', `${playerInventory.craftedItems.basicSword} 把`, 'result-cyan']]
-      : []),
-    ...((playerInventory.craftedItems?.basicHammer || 0) > 0
-      ? [['🔨 基礎氣球槌', `${playerInventory.craftedItems.basicHammer} 把`, 'result-purple']]
-      : []),
-  ];
-  const swordQty = ci.basicSword || 0;
-  if (swordQty > 0 || equippedSword.id === 'basicSword') {
-    const durInfo = equippedSword.id === 'basicSword'
-      ? ` (耐久 ${equippedSword.currentDur}/${equippedSword.maxDur})`
-      : '';
-    bagRows.push([`⚔️ 基礎氣球劍${durInfo}`, `${swordQty} 把`,  'result-cyan']);
-  }
+  // 背包道具顯示（統一由 buildBagRows() 產生，製作後即時重繪用）
+  const bagRows = buildBagRows();
 
   // 小知識（各關有偏好的小知識）
   let trivia;
@@ -2364,7 +2389,8 @@ function renderGuidebook() {
           const ok = craftItem(recipe.id);
           if (ok) {
             showCraftMessage(`成功製作 ${recipe.name}！`);
-            renderGuidebook(); // 重新渲染更新數量
+            renderGuidebook();   // 重新渲染秘笈（材料數量）
+            refreshResultBag();  // 即時更新結算背包區塊
           }
         })
       );
