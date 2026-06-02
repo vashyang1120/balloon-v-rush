@@ -1,3 +1,42 @@
+
+// ── 全域錯誤捕捉 + 畫面顯示 ──────────────────
+function showDebugError(type, message, file, line, col, stack) {
+  // 確保面板存在
+  let panel = document.getElementById('__debug-error-panel__');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = '__debug-error-panel__';
+    panel.style.cssText = [
+      'position:fixed','top:0','left:0','right:0',
+      'background:rgba(180,0,0,0.95)','color:#fff',
+      'font-family:monospace','font-size:12px',
+      'padding:12px 16px','z-index:99999',
+      'max-height:50vh','overflow-y:auto',
+      'border-bottom:3px solid #ff4444',
+      'white-space:pre-wrap','word-break:break-all',
+    ].join(';');
+    document.body.appendChild(panel);
+  }
+  var parts = ['[DEBUG] ' + type, 'Message: ' + (message || '(no message)')];
+  if (file) parts.push('File: ' + file);
+  if (line) parts.push('Line: ' + line);
+  if (stack) parts.push('Stack: ' + stack);
+  var msg = parts.join(' | ');
+  panel.textContent = msg;
+  console.error('[showDebugError]', type, message, stack);
+}
+
+window.addEventListener('error', function(e) {
+  showDebugError('GLOBAL ERROR', e.message, e.filename, e.lineno, e.colno,
+    e.error && e.error.stack);
+});
+window.addEventListener('unhandledrejection', function(e) {
+  const r = e.reason;
+  showDebugError('UNHANDLED PROMISE',
+    r && (r.message || String(r)), '', '', '',
+    r && r.stack);
+});
+
 // =============================================
 //  氣球小V：派對島大作戰 — main.js
 //  MVP 0.7 — 第 1 關：氣球森林小徑
@@ -1254,30 +1293,15 @@ function update(dt, dtMs = 16.667) {
   checkHazards();
   checkHints();
   tickHint();
-  updateDogNose();
-  checkHiddenTreasure();
+  // TEMP DISABLED: updateDogNose / checkHiddenTreasure (MVP 1.2 debug)
+  // updateDogNose();
+  // checkHiddenTreasure();
   checkFinish();
 }
 
 function updateCamera() {
-  // 動態探索速度
-  let scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL;
-  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
-    scrollSpeed = bringBalloonDog
-      ? CONFIG.AUTO_SCROLL_SPEED_DOG
-      : CONFIG.AUTO_SCROLL_SPEED_EXPLORE;
-    // 靠近寶物時再放慢
-    if (bringBalloonDog && currentHiddenTreasure) {
-      const dist = Math.abs(player.x - currentHiddenTreasure.x);
-      if (dist < CONFIG.TREASURE_SLOW_ZONE_RADIUS) {
-        const slowFactor = Math.max(
-          CONFIG.TREASURE_SLOW_SCROLL_MULTIPLIER,
-          dist / CONFIG.TREASURE_SLOW_ZONE_RADIUS
-        );
-        scrollSpeed *= slowFactor;
-      }
-    }
-  }
+  // 探索速度：TEMP 暫時固定，待尋寶功能穩定後再開啟
+  const scrollSpeed = SCROLL_SPEED;
   cameraX += scrollSpeed;
 
   // Camera also follows player (lead slightly ahead)
@@ -1655,21 +1679,15 @@ function checkCollectibles() {
     }
   });
 
-  // 隱藏寶物
-  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
-    const tx = currentHiddenTreasure.x - cx;
-    if (tx > -40 && tx < CANVAS_W + 40) drawHiddenTreasure(tx, currentHiddenTreasure);
-  }
-
   // 圓氣球
   roundBalloons.forEach(r => {
     if (r.collected) return;
-    const R = 16; // 碰撞半徑
+    const R = 16;
     if (rectsOverlap(px, py, pw, ph, r.x - R, r.y - R, R*2, R*2)) {
       r.collected = true;
       currentRunStats.roundBalloon++;
       playerInventory.roundBalloon++;
-      saveInventory(); // 立即保存
+      saveInventory();
     }
   });
 }
@@ -2754,71 +2772,68 @@ function populateResultPanel() {
 
   const panel = document.getElementById('result-panel-body');
   if (!panel) return;
-  panel.innerHTML = `
-    <div class="rp-level-name">${LEVELS[currentLevelIndex]?.emoji || '🌿'} ${LEVEL_NAME}</div>
-    <div class="rp-section" id="rp-run-section">
-      <div class="rp-section-title">📋 本關成果</div>
-      ${makeTable(runRows)}
-    </div>
-    <div class="rp-section" id="rp-inventory-section">
-      <div class="rp-section-title">🎒 目前背包</div>
-      ${makeTable(buildBagRows())}
-    </div>
-    ${hammerHint}
-    ${guideBookHint}
 
-    <!-- 氣球狗區塊 -->
-    ${hasDog ? `
-    <div class="rp-section" id="dog-section">
-      <div class="rp-section-title">🐶 氣球小狗</div>
-      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>
-      <div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">${dogTurns} 回合</span></div>
-      ${currentRunStats.dogHealed ? '<div class="rp-row"><span class="rp-label">❤️ 結算回血</span><span class="rp-val result-red">+0.5</span></div>' : ''}
-      ${currentRunStats.dogGoneThisClear ? '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>' : ''}
-      ${nextLvHasTreasure && !currentRunStats.dogGoneThisClear ? `
-        <div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>
-        <div class="rp-supply-item" style="margin-top:6px">
-          <div class="rp-supply-info">
-            <span class="rp-supply-name">帶氣球小狗出發</span>
-            <span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span>
-          </div>
-          <button id="btn-bring-dog" class="rp-supply-btn ${canBringDog ? '' : 'rp-supply-btn--disabled'}"
-                  ${canBringDog ? '' : 'disabled'}
-                  onclick="bringDogNextLevel()">
-            ${canBringDog ? '帶狗出發 -1 🎈' : '氣球不足'}
-          </button>
-        </div>
-      ` : ''}
-    </div>
-    ` : `
-    <div class="rp-section" id="dog-section">
-      <div class="rp-section-title">🐶 氣球小狗</div>
-      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>
-    </div>
-    `}
-    <div class="rp-section" id="supply-section">
-      <div class="rp-section-title">🏠 小V的家・補給</div>
-      <div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">${player.hp} / ${player.maxHp}</span></div>
-      <div class="rp-supply-item">
-        <div class="rp-supply-info">
-          <span class="rp-supply-name">🩹 愛心貼布</span>
-          <span class="rp-supply-price">20 🪙　+1 ❤️</span>
-        </div>
-        <button id="btn-buy-bandage" class="rp-supply-btn" onclick="buyBandage()">
-          ${playerInventory.coins < 20 ? '金幣不足' : player.hp >= player.maxHp ? '生命已滿' : '購買並使用 -20 🪙'}
-        </button>
-      </div>
-      <div id="bandage-msg" class="rp-supply-msg"></div>
-    </div>
-    <div class="rp-trivia">
-      💡 ${trivia}
-    </div>
-    <!-- TODO: 未來氣球小狗（已實裝於「小V的家」時）
-         每關結算給玩家 +0.5 生命恢復。
-         無耐久，但有陪伴回合數，消失提示：
-         「氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。」
-    -->
-  `;
+  // ── 組裝各區塊 HTML（不用巢狀 template literal，避免瀏覽器解析問題）──
+
+  // 氣球狗區塊
+  let dogSectionHtml = '';
+  if (hasDog) {
+    let dogInner = '';
+    dogInner += '<div class="rp-section-title">🐶 氣球小狗</div>';
+    dogInner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>';
+    dogInner += '<div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">' + dogTurns + ' 回合</span></div>';
+    if (currentRunStats.dogHealed) {
+      dogInner += '<div class="rp-row"><span class="rp-label">❤️ 結算回血</span><span class="rp-val result-red">+0.5</span></div>';
+    }
+    if (currentRunStats.dogGoneThisClear) {
+      dogInner += '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>';
+    }
+    if (nextLvHasTreasure && !currentRunStats.dogGoneThisClear) {
+      dogInner += '<div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>';
+      const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
+      const btnDisStr = canBringDog ? '' : 'disabled';
+      const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
+      dogInner += '<div class="rp-supply-item" style="margin-top:6px">'
+        + '<div class="rp-supply-info">'
+        + '<span class="rp-supply-name">帶氣球小狗出發</span>'
+        + '<span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span>'
+        + '</div>'
+        + '<button id="btn-bring-dog" class="rp-supply-btn ' + btnCls + '" ' + btnDisStr + ' onclick="bringDogNextLevel()">'
+        + btnLabel + '</button></div>';
+    }
+    dogSectionHtml = '<div class="rp-section" id="dog-section">' + dogInner + '</div>';
+  } else {
+    dogSectionHtml = '<div class="rp-section" id="dog-section">'
+      + '<div class="rp-section-title">🐶 氣球小狗</div>'
+      + '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>'
+      + '</div>';
+  }
+
+  // 貼布按鈕文字
+  const bandageBtnText = playerInventory.coins < 20 ? '金幣不足'
+    : player.hp >= player.maxHp ? '生命已滿'
+    : ('購買並使用 -' + BANDAGE_PRICE + ' 🪙');
+
+  // 組合完整 HTML
+  let html = '';
+  html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
+  html += '<div class="rp-section" id="rp-run-section"><div class="rp-section-title">📋 本關成果</div>' + makeTable(runRows) + '</div>';
+  html += '<div class="rp-section" id="rp-inventory-section"><div class="rp-section-title">🎒 目前背包</div>' + makeTable(buildBagRows()) + '</div>';
+  html += hammerHint;
+  html += guideBookHint;
+  html += dogSectionHtml;
+  html += '<div class="rp-section" id="supply-section">'
+    + '<div class="rp-section-title">🏠 小V的家・補給</div>'
+    + '<div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">' + player.hp + ' / ' + player.maxHp + '</span></div>'
+    + '<div class="rp-supply-item"><div class="rp-supply-info">'
+    + '<span class="rp-supply-name">🩹 愛心貼布</span>'
+    + '<span class="rp-supply-price">20 🪙　+1 ❤️</span>'
+    + '</div><button id="btn-buy-bandage" class="rp-supply-btn" onclick="buyBandage()">'
+    + bandageBtnText + '</button></div>'
+    + '<div id="bandage-msg" class="rp-supply-msg"></div></div>';
+  html += '<div class="rp-trivia">💡 ' + trivia + '</div>';
+
+  panel.innerHTML = html;
 
   // 更新補給按鈕狀態（購買後重刷用）
   updateBandageBtn();
@@ -3041,22 +3056,37 @@ function hideResultButtons() {
       btnPlay.addEventListener(ev, e => {
         e.preventDefault();
         if (gameState !== 'playing') {
-          if (btnPlay._nextLevel) {
-            // 進入下一關：背包保留，關卡 index +1
-            const nextIdx = currentLevelIndex + 1;
-            console.log('next level with dog state:', {
-              nextBringDog, currentLevelIndex, nextIdx
-            });
-            bringBalloonDog = nextBringDog; // 轉移帶狗狀態
-            nextBringDog    = false;
-            loadLevel(nextIdx);
-            restart();
-          } else {
-            // 再玩一次：重載同一關
-            nextBringDog    = false;
-            bringBalloonDog = false; // 重玩不帶狗
-            loadLevel(currentLevelIndex);
-            restart();
+          try {
+            if (btnPlay._nextLevel) {
+              const nextIdx = currentLevelIndex + 1;
+              console.log('NEXT LEVEL CLICKED', {
+                currentLevelIndex, nextIdx,
+                levelsLength: LEVELS.length,
+                nextBringDog, bringBalloonDog,
+                hasDog: !!(playerInventory.balloonDog?.present),
+              });
+              if (nextIdx >= LEVELS.length) {
+                console.warn('No more levels, restarting current');
+                loadLevel(currentLevelIndex);
+                restart();
+                return;
+              }
+              bringBalloonDog = (nextBringDog === true);
+              nextBringDog    = false;
+              console.log('BEFORE loadLevel', nextIdx);
+              loadLevel(nextIdx);
+              console.log('AFTER loadLevel, hiddenTreasure:', currentHiddenTreasure);
+              console.log('BEFORE restart, bringBalloonDog:', bringBalloonDog);
+              restart();
+              console.log('AFTER restart');
+            } else {
+              nextBringDog    = false;
+              bringBalloonDog = false;
+              loadLevel(currentLevelIndex);
+              restart();
+            }
+          } catch(err) {
+            showDebugError('NEXT LEVEL CRASH', err.message, '', '', '', err.stack);
           }
         }
       })
