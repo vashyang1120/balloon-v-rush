@@ -1958,15 +1958,16 @@ function buildBagRows() {
 }
 
 // ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
+// 使用明確 id="rp-inventory-section"，不猜 querySelectorAll index
 function refreshResultBag() {
-  const section = document.querySelector('#result-panel-body .rp-section:nth-child(2)');
+  const section = document.getElementById('rp-inventory-section');
   if (!section) return; // 結算畫面未開啟
   const rows    = buildBagRows();
   const content = rows.map(([label, val, cls]) =>
     `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
   ).join('');
-  // 保留 section-title，只更換內容列
-  const title   = section.querySelector('.rp-section-title');
+  // 保留 section-title，只替換內容列
+  const title = section.querySelector('.rp-section-title');
   section.innerHTML = '';
   if (title) section.appendChild(title);
   section.insertAdjacentHTML('beforeend', content);
@@ -2039,13 +2040,13 @@ function populateResultPanel() {
   if (!panel) return;
   panel.innerHTML = `
     <div class="rp-level-name">${LEVELS[currentLevelIndex]?.emoji || '🌿'} ${LEVEL_NAME}</div>
-    <div class="rp-section">
+    <div class="rp-section" id="rp-run-section">
       <div class="rp-section-title">📋 本關成果</div>
       ${makeTable(runRows)}
     </div>
-    <div class="rp-section">
+    <div class="rp-section" id="rp-inventory-section">
       <div class="rp-section-title">🎒 目前背包</div>
-      ${makeTable(bagRows)}
+      ${makeTable(buildBagRows())}
     </div>
     ${hammerHint}
     ${guideBookHint}
@@ -2109,14 +2110,15 @@ function buyBandage() {
 
   // 更新結算畫面數字
   updateBandageBtn();
-  // 更新「目前背包」的金幣（第二個 .result-gold，第一個是本關成果，不能動）
-  const goldEls = document.querySelectorAll('#result-panel-body .result-gold');
-  if (goldEls.length >= 2) goldEls[1].textContent = `${playerInventory.coins} 枚`;
-  // 更新生命顯示（result-red 中含 '/' 的是生命格）
-  const hpEls = document.querySelectorAll('#result-panel-body .result-red');
-  hpEls.forEach(el => {
-    if (el.textContent.includes('/')) el.textContent = `${player.hp} / ${player.maxHp}`;
-  });
+  // 目前背包整區重繪（金幣已在 playerInventory 裡更新）
+  refreshResultBag();
+  // 更新本關成果裡的生命欄（用明確 id 的 section 找，只改含 '/' 的欄位）
+  const runSection = document.getElementById('rp-run-section');
+  if (runSection) {
+    runSection.querySelectorAll('.result-red').forEach(el => {
+      if (el.textContent.includes('/')) el.textContent = `${player.hp} / ${player.maxHp}`;
+    });
+  }
   // 顯示訊息
   const msg = document.getElementById('bandage-msg');
   if (msg) {
