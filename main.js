@@ -156,6 +156,8 @@ const INVENTORY_DEFAULTS = {
   },
   // 目前裝備的劍耐久（localStorage 持久化，關卡結束後保留）
   equippedSwordDur: 0,
+  // 第 1 關教學劍是否已發放（防止重複刷劍）
+  tutorialSwordGranted: false,
 };
 
 // ── 氣球秘笈配方定義 (MVP 0.3) ────────────────
@@ -223,8 +225,9 @@ function saveInventory() {
 
 function resetInventory() {
   Object.assign(playerInventory, INVENTORY_DEFAULTS);
-  playerInventory.craftedItems    = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
-  playerInventory.equippedSwordDur = 0;
+  playerInventory.craftedItems         = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  playerInventory.equippedSwordDur     = 0;
+  playerInventory.tutorialSwordGranted = false; // 清除背包後可重領教學劍
   saveInventory();
   // 清除執行期裝備狀態
   equippedSword.id = null;
@@ -759,6 +762,30 @@ const LEVELS = [
 
 ];  // end LEVELS
 
+
+// ── 第 1 關教學劍發放 ────────────────────────
+// 規則：第 1 關 + 未曾發放 + 目前沒有劍 → 給 1 把，顯示一次性提示
+function grantTutorialSwordIfNeeded() {
+  if (currentLevelIndex !== 0) return;                       // 只在第 1 關
+  if (playerInventory.tutorialSwordGranted) return;          // 已發放過
+  const ci = playerInventory.craftedItems || {};
+  if ((ci.basicSword || 0) > 0) {                            // 已有劍就不送
+    playerInventory.tutorialSwordGranted = true;
+    saveInventory();
+    return;
+  }
+  // 發放教學劍
+  if (!playerInventory.craftedItems) playerInventory.craftedItems = {};
+  playerInventory.craftedItems.basicSword =
+    (playerInventory.craftedItems.basicSword || 0) + 1;
+  playerInventory.tutorialSwordGranted = true;
+  saveInventory();
+  // 重新初始化裝備（讓劍立刻生效）
+  initEquippedSword();
+  // 顯示一次性教學提示（插在目前提示序列前）
+  showHint('⚔️ 小V獲得了基礎氣球劍！按 Z 打退小怪。', 320);
+}
+
 // ── loadLevel：載入指定關卡資料 ──────────────
 function loadLevel(index) {
   const lv = LEVELS[index];
@@ -792,6 +819,11 @@ function loadLevel(index) {
   lv.hints.forEach(h => HINTS.push(Object.assign({}, h, { shown: false })));
 
   currentLevelIndex = index;
+
+  // 第 1 關：嘗試發放教學劍（有保護機制，不會重複）
+  // 注意：此時 initEquippedSword 尚未被 restart() 呼叫，
+  // grantTutorialSwordIfNeeded 裡有獨立的 initEquippedSword 呼叫
+  if (index === 0) grantTutorialSwordIfNeeded();
 }
 
 // ── Tutorial Hints (MVP 0.7) ──────────────────
@@ -1746,6 +1778,16 @@ function populateResultPanel() {
     ).join('');
   }
 
+  // 第 1 關結算：加入氣球秘笈教學區塊
+  const guideBookHint = currentLevelIndex === 0 ? `
+    <div class="rp-guidebook-hint">
+      <div class="rp-guidebook-hint__title">📖 氣球秘笈解鎖！</div>
+      <div class="rp-guidebook-hint__body">
+        收集到 260 長條氣球後，可以在<strong>氣球秘笈</strong>裡製作基礎氣球劍，帶入下一關使用！
+      </div>
+    </div>
+  ` : '';
+
   const panel = document.getElementById('result-panel-body');
   if (!panel) return;
   panel.innerHTML = `
@@ -1758,10 +1800,21 @@ function populateResultPanel() {
       <div class="rp-section-title">🎒 目前背包</div>
       ${makeTable(bagRows)}
     </div>
+    ${guideBookHint}
     <div class="rp-trivia">
       💡 ${trivia}
     </div>
   `;
+
+  // 第 1 關結算：輕微強調氣球秘笈按鈕
+  const btnGuide = document.getElementById('btn-guidebook');
+  if (btnGuide) {
+    if (currentLevelIndex === 0) {
+      btnGuide.classList.add('result-btn--guide-highlight');
+    } else {
+      btnGuide.classList.remove('result-btn--guide-highlight');
+    }
+  }
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {

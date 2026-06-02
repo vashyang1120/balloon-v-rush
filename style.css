@@ -561,3 +561,44 @@ html, body {
   padding: 4px 0 10px;
   letter-spacing: 0.04em;
 }
+
+/* ── 第 1 關結算：氣球秘笈教學提示 ── */
+.rp-guidebook-hint {
+  background: rgba(100,160,255,0.1);
+  border: 1px solid rgba(100,180,255,0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.rp-guidebook-hint__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #aad4ff;
+  margin-bottom: 5px;
+}
+
+.rp-guidebook-hint__body {
+  font-size: 12px;
+  color: rgba(200,230,255,0.85);
+  line-height: 1.6;
+}
+
+.rp-guidebook-hint__body strong {
+  color: #aad4ff;
+  font-weight: 700;
+}
+
+/* ── 第 1 關結算：氣球秘笈按鈕強調 ── */
+.result-btn--guide-highlight {
+  border-color: rgba(140,220,255,0.9) !important;
+  background: rgba(15,55,100,0.95) !important;
+  color: #c8ecff !important;
+  box-shadow: 0 0 10px rgba(100,200,255,0.4);
+  animation: guide-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes guide-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(100,200,255,0.3); }
+  50%       { box-shadow: 0 0 16px rgba(100,200,255,0.7); }
+}
