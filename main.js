@@ -1293,15 +1293,37 @@ function update(dt, dtMs = 16.667) {
   checkHazards();
   checkHints();
   tickHint();
-  // TEMP DISABLED: updateDogNose / checkHiddenTreasure (MVP 1.2 debug)
-  // updateDogNose();
-  // checkHiddenTreasure();
+  if (bringBalloonDog) updateDogNose();
+  checkHiddenTreasure();
   checkFinish();
 }
 
 function updateCamera() {
-  // 探索速度：TEMP 暫時固定，待尋寶功能穩定後再開啟
-  const scrollSpeed = SCROLL_SPEED;
+  // 探索速度（完整防呆：hiddenTreasure 或狗不存在時不計算）
+  let scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL;
+  try {
+    const hasTreasure = !!(currentHiddenTreasure
+      && !currentHiddenTreasure.found
+      && typeof currentHiddenTreasure.x === 'number');
+    if (hasTreasure) {
+      scrollSpeed = bringBalloonDog
+        ? CONFIG.AUTO_SCROLL_SPEED_DOG
+        : CONFIG.AUTO_SCROLL_SPEED_EXPLORE;
+      if (bringBalloonDog) {
+        const dist = Math.abs(player.x - currentHiddenTreasure.x);
+        if (dist < CONFIG.TREASURE_SLOW_ZONE_RADIUS) {
+          const factor = Math.max(
+            CONFIG.TREASURE_SLOW_SCROLL_MULTIPLIER,
+            dist / CONFIG.TREASURE_SLOW_ZONE_RADIUS
+          );
+          scrollSpeed = Math.max(
+            CONFIG.AUTO_SCROLL_SPEED_NORMAL * 0.45,
+            scrollSpeed * factor
+          );
+        }
+      }
+    }
+  } catch(e) { scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL; }
   cameraX += scrollSpeed;
 
   // Camera also follows player (lead slightly ahead)
@@ -1597,26 +1619,32 @@ function isInSafeZone(px, py, pw, ph) {
 
 // ── 狗鼻子亮度 ──────────────────────────────
 function updateDogNose() {
-  if (!bringBalloonDog
-      || !currentHiddenTreasure
-      || currentHiddenTreasure.found
-      || typeof currentHiddenTreasure.x !== 'number') {
-    dogNoseGlow = 0;
-    return;
-  }
-  const dist = Math.abs(player.x - currentHiddenTreasure.x);
-  if (dist > 400)       dogNoseGlow = 0;
-  else if (dist > 250)  dogNoseGlow = 0.25;
-  else if (dist > 120)  dogNoseGlow = 0.65;
-  else                  dogNoseGlow = 1.0;
+  try {
+    if (!bringBalloonDog
+        || !currentHiddenTreasure
+        || currentHiddenTreasure.found
+        || typeof currentHiddenTreasure.x !== 'number') {
+      dogNoseGlow = 0;
+      return;
+    }
+    const dist = Math.abs(player.x - currentHiddenTreasure.x);
+    if      (dist > 400) dogNoseGlow = 0;
+    else if (dist > 250) dogNoseGlow = 0.25;
+    else if (dist > 120) dogNoseGlow = 0.65;
+    else {
+      // <120 px：閃爍
+      dogNoseGlow = 0.85 + Math.sin(frameCount * 0.3) * 0.15;
+    }
+  } catch(e) { dogNoseGlow = 0; }
 }
 
 // ── 隱藏寶物碰撞 ────────────────────────────
 function checkHiddenTreasure() {
+  try {
   if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
-  if (typeof currentHiddenTreasure.x !== 'number') return; // 防呆
+  if (typeof currentHiddenTreasure.x !== 'number') return;
   const t  = currentHiddenTreasure;
-  const R  = 32;
+  const R  = 50; // 稍微大一點，更容易找到
   if (!rectsOverlap(player.x, player.y, player.w, player.h,
                     t.x - R, t.y - R, R*2, R*2)) return;
 
@@ -1630,12 +1658,13 @@ function checkHiddenTreasure() {
       currentRunStats.foundHiddenTreasure = true;
     }
   } else if (t.type === 'goldChest') {
-    playerInventory.coins += t.rewardCoins;
+    playerInventory.coins += (t.rewardCoins || 30);
     saveInventory();
-    showHint(`找到隱藏寶箱！獲得 ${t.rewardCoins} 金幣！`, 320);
+    showHint('找到隱藏寶箱！獲得 ' + (t.rewardCoins || 30) + ' 金幣！', 320);
     currentRunStats.foundHiddenTreasure = true;
-    currentRunStats.foundTreasureCoins  = t.rewardCoins;
+    currentRunStats.foundTreasureCoins  = t.rewardCoins || 30;
   }
+  } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
 
 function updateEnemies() {
@@ -1971,10 +2000,15 @@ function drawWorld() {
     drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0);
   });
 
-  // 隱藏寶物
-  if (currentHiddenTreasure && !currentHiddenTreasure.found) {
-    const tx = currentHiddenTreasure.x - cx;
-    if (tx > -40 && tx < CANVAS_W + 40) drawHiddenTreasure(tx, currentHiddenTreasure);
+  // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
+  if (currentHiddenTreasure
+      && !currentHiddenTreasure.found
+      && typeof currentHiddenTreasure.x === 'number'
+      && (bringBalloonDog || dogNoseGlow > 0)) {
+    try {
+      const tx = currentHiddenTreasure.x - cx;
+      if (tx > -60 && tx < CANVAS_W + 60) drawHiddenTreasure(tx, currentHiddenTreasure);
+    } catch(e) {}
   }
 
   // 圓氣球
@@ -2046,9 +2080,11 @@ function drawWorld() {
   drawPlayer(cx);
   // 氣球狗（跟隨玩家）
   if (bringBalloonDog) {
-    const dogX = player.x - cx - 30;
-    const dogY = player.y + player.h * 0.5;
-    drawBalloonDog(dogX, dogY, dogNoseGlow);
+    try {
+      const dogX = player.x - cx - 30;
+      const dogY = player.y + player.h * 0.5;
+      drawBalloonDog(dogX, dogY, dogNoseGlow || 0);
+    } catch(e) {}
   }
 }
 
