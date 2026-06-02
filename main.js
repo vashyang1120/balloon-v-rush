@@ -102,6 +102,8 @@ const TRIVIA = [
   '柑橘類果皮中的油分可能讓乳膠氣球更容易破裂。',
   '一條 260 氣球可以扭出超過 20 個基本泡泡。',
   '柑橘類果皮中的油分，可能讓乳膠氣球更容易破裂，所以氣球要盡量遠離橘子皮喔！',
+  '氣球佈置時，路線與高度也很重要，安全動線比華麗更優先！',
+  '戶外或高低落差大的場地，氣球佈置要特別注意固定與通行安全。',
 ];
 
 // ── Input state ───────────────────────────────
@@ -628,6 +630,130 @@ const LEVELS = [
       { x:3700, y:GROUND_Y-CONFIG.ORANGE_H,
         w:CONFIG.ORANGE_W, h:CONFIG.ORANGE_H,
         sprayDir:-1, phase:'idle', phaseTimer:0, sprayActive:false },
+    ],
+  },
+
+
+  // ════════════════════════════════════════════
+  //  關卡 2：糖果氣球懸崖
+  // ════════════════════════════════════════════
+  {
+    name:   '第 3 關：糖果氣球懸崖',
+    length: 6400,
+    emoji:  '🍬',
+    hints: [
+      // 觸發位置均在危險/選擇點前 ~300px
+      { triggerX:   30, msg: '🍬 第 3 關：糖果氣球懸崖！',                   shown: false, duration: 270 },
+      { triggerX:  850, msg: '🪜 上方路線獎勵較多，但要小心跳躍！',          shown: false, duration: 260 },
+      { triggerX: 2000, msg: '🔼 走上方平台，有時比硬闖更安全！',            shown: false, duration: 250 },
+      { triggerX: 3200, msg: '⚔️ 跳躍後也可以用氣球劍打退小怪！',           shown: false, duration: 250 },
+      { triggerX: 4700, msg: '🎉 快到終點了！收集最後的氣球吧！',            shown: false, duration: 240 },
+    ],
+    buildPlatforms: () => [
+      // 段 1：安全區，高低交替，讓玩家習慣起伏
+      { x:  280, y: GROUND_Y - 80,  w: 130, h: 18 },  // 低平台
+      { x:  520, y: GROUND_Y - 130, w: 120, h: 18 },  // 中平台
+      { x:  760, y: GROUND_Y - 90,  w: 140, h: 18 },  // 低平台
+
+      // 段 2：高低路線分叉
+      // 下方路線（地面可走，安全但獎勵少）
+      { x: 1050, y: GROUND_Y - 80,  w: 140, h: 18 },  // 低平台（下方路線基礎）
+      { x: 1380, y: GROUND_Y - 80,  w: 130, h: 18 },  // 低平台
+      { x: 1680, y: GROUND_Y - 80,  w: 120, h: 18 },  // 低平台（下方路線終段）
+      // 上方路線（需跳上，獎勵多）
+      { x: 1000, y: GROUND_Y - 148, w: 160, h: 18 },  // 上方起點（從地面可跳達）
+      { x: 1350, y: GROUND_Y - 150, w: 140, h: 18 },  // 上方中段
+      { x: 1700, y: GROUND_Y - 148, w: 150, h: 18 },  // 上方終段（可跳回地面）
+
+      // 段 3：尖刺在下方，上方迴避路線
+      { x: 2150, y: GROUND_Y - 145, w: 160, h: 18 },  // 上方繞路
+      { x: 2450, y: GROUND_Y - 138, w: 150, h: 18 },  // 上方繞路
+      { x: 2780, y: GROUND_Y - 130, w: 140, h: 18 },  // 回落平台
+      { x: 3050, y: GROUND_Y - 90,  w: 130, h: 18 },  // 回地面緩衝
+
+      // 段 4：平台小怪區
+      { x: 3400, y: GROUND_Y - 110, w: 150, h: 18 },  // 小怪站立平台
+      { x: 3750, y: GROUND_Y - 130, w: 140, h: 18 },  // 高平台，可跳攻擊
+      { x: 4100, y: GROUND_Y - 100, w: 160, h: 18 },  // 中平台
+      { x: 4450, y: GROUND_Y - 90,  w: 130, h: 18 },  // 低平台，回地面
+
+      // 段 5：終點獎勵區
+      { x: 4850, y: GROUND_Y - 100, w: 180, h: 18 },
+      { x: 5250, y: GROUND_Y - 130, w: 160, h: 18 },
+      { x: 5650, y: GROUND_Y - 100, w: 150, h: 18 },
+    ],
+    buildCoins: () => {
+      const placements = [
+        // 段 1：引導
+        [150,55],[240,55],[330,55],
+        [300,120],[540,170],[780,130],
+        // 段 2：下方路線少量，上方路線較多
+        [1070,120],[1180,55],[1400,120],
+        // 上方路線金幣（y 偏移更大）
+        [1020,200],[1080,200],[1140,200],  // 上方路線起點
+        [1370,210],[1440,210],[1510,210],  // 上方路線中段
+        [1720,195],[1800,195],             // 上方路線終段
+        // 段 3：上方繞路獎勵
+        [2170,190],[2250,190],[2330,180],
+        [2470,180],[2550,170],
+        [2800,170],[2900,55],[3000,55],
+        // 段 4：平台上小怪前後
+        [3420,150],[3550,55],[3650,55],
+        [3770,170],[3900,55],[4000,55],
+        [4120,140],[4300,55],[4460,130],
+        // 段 5：密集獎勵
+        [4870,55],[4940,55],[5010,55],[5080,140],
+        [5150,55],[5270,170],[5400,55],[5520,55],
+        [5670,140],[5800,55],[5950,55],[6050,55],
+      ];
+      return placements.map(([x,yOff]) => ({
+        x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random()*Math.PI*2
+      }));
+    },
+    buildBalloons: () => {
+      // 10 個，上方路線多放幾個作為誘因
+      const positions = [
+        [500,  130], // 段 1 平台
+        [800,  130],
+        [1060, 188], // 段 2 上方路線
+        [1450, 190],
+        [1730, 188],
+        [2200, 185], // 段 3 上方
+        [2800, 170],
+        [3780, 175], // 段 4 高平台
+        [4900, 140], // 段 5
+        [5300, 170],
+      ];
+      return positions.map(([x, yOff]) => ({
+        x: x+10, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random()*Math.PI*2
+      }));
+    },
+    buildSpikes: () => [
+      // 段 3：下方地面尖刺，上方有平台可繞
+      { x: 2280, y: GROUND_Y - 24, w: 40, h: 24 },
+      { x: 2580, y: GROUND_Y - 24, w: 40, h: 24 },
+      { x: 2920, y: GROUND_Y - 24, w: 40, h: 24 },
+      // 段 4：平台間一組小尖刺
+      { x: 4200, y: GROUND_Y - 24, w: 40, h: 24 },
+    ],
+    buildEnemies: () => [
+      // 段 4：2 隻小怪在平台旁，可選擇跳躍或攻擊
+      { x: 3500, patrol: 3500, patrolRange: 110 },
+      { x: 4000, patrol: 4000, patrolRange: 120 },
+      // 段 5：1 隻小怪在終點前，增加一點挑戰
+      { x: 5500, patrol: 5500, patrolRange: 100 },
+    ].map(d => ({
+      x: d.x, y: GROUND_Y - CONFIG.ENEMY_H,
+      w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+      vx: -CONFIG.ENEMY_SPEED, hp: 2,
+      patrol: d.patrol, patrolRange: d.patrolRange,
+      active: true, hitFlash: 0,
+    })),
+    buildOranges: () => [
+      // 選擇性：1 隻在段 4，不是本關主角，位置寬鬆可跳過
+      { x: 4600, y: GROUND_Y - CONFIG.ORANGE_H,
+        w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+        sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false },
     ],
   },
 
@@ -1602,11 +1728,14 @@ function populateResultPanel() {
     bagRows.push([`⚔️ 基礎氣球劍${durInfo}`, `${swordQty} 把`,  'result-cyan']);
   }
 
-  // 小知識（第 2 關提高橘子皮小知識出現機率）
+  // 小知識（各關有偏好的小知識）
   let trivia;
-  const orangeIdx = TRIVIA.findIndex(t => t.includes('橘子皮') || t.includes('柑橘'));
+  const orangeIdx  = TRIVIA.findIndex(t => t.includes('橘子皮') || t.includes('柑橘'));
+  const routeIdx   = TRIVIA.findIndex(t => t.includes('路線') || t.includes('通行'));
   if (currentLevelIndex === 1 && Math.random() < 0.6 && orangeIdx >= 0) {
-    trivia = TRIVIA[orangeIdx];
+    trivia = TRIVIA[orangeIdx]; // 第 2 關：橘子皮相關
+  } else if (currentLevelIndex === 2 && Math.random() < 0.55 && routeIdx >= 0) {
+    trivia = TRIVIA[routeIdx];  // 第 3 關：路線/通行相關
   } else {
     trivia = TRIVIA[(currentRunStats.coins + currentRunStats.balloon260) % TRIVIA.length];
   }
