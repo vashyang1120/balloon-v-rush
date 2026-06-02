@@ -751,3 +751,12 @@ html, body {
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
+
+/* ── 手機道具切換按鈕 ── */
+.switch-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  background: rgba(80,40,160,0.4);
+  border-color: rgba(180,120,255,0.6);
+}

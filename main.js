@@ -54,6 +54,14 @@ const CONFIG = {
   LEVEL_DURATION:  60,    // 關卡時間限制（秒）
   LEVEL_LENGTH:    6400,  // 第 1 關世界寬度（約 60 秒）
 
+  // -- basicHammer 近戰攻擊 --
+  HAMMER_ATTACK_RANGE:    70,   // 攻擊框往前延伸距離 (px)
+  HAMMER_ATTACK_HEIGHT:   55,   // 攻擊框高度 (px)
+  HAMMER_ATTACK_DURATION: 14,   // 攻擊框存活幀數
+  HAMMER_ATTACK_COOLDOWN: 35,   // 攻擊冷卻幀數
+  HAMMER_SPIN_SPEED:       9,   // 旋轉小怪飛行速度 (px/幀)
+  HAMMER_SPIN_LIFE:      200,   // 旋轉小怪飛行幀數
+
   // -- 橘子怪 (balloonNemesis) --
   ORANGE_W:           44,   // 橘子怪寬度 (px)
   ORANGE_H:           44,   // 橘子怪高度 (px)
@@ -111,11 +119,21 @@ const keys = {};
 const mobileBtn = { left: false, right: false, jump: false, attack: false };
 
 window.addEventListener('keydown', e => {
-  // Esc：playing ↔ paused 切換（結算/秘笈時不處理）
   if (e.code === 'Escape') {
     if (gameState === 'playing') { pauseGame(); return; }
     if (gameState === 'paused')  { resumeGame(); return; }
-    return; // failed / gameover / clear 狀態 Esc 不做事
+    return;
+  }
+  // 數字鍵切換武器
+  if (e.code === 'Digit1' && gameState === 'playing') {
+    if (equippedSword.id) activeSlot = 'sword';
+    else showHint('尚未擁有基礎氣球劍', 150);
+    return;
+  }
+  if (e.code === 'Digit2' && gameState === 'playing') {
+    if (equippedHammer.id) activeSlot = 'hammer';
+    else showHint('尚未擁有基礎氣球槌', 150);
+    return;
   }
   keys[e.code] = true;
   if (['Space','ArrowLeft','ArrowRight','ArrowUp','KeyZ'].includes(e.code)) e.preventDefault();
@@ -161,6 +179,7 @@ const INVENTORY_DEFAULTS = {
     // 未來可在此擴充更多解鎖狀態
   },
   equippedSwordDur:     0,
+  equippedHammerDur:    0,       // 裝備中的氣球槌耐久
   tutorialSwordGranted: false,
   uniqueCollectibles: {
     level3RoundBalloon: false,  // 第 3 關圓氣球是否已成功帶回（通關）
@@ -281,7 +300,8 @@ let currentRunStats = {
   roundBalloon:             0,
   enemiesDefeated:          0,
   damageTaken:              0,
-  unlockedHammerThisClear:  false, // 這局是否第一次解鎖氣球槌
+  unlockedHammerThisClear:  false,
+  usedHeartPatch:           false, // 每關限用一次愛心貼布
 };
 
 // ── Asset loading ─────────────────────────────
@@ -368,8 +388,10 @@ const player = {
   invincible: 0,        // frames of invincibility after hit
   attackCooldown: 0,
   attackActive: 0,      // frames the projectile flash is live (no-sword)
-  meleeActive: 0,       // frames the melee hitbox is live (basicSword)
-  meleeHit: false,      // 本次揮擊是否已命中過（每揮一次只扣一次耐久）
+  meleeActive: 0,
+  meleeHit: false,
+  meleeHammerActive: 0, // hammer melee hitbox live frames
+  hammerHit: false,
   // Stats
   coinsCollected: 0,
   balloonsCollected: 0,
@@ -406,6 +428,7 @@ let spikes      = generateSpikes();
 let enemies     = generateEnemies();
 let orangeNemeses   = generateOrangeNemeses(); // balloonNemesis: 不能被攻擊
 let roundBalloons   = [];  // 圓氣球收集物（由 loadLevel 填充）
+let tackHazards     = [];  // 圖釘區（由 loadLevel 填充）
 const projectiles = []; // player-fired balloons
 
 // Finish line position（由 loadLevel() 更新）
@@ -808,6 +831,85 @@ const LEVELS = [
     },
   },
 
+
+  // ════════════════════════════════════════════
+  //  關卡 3：圖釘工坊
+  // ════════════════════════════════════════════
+  {
+    name:   '第 4 關：圖釘工坊',
+    length: 6400,
+    emoji:  '📌',
+    hints: [
+      { triggerX:   30, msg: '📌 第 4 關：圖釘工坊！',                     shown: false, duration: 270 },
+      { triggerX:  750, msg: '📌 圖釘是氣球剋星，不能用氣球劍硬打！',      shown: false, duration: 260 },
+      { triggerX: 1050, msg: '🔨 按 2 裝備氣球槌，再按 Z 敲倒樹！',        shown: false, duration: 260 },
+      { triggerX: 2100, msg: '💥 氣球槌可以把小怪敲飛，撞到前方其他小怪！',shown: false, duration: 260 },
+      { triggerX: 3500, msg: '🌲 觀察場景機關，比硬闖更安全！',            shown: false, duration: 250 },
+    ],
+    buildPlatforms: () => [
+      { x:  300, y: GROUND_Y - 80,  w: 130, h: 18 },
+      { x:  600, y: GROUND_Y - 110, w: 120, h: 18 },
+      { x: 1200, y: GROUND_Y - 120, w: 150, h: 18 },
+      { x: 1600, y: GROUND_Y - 100, w: 140, h: 18 },
+      { x: 2200, y: GROUND_Y - 120, w: 140, h: 18 },
+      { x: 2600, y: GROUND_Y - 100, w: 130, h: 18 },
+      { x: 3200, y: GROUND_Y - 130, w: 160, h: 18 },
+      { x: 3700, y: GROUND_Y - 110, w: 140, h: 18 },
+      { x: 4200, y: GROUND_Y - 120, w: 150, h: 18 },
+      { x: 4800, y: GROUND_Y - 100, w: 180, h: 18 },
+      { x: 5300, y: GROUND_Y - 120, w: 150, h: 18 },
+    ],
+    buildCoins: () => {
+      const p = [
+        [150,55],[240,55],[330,55],[430,55],
+        [620,150],[720,55],
+        [900,55],[1000,55],
+        [1400,55],[1550,55],[1700,55],
+        [2000,55],[2250,160],[2450,55],
+        [2750,55],[2900,55],
+        [3050,55],[3350,170],[3600,55],
+        [4000,55],[4150,55],[4300,160],
+        [4820,55],[4900,55],[4980,55],[5060,55],
+        [5100,140],[5300,55],[5500,55],[5700,55],[5900,55],
+      ];
+      return p.map(([x,yOff]) => ({ x, y:GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
+    },
+    buildBalloons: () =>
+      [400,900,1500,2200,3000,3800,4600,5200].map(x => ({
+        x:x+20, y:GROUND_Y-80, collected:false, bobOffset:Math.random()*Math.PI*2
+      })),
+    buildSpikes: () => [
+      // 少量尖刺，圖釘區是主要障礙
+      { x:2050, y:GROUND_Y-24, w:40, h:24 },
+    ],
+    buildTackHazards: () => [
+      // 段 2：第一個圖釘區（樹倒下後可安全通過）
+      { x:1350, y:GROUND_Y-24, w:120, h:24 },
+      // 段 4：第二個圖釘區
+      { x:3900, y:GROUND_Y-24, w:120, h:24 },
+    ],
+    buildTrees: () => [
+      // 段 2：第一棵樹，敲倒後覆蓋 tackHazard[0]
+      { x:1200, y:0, h:120, trunkW:22, crownR:38, state:'standing', fallTimer:0, safeZone:null },
+      // 段 4：第二棵樹
+      { x:3700, y:0, h:120, trunkW:22, crownR:38, state:'standing', fallTimer:0, safeZone:null },
+    ],
+    buildEnemies: () => [
+      { x:2300,patrol:2300,patrolRange:120 },
+      { x:2600,patrol:2600,patrolRange:100 },
+      { x:2900,patrol:2900,patrolRange:110 },
+      { x:4500,patrol:4500,patrolRange:120 },
+    ].map(d => ({
+      x:d.x, y:GROUND_Y-CONFIG.ENEMY_H,
+      w:CONFIG.ENEMY_W, h:CONFIG.ENEMY_H,
+      vx:-CONFIG.ENEMY_SPEED, hp:2,
+      patrol:d.patrol, patrolRange:d.patrolRange,
+      active:true, hitFlash:0,
+    })),
+    buildOranges: () => [], // 第 4 關沒有橘子怪
+    buildRoundBalloons: () => [], // 第 4 關沒有額外圓氣球
+  },
+
 ];  // end LEVELS
 
 
@@ -832,6 +934,76 @@ function grantTutorialSwordIfNeeded() {
   initEquippedSword();
   // 顯示一次性教學提示（插在目前提示序列前）
   showHint('⚔️ 小V獲得了基礎氣球劍！按 Z 打退小怪。', 320);
+}
+
+
+// ── Equipped Hammer (MVP 1.1) ─────────────────
+const equippedHammer = {
+  id:         null,
+  name:       '',
+  maxDur:     0,
+  currentDur: 0,
+};
+
+// 目前裝備槽（'sword' | 'hammer' | null）
+var activeSlot = 'sword'; // 預設劍
+
+function initEquippedHammer() {
+  const ci  = playerInventory.craftedItems || {};
+  const qty = ci.basicHammer || 0;
+  const recipe = RECIPES.find(r => r.id === 'basicHammer');
+  if (qty > 0 && recipe) {
+    equippedHammer.id      = 'basicHammer';
+    equippedHammer.name    = recipe.name;
+    equippedHammer.maxDur  = recipe.durability;
+    const saved = playerInventory.equippedHammerDur || 0;
+    equippedHammer.currentDur = (saved > 0 && saved <= recipe.durability)
+      ? saved : recipe.durability;
+  } else {
+    equippedHammer.id = null;
+    equippedHammer.name = '';
+    equippedHammer.maxDur = 0;
+    equippedHammer.currentDur = 0;
+  }
+}
+
+function consumeHammerDurability() {
+  if (!equippedHammer.id) return;
+  equippedHammer.currentDur--;
+  if (equippedHammer.currentDur <= 0) {
+    const ci = playerInventory.craftedItems;
+    ci.basicHammer = Math.max(0, (ci.basicHammer || 1) - 1);
+    if (ci.basicHammer > 0) {
+      equippedHammer.currentDur = equippedHammer.maxDur;
+    } else {
+      equippedHammer.id = null;
+      equippedHammer.name = '';
+      equippedHammer.maxDur = 0;
+      equippedHammer.currentDur = 0;
+      // 自動切回劍（若有）
+      if (equippedSword.id) activeSlot = 'sword';
+      else activeSlot = null;
+    }
+    playerInventory.equippedHammerDur = equippedHammer.currentDur;
+    saveInventory();
+  } else {
+    playerInventory.equippedHammerDur = equippedHammer.currentDur;
+    saveInventory();
+  }
+}
+
+// 切換道具（手機按鈕 / 鍵盤）
+function cycleWeapon() {
+  const hasSword  = !!equippedSword.id;
+  const hasHammer = !!equippedHammer.id;
+  if (!hasSword && !hasHammer) { showHint('目前沒有可裝備道具', 150); return; }
+  if (activeSlot === 'sword') {
+    if (hasHammer) { activeSlot = 'hammer'; }
+    else           { showHint('目前沒有其他道具可以切換', 150); }
+  } else {
+    if (hasSword) { activeSlot = 'sword'; }
+    else          { showHint('目前沒有其他道具可以切換', 150); }
+  }
 }
 
 // ── loadLevel：載入指定關卡資料 ──────────────
@@ -866,6 +1038,13 @@ function loadLevel(index) {
   roundBalloons.length = 0;
   if (lv.buildRoundBalloons) lv.buildRoundBalloons().forEach(r => roundBalloons.push(r));
 
+  // 圖釘區與可敲倒的樹
+  tackHazards.length = 0;
+  if (lv.buildTackHazards) lv.buildTackHazards().forEach(t => tackHazards.push(t));
+  breakableTrees.length = 0;
+  if (lv.buildTrees) lv.buildTrees().forEach(t => breakableTrees.push(t));
+  spinningEnemies.length = 0;
+
   // 複製 hints（每次都要 reset shown 狀態）
   HINTS.length = 0;
   lv.hints.forEach(h => HINTS.push(Object.assign({}, h, { shown: false })));
@@ -876,6 +1055,7 @@ function loadLevel(index) {
   // 注意：此時 initEquippedSword 尚未被 restart() 呼叫，
   // grantTutorialSwordIfNeeded 裡有獨立的 initEquippedSword 呼叫
   if (index === 0) grantTutorialSwordIfNeeded();
+  activeSlot = equippedSword.id ? 'sword' : (equippedHammer.id ? 'hammer' : 'sword');
 }
 
 // ── Tutorial Hints (MVP 0.7) ──────────────────
@@ -978,6 +1158,9 @@ function update(dt, dtMs = 16.667) {
   updateEnemies();
   updateProjectiles();
   updateMeleeAttack();
+  updateHammerMelee();
+  updateSpinningEnemies(dt);
+  updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
   checkCollectibles();
   checkHazards();
@@ -1052,17 +1235,20 @@ function updatePlayer(dt) {
   if (player.attackActive > 0)   player.attackActive--;
   if (player.meleeActive > 0)    player.meleeActive--;
 
+  if (player.meleeHammerActive > 0) player.meleeHammerActive--;
+
   if (inp('attack') && player.attackCooldown === 0) {
-    if (equippedSword.id === 'basicSword') {
-      // ── 近戰攻擊（basicSword）──
+    if (activeSlot === 'hammer' && equippedHammer.id) {
+      player.attackCooldown     = CONFIG.HAMMER_ATTACK_COOLDOWN;
+      player.meleeHammerActive  = CONFIG.HAMMER_ATTACK_DURATION;
+      player.hammerHit          = false;
+    } else if (activeSlot === 'sword' && equippedSword.id === 'basicSword') {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
-      player.meleeHit       = false; // 重置命中旗標
+      player.meleeHit       = false;
     } else {
-      // ── 無裝備：保留舊攻擊視覺效果，但不發射子彈，也不打傷敵人 ──
       player.attackCooldown = 30;
       player.attackActive   = 12;
-      // （projectile 系統保留，留給未來氣球槍；此處刻意不呼叫 fireProjectile）
     }
   }
 
@@ -1175,6 +1361,95 @@ function updateOrangeNemeses(dtMs) {
   });
 }
 
+
+// ── Spinning enemies（被槌子打飛的小怪）────────
+let spinningEnemies = []; // { x, y, w, h, vx, life }
+
+function updateHammerMelee() {
+  if (player.meleeHammerActive <= 0) return;
+
+  const atkX = player.facingRight
+    ? player.x + player.w
+    : player.x - CONFIG.HAMMER_ATTACK_RANGE;
+  const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
+  const atkW = CONFIG.HAMMER_ATTACK_RANGE;
+  const atkH = CONFIG.HAMMER_ATTACK_HEIGHT;
+
+  // 打一般小怪 → 旋轉飛出
+  enemies.forEach(e => {
+    if (!e.active) return;
+    if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
+      e.active = false; // 從場上移除
+      spinningEnemies.push({
+        x: e.x, y: e.y, w: e.w, h: e.h,
+        vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
+        life: CONFIG.HAMMER_SPIN_LIFE,
+        angle: 0,
+      });
+      if (!player.hammerHit) {
+        player.hammerHit = true;
+        consumeHammerDurability();
+      }
+    }
+  });
+
+  // 打可敲倒的樹
+  breakableTrees.forEach(t => {
+    if (t.state !== 'standing') return;
+    if (rectsOverlap(atkX, atkY, atkW, atkH, t.x, t.y, t.trunkW, t.h)) {
+      t.state    = 'falling';
+      t.fallTimer= 0;
+      if (!player.hammerHit) {
+        player.hammerHit = true;
+        consumeHammerDurability();
+      }
+    }
+  });
+}
+
+function updateSpinningEnemies(dt) {
+  for (let i = spinningEnemies.length - 1; i >= 0; i--) {
+    const s = spinningEnemies[i];
+    s.x += s.vx * dt;
+    s.angle += 0.3 * dt;
+    s.life--;
+    if (s.life <= 0) { spinningEnemies.splice(i, 1); continue; }
+    // 撞到其他活著的小怪 → 消滅
+    enemies.forEach(e => {
+      if (!e.active) return;
+      if (rectsOverlap(s.x, s.y, s.w, s.h, e.x, e.y, e.w, e.h)) {
+        e.active = false;
+        player.enemiesDefeated++;
+        s.life = 0;
+      }
+    });
+  }
+}
+
+// ── Breakable Trees ──────────────────────────
+let breakableTrees = [];   // loadLevel 填充
+const TREE_FALL_DURATION = 60; // 幀數
+
+function updateBreakableTrees(dt) {
+  breakableTrees.forEach(t => {
+    if (t.state === 'falling') {
+      t.fallTimer += dt;
+      if (t.fallTimer >= TREE_FALL_DURATION) {
+        t.state = 'fallen';
+        // 建立 safeZone（倒在右方）
+        t.safeZone = { x: t.x, y: GROUND_Y - 24, w: t.h * 0.8, h: 24 };
+      }
+    }
+  });
+}
+
+function isInSafeZone(px, py, pw, ph) {
+  return breakableTrees.some(t =>
+    t.state === 'fallen' && t.safeZone &&
+    rectsOverlap(px, py, pw, ph, t.safeZone.x, t.safeZone.y, t.safeZone.w, t.safeZone.h)
+  );
+}
+
 function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
@@ -1239,6 +1514,15 @@ function checkHazards() {
       damagePlayer();
     }
   });
+
+  // TackHazards（圖釘區），safeZone 內不受傷
+  if (!isInSafeZone(px, py, pw, ph)) {
+    tackHazards.forEach(t => {
+      if (rectsOverlap(px, py + ph - 12, pw, 12, t.x, t.y, t.w, t.h)) {
+        damagePlayer();
+      }
+    });
+  }
 
   // Enemies (contact damage)
   enemies.forEach(e => {
@@ -1493,6 +1777,39 @@ function drawWorld() {
     drawRoundBalloon(sx, sy);
   });
 
+  // 圖釘區
+  tackHazards.forEach(t => {
+    const sx = t.x - cx;
+    if (sx > CANVAS_W + 10 || sx + t.w < -10) return;
+    drawTackHazard(sx, t.y, t.w, t.h);
+  });
+
+  // 可敲倒的樹
+  breakableTrees.forEach(t => {
+    const sx = t.x - cx;
+    if (sx > CANVAS_W + 80 || sx + 80 < -10) return;
+    drawBreakableTree(sx, t);
+  });
+
+  // 旋轉飛出的小怪
+  spinningEnemies.forEach(s => {
+    const sx = s.x - cx;
+    if (sx > CANVAS_W + 60 || sx + s.w < -60) return;
+    ctx.save();
+    ctx.translate(sx + s.w/2, s.y + s.h/2);
+    ctx.rotate(s.angle);
+    ctx.fillStyle = '#e05050';
+    ctx.beginPath();
+    ctx.roundRect(-s.w/2, -s.h/2, s.w, s.h, 8);
+    ctx.fill();
+    // 暈眩星星
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('★', 0, 4);
+    ctx.restore();
+  });
+
   // Orange nemeses (balloonNemesis)
   orangeNemeses.forEach(o => {
     const sx = o.x - cx;
@@ -1559,8 +1876,25 @@ function drawPlayer(cx) {
     ctx.roundRect(atkLocalX, atkLocalY, CONFIG.BASIC_SWORD_ATTACK_RANGE, CONFIG.BASIC_SWORD_ATTACK_HEIGHT, 6);
     ctx.fill();
     ctx.stroke();
+  } else if (player.meleeHammerActive > 0) {
+    // 槌子攻擊效果
+    const hx  = player.facingRight ? player.w : -CONFIG.HAMMER_ATTACK_RANGE;
+    const hy  = (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
+    const prg = player.meleeHammerActive / CONFIG.HAMMER_ATTACK_DURATION;
+    ctx.fillStyle = `rgba(255,210,80,${0.3 + 0.3 * prg})`;
+    ctx.strokeStyle = `rgba(255,180,0,${0.6 + 0.3 * prg})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(hx, hy, CONFIG.HAMMER_ATTACK_RANGE, CONFIG.HAMMER_ATTACK_HEIGHT, 6);
+    ctx.fill();
+    ctx.stroke();
+    // 槌頭圓形
+    const hcx = player.facingRight ? player.w + CONFIG.HAMMER_ATTACK_RANGE * 0.7 : -CONFIG.HAMMER_ATTACK_RANGE * 0.7;
+    ctx.fillStyle = `rgba(200,140,0,${0.6 * prg})`;
+    ctx.beginPath();
+    ctx.arc(hcx, player.h * 0.45, 14, 0, Math.PI * 2);
+    ctx.fill();
   } else if (player.attackActive > 0) {
-    // 無裝備：小範圍拳擊視覺（比氣球劍短），無命中判定
     ctx.fillStyle = 'rgba(255,220,100,0.3)';
     ctx.beginPath();
     ctx.ellipse(
@@ -1661,6 +1995,79 @@ function drawRoundBalloon(x, y) {
   ctx.font = '8px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('圓', x, y + 4);
+}
+
+
+function drawTackHazard(x, y, w, h) {
+  // 圖釘區：深灰底板 + 多個小圖釘
+  ctx.fillStyle = '#444';
+  ctx.fillRect(x, y + h - 6, w, 6);
+  const count = Math.max(1, Math.floor(w / 12));
+  for (let i = 0; i < count; i++) {
+    const bx = x + i * (w / count) + (w / count) / 2;
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath();
+    ctx.moveTo(bx, y);
+    ctx.lineTo(bx - 4, y + h - 6);
+    ctx.lineTo(bx + 4, y + h - 6);
+    ctx.closePath();
+    ctx.fill();
+    // 圖釘頭
+    ctx.fillStyle = '#ccc';
+    ctx.beginPath();
+    ctx.arc(bx, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 警告標籤
+  ctx.fillStyle = 'rgba(255,200,0,0.7)';
+  ctx.font = '8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('圖釘', x + w / 2, y - 4);
+}
+
+function drawBreakableTree(sx, t) {
+  const trunkH = t.h;
+  const trunkW = t.trunkW || 20;
+  const crownR = t.crownR || 35;
+
+  if (t.state === 'standing') {
+    // 樹幹
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(sx + trunkW/2 - trunkW/2, GROUND_Y - trunkH, trunkW, trunkH);
+    // 樹冠
+    ctx.fillStyle = '#3a8a1a';
+    ctx.beginPath();
+    ctx.arc(sx + trunkW/2, GROUND_Y - trunkH, crownR, 0, Math.PI * 2);
+    ctx.fill();
+    // 可交互標記
+    ctx.fillStyle = 'rgba(255,255,150,0.7)';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔨?', sx + trunkW/2, GROUND_Y - trunkH - crownR - 4);
+  } else if (t.state === 'falling') {
+    // 倒下動畫：往右旋轉
+    const progress = Math.min(1, t.fallTimer / TREE_FALL_DURATION);
+    const angle    = progress * Math.PI / 2;
+    ctx.save();
+    ctx.translate(sx + trunkW/2, GROUND_Y);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(-trunkW/2, -trunkH, trunkW, trunkH);
+    ctx.fillStyle = '#3a8a1a';
+    ctx.beginPath();
+    ctx.arc(0, -trunkH, crownR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (t.state === 'fallen') {
+    // 倒下的樹（水平）+ 安全橋
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(sx, GROUND_Y - trunkW, trunkH * 0.8, trunkW);
+    ctx.fillStyle = '#3a8a1a';
+    ctx.fillRect(sx + trunkH * 0.6, GROUND_Y - trunkW - crownR/2, crownR*1.2, crownR);
+    // 安全提示
+    ctx.fillStyle = 'rgba(100,255,100,0.5)';
+    ctx.fillRect(sx, GROUND_Y - 6, trunkH * 0.8, 6);
+  }
 }
 
 function drawSpike(x, y, w, h) {
@@ -1881,24 +2288,25 @@ function drawHUD() {
   }
 
   // 裝備顯示（右側 HUD 下方）
-  if (equippedSword.id) {
-    ctx.textAlign = 'right';
+  // 裝備顯示（依 activeSlot）
+  ctx.textAlign = 'right';
+  const activeItem = activeSlot === 'hammer' ? equippedHammer : equippedSword;
+  if (activeItem && activeItem.id) {
+    const itemEmoji = activeSlot === 'hammer' ? '🔨' : '⚔️';
     ctx.font = '12px sans-serif';
-    ctx.fillStyle = '#c8f0ff';
-    ctx.fillText(`⚔️ ${equippedSword.name}`, CANVAS_W - pad, 58);
-    // 耐久條
+    ctx.fillStyle = activeSlot === 'hammer' ? '#ffd080' : '#c8f0ff';
+    ctx.fillText(`${itemEmoji} ${activeItem.name}`, CANVAS_W - pad, 58);
     const durBarW = 80;
     const durBarX = CANVAS_W - pad - durBarW;
-    const durFrac = equippedSword.currentDur / equippedSword.maxDur;
+    const durFrac = activeItem.currentDur / activeItem.maxDur;
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(durBarX, 62, durBarW, 5);
     ctx.fillStyle = durFrac > 0.4 ? '#60d080' : '#e08040';
     ctx.fillRect(durBarX, 62, durBarW * durFrac, 5);
     ctx.fillStyle = 'rgba(200,240,255,0.6)';
     ctx.font = '10px sans-serif';
-    ctx.fillText(`${equippedSword.currentDur}/${equippedSword.maxDur}`, CANVAS_W - pad, 76);
+    ctx.fillText(`${activeItem.currentDur}/${activeItem.maxDur}`, CANVAS_W - pad, 76);
   } else {
-    ctx.textAlign = 'right';
     ctx.font = '11px sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillText('目前道具：無', CANVAS_W - pad, 60);
@@ -1950,9 +2358,12 @@ function buildBagRows() {
       : '';
     rows.push([`⚔️ 基礎氣球劍`, `x${qty}${durStr}`, 'result-cyan']);
   }
-  // 基礎氣球槌（未來支援裝備耐久時，在此加 durStr）
+  // 基礎氣球槌
   if ((ci.basicHammer || 0) > 0) {
-    rows.push([`🔨 基礎氣球槌`, `x${ci.basicHammer}`, 'result-purple']);
+    const hqty   = ci.basicHammer;
+    const hdurStr = (equippedHammer.id && activeSlot === 'hammer')
+      ? `｜裝備 ${equippedHammer.currentDur}/${equippedHammer.maxDur}` : '';
+    rows.push([`🔨 基礎氣球槌`, `x${hqty}${hdurStr}`, 'result-purple']);
   }
   return rows;
 }
@@ -2102,10 +2513,12 @@ const BANDAGE_PRICE = 20;
 const BANDAGE_HEAL  = 1;
 
 function buyBandage() {
-  if (playerInventory.coins < BANDAGE_PRICE) return; // 金幣不足
-  if (player.hp >= player.maxHp) return;             // 生命已滿
+  if (player.hp >= player.maxHp) return;
+  if (currentRunStats.usedHeartPatch) return;        // 每關限一次
+  if (playerInventory.coins < BANDAGE_PRICE) return;
   playerInventory.coins -= BANDAGE_PRICE;
   player.hp = Math.min(player.maxHp, player.hp + BANDAGE_HEAL);
+  currentRunStats.usedHeartPatch = true;
   saveInventory();
 
   // 更新補給區目前生命
@@ -2131,6 +2544,10 @@ function updateBandageBtn() {
   if (!btn) return;
   if (player.hp >= player.maxHp) {
     btn.textContent = '生命已滿';
+    btn.disabled = true;
+    btn.classList.add('rp-supply-btn--disabled');
+  } else if (currentRunStats.usedHeartPatch) {
+    btn.textContent = '本關已使用';
     btn.disabled = true;
     btn.classList.add('rp-supply-btn--disabled');
   } else if (playerInventory.coins < BANDAGE_PRICE) {
@@ -2176,7 +2593,7 @@ function restart() {
     onGround: false, facingRight: true,
     hp: player.maxHp, invincible: 0,  // 使用 maxHp（支援自訂）
     attackCooldown: 0, attackActive: 0,
-    meleeActive: 0, meleeHit: false,
+    meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
   // Reset currentRunStats（本局歸零，inventory 不動）
@@ -2186,6 +2603,7 @@ function restart() {
   currentRunStats.enemiesDefeated         = 0;
   currentRunStats.damageTaken             = 0;
   currentRunStats.unlockedHammerThisClear = false;
+  currentRunStats.usedHeartPatch          = false;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
@@ -2195,6 +2613,8 @@ function restart() {
 
   // 重新初始化裝備
   initEquippedSword();
+  initEquippedHammer();
+  activeSlot = equippedSword.id ? 'sword' : (equippedHammer.id ? 'hammer' : 'sword');
 
   // Reset world
   cameraX    = 0;
@@ -2207,6 +2627,8 @@ function restart() {
   enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   roundBalloons.forEach(r => { r.collected = false; });
+  spinningEnemies.length = 0;
+  breakableTrees.forEach(t => { t.state = 'standing'; t.fallTimer = 0; t.safeZone = null; });
   projectiles.length = 0;
   resetHints();
 }
@@ -2433,4 +2855,5 @@ function loop(timestamp) {
 // ── 初始化並啟動 ────────────────────────────
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
+initEquippedHammer();
 requestAnimationFrame(loop);

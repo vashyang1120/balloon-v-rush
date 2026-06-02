@@ -101,6 +101,7 @@
         <button class="ctrl-btn" id="btn-right">▶</button>
       </div>
       <div id="ctrl-right-group">
+        <button class="ctrl-btn switch-btn" id="btn-switch-weapon">🔁</button>
         <button class="ctrl-btn" id="btn-jump">跳</button>
         <button class="ctrl-btn action-btn" id="btn-attack">🎈</button>
       </div>
@@ -199,6 +200,17 @@
   btnPauseOuter.addEventListener('touchstart', handlePauseClick);
   btnPauseIngame.addEventListener('click',      handlePauseClick);
   btnPauseIngame.addEventListener('touchstart', handlePauseClick);
+
+  // 道具切換按鈕（手機）
+  const btnSwitch = document.getElementById('btn-switch-weapon');
+  if (btnSwitch) {
+    ['click','touchstart'].forEach(ev =>
+      btnSwitch.addEventListener(ev, e => {
+        e.preventDefault();
+        if (gameState === 'playing' && typeof cycleWeapon === 'function') cycleWeapon();
+      })
+    );
+  }
 
   // 重試本關（失敗畫面）
   function handleRetry(e) {
