@@ -1986,7 +1986,6 @@ function populateResultPanel() {
       : []),
     ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,      'result-orange'],
     ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,          'result-red'],
-    ['❤️ 目前生命',     `${player.hp} / ${player.maxHp}`,            'result-red'],
     ['⏱  剩餘時間',     `${timeLeft} 秒`,                             'result-blue'],
   ];
 
@@ -2052,6 +2051,7 @@ function populateResultPanel() {
     ${guideBookHint}
     <div class="rp-section" id="supply-section">
       <div class="rp-section-title">🏠 小V的家・補給</div>
+      <div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">${player.hp} / ${player.maxHp}</span></div>
       <div class="rp-supply-item">
         <div class="rp-supply-info">
           <span class="rp-supply-name">🩹 愛心貼布</span>
@@ -2108,17 +2108,14 @@ function buyBandage() {
   player.hp = Math.min(player.maxHp, player.hp + BANDAGE_HEAL);
   saveInventory();
 
-  // 更新結算畫面數字
-  updateBandageBtn();
-  // 目前背包整區重繪（金幣已在 playerInventory 裡更新）
+  // 更新補給區目前生命
+  const supplyHp = document.getElementById('supply-hp');
+  if (supplyHp) supplyHp.textContent = `${player.hp} / ${player.maxHp}`;
+  // 更新目前背包（金幣減少）
   refreshResultBag();
-  // 更新本關成果裡的生命欄（用明確 id 的 section 找，只改含 '/' 的欄位）
-  const runSection = document.getElementById('rp-run-section');
-  if (runSection) {
-    runSection.querySelectorAll('.result-red').forEach(el => {
-      if (el.textContent.includes('/')) el.textContent = `${player.hp} / ${player.maxHp}`;
-    });
-  }
+  // 更新按鈕狀態
+  updateBandageBtn();
+  // 注意：本關成果 (rp-run-section) 完全不動
   // 顯示訊息
   const msg = document.getElementById('bandage-msg');
   if (msg) {
