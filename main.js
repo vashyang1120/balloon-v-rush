@@ -1340,27 +1340,31 @@ function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
 
   if (currentLevelIndex === 2) {
-    const uc = playerInventory.uniqueCollectibles || {};
-    const ur = playerInventory.unlockedRecipes   || {};
+    if (!playerInventory.unlockedRecipes)    playerInventory.unlockedRecipes    = {};
+    if (!playerInventory.uniqueCollectibles) playerInventory.uniqueCollectibles = {};
 
-    // 這局是否第一次解鎖 basicHammer？
-    const firstUnlock = !ur.basicHammer;
+    // Debug log
+    console.log('[triggerClear] Before unlock basicHammer:', playerInventory.unlockedRecipes.basicHammer);
+
+    // 這局是否第一次解鎖 basicHammer？（先判斷，再設值）
+    const firstUnlock = playerInventory.unlockedRecipes.basicHammer !== true;
     if (firstUnlock) {
-      if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
-      playerInventory.unlockedRecipes.basicHammer = true;
-      currentRunStats.unlockedHammerThisClear = true;  // 記錄：這局第一次解鎖
+      playerInventory.unlockedRecipes.basicHammer  = true;
+      currentRunStats.unlockedHammerThisClear      = true;
     }
 
-    // 玩家通關帶回圓氣球：標記 uniqueCollectibles
+    console.log('[triggerClear] unlockedHammerThisClear:', currentRunStats.unlockedHammerThisClear);
+
+    // 通關帶回圓氣球：鎖定一次性收集物
     if (currentRunStats.roundBalloon > 0) {
-      if (!playerInventory.uniqueCollectibles) playerInventory.uniqueCollectibles = {};
       playerInventory.uniqueCollectibles.level3RoundBalloon = true;
     }
   }
 
   saveInventory();
   gameState = 'clear';
-  populateResultPanel();   // 此時 currentRunStats.unlockedHammerThisClear 仍有值
+  // currentRunStats.unlockedHammerThisClear 在 populateResultPanel 前保持有效
+  populateResultPanel();
   updateNextLevelButton();
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -1947,7 +1951,13 @@ function populateResultPanel() {
     ['🪙 金幣總計',         `${playerInventory.coins} 枚`,            'result-gold'],
     ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,       'result-pink'],
     ...(playerInventory.roundBalloon > 0
-      ? [['🎈 圓氣球總計',  `${playerInventory.roundBalloon} 顆`,     'result-purple']]
+      ? [['⚪ 圓氣球總計',  `${playerInventory.roundBalloon} 顆`,     'result-purple']]
+      : []),
+    ...((playerInventory.craftedItems?.basicSword  || 0) > 0
+      ? [['⚔️ 基礎氣球劍', `${playerInventory.craftedItems.basicSword} 把`, 'result-cyan']]
+      : []),
+    ...((playerInventory.craftedItems?.basicHammer || 0) > 0
+      ? [['🔨 基礎氣球槌', `${playerInventory.craftedItems.basicHammer} 把`, 'result-purple']]
       : []),
   ];
   const swordQty = ci.basicSword || 0;
@@ -1975,6 +1985,8 @@ function populateResultPanel() {
       `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
     ).join('');
   }
+
+  console.log('[populateResultPanel] unlockedHammerThisClear:', currentRunStats.unlockedHammerThisClear);
 
   // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
   const ur = playerInventory.unlockedRecipes || {};
@@ -2010,6 +2022,7 @@ function populateResultPanel() {
       <div class="rp-section-title">🎒 目前背包</div>
       ${makeTable(bagRows)}
     </div>
+    ${hammerHint}
     ${guideBookHint}
     <div class="rp-section" id="supply-section">
       <div class="rp-section-title">🏠 小V的家・補給</div>
@@ -2037,12 +2050,21 @@ function populateResultPanel() {
   // 更新補給按鈕狀態（購買後重刷用）
   updateBandageBtn();
 
-  // 秘笈按鈕強調：第 1 關（新手教學）或第 3 關通關（新槌解鎖）
+  // 秘笈按鈕強調 + 建議查看文字
   const btnGuide = document.getElementById('btn-guidebook');
   if (btnGuide) {
-    const shouldHighlight = currentLevelIndex === 0 ||
-      (currentLevelIndex === 2 && gameState === 'clear' && ur.basicHammer);
+    const isHammerUnlock = currentRunStats.unlockedHammerThisClear === true;
+    const shouldHighlight = currentLevelIndex === 0 || isHammerUnlock;
     btnGuide.classList.toggle('result-btn--guide-highlight', shouldHighlight);
+
+    // 按鈕主文字（第一個 text node）
+    const textNode = [...btnGuide.childNodes].find(n => n.nodeType === 3);
+    if (textNode) {
+      textNode.textContent = isHammerUnlock ? '氣球秘笈' : '氣球秘笈';
+    }
+    // 副標（.result-btn-sub span）
+    const sub = btnGuide.querySelector('.result-btn-sub');
+    if (sub) sub.textContent = isHammerUnlock ? '建議查看' : 'Guidebook';
   }
 }
 
