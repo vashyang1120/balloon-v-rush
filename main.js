@@ -216,8 +216,9 @@ const INVENTORY_DEFAULTS = {
   roundBalloon:  0,        // MVP 1.0B：圓氣球材料
   // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12 ...
   craftedItems: {
-    basicSword:   0,
-    basicHammer:  0,       // MVP 1.0B：基礎氣球槌
+    basicSword:       0,
+    basicHammer:      0,
+    balloonLollipop:  0,   // 氣球棒棒糖
     // 未來可在此擴充更多道具
   },
   unlockedRecipes: {
@@ -280,7 +281,7 @@ const RECIPES = [
     cost:       { balloon260: 2 },
     emoji:      '🍭',
     unlockKey:  'balloonLollipop',
-    comingSoon: true,          // 製作功能尚未開放
+    // comingSoon 已移除 — 取得秘笈後可正常製作
   },
   // 未來可繼續擴充
 ];
@@ -2784,6 +2785,10 @@ function buildBagRows() {
     const hdurStr = (equippedHammer.id && activeSlot === 'hammer')
       ? `｜裝備 ${equippedHammer.currentDur}/${equippedHammer.maxDur}` : '';
     rows.push([`🔨 基礎氣球槌`, `x${hqty}${hdurStr}`, 'result-purple']);
+  }
+  // 氣球棒棒糖
+  if ((ci.balloonLollipop || 0) > 0) {
+    rows.push([`🍭 氣球棒棒糖`, `x${ci.balloonLollipop}`, 'result-pink']);
   }
   return rows;
 }
