@@ -39,7 +39,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // =============================================
 //  氣球小V：派對島大作戰 — main.js
-//  MVP 0.7 — 第 1 關：氣球森林小徑
+//  Phase 1 — 正式版資料結構整理
 // =============================================
 
 // ── Canvas setup ──────────────────────────────
@@ -55,7 +55,27 @@ canvas.height = CANVAS_H;
 // =============================================
 //  CONFIG - 可調參數區（在這裡微調數值）
 // =============================================
+// =============================================
+//  CONFIG — 全域數值常數（Phase 1 整理）
+//  修改遊戲數值請集中在此，不要散落 magic number
+//  下方數值與 MVP 封版版本一致，未修改任何數值
+// =============================================
 const CONFIG = {
+  // ── 玩家 ──
+  MAX_HP:                    3,
+  // ── 補給 ──
+  HEART_PATCH_COST:          20,
+  HEART_PATCH_HEAL:          1,
+  // ── 氣球狗 ──
+  DOG_HEAL_AMOUNT:           0.5,
+  DOG_INITIAL_TURNS:         3,
+  DOG_LEASH_COST_BALLOON260: 1,
+  // ── 武器耐久 ──
+  BASIC_SWORD_DURABILITY:    10,
+  BASIC_HAMMER_DURABILITY:   3,
+  // ── 隱藏物 ──
+  GOLD_CHEST_REWARD:         30,
+  TREASURE_DETECT_RADIUS:    50,   // 玩家碰到隱藏物的判定半徑
   // -- 角色 --
   PLAYER_W:        60,    // 角色顯示寬度 (px)
   PLAYER_H:        80,    // 角色顯示高度 (px)
@@ -207,9 +227,16 @@ function inp(action) {
 }
 
 
-// ── Inventory & Save (MVP 0.2) ────────────────
-// playerInventory: 跨局累積的背包資料
-// 新增材料時只需在此物件與 INVENTORY_DEFAULTS 加欄位即可
+// =============================================
+//  玩家資料結構（Phase 1 整理）
+//  playerInventory  — 背包與解鎖
+//  playerHome       — 小V的家（狗等）
+//  playerProgress   — 進度（未來排行榜用）
+//  → 目前 playerHome 整合在 playerInventory.balloonDog
+//  → playerProgress 為未來擴充預留
+// =============================================
+
+// ── Inventory & Save ──────────────────────────
 const INVENTORY_DEFAULTS = {
   coins:         0,
   balloon260:    0,
@@ -231,8 +258,8 @@ const INVENTORY_DEFAULTS = {
     present:    false, // 家裡有沒有狗
     turnsLeft:  0,     // 剩餘陪伴回合
   },
-  // 跨關卡暫存（不保存到 localStorage，每次 triggerClear/loadLevel 時重置）
-  // 這裡只存 persistent 部分
+  // 未來排行榜用進度欄位（Phase 1 預留，尚未實作）
+  // playerProgress: { highestStageCleared: 0, totalStagesCleared: 0 }
   equippedSwordDur:     0,
   equippedHammerDur:    0,       // 裝備中的氣球槌耐久
   tutorialSwordGranted: false,
@@ -340,6 +367,26 @@ function craftItem(recipeId) {
 
 const SAVE_KEY = 'balloonV_inventory';
 
+// =============================================
+//  存檔原則（Phase 1 註解，Firebase 尚未實作）
+//
+//  localStorage：
+//   - 儲存 playerInventory（背包、解鎖、氣球狗）
+//   - 儲存遊戲進度（highestStageCleared）
+//   - 不存 currentChallenge（每次挑戰重新計算）
+//
+//  Firebase（未來）：
+//   - 只在玩家主動「提交排行榜」時寫入一筆
+//   - 不要每關寫 Firebase
+//   - 不要每次撿金幣/材料就寫 Firebase
+//   - 排行榜資料格式：
+//     { playerName, score, progressLabel,
+//       recipesFound, treasuresFound,
+//       retryCount, damageTaken, submittedAt }
+//
+//  localStorage key: 'balloonV_inventory'（目前沿用 MVP key）
+// =============================================
+
 function loadInventory() {
   try {
     const saved = localStorage.getItem(SAVE_KEY);
@@ -389,6 +436,73 @@ function resetInventory() {
 }
 
 let playerInventory = loadInventory();
+
+
+// =============================================
+//  currentChallenge — 跨關累積挑戰資料（Phase 1）
+//  currentRunStats  — 單關資料（已有）
+//  分工：runStats 記本關，challenge 記整段挑戰
+// =============================================
+let currentChallenge = {
+  score:               0,
+  stagesCleared:       0,
+  currentStageId:      null,   // 例如 '1-1'、'1-2'
+  reachedStageId:      null,
+  totalCoinsCollected: 0,
+  totalMaterials: {
+    balloon260:   0,
+    roundBalloon: 0,
+  },
+  hiddenRecipesFound:   0,
+  hiddenTreasuresFound: 0,
+  retryCount:           0,
+  damageTaken:          0,
+  itemsCrafted:         0,
+  startedAt:            null,
+  endedAt:              null,
+  isCompleted:          false,
+  isAbandoned:          false,
+};
+
+function resetCurrentChallenge() {
+  currentChallenge.score               = 0;
+  currentChallenge.stagesCleared       = 0;
+  currentChallenge.currentStageId      = null;
+  currentChallenge.reachedStageId      = null;
+  currentChallenge.totalCoinsCollected = 0;
+  currentChallenge.totalMaterials      = { balloon260: 0, roundBalloon: 0 };
+  currentChallenge.hiddenRecipesFound  = 0;
+  currentChallenge.hiddenTreasuresFound= 0;
+  currentChallenge.retryCount          = 0;
+  currentChallenge.damageTaken         = 0;
+  currentChallenge.itemsCrafted        = 0;
+  currentChallenge.startedAt           = null;
+  currentChallenge.endedAt             = null;
+  currentChallenge.isCompleted         = false;
+  currentChallenge.isAbandoned         = false;
+}
+
+// currentChallenge 在 triggerClear 時累積（Phase 1 只建結構）
+function updateChallengeOnClear() {
+  currentChallenge.stagesCleared++;
+  currentChallenge.totalCoinsCollected  += currentRunStats.coins;
+  currentChallenge.totalMaterials.balloon260   += currentRunStats.balloon260;
+  currentChallenge.totalMaterials.roundBalloon += currentRunStats.roundBalloon;
+  if (currentRunStats.foundHiddenTreasure) {
+    if (currentRunStats.pendingRecipeUnlocks && Object.keys(currentRunStats.pendingRecipeUnlocks).length)
+      currentChallenge.hiddenRecipesFound++;
+    else
+      currentChallenge.hiddenTreasuresFound++;
+  }
+  currentChallenge.damageTaken   += currentRunStats.damageTaken;
+  currentChallenge.retryCount    += 0; // retry 在 triggerFailed 計
+  currentChallenge.currentStageId = LEVELS[currentLevelIndex]?.stageId || null;
+  currentChallenge.reachedStageId = currentChallenge.currentStageId;
+}
+
+function updateChallengeOnRetry() {
+  currentChallenge.retryCount++;
+}
 
 // currentRunStats: 本局獲得（每次 restart 清零）
 let currentRunStats = {
@@ -646,12 +760,16 @@ var currentLevelIndex = 0; // 0 = 第1關, 1 = 第2關
 const LEVELS = [
 
   // ════════════════════════════════════════════
-  //  關卡 0：氣球森林小徑
+  //  Stage 1-1：氣球森林小徑
   // ════════════════════════════════════════════
   {
-    name:   '第 1 關：氣球森林小徑',
-    length: 6400,
-    emoji:  '🌿',
+    chapterId:   1,
+    stageId:     '1-1',
+    displayName: '第 1 關：氣球森林小徑',
+    name:        '第 1 關：氣球森林小徑', // 保留 name 供舊程式碼相容
+    shortName:   '氣球森林小徑',
+    length:      6400,
+    emoji:       '🌿',
     hints: [
       { triggerX:   30, msg: '← → 移動　空白鍵 跳躍',             shown: false, duration: 270 },
       { triggerX:  680, msg: '⚔️ Z 鍵 使用氣球劍攻擊小怪！',      shown: false, duration: 240 },
@@ -715,12 +833,16 @@ const LEVELS = [
   },
 
   // ════════════════════════════════════════════
-  //  關卡 1：橘子果園危機
+  //  Stage 1-2：橘子果園危機
   // ════════════════════════════════════════════
   {
-    name:   '第 2 關：橘子果園危機',
-    length: 6400,
-    emoji:  '🍊',
+    chapterId:   1,
+    stageId:     '1-2',
+    displayName: '第 2 關：橘子果園危機',
+    name:        '第 2 關：橘子果園危機',
+    shortName:   '橘子果園危機',
+    length:      6400,
+    emoji:       '🍊',
     hints: [
       { triggerX:   30, msg: '🍊 第 2 關：橘子果園危機！',                       shown: false, duration: 270 },
       { triggerX:  750, msg: '🍊 橘子怪是氣球剋星，不能用氣球劍硬打！',         shown: false, duration: 270 },
@@ -804,12 +926,16 @@ const LEVELS = [
 
 
   // ════════════════════════════════════════════
-  //  關卡 2：糖果氣球懸崖
+  //  Stage 1-3：糖果氣球懸崖
   // ════════════════════════════════════════════
   {
-    name:   '第 3 關：糖果氣球懸崖',
-    length: 6400,
-    emoji:  '🍬',
+    chapterId:   1,
+    stageId:     '1-3',
+    displayName: '第 3 關：糖果氣球懸崖',
+    name:        '第 3 關：糖果氣球懸崖',
+    shortName:   '糖果氣球懸崖',
+    length:      6400,
+    emoji:       '🍬',
     hints: [
       // 觸發位置均在危險/選擇點前 ~300px
       { triggerX:   30, msg: '🍬 第 3 關：糖果氣球懸崖！',                   shown: false, duration: 270 },
@@ -940,12 +1066,16 @@ const LEVELS = [
 
 
   // ════════════════════════════════════════════
-  //  關卡 3：圖釘工坊
+  //  Stage 1-4：圖釘工坊
   // ════════════════════════════════════════════
   {
-    name:   '第 4 關：圖釘工坊',
-    length: 6400,
-    emoji:  '📌',
+    chapterId:   1,
+    stageId:     '1-4',
+    displayName: '第 4 關：圖釘工坊',
+    name:        '第 4 關：圖釘工坊',
+    shortName:   '圖釘工坊',
+    length:      6400,
+    emoji:       '📌',
     hints: [
       { triggerX:   30, msg: '📌 第 4 關：圖釘工坊！',                     shown: false, duration: 270 },
       { triggerX:  750, msg: '📌 圖釘是氣球剋星，不能用氣球劍硬打！',      shown: false, duration: 260 },
@@ -1067,6 +1197,83 @@ var activeSlot = 'sword'; // 預設劍
 var currentHiddenTreasure = null;
 // ── 進關前快照（死亡時 rollback 用）──
 var levelStartSnapshot = null;
+
+// =============================================
+//  Snapshot 函式（Phase 1 整理）
+//  createLevelStartSnapshot() — 進關前建立快照
+//  restoreLevelStartSnapshot() — 死亡時還原
+//  clearLevelStartSnapshot()  — 通關後清除
+// =============================================
+
+function createLevelStartSnapshot() {
+  levelStartSnapshot = {
+    // 背包資料
+    coins:              playerInventory.coins,
+    balloon260:         playerInventory.balloon260,
+    roundBalloon:       playerInventory.roundBalloon,
+    craftedItems:       JSON.parse(JSON.stringify(playerInventory.craftedItems || {})),
+    unlockedRecipes:    JSON.parse(JSON.stringify(playerInventory.unlockedRecipes || {})),
+    uniqueCollectibles: JSON.parse(JSON.stringify(playerInventory.uniqueCollectibles || {})),
+    balloonDog:         JSON.parse(JSON.stringify(playerInventory.balloonDog || {})),
+    // 裝備耐久（執行期）
+    equippedSwordId:    equippedSword.id,
+    equippedSwordDur:   equippedSword.currentDur,
+    equippedSwordMax:   equippedSword.maxDur,
+    equippedHammerId:   equippedHammer.id,
+    equippedHammerDur:  equippedHammer.currentDur,
+    equippedHammerMax:  equippedHammer.maxDur,
+    activeSlot:         activeSlot,
+    // 玩家生命
+    hp:                 player.hp,
+  };
+  console.log('createLevelStartSnapshot:', {
+    coins: levelStartSnapshot.coins,
+    swordDur: levelStartSnapshot.equippedSwordDur,
+    hammerDur: levelStartSnapshot.equippedHammerDur,
+  });
+}
+
+function restoreLevelStartSnapshot() {
+  if (!levelStartSnapshot) return;
+  playerInventory.coins              = levelStartSnapshot.coins;
+  playerInventory.balloon260         = levelStartSnapshot.balloon260;
+  playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
+  playerInventory.craftedItems       = JSON.parse(JSON.stringify(levelStartSnapshot.craftedItems));
+  playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
+  playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
+  playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
+  playerInventory.equippedSwordDur   = levelStartSnapshot.equippedSwordDur;
+  playerInventory.equippedHammerDur  = levelStartSnapshot.equippedHammerDur;
+  // 還原執行期裝備狀態
+  if (levelStartSnapshot.equippedSwordId) {
+    equippedSword.id         = levelStartSnapshot.equippedSwordId;
+    equippedSword.currentDur = levelStartSnapshot.equippedSwordDur;
+    equippedSword.maxDur     = levelStartSnapshot.equippedSwordMax;
+  } else {
+    equippedSword.id = null; equippedSword.currentDur = 0; equippedSword.maxDur = 0;
+  }
+  if (levelStartSnapshot.equippedHammerId) {
+    equippedHammer.id         = levelStartSnapshot.equippedHammerId;
+    equippedHammer.currentDur = levelStartSnapshot.equippedHammerDur;
+    equippedHammer.maxDur     = levelStartSnapshot.equippedHammerMax;
+  } else {
+    equippedHammer.id = null; equippedHammer.currentDur = 0; equippedHammer.maxDur = 0;
+  }
+  activeSlot  = levelStartSnapshot.activeSlot || 'sword';
+  player.hp   = levelStartSnapshot.hp;
+  saveInventory();
+  console.log('restoreLevelStartSnapshot:', {
+    coins: playerInventory.coins,
+    swordDur: equippedSword.currentDur,
+    hammerDur: equippedHammer.currentDur,
+  });
+}
+
+function clearLevelStartSnapshot() {
+  levelStartSnapshot = null;
+}
+
+
 var bringBalloonDog  = false; // 本關是否帶狗出門（loadLevel 後才設定）
 var nextBringDog     = false; // 下一關是否帶狗（帶狗按鈕設定，進下一關時轉移）
 var dogNoseGlow      = 0;     // 0～1（保留）
@@ -1836,44 +2043,10 @@ function resumeGame() {
 // 規則：死亡時回滾本局收集到的材料（未帶走）
 function triggerFailed() {
   // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
-  if (levelStartSnapshot) {
-    // 還原背包
-    playerInventory.coins              = levelStartSnapshot.coins;
-    playerInventory.balloon260         = levelStartSnapshot.balloon260;
-    playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
-    playerInventory.craftedItems       = JSON.parse(JSON.stringify(levelStartSnapshot.craftedItems));
-    playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
-    playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
-    playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
-    playerInventory.equippedSwordDur   = levelStartSnapshot.equippedSwordDur;
-    playerInventory.equippedHammerDur  = levelStartSnapshot.equippedHammerDur;
-    // 還原裝備執行期狀態
-    if (levelStartSnapshot.equippedSwordId) {
-      equippedSword.id         = levelStartSnapshot.equippedSwordId;
-      equippedSword.currentDur = levelStartSnapshot.equippedSwordDur;
-      equippedSword.maxDur     = levelStartSnapshot.equippedSwordMax;
-    } else {
-      equippedSword.id = null; equippedSword.currentDur = 0; equippedSword.maxDur = 0;
-    }
-    if (levelStartSnapshot.equippedHammerId) {
-      equippedHammer.id         = levelStartSnapshot.equippedHammerId;
-      equippedHammer.currentDur = levelStartSnapshot.equippedHammerDur;
-      equippedHammer.maxDur     = levelStartSnapshot.equippedHammerMax;
-    } else {
-      equippedHammer.id = null; equippedHammer.currentDur = 0; equippedHammer.maxDur = 0;
-    }
-    activeSlot  = levelStartSnapshot.activeSlot || 'sword';
-    player.hp   = levelStartSnapshot.hp;
-    saveInventory();
-    console.log('restored from snapshot:', {
-      coins: playerInventory.coins,
-      hammer: playerInventory.craftedItems.basicHammer,
-      hammerDur: equippedHammer.currentDur,
-      swordDur:  equippedSword.currentDur,
-    });
-  }
+  restoreLevelStartSnapshot();
 
   console.log('discard hidden treasure rewards on failed');
+  updateChallengeOnRetry(); // 重試次數 +1
 
   gameState = 'failed';
   showFailedOverlay();
@@ -1964,6 +2137,8 @@ function triggerClear() {
   populateResultPanel();
   updateNextLevelButton();
   showResultButtons();
+  updateChallengeOnClear(); // 累積跨關挑戰資料
+  clearLevelStartSnapshot(); // 通關後快照可清除
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
 
