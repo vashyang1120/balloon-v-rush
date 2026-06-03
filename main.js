@@ -180,6 +180,15 @@ const TRIVIA = [
   '戶外或高低落差大的場地，氣球佈置要特別注意固定與通行安全。',
 ];
 
+
+// ── 小V的作品牆連結（請填入實際 URL）───────────
+const LINKS = {
+  instagramWorks:      '',  // 例：'https://www.instagram.com/balloon.v'
+  youtubePerformance:  '',  // 例：'https://www.youtube.com/...'
+  youtubeTeaching:     '',  // 例：'https://www.youtube.com/...'
+  officialSite:        '',  // 例：'https://balloonv.com'
+};
+
 // ── Input state ───────────────────────────────
 const keys = {};
 const mobileBtn = { left: false, right: false, jump: false, attack: false };
@@ -3272,6 +3281,192 @@ function bringDogNextLevel() {
     btn.classList.add('rp-supply-btn--disabled');
   }
   refreshResultBag(); // 更新 260 氣球數量
+}
+
+
+// =============================================
+//  小V的家（Phase 2）
+//  openHomeScreen()   — 開啟小V的家
+//  closeHomeScreen()  — 關閉小V的家
+//  renderHome*()      — 各區塊渲染
+//  homeGoNextLevel()  — 從小V的家進入下一關
+// =============================================
+
+function openHomeScreen() {
+  // 同步隱藏其他 overlay
+  const resultEl  = document.getElementById('result-overlay');
+  const failedEl  = document.getElementById('failed-overlay');
+  if (resultEl) resultEl.style.display = 'none';
+  if (failedEl) failedEl.style.display = 'none';
+
+  // 渲染各區塊
+  renderHomeInventory();
+  renderHomeSupply();
+  renderHomeDog();
+  renderHomeNextStage();
+  renderHomeChallenge();
+
+  document.getElementById('home-screen').style.display = 'flex';
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+}
+
+function closeHomeScreen() {
+  document.getElementById('home-screen').style.display = 'none';
+}
+
+// ── 目前背包 ────────────────────────────────
+function renderHomeInventory() {
+  const el = document.getElementById('home-inventory-body');
+  if (!el) return;
+  const rows = buildBagRows(); // 共用現有函式
+  el.innerHTML = rows.map(([label, val, cls]) =>
+    '<div class="home-row"><span class="home-row-label">' + label + '</span>'
+    + '<span class="home-row-val ' + cls + '">' + val + '</span></div>'
+  ).join('') || '<div class="home-empty">背包是空的</div>';
+}
+
+// ── 補給與生命 ──────────────────────────────
+function renderHomeSupply() {
+  const el = document.getElementById('home-supply-body');
+  if (!el) return;
+
+  const bandageBtnText = player.hp >= player.maxHp  ? '生命已滿'
+    : currentRunStats.usedHeartPatch                 ? '本關已使用'
+    : (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST ? '金幣不足'
+    : '購買並使用 -' + CONFIG.HEART_PATCH_COST + ' 🪙';
+  const bandageDisabled = (player.hp >= player.maxHp
+    || currentRunStats.usedHeartPatch
+    || (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST);
+
+  el.innerHTML =
+    '<div class="home-row"><span class="home-row-label">❤️ 目前生命</span>'
+    + '<span class="home-row-val result-red">' + player.hp + ' / ' + player.maxHp + '</span></div>'
+    + '<div class="home-supply-item">'
+    + '<div><span class="home-row-label">🩹 愛心貼布</span>'
+    + '<span style="color:#888;font-size:11px;margin-left:6px">20 🪙 +1 ❤️</span></div>'
+    + '<button id="btn-home-bandage" class="home-btn '
+    + (bandageDisabled ? 'home-btn--dim' : 'home-btn--red') + '" '
+    + (bandageDisabled ? 'disabled' : '') + ' onclick="homeUseBandage()">'
+    + bandageBtnText + '</button></div>'
+    + '<div id="home-bandage-msg" class="home-msg"></div>';
+}
+
+function homeUseBandage() {
+  if (typeof buyBandage === 'function') {
+    buyBandage(); // 共用現有邏輯
+    renderHomeSupply();     // 更新補給區
+    renderHomeInventory();  // 更新背包金幣
+  }
+}
+
+// ── 氣球小狗 ────────────────────────────────
+function renderHomeDog() {
+  const el = document.getElementById('home-dog-body');
+  if (!el) return;
+  const dog          = playerInventory.balloonDog || {};
+  const hasDog       = dog.present;
+  const turns        = dog.turnsLeft || 0;
+  const nextLvIdx    = currentLevelIndex + 1;
+  const nextHasTreasure = nextLvIdx < LEVELS.length && !!LEVELS[nextLvIdx]?.hiddenTreasure;
+  const canBringDog  = hasDog && (playerInventory.balloon260 || 0) >= 1;
+
+  let html = '';
+  if (hasDog) {
+    html += '<div class="home-row"><span class="home-row-label">狀態</span><span class="home-row-val result-gold">已在小V的家</span></div>';
+    html += '<div class="home-row"><span class="home-row-label">陪伴回合</span><span class="home-row-val result-blue">' + turns + ' 回合</span></div>';
+    html += '<div class="home-row"><span class="home-row-label">每次通關</span><span class="home-row-val result-red">❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</span></div>';
+    if (nextHasTreasure) {
+      html += '<div class="home-dog-hint">🐶 氣球小狗好像聞到了什麼……<br>下一關也許有隱藏寶物，記得帶牠一起去！</div>';
+      const btnText = canBringDog ? '帶氣球小狗一起出發 -1 🎈' : '需要 260 長條氣球 x1 作為牽繩';
+      html += '<button id="btn-home-bring-dog" class="home-btn '
+        + (canBringDog ? 'home-btn--purple' : 'home-btn--dim') + '" '
+        + (canBringDog ? '' : 'disabled') + ' onclick="homeBringDog()">'
+        + btnText + '</button>';
+    }
+  } else {
+    html += '<div class="home-row"><span class="home-row-label">狀態</span><span class="home-row-val" style="color:#666">尚未入住</span></div>';
+    html += '<div class="home-dog-hint" style="color:#aaa">可在氣球秘笈中製作氣球小狗。</div>';
+  }
+  el.innerHTML = html;
+}
+
+function homeBringDog() {
+  if (typeof bringDogNextLevel === 'function') {
+    bringDogNextLevel();
+    renderHomeDog();
+    renderHomeInventory();
+    // 更新下一關按鈕提示
+    const dogBtn = document.getElementById('btn-home-bring-dog');
+    if (dogBtn) { dogBtn.textContent = '已準備帶氣球小狗出發 🐶'; dogBtn.disabled = true; }
+  }
+}
+
+// ── 下一關資訊 ──────────────────────────────
+function renderHomeNextStage() {
+  const el = document.getElementById('home-next-stage-body');
+  if (!el) return;
+  const nextIdx = currentLevelIndex + 1;
+  const btn = document.getElementById('btn-home-next-level');
+
+  if (nextIdx >= LEVELS.length) {
+    el.innerHTML = '<div class="home-empty">已抵達最後一關！可以重玩或結算本次成績。</div>';
+    if (btn) { btn.textContent = '再玩一次'; }
+    return;
+  }
+  const lv = LEVELS[nextIdx];
+  let html = '<div class="home-row"><span class="home-row-label">下一關</span>'
+    + '<span class="home-row-val result-gold">' + (lv.stageId || '') + ' ' + (lv.shortName || lv.name) + '</span></div>';
+  if (lv.hiddenTreasure && (playerInventory.balloonDog?.present)) {
+    html += '<div class="home-dog-hint" style="color:#ffe080">這一關似乎藏著神秘寶物……</div>';
+  }
+  el.innerHTML = html;
+  if (btn) btn.textContent = '🚀 開始下一關';
+}
+
+// ── 本次挑戰 ────────────────────────────────
+function renderHomeChallenge() {
+  const el = document.getElementById('home-challenge-body');
+  if (!el) return;
+  const c = currentChallenge;
+  el.innerHTML =
+    '<div class="home-row"><span class="home-row-label">完成關卡</span><span class="home-row-val result-blue">' + c.stagesCleared + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">最高進度</span><span class="home-row-val result-gold">' + (c.reachedStageId || '-') + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">總金幣</span><span class="home-row-val result-gold">' + c.totalCoinsCollected + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">秘笈發現</span><span class="home-row-val">' + c.hiddenRecipesFound + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">寶箱發現</span><span class="home-row-val">' + c.hiddenTreasuresFound + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">重試次數</span><span class="home-row-val result-red">' + c.retryCount + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">受傷次數</span><span class="home-row-val result-red">' + c.damageTaken + '</span></div>';
+}
+
+// ── 從小V的家進入下一關 ──────────────────────
+function homeGoNextLevel() {
+  try {
+    const nextIdx = currentLevelIndex + 1;
+    if (nextIdx >= LEVELS.length) {
+      // 最後一關：重玩目前關
+      nextBringDog    = false;
+      bringBalloonDog = false;
+      loadLevel(currentLevelIndex);
+      closeHomeScreen();
+      if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+      restart();
+      return;
+    }
+    bringBalloonDog = (nextBringDog === true);
+    nextBringDog    = false;
+    closeHomeScreen();
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    loadLevel(nextIdx);
+    restart();
+  } catch(err) {
+    if (typeof showDebugError === 'function')
+      showDebugError('HOME NEXT LEVEL', err.message, '', '', '', err.stack);
+  }
+}
+
+// placeholder 供未來擴充
+function openChallengeSummary() {
+  alert('本次成績結算功能將在下一階段加入。');
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {

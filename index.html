@@ -8,28 +8,104 @@
 </head>
 <body>
 
-  <!-- 直式遮罩：手機直拿時顯示 -->
+  <!-- 直式遮罩 -->
   <div id="portrait-mask">
     <div id="portrait-msg">
       <div style="font-size:48px;margin-bottom:16px;">📱↔️</div>
       <div>請旋轉手機橫向遊玩</div>
       <div style="font-size:13px;opacity:0.6;margin-top:8px;">或點擊下方進入全螢幕</div>
-      <button id="btn-fullscreen-portrait" class="fs-btn" style="margin-top:20px;">
-        ⛶ 全螢幕遊玩
-      </button>
+      <button id="btn-fullscreen-portrait" class="fs-btn" style="margin-top:20px;">⛶ 全螢幕遊玩</button>
     </div>
   </div>
 
-  <!-- 外部按鈕列（非全螢幕時在 game-wrapper 上方） -->
+  <!-- 外部按鈕列（非全螢幕時） -->
   <div id="top-bar">
     <button id="btn-pause" class="top-btn">Ⅱ 暫停</button>
     <button id="btn-fullscreen" class="top-btn">⛶ 全螢幕</button>
   </div>
 
+  <!-- ════════════════════════════════════════════
+       🏠 小V的家 overlay（Phase 2）
+       獨立於 game-wrapper，可在任何尺寸下正常顯示
+       ════════════════════════════════════════════ -->
+  <div id="home-screen" style="display:none">
+    <div id="home-panel">
+
+      <!-- 標題 -->
+      <div id="home-header">
+        <div id="home-title">🏠 小V的家</div>
+        <div id="home-subtitle">整理氣球、查看秘笈，準備下一次派對任務！</div>
+      </div>
+
+      <!-- 主要內容（可捲動） -->
+      <div id="home-body">
+
+        <!-- 1. 目前背包 -->
+        <section class="home-section" id="home-inventory-section">
+          <div class="home-section-title">🎒 目前背包</div>
+          <div id="home-inventory-body"><!-- renderHomeInventory() 填入 --></div>
+        </section>
+
+        <!-- 2. 氣球秘笈入口 -->
+        <section class="home-section" id="home-guidebook-section">
+          <div class="home-section-title">📖 氣球秘笈</div>
+          <div class="home-section-desc">查看已解鎖的氣球造型，並製作道具。</div>
+          <button id="btn-home-open-guidebook" class="home-btn home-btn--blue">
+            打開氣球秘笈
+          </button>
+        </section>
+
+        <!-- 3. 補給與生命 -->
+        <section class="home-section" id="home-supply-section">
+          <div class="home-section-title">🏥 補給</div>
+          <div id="home-supply-body"><!-- renderHomeSupply() 填入 --></div>
+        </section>
+
+        <!-- 4. 氣球小狗 -->
+        <section class="home-section" id="home-dog-section">
+          <div class="home-section-title">🐶 氣球小狗</div>
+          <div id="home-dog-body"><!-- renderHomeDog() 填入 --></div>
+        </section>
+
+        <!-- 5. 下一關準備 -->
+        <section class="home-section" id="home-next-stage-section">
+          <div class="home-section-title">🗺️ 下一關準備</div>
+          <div id="home-next-stage-body"><!-- renderHomeNextStage() 填入 --></div>
+          <button id="btn-home-next-level" class="home-btn home-btn--green" style="margin-top:10px">
+            🚀 開始下一關
+          </button>
+        </section>
+
+        <!-- 6. 本次挑戰 -->
+        <section class="home-section" id="home-challenge-section">
+          <div class="home-section-title">🏆 本次挑戰</div>
+          <div id="home-challenge-body"><!-- renderHomeChallenge() 填入 --></div>
+          <button id="btn-home-challenge-summary" class="home-btn home-btn--dim" style="margin-top:8px">
+            結算本次成績
+          </button>
+        </section>
+
+        <!-- 7. 小V的作品牆 -->
+        <section class="home-section" id="home-works-section">
+          <div class="home-section-title">🎈 小V的作品牆</div>
+          <div class="home-section-desc">想看看現實中的氣球小V做過哪些作品嗎？</div>
+          <div id="home-works-links">
+            <button class="home-link-btn" data-link="instagramWorks">🎈 看小V的氣球作品</button>
+            <button class="home-link-btn" data-link="youtubePerformance">🎩 看小V的表演紀錄</button>
+            <button class="home-link-btn" data-link="youtubeTeaching">📚 看小V的氣球教學</button>
+            <button class="home-link-btn" data-link="officialSite">🌐 預約活動 / 官方網站</button>
+          </div>
+        </section>
+
+      </div><!-- /#home-body -->
+
+    </div><!-- /#home-panel -->
+  </div><!-- /#home-screen -->
+
   <div id="game-wrapper">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 遊戲內右上角按鈕（全螢幕時顯示，疊在 canvas 上） -->
+    <!-- 遊戲內右上角按鈕 -->
     <div id="ingame-top-bar">
       <button id="btn-pause-ingame" class="ingame-top-btn">Ⅱ 暫停</button>
       <button id="btn-fs-ingame"    class="ingame-top-btn">× 離開全螢幕</button>
@@ -58,12 +134,13 @@
           再挑戰一次把它們帶回家吧！
         </div>
         <div id="failed-actions">
-          <button id="btn-retry" class="failed-btn failed-btn--primary">↺ 重試本關</button>
+          <button id="btn-retry"       class="failed-btn failed-btn--primary">↺ 重試本關</button>
+          <button id="btn-go-home-failed" class="failed-btn failed-btn--secondary">🏠 回小V的家</button>
         </div>
       </div>
     </div>
 
-        <!-- 結算畫面 overlay -->
+    <!-- 結算畫面 overlay -->
     <div id="result-overlay">
       <div id="result-panel">
         <div id="result-panel-title">關卡結算</div>
@@ -71,6 +148,9 @@
         <div id="result-action-bar">
           <button id="btn-play-again"   class="result-btn result-btn--primary">
             再玩一次<span class="result-btn-sub">Play Again</span>
+          </button>
+          <button id="btn-go-home"      class="result-btn result-btn--home">
+            小V的家<span class="result-btn-sub">Home</span>
           </button>
           <button id="btn-guidebook"    class="result-btn result-btn--guide">
             氣球秘笈<span class="result-btn-sub">Guidebook</span>
@@ -130,78 +210,56 @@
     wrapper.style.maxHeight = 'none';
   }
 
-  // ── 全螢幕狀態 ───────────────────────────────
+  // ── 全螢幕 ───────────────────────────────────
   function isFS() {
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
-
   function enterFS() {
     const el  = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen
               || el.mozRequestFullScreen || el.msRequestFullscreen;
     if (req) req.call(el).catch(() => {});
-    try {
-      if (screen.orientation && screen.orientation.lock)
-        screen.orientation.lock('landscape').catch(() => {});
-    } catch(e) {}
+    try { if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
   }
-
   function exitFS() {
     const fn = document.exitFullscreen || document.webkitExitFullscreen
              || document.mozCancelFullScreen || document.msExitFullscreen;
     if (fn) fn.call(document).catch(() => {});
   }
-
   function toggleFS() { isFS() ? exitFS() : enterFS(); }
 
-  // ── fullscreenchange：更新按鈕文字 + UI 切換 ──
   function onFSChange() {
     const fs = isFS();
-
-    // 外部按鈕列：非全螢幕時顯示（CSS :fullscreen 也會隱藏）
-    document.getElementById('top-bar').style.display = fs ? 'none' : 'flex';
-    // 遊戲內按鈕列：全螢幕時顯示
+    document.getElementById('top-bar').style.display        = fs ? 'none' : 'flex';
     document.getElementById('ingame-top-bar').style.display = fs ? 'flex' : 'none';
-
-    // 按鈕文字
-    document.getElementById('btn-fullscreen').textContent  = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
-    document.getElementById('btn-fs-ingame').textContent   = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
-
+    document.getElementById('btn-fullscreen').textContent   = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
+    document.getElementById('btn-fs-ingame').textContent    = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
     resizeGame();
     checkOrientation();
   }
+  ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']
+    .forEach(ev => document.addEventListener(ev, onFSChange));
 
-  ['fullscreenchange','webkitfullscreenchange',
-   'mozfullscreenchange','MSFullscreenChange'].forEach(ev =>
-    document.addEventListener(ev, onFSChange)
-  );
-
-  // ── 全螢幕按鈕事件 ───────────────────────────
   document.getElementById('btn-fullscreen').addEventListener('click', toggleFS);
   document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFS);
   document.getElementById('btn-fs-ingame').addEventListener('click', toggleFS);
-  document.getElementById('btn-fs-ingame').addEventListener('touchstart', e => {
-    e.preventDefault(); toggleFS();
-  });
+  document.getElementById('btn-fs-ingame').addEventListener('touchstart', e => { e.preventDefault(); toggleFS(); });
 
-  // ── 暫停按鈕事件（外部 + 遊戲內，DOM 已存在才綁定）──
+  // ── 暫停按鈕 ─────────────────────────────────
   function handlePauseClick(e) {
     e.preventDefault();
-    // pauseGame / resumeGame 由 main.js 定義，此時已載入
     if (typeof pauseGame !== 'function') return;
-    if (gameState === 'playing')       pauseGame();
-    else if (gameState === 'paused')   resumeGame();
+    if (gameState === 'playing')     pauseGame();
+    else if (gameState === 'paused') resumeGame();
   }
-
   const btnPauseOuter  = document.getElementById('btn-pause');
   const btnPauseIngame = document.getElementById('btn-pause-ingame');
-
   btnPauseOuter.addEventListener('click',      handlePauseClick);
   btnPauseOuter.addEventListener('touchstart', handlePauseClick);
   btnPauseIngame.addEventListener('click',      handlePauseClick);
   btnPauseIngame.addEventListener('touchstart', handlePauseClick);
 
-  // 道具切換按鈕（手機）
+  // ── 道具切換（手機）───────────────────────────
   const btnSwitch = document.getElementById('btn-switch-weapon');
   if (btnSwitch) {
     ['click','touchstart'].forEach(ev =>
@@ -212,13 +270,14 @@
     );
   }
 
-  // 重試本關（失敗畫面）
+  // ── 重試本關（失敗畫面）───────────────────────
   function handleRetry(e) {
     e.preventDefault();
-    if (gameState === 'failed') {
-      loadLevel(currentLevelIndex); // 重載同一關
-      restart();
-    }
+    if (gameState !== 'failed') return;
+    nextBringDog    = false;
+    bringBalloonDog = false;
+    loadLevel(currentLevelIndex);
+    restart();
   }
   const btnRetry = document.getElementById('btn-retry');
   if (btnRetry) {
@@ -226,9 +285,76 @@
     btnRetry.addEventListener('touchstart', handleRetry);
   }
 
-  // ── 結算畫面時隱藏暫停按鈕，離開結算時恢復 ──
-  // 這由 main.js 的 triggerClear/GameOver 呼叫 hidePauseBtn()，
-  // 由 restart() 呼叫 showPauseBtn()
+  // ── 回小V的家（失敗畫面）─────────────────────
+  const btnGoHomeFailed = document.getElementById('btn-go-home-failed');
+  if (btnGoHomeFailed) {
+    ['click','touchstart'].forEach(ev =>
+      btnGoHomeFailed.addEventListener(ev, e => {
+        e.preventDefault();
+        openHomeScreen();
+      })
+    );
+  }
+
+  // ── 回小V的家（結算畫面）─────────────────────
+  const btnGoHome = document.getElementById('btn-go-home');
+  if (btnGoHome) {
+    ['click','touchstart'].forEach(ev =>
+      btnGoHome.addEventListener(ev, e => {
+        e.preventDefault();
+        openHomeScreen();
+      })
+    );
+  }
+
+  // ── 小V的家：開啟氣球秘笈 ────────────────────
+  const btnHomeGuidebook = document.getElementById('btn-home-open-guidebook');
+  if (btnHomeGuidebook) {
+    ['click','touchstart'].forEach(ev =>
+      btnHomeGuidebook.addEventListener(ev, e => {
+        e.preventDefault();
+        if (typeof openGuidebook === 'function') openGuidebook();
+      })
+    );
+  }
+
+  // ── 小V的家：下一關按鈕 ─────────────────────
+  const btnHomeNextLevel = document.getElementById('btn-home-next-level');
+  if (btnHomeNextLevel) {
+    ['click','touchstart'].forEach(ev =>
+      btnHomeNextLevel.addEventListener(ev, e => {
+        e.preventDefault();
+        homeGoNextLevel();
+      })
+    );
+  }
+
+  // ── 小V的家：結算成績（placeholder）─────────
+  const btnChallengeSummary = document.getElementById('btn-home-challenge-summary');
+  if (btnChallengeSummary) {
+    ['click','touchstart'].forEach(ev =>
+      btnChallengeSummary.addEventListener(ev, e => {
+        e.preventDefault();
+        if (typeof openChallengeSummary === 'function') openChallengeSummary();
+        else alert('本次成績結算功能將在下一階段加入。');
+      })
+    );
+  }
+
+  // ── 小V的作品牆連結 ──────────────────────────
+  document.querySelectorAll('.home-link-btn').forEach(btn => {
+    ['click','touchstart'].forEach(ev =>
+      btn.addEventListener(ev, e => {
+        e.preventDefault();
+        const key = btn.dataset.link;
+        const url = (typeof LINKS !== 'undefined' && LINKS[key]) || '';
+        if (url) window.open(url, '_blank');
+        else alert('連結準備中，敬請期待！');
+      })
+    );
+  });
+
+  // ── pauseBtn 顯示控制 ─────────────────────────
   window.hidePauseBtn = function() {
     btnPauseOuter.style.display  = 'none';
     btnPauseIngame.style.display = 'none';
