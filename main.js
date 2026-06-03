@@ -93,8 +93,8 @@ const CONFIG = {
   AUTO_SCROLL_SPEED_NORMAL:       2.2,   // 一般關卡速度
   AUTO_SCROLL_SPEED_EXPLORE:      1.87,  // 有隱藏物的關卡（稍慢）
   AUTO_SCROLL_SPEED_DOG:          1.65,  // 帶狗出門時再慢一點
-  TREASURE_SLOW_ZONE_RADIUS:      320,   // 靠近寶物多少 px 時啟動慢速
-  TREASURE_SLOW_SCROLL_MULTIPLIER:0.55,  // 最慢速倍率（最低不低於 45%）
+  TREASURE_SLOW_ZONE_RADIUS:      420,   // 靠近寶物多少 px 時啟動慢速
+  TREASURE_SLOW_SCROLL_MULTIPLIER:0.38,  // 最慢速倍率（接近寶物時明顯放慢）
 
   // -- 關卡 --
   LEVEL_DURATION:  60,    // 關卡時間限制（秒）
@@ -401,6 +401,8 @@ let currentRunStats = {
   foundHiddenTreasure:      false,
   foundTreasureCoins:       0,
   pendingRecipeUnlocks:     {},  // 本關暫時解鎖（通關才寫入）
+  pendingCoins:             0,
+  foundHiddenTreasureName:  null, // 本關找到的隱藏物名稱
   foundTreasureCoins:       0,      // 本關從寶箱獲得的金幣
 };
 
@@ -1321,7 +1323,7 @@ function updateCamera() {
             dist / CONFIG.TREASURE_SLOW_ZONE_RADIUS
           );
           scrollSpeed = Math.max(
-            CONFIG.AUTO_SCROLL_SPEED_NORMAL * 0.45,
+            CONFIG.AUTO_SCROLL_SPEED_NORMAL * 0.38,
             scrollSpeed * factor
           );
         }
@@ -1329,8 +1331,9 @@ function updateCamera() {
         if (frameCount % 60 === 0) {
           const dist2 = Math.abs(player.x - currentHiddenTreasure.x);
           console.log('[Scroll] speed:', scrollSpeed.toFixed(3),
-            'distanceToTreasure:', Math.round(dist2),
-            'dogNoseLevel:', dogNoseLevel);
+            'dist:', Math.round(dist2), 'noseLevel:', dogNoseLevel,
+            'pendingCoins:', currentRunStats.pendingCoins || 0,
+            'foundTreasure:', currentRunStats.foundHiddenTreasure);
         }
       }
     }
@@ -1655,29 +1658,35 @@ function updateDogNose() {
 // ── 隱藏寶物碰撞 ────────────────────────────
 function checkHiddenTreasure() {
   try {
+    // 必須帶狗才能觸發隱藏物
+    if (!bringBalloonDog) return;
     if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
-    if (currentRunStats.foundHiddenTreasure) return; // 本輪已取得，不重複提示
+    if (currentRunStats.foundHiddenTreasure) return; // 本輪已取得，不重複
     if (typeof currentHiddenTreasure.x !== 'number') return;
     const t = currentHiddenTreasure;
     const R = 50;
     if (!rectsOverlap(player.x, player.y, player.w, player.h, t.x-R, t.y-R, R*2, R*2)) return;
 
     t.found = true;
-    currentRunStats.foundHiddenTreasure = true; // 標記本輪已取得
+    currentRunStats.foundHiddenTreasure = true;
 
     if (t.type === 'recipe') {
-      // 棒棒糖秘笈：先放 pending，通關才正式寫入
+      // 棒棒糖秘笈：pending 模式，通關才正式寫入
       if (!currentRunStats.pendingRecipeUnlocks) currentRunStats.pendingRecipeUnlocks = {};
       currentRunStats.pendingRecipeUnlocks[t.recipeKey] = true;
-      // 暫時顯示（讓玩家看到效果），但 inventory 還沒更新
-      if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
-      playerInventory.unlockedRecipes[t.recipeKey] = true; // 暫時顯示用
+      currentRunStats.foundHiddenTreasureName = '氣球棒棒糖秘笈';
       showHint('找到隱藏秘笈：氣球棒棒糖！', 320);
+      console.log('hidden treasure found:', { type: 'recipe', recipeKey: t.recipeKey, bringBalloonDog,
+        pending: currentRunStats.pendingRecipeUnlocks });
     } else if (t.type === 'goldChest') {
       const coins = t.rewardCoins || 30;
-      playerInventory.coins += coins; // 暫時加，死亡時 rollback
-      currentRunStats.foundTreasureCoins = coins;
+      // pendingCoins 模式：通關才正式加金幣（死亡時 rollback 不需處理，因為沒寫入 inventory）
+      currentRunStats.pendingCoins = (currentRunStats.pendingCoins || 0) + coins;
+      currentRunStats.foundTreasureCoins      = coins;
+      currentRunStats.foundHiddenTreasureName = '金幣寶箱';
       showHint('找到隱藏寶箱！獲得 ' + coins + ' 金幣！', 320);
+      console.log('hidden treasure found:', { type: 'goldChest', coins, bringBalloonDog,
+        pendingCoins: currentRunStats.pendingCoins });
     }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
@@ -1840,6 +1849,8 @@ function triggerFailed() {
     saveInventory();
   }
 
+  console.log('discard hidden treasure rewards on failed');
+
   gameState = 'failed';
   showFailedOverlay();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -1890,6 +1901,22 @@ function triggerClear() {
     if (currentRunStats.roundBalloon > 0) {
       playerInventory.uniqueCollectibles.level3RoundBalloon = true;
     }
+  }
+
+  // 隱藏物通關正式結算
+  if (currentRunStats.foundHiddenTreasure) {
+    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+    const pending = currentRunStats.pendingRecipeUnlocks || {};
+    for (const key of Object.keys(pending)) {
+      playerInventory.unlockedRecipes[key] = true;
+    }
+    if ((currentRunStats.pendingCoins || 0) > 0) {
+      playerInventory.coins += currentRunStats.pendingCoins;
+    }
+    console.log('apply hidden treasure rewards on clear:', {
+      pendingCoins: currentRunStats.pendingCoins,
+      pendingRecipeUnlocks: currentRunStats.pendingRecipeUnlocks,
+    });
   }
 
   // 氣球狗結算：先回血，再扣回合（最後一回合仍回血）
@@ -2826,6 +2853,20 @@ function populateResultPanel() {
   }
 
   console.log('[populateResultPanel] unlockedHammerThisClear:', currentRunStats.unlockedHammerThisClear);
+  console.log('[populateResultPanel] foundHiddenTreasure:', currentRunStats.foundHiddenTreasure,
+    'name:', currentRunStats.foundHiddenTreasureName,
+    'pendingCoins:', currentRunStats.pendingCoins);
+
+  // 隱藏物發現提示（只在通關結算時顯示）
+  const treasureHint = (gameState === 'clear' && currentRunStats.foundHiddenTreasure)
+    ? ('<div class="rp-guidebook-hint" style="border-color:rgba(255,220,80,0.5);background:rgba(80,60,0,0.2)">'
+      + '<div class="rp-guidebook-hint__title">🎉 隱藏發現！</div>'
+      + '<div class="rp-guidebook-hint__body">'
+      + (currentRunStats.foundHiddenTreasureName === '金幣寶箱'
+          ? '金幣寶箱 +' + (currentRunStats.pendingCoins || 30) + ' 金幣 已加入背包！'
+          : '氣球棒棒糖秘笈已解鎖！可在氣球秘笈中查看。')
+      + '</div></div>')
+    : '';
 
   // 氣球狗相關
   const dogData       = playerInventory.balloonDog || {};
@@ -2907,6 +2948,7 @@ function populateResultPanel() {
   html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
   html += '<div class="rp-section" id="rp-run-section"><div class="rp-section-title">📋 本關成果</div>' + makeTable(runRows) + '</div>';
   html += '<div class="rp-section" id="rp-inventory-section"><div class="rp-section-title">🎒 目前背包</div>' + makeTable(buildBagRows()) + '</div>';
+  html += treasureHint;
   html += hammerHint;
   html += guideBookHint;
   html += dogSectionHtml;
@@ -3072,6 +3114,8 @@ function restart() {
   currentRunStats.usedHeartPatch          = false;
   currentRunStats.foundHiddenTreasure     = false;
   currentRunStats.pendingRecipeUnlocks     = {};
+  currentRunStats.pendingCoins             = 0;
+  currentRunStats.foundHiddenTreasureName  = null;
   currentRunStats.foundTreasureCoins      = 0;
   if (currentHiddenTreasure) currentHiddenTreasure.found = false; // 重試時重置取得狀態
   currentRunStats.dogHealed               = false;
