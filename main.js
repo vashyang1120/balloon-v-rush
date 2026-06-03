@@ -398,7 +398,9 @@ let currentRunStats = {
   damageTaken:              0,
   unlockedHammerThisClear:  false,
   usedHeartPatch:           false,
-  foundHiddenTreasure:      false,  // 本關是否找到隱藏物
+  foundHiddenTreasure:      false,
+  foundTreasureCoins:       0,
+  pendingRecipeUnlocks:     {},  // 本關暫時解鎖（通關才寫入）
   foundTreasureCoins:       0,      // 本關從寶箱獲得的金幣
 };
 
@@ -1059,10 +1061,13 @@ const equippedHammer = {
 var activeSlot = 'sword'; // 預設劍
 
 // ── Hidden treasure & balloon dog run state ───
-var currentHiddenTreasure = null; // 本關 hiddenTreasure 物件（loadLevel 設定）
+var currentHiddenTreasure = null;
+// ── 進關前快照（死亡時 rollback 用）──
+var levelStartSnapshot = null;
 var bringBalloonDog  = false; // 本關是否帶狗出門（loadLevel 後才設定）
 var nextBringDog     = false; // 下一關是否帶狗（帶狗按鈕設定，進下一關時轉移）
-var dogNoseGlow      = 0;     // 0～1，狗鼻子亮度
+var dogNoseGlow      = 0;     // 0～1（保留）
+var dogNoseLevel     = 0;     // 0-3：0=暗, 1=微亮, 2=亮, 3=閃爍
 
 function initEquippedHammer() {
   const ci  = playerInventory.craftedItems || {};
@@ -1299,7 +1304,6 @@ function update(dt, dtMs = 16.667) {
 }
 
 function updateCamera() {
-  // 探索速度（完整防呆：hiddenTreasure 或狗不存在時不計算）
   let scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL;
   try {
     const hasTreasure = !!(currentHiddenTreasure
@@ -1320,6 +1324,13 @@ function updateCamera() {
             CONFIG.AUTO_SCROLL_SPEED_NORMAL * 0.45,
             scrollSpeed * factor
           );
+        }
+        // Debug log（每 60 幀）
+        if (frameCount % 60 === 0) {
+          const dist2 = Math.abs(player.x - currentHiddenTreasure.x);
+          console.log('[Scroll] speed:', scrollSpeed.toFixed(3),
+            'distanceToTreasure:', Math.round(dist2),
+            'dogNoseLevel:', dogNoseLevel);
         }
       }
     }
@@ -1624,46 +1635,50 @@ function updateDogNose() {
         || !currentHiddenTreasure
         || currentHiddenTreasure.found
         || typeof currentHiddenTreasure.x !== 'number') {
-      dogNoseGlow = 0;
+      dogNoseGlow  = 0;
+      dogNoseLevel = 0;
       return;
     }
     const dist = Math.abs(player.x - currentHiddenTreasure.x);
-    if      (dist > 400) dogNoseGlow = 0;
-    else if (dist > 250) dogNoseGlow = 0.25;
-    else if (dist > 120) dogNoseGlow = 0.65;
-    else {
-      // <120 px：閃爍
-      dogNoseGlow = 0.85 + Math.sin(frameCount * 0.3) * 0.15;
+    if      (dist > 400) { dogNoseLevel = 0; dogNoseGlow = 0;    }
+    else if (dist > 250) { dogNoseLevel = 1; dogNoseGlow = 0.25; }
+    else if (dist > 120) { dogNoseLevel = 2; dogNoseGlow = 0.65; }
+    else                 { dogNoseLevel = 3; dogNoseGlow = 0.85 + Math.sin(frameCount * 0.3) * 0.15; }
+    // Debug log（每 120 幀輸出一次）
+    if (frameCount % 120 === 0) {
+      console.log('[DogNose] dist:', Math.round(dist), 'level:', dogNoseLevel, 'glow:', dogNoseGlow.toFixed(2),
+        'scrollSpeed:', CONFIG.AUTO_SCROLL_SPEED_DOG.toFixed(2));
     }
-  } catch(e) { dogNoseGlow = 0; }
+  } catch(e) { dogNoseGlow = 0; dogNoseLevel = 0; }
 }
 
 // ── 隱藏寶物碰撞 ────────────────────────────
 function checkHiddenTreasure() {
   try {
-  if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
-  if (typeof currentHiddenTreasure.x !== 'number') return;
-  const t  = currentHiddenTreasure;
-  const R  = 50; // 稍微大一點，更容易找到
-  if (!rectsOverlap(player.x, player.y, player.w, player.h,
-                    t.x - R, t.y - R, R*2, R*2)) return;
+    if (!currentHiddenTreasure || currentHiddenTreasure.found) return;
+    if (currentRunStats.foundHiddenTreasure) return; // 本輪已取得，不重複提示
+    if (typeof currentHiddenTreasure.x !== 'number') return;
+    const t = currentHiddenTreasure;
+    const R = 50;
+    if (!rectsOverlap(player.x, player.y, player.w, player.h, t.x-R, t.y-R, R*2, R*2)) return;
 
-  t.found = true;
-  if (t.type === 'recipe') {
-    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
-    if (!playerInventory.unlockedRecipes[t.recipeKey]) {
-      playerInventory.unlockedRecipes[t.recipeKey] = true;
-      saveInventory();
-      showHint(`找到隱藏秘笈：氣球棒棒糖！`, 320);
-      currentRunStats.foundHiddenTreasure = true;
+    t.found = true;
+    currentRunStats.foundHiddenTreasure = true; // 標記本輪已取得
+
+    if (t.type === 'recipe') {
+      // 棒棒糖秘笈：先放 pending，通關才正式寫入
+      if (!currentRunStats.pendingRecipeUnlocks) currentRunStats.pendingRecipeUnlocks = {};
+      currentRunStats.pendingRecipeUnlocks[t.recipeKey] = true;
+      // 暫時顯示（讓玩家看到效果），但 inventory 還沒更新
+      if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+      playerInventory.unlockedRecipes[t.recipeKey] = true; // 暫時顯示用
+      showHint('找到隱藏秘笈：氣球棒棒糖！', 320);
+    } else if (t.type === 'goldChest') {
+      const coins = t.rewardCoins || 30;
+      playerInventory.coins += coins; // 暫時加，死亡時 rollback
+      currentRunStats.foundTreasureCoins = coins;
+      showHint('找到隱藏寶箱！獲得 ' + coins + ' 金幣！', 320);
     }
-  } else if (t.type === 'goldChest') {
-    playerInventory.coins += (t.rewardCoins || 30);
-    saveInventory();
-    showHint('找到隱藏寶箱！獲得 ' + (t.rewardCoins || 30) + ' 金幣！', 320);
-    currentRunStats.foundHiddenTreasure = true;
-    currentRunStats.foundTreasureCoins  = t.rewardCoins || 30;
-  }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
 
@@ -1806,11 +1821,24 @@ function resumeGame() {
 // ── 挑戰失敗（死亡）─────────────────────────
 // 規則：死亡時回滾本局收集到的材料（未帶走）
 function triggerFailed() {
-  // 把本局獲得的材料從 inventory 退回（不能帶走）
-  playerInventory.coins       = Math.max(0, playerInventory.coins       - currentRunStats.coins);
-  playerInventory.balloon260  = Math.max(0, playerInventory.balloon260  - currentRunStats.balloon260);
-  playerInventory.roundBalloon= Math.max(0, playerInventory.roundBalloon- currentRunStats.roundBalloon);
-  saveInventory();
+  // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
+  if (levelStartSnapshot) {
+    playerInventory.coins              = levelStartSnapshot.coins;
+    playerInventory.balloon260         = levelStartSnapshot.balloon260;
+    playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
+    playerInventory.craftedItems       = JSON.parse(JSON.stringify(levelStartSnapshot.craftedItems));
+    playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
+    playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
+    playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
+    player.hp                          = levelStartSnapshot.hp;
+    saveInventory();
+  } else {
+    // fallback：舊邏輯
+    playerInventory.coins        = Math.max(0, playerInventory.coins        - currentRunStats.coins);
+    playerInventory.balloon260   = Math.max(0, playerInventory.balloon260   - currentRunStats.balloon260);
+    playerInventory.roundBalloon = Math.max(0, playerInventory.roundBalloon - currentRunStats.roundBalloon);
+    saveInventory();
+  }
 
   gameState = 'failed';
   showFailedOverlay();
@@ -2083,7 +2111,7 @@ function drawWorld() {
     try {
       const dogX = player.x - cx - 30;
       const dogY = player.y + player.h * 0.5;
-      drawBalloonDog(dogX, dogY, dogNoseGlow || 0);
+      drawBalloonDog(dogX, dogY);
     } catch(e) {}
   }
 }
@@ -2275,48 +2303,59 @@ function drawHiddenTreasure(sx, t) {
   }
 }
 
-function drawBalloonDog(x, y, glow) {
-  // 簡化版氣球狗（幾何形狀 placeholder）
+// 鼻子顏色：4 段（dogNoseLevel 0-3）
+const DOG_NOSE_COLORS = ['#555555', '#ffe080', '#ffaa00', '#ff4400'];
+
+function drawBalloonDog(x, y) {
+  // 依全域 dogNoseLevel 決定鼻子顏色
+  const level     = dogNoseLevel || 0;
+  const noseColor = DOG_NOSE_COLORS[level];
+  const isFlash   = level === 3;
+  const flashVis  = !isFlash || (Math.floor(frameCount / 6) % 2 === 0); // 每 6 幀閃一次
+
   ctx.save();
   ctx.translate(x, y);
-  // 身體（橢圓）
+
+  // 身體
   ctx.fillStyle = '#f5c842';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI*2); ctx.fill();
+
   // 頭
-  ctx.beginPath();
-  ctx.arc(14, -6, 9, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(14, -6, 9, 0, Math.PI*2); ctx.fill();
+
   // 耳朵
   ctx.fillStyle = '#e8a800';
-  ctx.beginPath();
-  ctx.ellipse(10, -13, 4, 6, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(18, -13, 4, 6, 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  // 鼻子（依 glow 亮度）
-  const noseAlpha = 0.3 + glow * 0.7;
-  const noseR = 7 + glow * 5;
-  if (glow > 0.6) {
-    // 鼻子光暈
-    ctx.fillStyle = `rgba(255,80,60,${glow * 0.4})`;
-    ctx.beginPath();
-    ctx.arc(22, -5, noseR, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -13, 4, 6, -0.4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(18, -13, 4, 6,  0.4, 0, Math.PI*2); ctx.fill();
+
+  // 鼻子光暈（level >= 2 才有）
+  if (level >= 2 && flashVis) {
+    const haloR = 8 + (level - 2) * 6;
+    ctx.fillStyle = level === 3 ? 'rgba(255,80,0,0.45)' : 'rgba(255,200,0,0.3)';
+    ctx.beginPath(); ctx.arc(22, -5, haloR, 0, Math.PI*2); ctx.fill();
   }
-  ctx.fillStyle = `rgba(220,60,40,${noseAlpha})`;
-  ctx.beginPath();
-  ctx.arc(22, -5, 4, 0, Math.PI * 2);
-  ctx.fill();
+
+  // 鼻子本體（flashVis 控制閃爍）
+  if (flashVis) {
+    ctx.fillStyle = noseColor;
+    ctx.beginPath(); ctx.arc(22, -5, 4, 0, Math.PI*2); ctx.fill();
+  }
+
+  // 眼睛
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(20, -9, 2, 0, Math.PI*2); ctx.fill();
+
   // 尾巴
-  ctx.strokeStyle = '#f5c842';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-12, -2);
-  ctx.quadraticCurveTo(-22, -14, -16, -20);
-  ctx.stroke();
+  ctx.strokeStyle = '#f5c842'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-12, -2); ctx.quadraticCurveTo(-22, -14, -16, -20); ctx.stroke();
+
+  // 鼻子等級標示（debug，level > 0 時顯示）
+  if (level > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('L' + level, 22, 6);
+  }
+
   ctx.restore();
 }
 
@@ -2700,25 +2739,38 @@ function buildBagRows() {
 // ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
 // 使用明確 id="rp-inventory-section"，不猜 querySelectorAll index
 
-// ── refreshResultDog：製作狗後即時更新狗區塊 ──
+// ── refreshResultDog：製作狗後即時更新狗區塊（含帶狗出門提示）──
 function refreshResultDog() {
   const sec = document.getElementById('dog-section');
   if (!sec) return;
   const dog    = playerInventory.balloonDog || {};
   const hasDog = dog.present;
   const turns  = dog.turnsLeft || 0;
+  const nextLvIndex        = currentLevelIndex + 1;
+  const nextLvHasTreasure  = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
+  const canBringDog        = hasDog && (playerInventory.balloon260 || 0) >= 1;
+
+  let inner = '';
   if (hasDog) {
-    sec.innerHTML = `
-      <div class="rp-section-title">🐶 氣球小狗</div>
-      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>
-      <div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">${turns} 回合</span></div>
-    `;
+    inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
+    inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>';
+    inner += '<div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">' + turns + ' 回合</span></div>';
+    if (nextLvHasTreasure) {
+      inner += '<div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>';
+      const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
+      const btnDisStr = canBringDog ? '' : 'disabled';
+      const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
+      inner += '<div class="rp-supply-item" style="margin-top:6px">'
+        + '<div class="rp-supply-info"><span class="rp-supply-name">帶氣球小狗出發</span>'
+        + '<span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span></div>'
+        + '<button id="btn-bring-dog" class="rp-supply-btn ' + btnCls + '" ' + btnDisStr
+        + ' onclick="bringDogNextLevel()">' + btnLabel + '</button></div>';
+    }
   } else {
-    sec.innerHTML = `
-      <div class="rp-section-title">🐶 氣球小狗</div>
-      <div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>
-    `;
+    inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
+    inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>';
   }
+  sec.innerHTML = inner;
 }
 
 function refreshResultBag() {
@@ -3019,11 +3071,14 @@ function restart() {
   currentRunStats.unlockedHammerThisClear = false;
   currentRunStats.usedHeartPatch          = false;
   currentRunStats.foundHiddenTreasure     = false;
+  currentRunStats.pendingRecipeUnlocks     = {};
   currentRunStats.foundTreasureCoins      = 0;
+  if (currentHiddenTreasure) currentHiddenTreasure.found = false; // 重試時重置取得狀態
   currentRunStats.dogHealed               = false;
   currentRunStats.dogGoneThisClear        = false;
   // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
-  dogNoseGlow = 0;
+  dogNoseGlow  = 0;
+  dogNoseLevel = 0;
 
   // 儲存目前耐久到 inventory（下局可繼續）
   if (equippedSword.id) {
