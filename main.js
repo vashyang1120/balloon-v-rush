@@ -1680,13 +1680,17 @@ function checkHiddenTreasure() {
         pending: currentRunStats.pendingRecipeUnlocks });
     } else if (t.type === 'goldChest') {
       const coins = t.rewardCoins || 30;
-      // pendingCoins 模式：通關才正式加金幣（死亡時 rollback 不需處理，因為沒寫入 inventory）
-      currentRunStats.pendingCoins = (currentRunStats.pendingCoins || 0) + coins;
-      currentRunStats.foundTreasureCoins      = coins;
-      currentRunStats.foundHiddenTreasureName = '金幣寶箱';
+      // 金幣立即加入 inventory 和 runStats（死亡時 snapshot rollback 會復原）
+      playerInventory.coins                   += coins;
+      currentRunStats.coins                   += coins; // HUD 和本關成果同步
+      player.coinsCollected                   += coins; // HUD 金幣數字同步
+      currentRunStats.pendingCoins             = coins; // 通關時結算面板用
+      currentRunStats.foundTreasureCoins       = coins;
+      currentRunStats.foundHiddenTreasureName  = '金幣寶箱';
+      saveInventory();
+      console.log('gold chest applied:', {
+        runCoins: currentRunStats.coins, inventoryCoins: playerInventory.coins });
       showHint('找到隱藏寶箱！獲得 ' + coins + ' 金幣！', 320);
-      console.log('hidden treasure found:', { type: 'goldChest', coins, bringBalloonDog,
-        pendingCoins: currentRunStats.pendingCoins });
     }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
@@ -1832,6 +1836,7 @@ function resumeGame() {
 function triggerFailed() {
   // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
   if (levelStartSnapshot) {
+    // 還原背包
     playerInventory.coins              = levelStartSnapshot.coins;
     playerInventory.balloon260         = levelStartSnapshot.balloon260;
     playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
@@ -1839,14 +1844,32 @@ function triggerFailed() {
     playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
     playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
     playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
-    player.hp                          = levelStartSnapshot.hp;
+    playerInventory.equippedSwordDur   = levelStartSnapshot.equippedSwordDur;
+    playerInventory.equippedHammerDur  = levelStartSnapshot.equippedHammerDur;
+    // 還原裝備執行期狀態
+    if (levelStartSnapshot.equippedSwordId) {
+      equippedSword.id         = levelStartSnapshot.equippedSwordId;
+      equippedSword.currentDur = levelStartSnapshot.equippedSwordDur;
+      equippedSword.maxDur     = levelStartSnapshot.equippedSwordMax;
+    } else {
+      equippedSword.id = null; equippedSword.currentDur = 0; equippedSword.maxDur = 0;
+    }
+    if (levelStartSnapshot.equippedHammerId) {
+      equippedHammer.id         = levelStartSnapshot.equippedHammerId;
+      equippedHammer.currentDur = levelStartSnapshot.equippedHammerDur;
+      equippedHammer.maxDur     = levelStartSnapshot.equippedHammerMax;
+    } else {
+      equippedHammer.id = null; equippedHammer.currentDur = 0; equippedHammer.maxDur = 0;
+    }
+    activeSlot  = levelStartSnapshot.activeSlot || 'sword';
+    player.hp   = levelStartSnapshot.hp;
     saveInventory();
-  } else {
-    // fallback：舊邏輯
-    playerInventory.coins        = Math.max(0, playerInventory.coins        - currentRunStats.coins);
-    playerInventory.balloon260   = Math.max(0, playerInventory.balloon260   - currentRunStats.balloon260);
-    playerInventory.roundBalloon = Math.max(0, playerInventory.roundBalloon - currentRunStats.roundBalloon);
-    saveInventory();
+    console.log('restored from snapshot:', {
+      coins: playerInventory.coins,
+      hammer: playerInventory.craftedItems.basicHammer,
+      hammerDur: equippedHammer.currentDur,
+      swordDur:  equippedSword.currentDur,
+    });
   }
 
   console.log('discard hidden treasure rewards on failed');
@@ -1910,13 +1933,15 @@ function triggerClear() {
     for (const key of Object.keys(pending)) {
       playerInventory.unlockedRecipes[key] = true;
     }
-    if ((currentRunStats.pendingCoins || 0) > 0) {
-      playerInventory.coins += currentRunStats.pendingCoins;
-    }
+    // 注意：金幣已在找到寶箱時立即寫入 playerInventory
+    // pendingCoins 只是給結算畫面顯示用，不需再加
     console.log('apply hidden treasure rewards on clear:', {
       pendingCoins: currentRunStats.pendingCoins,
       pendingRecipeUnlocks: currentRunStats.pendingRecipeUnlocks,
     });
+    const unlockedLollipop = !!(currentRunStats.pendingRecipeUnlocks?.balloonLollipop);
+    console.log('lollipop recipe unlocked on clear:', unlockedLollipop,
+      'unlockedRecipes:', JSON.stringify(playerInventory.unlockedRecipes));
   }
 
   // 氣球狗結算：先回血，再扣回合（最後一回合仍回血）
@@ -3124,11 +3149,8 @@ function restart() {
   dogNoseGlow  = 0;
   dogNoseLevel = 0;
 
-  // 儲存目前耐久到 inventory（下局可繼續）
-  if (equippedSword.id) {
-    playerInventory.equippedSwordDur = equippedSword.currentDur;
-    saveInventory();
-  }
+  // 注意：耐久由 triggerClear 通關時才儲存，不在 restart 裡儲存
+  // （避免死亡後耐久被錯誤存入）
 
   // 重新初始化裝備
   initEquippedSword();
@@ -3139,6 +3161,32 @@ function restart() {
   cameraX    = 0;
   frameCount = 0;
   elapsedSec = 0;
+
+  // ── 建立進關前快照（在 gameState = 'playing' 前，關卡剛初始化完成時）──
+  levelStartSnapshot = {
+    coins:              playerInventory.coins,
+    balloon260:         playerInventory.balloon260,
+    roundBalloon:       playerInventory.roundBalloon,
+    craftedItems:       JSON.parse(JSON.stringify(playerInventory.craftedItems || {})),
+    unlockedRecipes:    JSON.parse(JSON.stringify(playerInventory.unlockedRecipes || {})),
+    uniqueCollectibles: JSON.parse(JSON.stringify(playerInventory.uniqueCollectibles || {})),
+    balloonDog:         JSON.parse(JSON.stringify(playerInventory.balloonDog || {})),
+    equippedSwordId:    equippedSword.id,
+    equippedSwordDur:   equippedSword.currentDur,
+    equippedSwordMax:   equippedSword.maxDur,
+    equippedHammerId:   equippedHammer.id,
+    equippedHammerDur:  equippedHammer.currentDur,
+    equippedHammerMax:  equippedHammer.maxDur,
+    activeSlot:         activeSlot,
+    hp:                 player.hp,
+  };
+  console.log('levelStartSnapshot created:', {
+    coins: levelStartSnapshot.coins,
+    hammer: levelStartSnapshot.craftedItems.basicHammer,
+    hammerDur: levelStartSnapshot.equippedHammerDur,
+    swordDur:  levelStartSnapshot.equippedSwordDur,
+  });
+
   gameState  = 'playing';
 
   coins.forEach(c => { c.collected = false; });
