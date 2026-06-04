@@ -1344,6 +1344,8 @@ function createLevelStartSnapshot() {
     activeSlot:         activeSlot,
     // 玩家生命
     hp:                 player.hp,
+    // 帶狗狀態（死亡重試時還原）
+    bringBalloonDog:    bringBalloonDog,
   };
   console.log('createLevelStartSnapshot:', {
     coins: levelStartSnapshot.coins,
@@ -1378,8 +1380,9 @@ function restoreLevelStartSnapshot() {
   } else {
     equippedHammer.id = null; equippedHammer.currentDur = 0; equippedHammer.maxDur = 0;
   }
-  activeSlot  = levelStartSnapshot.activeSlot || 'sword';
-  player.hp   = levelStartSnapshot.hp;
+  activeSlot      = levelStartSnapshot.activeSlot || 'sword';
+  player.hp       = levelStartSnapshot.hp;
+  bringBalloonDog = (levelStartSnapshot.bringBalloonDog === true);
   saveInventory();
   console.log('restoreLevelStartSnapshot:', {
     coins: playerInventory.coins,
@@ -3679,15 +3682,21 @@ function renderHomeDog() {
     turnsHtml += '<div class="dog-turn-dot' + (i < turns ? ' dog-turn-dot--filled' : '') + '"></div>';
   }
 
-  let bringHtml = '';
-  if (nextHasTreasure) {
-    const btnText = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
-    bringHtml =
-      '<div class="home-dog-hint">🐶 氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！</div>'
-      + '<button id="btn-home-bring-dog" class="home-btn '
+  // 帶狗提示（不論下一關是否有隱藏物，只要有狗就可帶）
+  const dogHint = nextHasTreasure
+    ? '🐶 氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
+    : '🐶 氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
+
+  let bringBtnHtml = '';
+  if (turns > 0) {
+    const btnText = canBringDog ? '帶狗出發 -1 🎈' : '260 氣球不足';
+    bringBtnHtml =
+      '<button id="btn-home-bring-dog" class="home-btn '
       + (canBringDog ? 'home-btn--purple' : 'home-btn--dim') + '" '
       + (canBringDog ? '' : 'disabled') + ' onclick="homeBringDog()">'
       + btnText + '</button>';
+  } else {
+    bringBtnHtml = '<div style="font-size:11px;color:#ff8888;margin-top:6px">氣球小狗已消氣，無法帶出門</div>';
   }
 
   el.innerHTML =
@@ -3700,7 +3709,8 @@ function renderHomeDog() {
     + '</div>'
     + '<div class="home-dog-card__hint">每次通關恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
     + '</div>'
-    + bringHtml;
+    + '<div class="home-dog-hint">' + dogHint + '</div>'
+    + bringBtnHtml;
 }
 
 function homeBringDog() {
@@ -3788,15 +3798,15 @@ function homeGoNextLevel() {
   try {
     // 失敗模式：只能重試本關，不能前往下一關
     if (homeEntryMode === 'failed') {
-      nextBringDog    = false;
-      bringBalloonDog = false;
+      // 使用 snapshot 還原（包含 bringBalloonDog、HP、耐久）
+      restoreLevelStartSnapshot();
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
       loadLevel(currentLevelIndex);
-      restart();
+      restart({ keepHp: true }); // HP 已由 snapshot 還原，keepHp 保持
       return;
     }
-    // 通關模式：正常前往下一關
+    // 通關模式：正常前往下一關，保留 HP
     const nextIdx = currentLevelIndex + 1;
     if (nextIdx >= LEVELS.length) {
       nextBringDog    = false;
@@ -3804,7 +3814,7 @@ function homeGoNextLevel() {
       loadLevel(currentLevelIndex);
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-      restart();
+      restart({ keepHp: true });
       return;
     }
     bringBalloonDog = (nextBringDog === true);
@@ -3812,7 +3822,7 @@ function homeGoNextLevel() {
     closeHomeScreen();
     if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
     loadLevel(nextIdx);
-    restart();
+    restart({ keepHp: true });
   } catch(err) {
     if (typeof showDebugError === 'function')
       showDebugError('HOME NEXT LEVEL', err.message, '', '', '', err.stack);
@@ -3841,7 +3851,8 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 }
 
 // ── Restart ───────────────────────────────────
-function restart() {
+function restart(opts) {
+  const keepHp = opts && opts.keepHp;
   hideResultButtons();
   // 確保所有 overlay 關掉
   const pauseEl  = document.getElementById('pause-overlay');
@@ -3854,7 +3865,7 @@ function restart() {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
     vx: 0, vy: 0,
     onGround: false, facingRight: true,
-    hp: player.maxHp, invincible: 0,  // 使用 maxHp（支援自訂）
+    hp: keepHp ? player.hp : player.maxHp, invincible: 0,
     attackCooldown: 0, attackActive: 0,
     meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
@@ -3990,7 +4001,7 @@ function hideResultButtons() {
               loadLevel(nextIdx);
               console.log('AFTER loadLevel, hiddenTreasure:', currentHiddenTreasure);
               console.log('BEFORE restart, bringBalloonDog:', bringBalloonDog);
-              restart();
+              restart({ keepHp: true }); // 跨關保留 HP
               console.log('AFTER restart');
             } else {
               nextBringDog    = false;
