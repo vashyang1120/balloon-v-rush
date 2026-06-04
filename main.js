@@ -42,6 +42,11 @@ window.addEventListener('unhandledrejection', function(e) {
 //  Phase 1 — 正式版資料結構整理
 // =============================================
 
+// ── 版本資訊 ──────────────────────────────────
+const GAME_VERSION = 'adventure-v0.2.0-player-profile';
+const BUILD_TIME   = '2026-06-04 19:00';
+// 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
+
 // ── Canvas setup ──────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -2282,6 +2287,7 @@ function draw() {
     drawWorld();
     drawHUD();
     drawHintBox();
+    drawVersionInfo();
   } else if (gameState === 'paused') {
     drawWorld();
     drawHUD();
@@ -3040,6 +3046,16 @@ function drawOverlay(text, color) {
 }
 
 // drawResultBox：Canvas 只畫模糊遮罩，所有內容由 HTML overlay 負責
+
+function drawVersionInfo() {
+  ctx.fillStyle  = 'rgba(255,255,255,0.18)';
+  ctx.font       = '9px monospace';
+  ctx.textAlign  = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(GAME_VERSION, CANVAS_W - 4, CANVAS_H - 2);
+  ctx.textBaseline = 'alphabetic';
+}
+
 function drawResultBox() {
   // 僅加深背景，讓 HTML 面板更清楚
   ctx.fillStyle = 'rgba(10,10,30,0.6)';
