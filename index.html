@@ -38,63 +38,97 @@
       </div>
 
       <!-- 主要內容（可捲動） -->
+      <!-- ── 卡片網格（主入口）── -->
+      <div id="home-card-grid">
+
+        <!-- 卡 1：下一關準備（預設展開，最重要） -->
+        <div class="hcard hcard--open" id="hcard-next" data-target="home-next-stage-section">
+          <div class="hcard-icon">🗺️</div>
+          <div class="hcard-title">下一關</div>
+        </div>
+
+        <!-- 卡 2：背包 -->
+        <div class="hcard" id="hcard-inv" data-target="home-inventory-section">
+          <div class="hcard-icon">🎒</div>
+          <div class="hcard-title">背包</div>
+        </div>
+
+        <!-- 卡 3：氣球秘笈 -->
+        <div class="hcard" id="hcard-guide" data-target="home-guidebook-section">
+          <div class="hcard-icon">📖</div>
+          <div class="hcard-title">氣球秘笈</div>
+        </div>
+
+        <!-- 卡 4：氣球小狗 -->
+        <div class="hcard" id="hcard-dog" data-target="home-dog-section">
+          <div class="hcard-icon">🐶</div>
+          <div class="hcard-title">氣球小狗</div>
+        </div>
+
+        <!-- 卡 5：補給 -->
+        <div class="hcard" id="hcard-supply" data-target="home-supply-section">
+          <div class="hcard-icon">🏥</div>
+          <div class="hcard-title">補給</div>
+        </div>
+
+        <!-- 卡 6：本次冒險 -->
+        <div class="hcard" id="hcard-challenge" data-target="home-challenge-section">
+          <div class="hcard-icon">🏆</div>
+          <div class="hcard-title">本次冒險</div>
+        </div>
+
+      </div><!-- /#home-card-grid -->
+
       <div id="home-body">
 
-        <!-- 1. 目前背包 -->
-        <section class="home-section" id="home-inventory-section">
-          <div class="home-section-title">🎒 目前背包</div>
-          <div id="home-inventory-body"><!-- renderHomeInventory() 填入 --></div>
-        </section>
-
-        <!-- 2. 氣球秘笈入口 -->
-        <section class="home-section" id="home-guidebook-section">
-          <div class="home-section-title">📖 氣球秘笈</div>
-          <div class="home-section-desc">查看已解鎖的氣球造型，並製作道具。</div>
-          <button id="btn-home-open-guidebook" class="home-btn home-btn--blue">
-            打開氣球秘笈
-          </button>
-        </section>
-
-        <!-- 3. 補給與生命 -->
-        <section class="home-section" id="home-supply-section">
-          <div class="home-section-title">🏥 補給</div>
-          <div id="home-supply-body"><!-- renderHomeSupply() 填入 --></div>
-        </section>
-
-        <!-- 4. 氣球小狗 -->
-        <section class="home-section" id="home-dog-section">
-          <div class="home-section-title">🐶 氣球小狗</div>
-          <div id="home-dog-body"><!-- renderHomeDog() 填入 --></div>
-        </section>
-
-        <!-- 5. 下一關準備 -->
-        <section class="home-section" id="home-next-stage-section">
+        <!-- 1. 下一關準備（預設展開） -->
+        <section class="home-section home-section--open" id="home-next-stage-section">
           <div class="home-section-title">🗺️ 下一關準備</div>
-          <div id="home-next-stage-body"><!-- renderHomeNextStage() 填入 --></div>
+          <div id="home-next-stage-body"></div>
           <button id="btn-home-next-level" class="home-btn home-btn--green" style="margin-top:10px">
             🚀 開始下一關
           </button>
         </section>
 
-        <!-- 6. 本次挑戰 -->
-        <section class="home-section" id="home-challenge-section">
-          <div class="home-section-title">🏆 本次挑戰</div>
-          <div id="home-challenge-body"><!-- renderHomeChallenge() 填入 --></div>
+        <!-- 2. 背包（圖示 + 數量，預設收合） -->
+        <section class="home-section" id="home-inventory-section" style="display:none">
+          <div class="home-section-title">🎒 目前背包</div>
+          <div id="home-inventory-body"></div>
+        </section>
+
+        <!-- 3. 氣球秘笈入口（預設收合） -->
+        <section class="home-section" id="home-guidebook-section" style="display:none">
+          <div class="home-section-title">📖 氣球秘笈</div>
+          <div class="home-section-desc">查看已解鎖的造型，材料夠就可以製作！</div>
+          <button id="btn-home-open-guidebook" class="home-btn home-btn--blue">
+            打開氣球秘笈
+          </button>
+        </section>
+
+        <!-- 4. 氣球小狗（預設收合） -->
+        <section class="home-section" id="home-dog-section" style="display:none">
+          <div class="home-section-title">🐶 氣球小狗</div>
+          <div id="home-dog-body"></div>
+        </section>
+
+        <!-- 5. 補給（預設收合） -->
+        <section class="home-section" id="home-supply-section" style="display:none">
+          <div class="home-section-title">🏥 補給</div>
+          <div id="home-supply-body"></div>
+        </section>
+
+        <!-- 6. 本次冒險（預設收合） -->
+        <section class="home-section" id="home-challenge-section" style="display:none">
+          <div class="home-section-title">🏆 本次冒險</div>
+          <div id="home-challenge-body"></div>
           <button id="btn-home-challenge-summary" class="home-btn home-btn--dim" style="margin-top:8px">
             結算本次成績
           </button>
         </section>
 
-        <!-- 8. 玩家身份（Phase A）-->
-        <section class="home-section" id="home-player-section">
-          <div class="home-section-title">🪪 玩家身份</div>
-          <div id="home-player-body"><!-- renderHomePlayer() 填入 --></div>
-        </section>
-
-        <!-- 7. 小V的作品牆 -->
-        <section class="home-section" id="home-works-section">
+        <!-- 7. 小V的作品牆（預設收合） -->
+        <section class="home-section" id="home-works-section" style="display:none">
           <div class="home-section-title">🎈 小V的作品牆</div>
-          <div class="home-section-desc">想看看現實中的氣球小V做過哪些作品嗎？</div>
           <div id="home-works-links">
             <button class="home-link-btn" data-link="instagramWorks">🎈 看小V的氣球作品</button>
             <button class="home-link-btn" data-link="youtubePerformance">🎩 看小V的表演紀錄</button>
@@ -103,12 +137,18 @@
           </div>
         </section>
 
-      <!-- 版本號 -->
-      <div id="home-version" style="text-align:center;padding:8px 0 4px;color:rgba(255,255,255,0.65);font-size:11px;font-family:monospace;flex-shrink:0">
-        adventure-v0.2.0-player-profile · 2026-06-04
-      </div>
+        <!-- 8. 玩家資訊（預設收合） -->
+        <section class="home-section" id="home-player-section" style="display:none">
+          <div class="home-section-title">🪪 玩家資訊</div>
+          <div id="home-player-body"></div>
+        </section>
 
       </div><!-- /#home-body -->
+
+      <!-- 版本號（底部小字） -->
+      <div id="home-version">
+        adventure-v0.2.0-player-profile · 2026-06-04
+      </div>
 
     </div><!-- /#home-panel -->
   </div><!-- /#home-screen -->
