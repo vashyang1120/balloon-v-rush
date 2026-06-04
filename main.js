@@ -1393,7 +1393,8 @@ function clearLevelStartSnapshot() {
 }
 
 
-var bringBalloonDog  = false; // 本關是否帶狗出門（loadLevel 後才設定）
+var bringBalloonDog  = false;
+var homeEntryMode    = 'normal'; // 'clear' | 'failed' | 'normal' // 本關是否帶狗出門（loadLevel 後才設定）
 var nextBringDog     = false; // 下一關是否帶狗（帶狗按鈕設定，進下一關時轉移）
 var dogNoseGlow      = 0;     // 0～1（保留）
 var dogNoseLevel     = 0;     // 0-3：0=暗, 1=微亮, 2=亮, 3=閃爍
@@ -3426,15 +3427,20 @@ function renderHomePlayer() {
   const el = document.getElementById('home-player-body');
   if (!el) return;
   const p = playerProfile || createDefaultPlayerProfile();
+  const row = (k, v, style) =>
+    '<div class="home-row"><span class="home-row-label" style="min-width:180px">' + k + '</span>'
+    + '<span class="home-row-val' + (style ? '" style="' + style : '') + '">' + v + '</span></div>';
   el.innerHTML =
-    '<div class="home-row"><span class="home-row-label">玩家</span><span class="home-row-val result-gold">' + (p.name || p.id) + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">身份頭像</span><span class="home-row-val">' + p.baseAvatarKey + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">顯示頭像</span><span class="home-row-val">' + p.displayAvatarKey + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label" style="font-size:10px">playerKey</span>'
-    + '<span class="home-row-val" style="font-size:10px;color:#888;word-break:break-all">' + p.playerKey + '</span></div>';
+    row('id', p.id, 'color:#ffd080')
+    + row('name', p.name, 'color:#ffd080')
+    + row('baseAvatarKey', p.baseAvatarKey)
+    + row('displayAvatarKey', p.displayAvatarKey)
+    + row('avatarKey', p.avatarKey, 'color:#aaa')
+    + row('playerKey', p.playerKey, 'font-size:10px;color:#888;word-break:break-all');
 }
 
-function openHomeScreen() {
+function openHomeScreen(from) {
+  homeEntryMode = from || 'normal';
   // 同步隱藏其他 overlay
   const resultEl  = document.getElementById('result-overlay');
   const failedEl  = document.getElementById('failed-overlay');
@@ -3546,24 +3552,42 @@ function homeBringDog() {
 
 // ── 下一關資訊 ──────────────────────────────
 function renderHomeNextStage() {
-  const el = document.getElementById('home-next-stage-body');
-  if (!el) return;
-  const nextIdx = currentLevelIndex + 1;
+  const el  = document.getElementById('home-next-stage-body');
   const btn = document.getElementById('btn-home-next-level');
+  if (!el) return;
 
+  // 失敗模式：本關尚未完成，只能重試
+  if (homeEntryMode === 'failed') {
+    const lv = LEVELS[currentLevelIndex];
+    el.innerHTML =
+      '<div class="home-row"><span class="home-row-label">目前關卡</span>'
+      + '<span class="home-row-val result-red">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</span></div>'
+      + '<div class="home-dog-hint" style="color:#ffaaaa">本關尚未完成，請先重試本關。</div>';
+    if (btn) {
+      btn.textContent = '↺ 重試本關';
+      btn.className   = btn.className.replace('home-btn--green', 'home-btn--red');
+    }
+    return;
+  }
+
+  // 通關模式：可前往下一關
+  const nextIdx = currentLevelIndex + 1;
   if (nextIdx >= LEVELS.length) {
     el.innerHTML = '<div class="home-empty">已抵達最後一關！可以重玩或結算本次成績。</div>';
-    if (btn) { btn.textContent = '再玩一次'; }
+    if (btn) { btn.textContent = '再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
     return;
   }
   const lv = LEVELS[nextIdx];
   let html = '<div class="home-row"><span class="home-row-label">下一關</span>'
     + '<span class="home-row-val result-gold">' + (lv.stageId || '') + ' ' + (lv.shortName || lv.name) + '</span></div>';
-  if (lv.hiddenTreasure && (playerInventory.balloonDog?.present)) {
+  if (lv.hiddenTreasure && playerInventory.balloonDog?.present) {
     html += '<div class="home-dog-hint" style="color:#ffe080">這一關似乎藏著神秘寶物……</div>';
   }
   el.innerHTML = html;
-  if (btn) btn.textContent = '🚀 開始下一關';
+  if (btn) {
+    btn.textContent = '🚀 開始下一關';
+    btn.className   = btn.className.replace('home-btn--red', 'home-btn--green');
+  }
 }
 
 // ── 本次挑戰 ────────────────────────────────
@@ -3584,9 +3608,19 @@ function renderHomeChallenge() {
 // ── 從小V的家進入下一關 ──────────────────────
 function homeGoNextLevel() {
   try {
+    // 失敗模式：只能重試本關，不能前往下一關
+    if (homeEntryMode === 'failed') {
+      nextBringDog    = false;
+      bringBalloonDog = false;
+      closeHomeScreen();
+      if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+      loadLevel(currentLevelIndex);
+      restart();
+      return;
+    }
+    // 通關模式：正常前往下一關
     const nextIdx = currentLevelIndex + 1;
     if (nextIdx >= LEVELS.length) {
-      // 最後一關：重玩目前關
       nextBringDog    = false;
       bringBalloonDog = false;
       loadLevel(currentLevelIndex);

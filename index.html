@@ -302,7 +302,7 @@
     ['click','touchstart'].forEach(ev =>
       btnGoHomeFailed.addEventListener(ev, e => {
         e.preventDefault();
-        openHomeScreen();
+        openHomeScreen('failed');
       })
     );
   }
@@ -313,7 +313,7 @@
     ['click','touchstart'].forEach(ev =>
       btnGoHome.addEventListener(ev, e => {
         e.preventDefault();
-        openHomeScreen();
+        openHomeScreen('clear');
       })
     );
   }
