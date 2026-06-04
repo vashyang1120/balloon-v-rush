@@ -189,6 +189,111 @@ const LINKS = {
   officialSite:        '',  // 例：'https://balloonv.com'
 };
 
+
+// =============================================
+//  玩家身份系統（Phase A）
+//  playerProfile   — 玩家身份資料
+//  playerKey       = encodeURIComponent(id) + "__" + baseAvatarKey
+//  baseAvatarKey   — 用於產生 playerKey，不可隨意變更
+//  displayAvatarKey — 顯示用，可更換，不影響 playerKey
+//  avatarKey       — 舊 UI 相容，值等於 displayAvatarKey
+//
+//  localStorage key: 'balloonVAdventurePlayerProfile'
+//  （與 balloonV_inventory 完全分離，清除背包不清身份）
+// =============================================
+
+const PLAYER_PROFILE_STORAGE_KEY = 'balloonVAdventurePlayerProfile';
+
+const PLAYER_PROFILE_DEFAULTS = {
+  id:               'Player',
+  name:             'Player',
+  baseAvatarKey:    'boy1',    // 身份頭像：用於產生 playerKey，不可輕易改變
+  displayAvatarKey: 'boy1',    // 顯示頭像：可更換，不影響 playerKey
+  avatarKey:        'boy1',    // 相容舊 UI，等於 displayAvatarKey
+  playerKey:        '',        // encodeURIComponent(id) + "__" + baseAvatarKey
+};
+
+let playerProfile = null; // 由 loadPlayerProfile() 初始化
+
+// ── buildPlayerKey ───────────────────────────
+function buildPlayerKey(id, baseAvatarKey) {
+  return encodeURIComponent(id || 'Player') + '__' + (baseAvatarKey || 'boy1');
+}
+
+// ── createDefaultPlayerProfile ───────────────
+function createDefaultPlayerProfile() {
+  const prof = Object.assign({}, PLAYER_PROFILE_DEFAULTS);
+  prof.playerKey = buildPlayerKey(prof.id, prof.baseAvatarKey);
+  return prof;
+}
+
+// ── normalizePlayerProfile ───────────────────
+// 舊資料缺欄位時自動補齊，不可 crash
+function normalizePlayerProfile(raw) {
+  if (!raw || typeof raw !== 'object') return createDefaultPlayerProfile();
+  const prof = Object.assign({}, PLAYER_PROFILE_DEFAULTS, raw);
+  // 確保 avatarKey 等於 displayAvatarKey
+  prof.avatarKey    = prof.displayAvatarKey || prof.baseAvatarKey || 'boy1';
+  // 確保 playerKey 正確（以 baseAvatarKey 為基礎）
+  prof.playerKey    = buildPlayerKey(prof.id, prof.baseAvatarKey);
+  return prof;
+}
+
+// ── loadPlayerProfile ────────────────────────
+function loadPlayerProfile() {
+  try {
+    const raw = localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return normalizePlayerProfile(parsed);
+    }
+  } catch(e) {
+    console.warn('loadPlayerProfile failed, using default:', e.message);
+  }
+  return createDefaultPlayerProfile();
+}
+
+// ── savePlayerProfile ────────────────────────
+function savePlayerProfile() {
+  try {
+    if (!playerProfile) return;
+    localStorage.setItem(PLAYER_PROFILE_STORAGE_KEY, JSON.stringify(playerProfile));
+  } catch(e) {
+    console.warn('savePlayerProfile failed:', e.message);
+  }
+}
+
+// ── getPlayerIdentityForResult ───────────────
+// 未來給 gameLogs / leaderboard 使用
+function getPlayerIdentityForResult() {
+  const p = playerProfile || createDefaultPlayerProfile();
+  return {
+    id:               p.id,
+    name:             p.name,
+    playerKey:        p.playerKey,
+    baseAvatarKey:    p.baseAvatarKey,
+    displayAvatarKey: p.displayAvatarKey,
+    avatarKey:        p.avatarKey,
+  };
+}
+
+// ── setDisplayAvatarForTest ──────────────────
+// 開發用：更換顯示頭像，不影響 playerKey
+function setDisplayAvatarForTest(newDisplayAvatarKey) {
+  if (!playerProfile) playerProfile = loadPlayerProfile();
+  playerProfile.displayAvatarKey = newDisplayAvatarKey;
+  playerProfile.avatarKey        = newDisplayAvatarKey;
+  // baseAvatarKey 和 playerKey 不變
+  savePlayerProfile();
+  console.log('setDisplayAvatarForTest:', {
+    displayAvatarKey: playerProfile.displayAvatarKey,
+    baseAvatarKey:    playerProfile.baseAvatarKey,
+    playerKey:        playerProfile.playerKey,
+  });
+  // 若小V的家已開啟，刷新玩家區塊
+  if (typeof renderHomePlayer === 'function') renderHomePlayer();
+}
+
 // ── Input state ───────────────────────────────
 const keys = {};
 const mobileBtn = { left: false, right: false, jump: false, attack: false };
@@ -3292,6 +3397,18 @@ function bringDogNextLevel() {
 //  homeGoNextLevel()  — 從小V的家進入下一關
 // =============================================
 
+function renderHomePlayer() {
+  const el = document.getElementById('home-player-body');
+  if (!el) return;
+  const p = playerProfile || createDefaultPlayerProfile();
+  el.innerHTML =
+    '<div class="home-row"><span class="home-row-label">玩家</span><span class="home-row-val result-gold">' + (p.name || p.id) + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">身份頭像</span><span class="home-row-val">' + p.baseAvatarKey + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label">顯示頭像</span><span class="home-row-val">' + p.displayAvatarKey + '</span></div>'
+    + '<div class="home-row"><span class="home-row-label" style="font-size:10px">playerKey</span>'
+    + '<span class="home-row-val" style="font-size:10px;color:#888;word-break:break-all">' + p.playerKey + '</span></div>';
+}
+
 function openHomeScreen() {
   // 同步隱藏其他 overlay
   const resultEl  = document.getElementById('result-overlay');
@@ -3305,6 +3422,7 @@ function openHomeScreen() {
   renderHomeDog();
   renderHomeNextStage();
   renderHomeChallenge();
+  renderHomePlayer();
 
   document.getElementById('home-screen').style.display = 'flex';
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -3833,6 +3951,7 @@ function loop(timestamp) {
 }
 
 // ── 初始化並啟動 ────────────────────────────
+playerProfile = loadPlayerProfile(); // 初始化玩家身份
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
