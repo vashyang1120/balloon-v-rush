@@ -1088,3 +1088,23 @@ html, body {
   .hcard-title     { font-size: 9px; }
   .rp-tiles        { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ── home-next-stage-fixed（固定顯示，不參與卡片收合）── */
+#home-next-stage-fixed {
+  flex-shrink: 0;
+  padding: 0 16px;
+  margin-bottom: 4px;
+}
+#home-next-stage-fixed .home-section {
+  margin-bottom: 0;
+}
+
+/* ── 5 張卡片（移除第 6 張後保持 3 列）── */
+#home-card-grid {
+  grid-template-columns: repeat(5, 1fr); /* 5 張卡片一排 */
+}
+@media (max-width: 420px) {
+  #home-card-grid { grid-template-columns: repeat(3, 1fr); }
+  #home-card-grid .hcard:nth-child(4),
+  #home-card-grid .hcard:nth-child(5) { /* 第 4/5 張自動換行 */ }
+}

@@ -3453,23 +3453,25 @@ function bringDogNextLevel() {
 // ── 小V的家卡片展開/收合 ────────────────────
 function initHomeCards() {
   document.querySelectorAll('.hcard').forEach(card => {
-    if (card.dataset.bound) return; // 避免重複綁定
+    if (card.dataset.bound) return;
     card.dataset.bound = '1';
     card.addEventListener('click', () => {
       const targetId = card.dataset.target;
       const section  = document.getElementById(targetId);
       if (!section) return;
-      const isOpen = section.style.display !== 'none';
-      // 收合所有 section
+      // 收合其他 section（不含 home-next-stage-section，它是固定的）
       document.querySelectorAll('#home-body .home-section').forEach(s => {
         s.style.display = 'none';
       });
       document.querySelectorAll('.hcard').forEach(c => c.classList.remove('hcard--open'));
-      // 若點的是已開啟的，就保持收合；否則展開
-      if (!isOpen) {
-        section.style.display = 'block';
-        card.classList.add('hcard--open');
-      }
+      // 永遠展開被點擊的那張（再點同一張也保持展開，不會消失）
+      section.style.display = 'block';
+      card.classList.add('hcard--open');
+      // 展開後刷新對應內容
+      if (targetId === 'home-inventory-section') renderHomeInventory();
+      else if (targetId === 'home-dog-section')   renderHomeDog();
+      else if (targetId === 'home-supply-section') renderHomeSupply();
+      else if (targetId === 'home-challenge-section') renderHomeChallenge();
     });
   });
 }
@@ -3520,11 +3522,12 @@ function openHomeScreen(from) {
   renderHomeChallenge();
   renderHomePlayer();
   initHomeCards();
-  // 預設展開「下一關準備」卡片
-  const nextCard = document.getElementById('hcard-next');
-  const nextSec  = document.getElementById('home-next-stage-section');
-  if (nextCard) nextCard.classList.add('hcard--open');
-  if (nextSec)  nextSec.style.display = 'block';
+  // home-next-stage-section 現在是固定顯示，不需要 JS show/hide
+  // 確保所有其他 section 預設收合（首次進入時）
+  document.querySelectorAll('#home-body .home-section').forEach(s => {
+    s.style.display = 'none';
+  });
+  document.querySelectorAll('.hcard').forEach(c => c.classList.remove('hcard--open'));
 
   document.getElementById('home-screen').style.display = 'flex';
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -4092,7 +4095,12 @@ function renderGuidebook() {
             showCraftMessage(`成功製作 ${recipe.name}！`);
             renderGuidebook();
             refreshResultBag();
-            if (recipe.id === 'balloonDog') refreshResultDog(); // 狗區塊即時更新
+            if (recipe.id === 'balloonDog') refreshResultDog();
+            // 若小V的家已開啟，同步刷新背包 / 狗 / 補給
+            if (document.getElementById('home-screen')?.style.display !== 'none') {
+              renderHomeInventory();
+              if (recipe.id === 'balloonDog') renderHomeDog();
+            }
           }
         })
       );

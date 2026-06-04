@@ -45,16 +45,19 @@
       </div>
 
       <!-- 主要內容（可捲動） -->
-      <!-- ── 卡片網格（主入口）── -->
+      <!-- ── 下一關準備（固定，不參與卡片收合）── -->
+      <div id="home-next-stage-fixed">
+        <div id="home-next-stage-section" class="home-section">
+          <div class="home-section-title">🗺️ 下一關準備</div>
+          <div id="home-next-stage-body"></div>
+          <button id="btn-home-next-level" class="home-btn home-btn--green" style="margin-top:10px">🚀 開始下一關</button>
+        </div>
+      </div>
+
+      <!-- ── 卡片網格（主入口，5 張）── -->
       <div id="home-card-grid">
 
-        <!-- 卡 1：下一關準備（預設展開，最重要） -->
-        <div class="hcard hcard--open" id="hcard-next" data-target="home-next-stage-section">
-          <div class="hcard-icon">🗺️</div>
-          <div class="hcard-title">下一關</div>
-        </div>
-
-        <!-- 卡 2：背包 -->
+        <!-- 背包 -->
         <div class="hcard" id="hcard-inv" data-target="home-inventory-section">
           <div class="hcard-icon">🎒</div>
           <div class="hcard-title">背包</div>
@@ -88,16 +91,7 @@
 
       <div id="home-body">
 
-        <!-- 1. 下一關準備（預設展開） -->
-        <section class="home-section" id="home-next-stage-section">
-          <div class="home-section-title">🗺️ 下一關準備</div>
-          <div id="home-next-stage-body"></div>
-          <button id="btn-home-next-level" class="home-btn home-btn--green" style="margin-top:10px">
-            🚀 開始下一關
-          </button>
-        </section>
-
-        <!-- 2. 背包（圖示 + 數量，預設收合） -->
+        <!-- 背包（圖示 + 數量，預設收合） -->
         <section class="home-section" id="home-inventory-section" style="display:none">
           <div class="home-section-title">🎒 目前背包</div>
           <div id="home-inventory-body"></div>
@@ -107,9 +101,7 @@
         <section class="home-section" id="home-guidebook-section" style="display:none">
           <div class="home-section-title">📖 氣球秘笈</div>
           <div class="home-section-desc">查看已解鎖的造型，材料夠就可以製作！</div>
-          <button id="btn-home-open-guidebook" class="home-btn home-btn--blue">
-            打開氣球秘笈
-          </button>
+          <button id="btn-home-open-guidebook" class="home-btn home-btn--blue" onclick="openGuidebook()">📖 打開氣球秘笈</button>
         </section>
 
         <!-- 4. 氣球小狗（預設收合） -->
@@ -128,9 +120,7 @@
         <section class="home-section" id="home-challenge-section" style="display:none">
           <div class="home-section-title">🏆 本次冒險</div>
           <div id="home-challenge-body"></div>
-          <button id="btn-home-challenge-summary" class="home-btn home-btn--dim" style="margin-top:8px">
-            結算本次成績
-          </button>
+          <!-- 結算成績按鈕：功能尚未開放，暫時隱藏 -->
         </section>
 
         <!-- 7. 小V的作品牆（預設收合） -->
@@ -221,7 +211,7 @@
     </div>
 
     <!-- 氣球秘笈 overlay -->
-    <div id="guidebook-overlay">
+    <div id="guidebook-overlay" style="z-index:13000">
       <div id="guidebook-panel">
         <div id="guidebook-header">
           <span id="guidebook-title">📖 氣球秘笈</span>
