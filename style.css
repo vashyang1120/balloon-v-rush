@@ -945,3 +945,146 @@ html, body {
   .home-section-title { font-size: 12px; margin-bottom: 6px; }
   .home-btn         { font-size: 12px; padding: 8px 12px; }
 }
+
+/* =============================================
+   Phase 2B-1：小V的家卡片網格 + 精簡結算
+   ============================================= */
+
+/* ── 卡片網格（主入口） ── */
+#home-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px 16px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.hcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 6px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.hcard:hover  { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.22); }
+.hcard:active { transform: scale(0.95); }
+.hcard--open  {
+  background: rgba(100,180,255,0.13);
+  border-color: rgba(100,180,255,0.55);
+  box-shadow: 0 0 10px rgba(100,180,255,0.2);
+}
+
+.hcard-icon  { font-size: 26px; line-height: 1; }
+.hcard-title { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.75); text-align: center; }
+
+/* ── 背包圖示磚格 ── */
+.home-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.home-inv-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 8px 4px;
+}
+.home-inv-emoji { font-size: 22px; line-height: 1; }
+.home-inv-count { font-size: 16px; font-weight: 800; }
+.home-inv-label { font-size: 9px; color: #888; }
+
+/* ── 氣球小狗卡片 ── */
+.home-dog-card {
+  background: rgba(255,220,100,0.07);
+  border: 1px solid rgba(255,220,100,0.2);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.home-dog-card--empty { opacity: 0.6; }
+.home-dog-card__icon   { font-size: 36px; margin-bottom: 6px; }
+.home-dog-card__status { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.home-dog-card__turns  { display: flex; justify-content: center; gap: 6px; margin-bottom: 6px; }
+.home-dog-card__hint   { font-size: 11px; color: rgba(255,255,255,0.45); }
+
+.dog-turn-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: 1.5px solid rgba(255,255,255,0.2);
+}
+.dog-turn-dot--filled {
+  background: #ffd080;
+  border-color: #ffaa00;
+  box-shadow: 0 0 5px rgba(255,200,0,0.5);
+}
+
+/* ── 結算：圖示磚 ── */
+.rp-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.rp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 8px 4px;
+}
+.rp-tile-emoji { font-size: 18px; line-height: 1; }
+.rp-tile-val   { font-size: 15px; font-weight: 800; }
+.rp-tile-label { font-size: 9px; color: #888; }
+
+/* ── 結算：詳細展開按鈕 ── */
+.rp-detail-toggle {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+.rp-detail-toggle:hover { color: rgba(255,255,255,0.7); }
+
+/* ── home-version 精簡 ── */
+#home-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#home-version {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 6px 0 4px;
+  color: rgba(255,255,255,0.35);
+  font-size: 10px;
+  font-family: monospace;
+}
+
+/* 手機橫向：卡片改 2 列 */
+@media (max-height: 500px) and (orientation: landscape) {
+  #home-card-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 8px 10px 6px; }
+  .hcard           { padding: 8px 4px; }
+  .hcard-icon      { font-size: 20px; }
+  .hcard-title     { font-size: 9px; }
+  .rp-tiles        { grid-template-columns: repeat(4, 1fr); }
+}

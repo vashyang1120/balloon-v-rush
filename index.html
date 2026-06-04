@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.0-player-profile" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.2.1-home-ui" />
 </head>
 <body>
 
@@ -33,8 +33,15 @@
 
       <!-- 標題 -->
       <div id="home-header">
-        <div id="home-title">🏠 小V的家</div>
-        <div id="home-subtitle">整理氣球、查看秘笈，準備下一次派對任務！</div>
+        <div id="home-header-top">
+          <div>
+            <div id="home-title">🏠 小V的家</div>
+            <div id="home-subtitle">整理氣球、查看秘笈，準備下一次派對任務！</div>
+          </div>
+          <button id="btn-home-back" class="home-btn home-btn--dim" style="display:none;white-space:nowrap;width:auto;padding:6px 12px;font-size:12px;margin-top:0" onclick="homeGoBack()">
+            ← 返回
+          </button>
+        </div>
       </div>
 
       <!-- 主要內容（可捲動） -->
@@ -82,7 +89,7 @@
       <div id="home-body">
 
         <!-- 1. 下一關準備（預設展開） -->
-        <section class="home-section home-section--open" id="home-next-stage-section">
+        <section class="home-section" id="home-next-stage-section">
           <div class="home-section-title">🗺️ 下一關準備</div>
           <div id="home-next-stage-body"></div>
           <button id="btn-home-next-level" class="home-btn home-btn--green" style="margin-top:10px">
@@ -147,7 +154,7 @@
 
       <!-- 版本號（底部小字） -->
       <div id="home-version">
-        adventure-v0.2.0-player-profile · 2026-06-04
+        adventure-v0.2.1-home-ui · 2026-06-04
       </div>
 
     </div><!-- /#home-panel -->
@@ -239,7 +246,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.0-player-profile"></script>
+  <script src="main.js?v=adventure-v0.2.1-home-ui"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

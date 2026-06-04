@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.0-player-profile';
-const BUILD_TIME   = '2026-06-04 19:00';
+const GAME_VERSION = 'adventure-v0.2.1-home-ui';
+const BUILD_TIME   = '2026-06-04 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3076,6 +3076,16 @@ function drawResultBox() {
 
 // ── buildBagRows：產生「目前背包」顯示陣列 ──
 // 製作道具後呼叫 refreshResultBag() 即時更新，不需重跑整個 populateResultPanel
+
+function toggleRpDetail() {
+  const body   = document.getElementById('rp-detail-body');
+  const toggle = document.getElementById('rp-detail-toggle');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display   = open ? 'none' : 'block';
+  if (toggle) toggle.textContent = open ? '▶ 詳細數據' : '▼ 詳細數據';
+}
+
 function buildBagRows() {
   const ci = playerInventory.craftedItems || {};
   const rows = [
@@ -3291,7 +3301,20 @@ function populateResultPanel() {
   // 組合完整 HTML
   let html = '';
   html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
-  html += '<div class="rp-section" id="rp-run-section"><div class="rp-section-title">📋 本關成果</div>' + makeTable(runRows) + '</div>';
+  // 主要成果：圖示磚（易讀）
+  const mainTiles = runRowsMain.map(([e, v, cls, lbl]) =>
+    '<div class="rp-tile"><div class="rp-tile-emoji">' + e + '</div>'
+    + '<div class="rp-tile-val ' + cls + '">' + v + '</div>'
+    + '<div class="rp-tile-label">' + lbl + '</div></div>'
+  ).join('');
+  // 詳細數據：可展開
+  const detailHtml =
+    '<div id="rp-detail-toggle" class="rp-detail-toggle" onclick="toggleRpDetail()">▶ 詳細數據</div>'
+    + '<div id="rp-detail-body" style="display:none">' + makeTable(runRows) + '</div>';
+  html += '<div class="rp-section" id="rp-run-section">'
+    + '<div class="rp-section-title">📋 本關成果</div>'
+    + '<div class="rp-tiles">' + mainTiles + '</div>'
+    + detailHtml + '</div>';
   html += '<div class="rp-section" id="rp-inventory-section"><div class="rp-section-title">🎒 目前背包</div>' + makeTable(buildBagRows()) + '</div>';
   html += treasureHint;
   html += hammerHint;
@@ -3423,6 +3446,31 @@ function bringDogNextLevel() {
 //  homeGoNextLevel()  — 從小V的家進入下一關
 // =============================================
 
+
+// ── 小V的家卡片展開/收合 ────────────────────
+function initHomeCards() {
+  document.querySelectorAll('.hcard').forEach(card => {
+    if (card.dataset.bound) return; // 避免重複綁定
+    card.dataset.bound = '1';
+    card.addEventListener('click', () => {
+      const targetId = card.dataset.target;
+      const section  = document.getElementById(targetId);
+      if (!section) return;
+      const isOpen = section.style.display !== 'none';
+      // 收合所有 section
+      document.querySelectorAll('#home-body .home-section').forEach(s => {
+        s.style.display = 'none';
+      });
+      document.querySelectorAll('.hcard').forEach(c => c.classList.remove('hcard--open'));
+      // 若點的是已開啟的，就保持收合；否則展開
+      if (!isOpen) {
+        section.style.display = 'block';
+        card.classList.add('hcard--open');
+      }
+    });
+  });
+}
+
 function renderHomePlayer() {
   const el = document.getElementById('home-player-body');
   if (!el) return;
@@ -3441,11 +3489,25 @@ function renderHomePlayer() {
 
 function openHomeScreen(from) {
   homeEntryMode = from || 'normal';
-  // 同步隱藏其他 overlay
-  const resultEl  = document.getElementById('result-overlay');
-  const failedEl  = document.getElementById('failed-overlay');
+  // 同步隱藏其他 overlay（但保留在背後，可返回）
+  const resultEl = document.getElementById('result-overlay');
+  const failedEl = document.getElementById('failed-overlay');
   if (resultEl) resultEl.style.display = 'none';
   if (failedEl) failedEl.style.display = 'none';
+
+  // 更新返回按鈕
+  const backBtn = document.getElementById('btn-home-back');
+  if (backBtn) {
+    if (homeEntryMode === 'clear') {
+      backBtn.textContent = '← 返回結算畫面';
+      backBtn.style.display = 'inline-block';
+    } else if (homeEntryMode === 'failed') {
+      backBtn.textContent = '← 返回失敗畫面';
+      backBtn.style.display = 'inline-block';
+    } else {
+      backBtn.style.display = 'none';
+    }
+  }
 
   // 渲染各區塊
   renderHomeInventory();
@@ -3454,6 +3516,12 @@ function openHomeScreen(from) {
   renderHomeNextStage();
   renderHomeChallenge();
   renderHomePlayer();
+  initHomeCards();
+  // 預設展開「下一關準備」卡片
+  const nextCard = document.getElementById('hcard-next');
+  const nextSec  = document.getElementById('home-next-stage-section');
+  if (nextCard) nextCard.classList.add('hcard--open');
+  if (nextSec)  nextSec.style.display = 'block';
 
   document.getElementById('home-screen').style.display = 'flex';
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -3467,11 +3535,30 @@ function closeHomeScreen() {
 function renderHomeInventory() {
   const el = document.getElementById('home-inventory-body');
   if (!el) return;
-  const rows = buildBagRows(); // 共用現有函式
-  el.innerHTML = rows.map(([label, val, cls]) =>
-    '<div class="home-row"><span class="home-row-label">' + label + '</span>'
-    + '<span class="home-row-val ' + cls + '">' + val + '</span></div>'
-  ).join('') || '<div class="home-empty">背包是空的</div>';
+  const ci  = playerInventory.craftedItems || {};
+  // 圖示磚塊格式：emoji + 數量
+  const items = [
+    { e:'🪙',  v: playerInventory.coins,        label:'金幣',       cls:'result-gold'   },
+    { e:'🎈',  v: playerInventory.balloon260,    label:'260 氣球',   cls:'result-pink'   },
+    { e:'⚪',  v: playerInventory.roundBalloon,  label:'圓氣球',     cls:'result-purple' },
+    { e:'⚔️',  v: ci.basicSword     || 0,        label:'氣球劍',     cls:'result-cyan'   },
+    { e:'🔨',  v: ci.basicHammer    || 0,        label:'氣球槌',     cls:'result-purple' },
+    { e:'🍭',  v: ci.balloonLollipop|| 0,        label:'棒棒糖',     cls:'result-pink'   },
+  ].filter(i => i.v > 0); // 數量 0 不顯示
+
+  if (!items.length) {
+    el.innerHTML = '<div class="home-empty">背包是空的</div>';
+    return;
+  }
+  el.innerHTML = '<div class="home-inv-grid">'
+    + items.map(i =>
+        '<div class="home-inv-tile">'
+        + '<div class="home-inv-emoji">' + i.e + '</div>'
+        + '<div class="home-inv-count ' + i.cls + '">' + i.v + '</div>'
+        + '<div class="home-inv-label">' + i.label + '</div>'
+        + '</div>'
+      ).join('')
+    + '</div>';
 }
 
 // ── 補給與生命 ──────────────────────────────
@@ -3512,31 +3599,51 @@ function homeUseBandage() {
 function renderHomeDog() {
   const el = document.getElementById('home-dog-body');
   if (!el) return;
-  const dog          = playerInventory.balloonDog || {};
-  const hasDog       = dog.present;
-  const turns        = dog.turnsLeft || 0;
-  const nextLvIdx    = currentLevelIndex + 1;
+  const dog             = playerInventory.balloonDog || {};
+  const hasDog          = dog.present;
+  const turns           = dog.turnsLeft || 0;
+  const nextLvIdx       = currentLevelIndex + 1;
   const nextHasTreasure = nextLvIdx < LEVELS.length && !!LEVELS[nextLvIdx]?.hiddenTreasure;
-  const canBringDog  = hasDog && (playerInventory.balloon260 || 0) >= 1;
+  const canBringDog     = hasDog && (playerInventory.balloon260 || 0) >= 1;
 
-  let html = '';
-  if (hasDog) {
-    html += '<div class="home-row"><span class="home-row-label">狀態</span><span class="home-row-val result-gold">已在小V的家</span></div>';
-    html += '<div class="home-row"><span class="home-row-label">陪伴回合</span><span class="home-row-val result-blue">' + turns + ' 回合</span></div>';
-    html += '<div class="home-row"><span class="home-row-label">每次通關</span><span class="home-row-val result-red">❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</span></div>';
-    if (nextHasTreasure) {
-      html += '<div class="home-dog-hint">🐶 氣球小狗好像聞到了什麼……<br>下一關也許有隱藏寶物，記得帶牠一起去！</div>';
-      const btnText = canBringDog ? '帶氣球小狗一起出發 -1 🎈' : '需要 260 長條氣球 x1 作為牽繩';
-      html += '<button id="btn-home-bring-dog" class="home-btn '
-        + (canBringDog ? 'home-btn--purple' : 'home-btn--dim') + '" '
-        + (canBringDog ? '' : 'disabled') + ' onclick="homeBringDog()">'
-        + btnText + '</button>';
-    }
-  } else {
-    html += '<div class="home-row"><span class="home-row-label">狀態</span><span class="home-row-val" style="color:#666">尚未入住</span></div>';
-    html += '<div class="home-dog-hint" style="color:#aaa">可在氣球秘笈中製作氣球小狗。</div>';
+  if (!hasDog) {
+    el.innerHTML =
+      '<div class="home-dog-card home-dog-card--empty">'
+      + '<div class="home-dog-card__icon" style="opacity:0.3">🐶</div>'
+      + '<div class="home-dog-card__status" style="color:#666">尚未入住</div>'
+      + '<div class="home-dog-card__hint">可在氣球秘笈中製作氣球小狗</div>'
+      + '</div>';
+    return;
   }
-  el.innerHTML = html;
+
+  // 回合格子
+  let turnsHtml = '';
+  for (let i = 0; i < 3; i++) {
+    turnsHtml += '<div class="dog-turn-dot' + (i < turns ? ' dog-turn-dot--filled' : '') + '"></div>';
+  }
+
+  let bringHtml = '';
+  if (nextHasTreasure) {
+    const btnText = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
+    bringHtml =
+      '<div class="home-dog-hint">🐶 氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！</div>'
+      + '<button id="btn-home-bring-dog" class="home-btn '
+      + (canBringDog ? 'home-btn--purple' : 'home-btn--dim') + '" '
+      + (canBringDog ? '' : 'disabled') + ' onclick="homeBringDog()">'
+      + btnText + '</button>';
+  }
+
+  el.innerHTML =
+    '<div class="home-dog-card">'
+    + '<div class="home-dog-card__icon">🐶</div>'
+    + '<div class="home-dog-card__status result-gold">已在小V的家</div>'
+    + '<div class="home-dog-card__turns">'
+    + '<span style="font-size:11px;color:#aaa">陪伴回合：</span>'
+    + turnsHtml
+    + '</div>'
+    + '<div class="home-dog-card__hint">每次通關恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
+    + '</div>'
+    + bringHtml;
 }
 
 function homeBringDog() {
@@ -3606,6 +3713,20 @@ function renderHomeChallenge() {
 }
 
 // ── 從小V的家進入下一關 ──────────────────────
+
+// ── 小V的家「返回」按鈕 ─────────────────────
+function homeGoBack() {
+  closeHomeScreen();
+  if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+  if (homeEntryMode === 'clear') {
+    const resultEl = document.getElementById('result-overlay');
+    if (resultEl) resultEl.style.display = 'flex';
+  } else if (homeEntryMode === 'failed') {
+    const failedEl = document.getElementById('failed-overlay');
+    if (failedEl) failedEl.style.display = 'flex';
+  }
+}
+
 function homeGoNextLevel() {
   try {
     // 失敗模式：只能重試本關，不能前往下一關
