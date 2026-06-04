@@ -1108,3 +1108,82 @@ html, body {
   #home-card-grid .hcard:nth-child(4),
   #home-card-grid .hcard:nth-child(5) { /* 第 4/5 張自動換行 */ }
 }
+
+/* =============================================
+   Phase 2B-2：兒童友善結算畫面
+   ============================================= */
+
+/* ── 過關主標區 ── */
+.rp-hero-section {
+  background: rgba(100,220,100,0.08) !important;
+  border-color: rgba(100,220,100,0.3) !important;
+  text-align: center;
+}
+.rp-hero-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #a0ffb0;
+  margin-bottom: 10px;
+}
+
+/* ── 圖示磚（4 格改為 2~4 格自適應）── */
+.rp-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rp-tile {
+  min-width: 64px;
+  max-width: 80px;
+  flex: 1 1 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 10px 6px;
+}
+.rp-tile-emoji { font-size: 20px; line-height: 1; }
+.rp-tile-val   { font-size: 18px; font-weight: 800; }
+.rp-tile-label { font-size: 9px;  color: #888; }
+
+/* ── 發現徽章 ── */
+.rp-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
+.rp-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1.5px solid;
+}
+.rp-badge--recipe {
+  color: #c8f0ff;
+  border-color: rgba(100,180,255,0.5);
+  background: rgba(20,60,100,0.5);
+}
+.rp-badge--chest {
+  color: #ffd080;
+  border-color: rgba(255,200,50,0.5);
+  background: rgba(60,40,0,0.5);
+}
+
+/* ── 可收合區塊 ── */
+.rp-collapsible { padding: 0 !important; overflow: hidden; }
+.rp-toggle-btn {
+  cursor: pointer;
+  padding: 10px 14px !important;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0 !important;
+}
+.rp-toggle-btn:hover { background: rgba(255,255,255,0.05); }
+.rp-toggle-arrow { font-size: 11px; color: #666; }
+/* body 區有 padding */
+#rp-inventory-body,
+#rp-detail-body,
+#rp-supply-body { padding: 6px 14px 12px; }

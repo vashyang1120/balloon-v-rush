@@ -3077,6 +3077,26 @@ function drawResultBox() {
 // ── buildBagRows：產生「目前背包」顯示陣列 ──
 // 製作道具後呼叫 refreshResultBag() 即時更新，不需重跑整個 populateResultPanel
 
+
+function rpToggle(titleEl) {
+  const bodyId = titleEl.dataset.target;
+  const body   = bodyId ? document.getElementById(bodyId) : null;
+  if (!body) return;
+  const open  = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  const arrow = titleEl.querySelector('.rp-toggle-arrow');
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
+}
+
+function toggleRpSection(bodyId, titleEl) {
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+  const open  = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  const arrow = titleEl ? titleEl.querySelector('.rp-toggle-arrow') : null;
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
+}
+
 function toggleRpDetail() {
   const body   = document.getElementById('rp-detail-body');
   const toggle = document.getElementById('rp-detail-toggle');
@@ -3156,17 +3176,14 @@ function refreshResultDog() {
 }
 
 function refreshResultBag() {
-  const section = document.getElementById('rp-inventory-section');
-  if (!section) return; // 結算畫面未開啟
-  const rows    = buildBagRows();
-  const content = rows.map(([label, val, cls]) =>
-    `<div class="rp-row"><span class="rp-label">${label}</span><span class="rp-val ${cls}">${val}</span></div>`
+  // 背包內容在 rp-inventory-body（可收合區塊的 body）
+  const body = document.getElementById('rp-inventory-body');
+  if (!body) return;
+  const rows = buildBagRows();
+  body.innerHTML = rows.map(([label, val, cls]) =>
+    '<div class="rp-row"><span class="rp-label">' + label + '</span>'
+    + '<span class="rp-val ' + cls + '">' + val + '</span></div>'
   ).join('');
-  // 保留 section-title，只替換內容列
-  const title = section.querySelector('.rp-section-title');
-  section.innerHTML = '';
-  if (title) section.appendChild(title);
-  section.insertAdjacentHTML('beforeend', content);
 }
 
 function populateResultPanel() {
@@ -3301,37 +3318,71 @@ function populateResultPanel() {
     : player.hp >= player.maxHp ? '生命已滿'
     : ('購買並使用 -' + BANDAGE_PRICE + ' 🪙');
 
-  // 組合完整 HTML
-  let html = '';
-  html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
-  // 主要成果：圖示磚（易讀）
+  // ── 組合完整 HTML（Phase 2B-2：兒童友善，資訊層級）── //
+
+  // 【第一層】主標題 + 本關收穫圖示磚
   const mainTiles = runRowsMain.map(([e, v, cls, lbl]) =>
     '<div class="rp-tile"><div class="rp-tile-emoji">' + e + '</div>'
     + '<div class="rp-tile-val ' + cls + '">' + v + '</div>'
     + '<div class="rp-tile-label">' + lbl + '</div></div>'
   ).join('');
-  // 詳細數據：可展開
-  const detailHtml =
-    '<div id="rp-detail-toggle" class="rp-detail-toggle" onclick="toggleRpDetail()">▶ 詳細數據</div>'
-    + '<div id="rp-detail-body" style="display:none">' + makeTable(runRows) + '</div>';
-  html += '<div class="rp-section" id="rp-run-section">'
-    + '<div class="rp-section-title">📋 本關成果</div>'
-    + '<div class="rp-tiles">' + mainTiles + '</div>'
-    + detailHtml + '</div>';
-  html += '<div class="rp-section" id="rp-inventory-section"><div class="rp-section-title">🎒 目前背包</div>' + makeTable(buildBagRows()) + '</div>';
-  html += treasureHint;
-  html += hammerHint;
-  html += guideBookHint;
-  html += dogSectionHtml;
-  html += '<div class="rp-section" id="supply-section">'
-    + '<div class="rp-section-title">🏠 小V的家・補給</div>'
+
+  // 隱藏物徽章（找到秘笈 / 寶箱就顯示）
+  const foundBadges = [];
+  if (currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈')
+    foundBadges.push('<div class="rp-badge rp-badge--recipe">📖 新秘笈發現！</div>');
+  if (currentRunStats.foundHiddenTreasureName === '金幣寶箱')
+    foundBadges.push('<div class="rp-badge rp-badge--chest">🎁 隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
+  const badgesHtml = foundBadges.join('');
+
+  // 【第二層】目前背包（預設收合）—— onclick 用 data-target，避免字串引號衝突
+  const bagHtml = '<div class="rp-section rp-collapsible" id="rp-inventory-section">'
+    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-inventory-body" onclick="rpToggle(this)">'
+    + '🎒 目前背包 <span class="rp-toggle-arrow">▶</span></div>'
+    + '<div id="rp-inventory-body" style="display:none">' + makeTable(buildBagRows()) + '</div></div>';
+
+  // 【第三層】詳細紀錄（預設收合）
+  const detailHtml = '<div class="rp-section rp-collapsible" id="rp-run-section">'
+    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-detail-body" onclick="rpToggle(this)">'
+    + '📋 詳細紀錄 <span class="rp-toggle-arrow">▶</span></div>'
+    + '<div id="rp-detail-body" style="display:none">'
+    + makeTable(runRows)
+    + '</div></div>';
+
+  // 【第四層】補給（預設收合）
+  const supplyHtml = '<div class="rp-section rp-collapsible" id="supply-section">'
+    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-supply-body" onclick="rpToggle(this)">'
+    + '🏥 補給 <span class="rp-toggle-arrow">▶</span></div>'
+    + '<div id="rp-supply-body" style="display:none">'
     + '<div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">' + player.hp + ' / ' + player.maxHp + '</span></div>'
     + '<div class="rp-supply-item"><div class="rp-supply-info">'
     + '<span class="rp-supply-name">🩹 愛心貼布</span>'
     + '<span class="rp-supply-price">20 🪙　+1 ❤️</span>'
     + '</div><button id="btn-buy-bandage" class="rp-supply-btn" onclick="buyBandage()">'
     + bandageBtnText + '</button></div>'
-    + '<div id="bandage-msg" class="rp-supply-msg"></div></div>';
+    + '<div id="bandage-msg" class="rp-supply-msg"></div>'
+    + '</div></div>';
+
+  // 組合
+  let html = '';
+  html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
+  // 第一層：重點收穫
+  html += '<div class="rp-section rp-hero-section" id="rp-hero-section">'
+    + '<div class="rp-hero-title">🎉 過關成功！本關帶回：</div>'
+    + '<div class="rp-tiles">' + mainTiles + '</div>'
+    + (badgesHtml ? '<div class="rp-badges">' + badgesHtml + '</div>' : '')
+    + '</div>';
+  // 特殊提示（槌子解鎖 / 秘笈按鈕）
+  html += treasureHint;
+  html += hammerHint;
+  html += guideBookHint;
+  // 氣球小狗
+  html += dogSectionHtml;
+  // 可收合的三層
+  html += bagHtml;
+  html += detailHtml;
+  html += supplyHtml;
+  // 氣球小知識
   html += '<div class="rp-trivia">💡 ' + trivia + '</div>';
 
   panel.innerHTML = html;
