@@ -2287,7 +2287,6 @@ function draw() {
     drawWorld();
     drawHUD();
     drawHintBox();
-    drawVersionInfo();
   } else if (gameState === 'paused') {
     drawWorld();
     drawHUD();
@@ -2309,6 +2308,7 @@ function draw() {
     drawHUD();
     drawResultBox();
   }
+  drawVersionInfo(); // 所有狀態都顯示版本號
 }
 
 function drawWorld() {
@@ -3048,11 +3048,20 @@ function drawOverlay(text, color) {
 // drawResultBox：Canvas 只畫模糊遮罩，所有內容由 HTML overlay 負責
 
 function drawVersionInfo() {
-  ctx.fillStyle  = 'rgba(255,255,255,0.18)';
-  ctx.font       = '9px monospace';
-  ctx.textAlign  = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(GAME_VERSION, CANVAS_W - 4, CANVAS_H - 2);
+  // 測試階段：明顯版本條（右上角，黑底白字）
+  const vText = GAME_VERSION + '  Build: ' + BUILD_TIME;
+  ctx.font     = '12px monospace';
+  const tw     = ctx.measureText(vText).width;
+  const px = CANVAS_W - tw - 10;
+  const py = 4;
+  // 黑色半透明底
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(px - 4, py, tw + 8, 18);
+  // 白字
+  ctx.fillStyle    = '#ffffff';
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(vText, px, py + 3);
   ctx.textBaseline = 'alphabetic';
 }
 
