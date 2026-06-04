@@ -3173,16 +3173,19 @@ function populateResultPanel() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
   const ci       = playerInventory.craftedItems || {}; // 供 hammerHint 等使用
 
-  // 本關成果
-  const runRows = [
-    ['🪙 金幣',         `${currentRunStats.coins} 枚`,                'result-gold'],
-    ['🎈 260 長條氣球', `${currentRunStats.balloon260} 條`,           'result-pink'],
+  // 本關成果：主要圖示磚（emoji, 數值, css class, 標籤）
+  const runRowsMain = [
+    ['🪙', String(currentRunStats.coins),                 'result-gold',   '本關金幣'],
+    ['🎈', String(currentRunStats.balloon260),            'result-pink',   '260 氣球'],
     ...(currentRunStats.roundBalloon > 0
-      ? [['🎈 圓氣球',  `${currentRunStats.roundBalloon} 顆`,         'result-purple']]
+      ? [['⚪', String(currentRunStats.roundBalloon),     'result-purple', '圓氣球']]
       : []),
-    ['💥 擊退小怪',     `${currentRunStats.enemiesDefeated} 隻`,      'result-orange'],
-    ['🩹 受傷次數',     `${currentRunStats.damageTaken} 次`,          'result-red'],
-    ['⏱  剩餘時間',     `${timeLeft} 秒`,                             'result-blue'],
+    ['💥', String(currentRunStats.enemiesDefeated),       'result-orange', '擊退小怪'],
+  ];
+  // 詳細數據（可展開，舊三元素格式 [label, value, cls]）
+  const runRows = [
+    ['🩹 受傷次數', `${currentRunStats.damageTaken} 次`, 'result-red'],
+    ['⏱  剩餘時間', `${timeLeft} 秒`,                    'result-blue'],
   ];
 
   // 背包
