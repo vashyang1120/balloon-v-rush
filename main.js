@@ -412,7 +412,7 @@ const RECIPES = [
   {
     id:         'balloonDog',
     name:       '氣球小狗',
-    effect:     '可靠近隱藏寶物時讓鼻子發亮，協助小V尋找寶物',
+    effect:     '可靠近隱藏寶物時讓鼻子發亮；製作時療癒 ❤️ +0.5，帶出門通關後也會恢復 ❤️ +0.5。',
     durability: 0,             // 無耐久，以 turnsLeft 計算
     cost:       { balloon260: 1 },
     emoji:      '🐶',
@@ -3151,25 +3151,38 @@ function refreshResultDog() {
   const dog    = playerInventory.balloonDog || {};
   const hasDog = dog.present;
   const turns  = dog.turnsLeft || 0;
-  const nextLvIndex        = currentLevelIndex + 1;
-  const nextLvHasTreasure  = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
-  const canBringDog        = hasDog && (playerInventory.balloon260 || 0) >= 1;
+  const nextLvIndex       = currentLevelIndex + 1;
+  const nextLvHasTreasure = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
+  const canBringDog       = hasDog && (playerInventory.balloon260 || 0) >= 1 && !nextBringDog;
 
   let inner = '';
   if (hasDog) {
     inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
     inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>';
     inner += '<div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">' + turns + ' 回合</span></div>';
-    if (nextLvHasTreasure) {
-      inner += '<div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>';
-      const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
-      const btnDisStr = canBringDog ? '' : 'disabled';
-      const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
-      inner += '<div class="rp-supply-item" style="margin-top:6px">'
-        + '<div class="rp-supply-info"><span class="rp-supply-name">帶氣球小狗出發</span>'
-        + '<span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span></div>'
-        + '<button id="btn-bring-dog" class="rp-supply-btn ' + btnCls + '" ' + btnDisStr
-        + ' onclick="bringDogNextLevel()">' + btnLabel + '</button></div>';
+    if (currentRunStats.dogHealed) {
+      inner += '<div class="rp-row"><span class="rp-label">🐶 療癒</span><span class="rp-val result-red">❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</span></div>';
+    }
+    // 帶狗按鈕（不論下一關是否有隱藏物）
+    if (!currentRunStats.dogGoneThisClear && turns > 0) {
+      const hint = nextLvHasTreasure
+        ? '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
+        : '氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
+      inner += '<div class="rp-supply-hp" style="color:#ffe080">' + hint + '</div>';
+      if (nextBringDog) {
+        // 已安排，顯示確認狀態，不可重複點擊
+        inner += '<div class="rp-supply-item" style="margin-top:6px">'
+          + '<button class="rp-supply-btn rp-supply-btn--disabled" disabled>✅ 已安排帶狗出發</button></div>';
+      } else {
+        const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '260 氣球不足';
+        const btnDisStr = canBringDog ? '' : 'disabled';
+        const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
+        inner += '<div class="rp-supply-item" style="margin-top:6px">'
+          + '<div class="rp-supply-info"><span class="rp-supply-name">帶氣球小狗出發</span>'
+          + '<span class="rp-supply-price">消耗 260 長條氣球 x1 作為牽繩</span></div>'
+          + '<button id="btn-bring-dog" class="rp-supply-btn ' + btnCls + '" ' + btnDisStr
+          + ' onclick="bringDogNextLevel()">' + btnLabel + '</button></div>';
+      }
     }
   } else {
     inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
@@ -3330,12 +3343,14 @@ function populateResultPanel() {
     + '<div class="rp-tile-label">' + lbl + '</div></div>'
   ).join('');
 
-  // 隱藏物徽章（找到秘笈 / 寶箱就顯示）
+  // 徽章（隱藏物 + 狗療癒）
   const foundBadges = [];
   if (currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈')
     foundBadges.push('<div class="rp-badge rp-badge--recipe">📖 新秘笈發現！</div>');
   if (currentRunStats.foundHiddenTreasureName === '金幣寶箱')
     foundBadges.push('<div class="rp-badge rp-badge--chest">🎁 隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
+  if (currentRunStats.dogHealed)
+    foundBadges.push('<div class="rp-badge rp-badge--dog">🐶 氣球小狗療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>');
   const badgesHtml = foundBadges.join('');
 
   // 【第二層】目前背包（預設收合）—— onclick 用 data-target，避免字串引號衝突
@@ -3688,15 +3703,19 @@ function renderHomeDog() {
     : '🐶 氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
 
   let bringBtnHtml = '';
-  if (turns > 0) {
-    const btnText = canBringDog ? '帶狗出發 -1 🎈' : '260 氣球不足';
+  if (turns <= 0) {
+    bringBtnHtml = '<div style="font-size:11px;color:#ff8888;margin-top:6px">氣球小狗已消氣，無法帶出門</div>';
+  } else if (nextBringDog) {
+    // 已安排帶狗，顯示確認，不可重複扣
+    bringBtnHtml = '<button class="home-btn home-btn--dim" disabled>✅ 已安排帶狗出發</button>';
+  } else {
+    const canBring = hasDog && (playerInventory.balloon260 || 0) >= 1;
+    const btnText  = canBring ? '帶狗出發 -1 🎈' : '260 氣球不足';
     bringBtnHtml =
       '<button id="btn-home-bring-dog" class="home-btn '
-      + (canBringDog ? 'home-btn--purple' : 'home-btn--dim') + '" '
-      + (canBringDog ? '' : 'disabled') + ' onclick="homeBringDog()">'
+      + (canBring ? 'home-btn--purple' : 'home-btn--dim') + '" '
+      + (canBring ? '' : 'disabled') + ' onclick="homeBringDog()">'
       + btnText + '</button>';
-  } else {
-    bringBtnHtml = '<div style="font-size:11px;color:#ff8888;margin-top:6px">氣球小狗已消氣，無法帶出門</div>';
   }
 
   el.innerHTML =
@@ -3716,11 +3735,10 @@ function renderHomeDog() {
 function homeBringDog() {
   if (typeof bringDogNextLevel === 'function') {
     bringDogNextLevel();
-    renderHomeDog();
-    renderHomeInventory();
-    // 更新下一關按鈕提示
-    const dogBtn = document.getElementById('btn-home-bring-dog');
-    if (dogBtn) { dogBtn.textContent = '已準備帶氣球小狗出發 🐶'; dogBtn.disabled = true; }
+    renderHomeDog();        // 更新小V的家狗區塊（顯示「已安排」）
+    renderHomeInventory();  // 更新 260 氣球數量
+    refreshResultDog();     // 同步結算畫面狗區塊
+    refreshResultBag();     // 同步背包 260 數量
   }
 }
 
@@ -3809,8 +3827,9 @@ function homeGoNextLevel() {
     // 通關模式：正常前往下一關，保留 HP
     const nextIdx = currentLevelIndex + 1;
     if (nextIdx >= LEVELS.length) {
-      nextBringDog    = false;
-      bringBalloonDog = false;
+      // 最後一關再玩：snapshot 還原
+      if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+      nextBringDog = false;
       loadLevel(currentLevelIndex);
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
@@ -4004,10 +4023,11 @@ function hideResultButtons() {
               restart({ keepHp: true }); // 跨關保留 HP
               console.log('AFTER restart');
             } else {
+              // 再玩一次（同關）：snapshot 還原後 keepHp
+              if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
               nextBringDog    = false;
-              bringBalloonDog = false;
               loadLevel(currentLevelIndex);
-              restart();
+              restart({ keepHp: true });
             }
           } catch(err) {
             showDebugError('NEXT LEVEL CRASH', err.message, '', '', '', err.stack);
@@ -4154,13 +4174,21 @@ function renderGuidebook() {
           e.preventDefault();
           const ok = craftItem(recipe.id);
           if (ok) {
-            showCraftMessage(`成功製作 ${recipe.name}！`);
+            let craftMsg = `成功製作 ${recipe.name}！`;
+            if (recipe.id === 'balloonDog') craftMsg = '🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5';
+            showCraftMessage(craftMsg);
             renderGuidebook();
             refreshResultBag();
-            if (recipe.id === 'balloonDog') refreshResultDog();
-            // 若小V的家已開啟，同步刷新背包 / 狗 / 補給
+            // 更新生命顯示
+            const supplyHp = document.getElementById('supply-hp');
+            if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
+            if (recipe.id === 'balloonDog') {
+              refreshResultDog(); // 結算畫面狗區塊（含帶狗按鈕）
+            }
+            // 若小V的家已開啟，同步刷新
             if (document.getElementById('home-screen')?.style.display !== 'none') {
               renderHomeInventory();
+              renderHomeSupply(); // 生命更新
               if (recipe.id === 'balloonDog') renderHomeDog();
             }
           }

@@ -1187,3 +1187,10 @@ html, body {
 #rp-inventory-body,
 #rp-detail-body,
 #rp-supply-body { padding: 6px 14px 12px; }
+
+/* ── 狗療癒徽章 ── */
+.rp-badge--dog {
+  color: #ffd080;
+  border-color: rgba(255,200,50,0.5);
+  background: rgba(60,30,0,0.5);
+}

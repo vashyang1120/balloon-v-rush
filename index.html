@@ -322,10 +322,10 @@
   function handleRetry(e) {
     e.preventDefault();
     if (gameState !== 'failed') return;
-    nextBringDog    = false;
-    bringBalloonDog = false;
+    // 用 snapshot 還原（含 bringBalloonDog / HP / 耐久）
+    if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
     loadLevel(currentLevelIndex);
-    restart();
+    if (typeof restart === 'function') restart({ keepHp: true });
   }
   const btnRetry = document.getElementById('btn-retry');
   if (btnRetry) {
