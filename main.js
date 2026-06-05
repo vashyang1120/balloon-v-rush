@@ -412,7 +412,7 @@ const RECIPES = [
   {
     id:         'balloonDog',
     name:       '氣球小狗',
-    effect:     '靠近隱藏寶物時鼻子會發亮。製作成功時療癒 ❤️ +0.5；帶牠出門並通關後，也會恢復 ❤️ +0.5。',
+    effect:     '靠近隱藏寶物時，鼻子會發亮。只要牠還在小V的家，每次通關結算時療癒 ❤️ +0.5；製作成功時也會立刻療癒 ❤️ +0.5。',
     durability: 0,             // 無耐久，以 turnsLeft 計算
     cost:       { balloon260: 1 },
     emoji:      '🐶',
@@ -457,7 +457,8 @@ function craftItem(recipeId) {
     }
     if (!playerInventory.balloonDog) playerInventory.balloonDog = {};
     playerInventory.balloonDog.present   = true;
-    playerInventory.balloonDog.turnsLeft = 3;
+    playerInventory.balloonDog.turnsLeft = CONFIG.DOG_INITIAL_TURNS || 3;
+    player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT); // 製作立即回血
     saveInventory();
     return true;
   }
@@ -3974,7 +3975,7 @@ function restart(opts) {
   frameCount = 0;
   elapsedSec = 0;
 
-  // ── 建立進關前快照（在 gameState = 'playing' 前，關卡剛初始化完成時）──
+  // ── 建立進關前快照 ── 包含 bringBalloonDog（此行是關鍵修正！）
   levelStartSnapshot = {
     coins:              playerInventory.coins,
     balloon260:         playerInventory.balloon260,
@@ -3991,13 +3992,12 @@ function restart(opts) {
     equippedHammerMax:  equippedHammer.maxDur,
     activeSlot:         activeSlot,
     hp:                 player.hp,
+    bringBalloonDog:    bringBalloonDog, // ← 關鍵：記錄本關帶狗狀態
   };
-  console.log('levelStartSnapshot created:', {
-    coins: levelStartSnapshot.coins,
-    hammer: levelStartSnapshot.craftedItems.basicHammer,
-    hammerDur: levelStartSnapshot.equippedHammerDur,
-    swordDur:  levelStartSnapshot.equippedSwordDur,
-  });
+  // 穩定備份（雙重保險）
+  levelStartBringDog = bringBalloonDog;
+  levelStartHp       = player.hp;
+  console.log('snapshot created: bringBalloonDog=' + bringBalloonDog + ' hp=' + player.hp);
 
   gameState  = 'playing';
 
@@ -4127,14 +4127,17 @@ function hideResultButtons() {
       btnResume.addEventListener(ev, e => { e.preventDefault(); resumeGame(); })
     );
   }
-  // 重新開始（從暫停畫面）
+  // 重試本關（從暫停畫面）
   const btnRestart = document.getElementById('btn-pause-restart');
   if (btnRestart) {
     ['click', 'touchstart'].forEach(ev =>
       btnRestart.addEventListener(ev, e => {
         e.preventDefault();
         gameState = 'playing'; // 先設回 playing 讓 restart() 不被擋
-        restart();
+        restoreLevelStartSnapshot(); // 還原到本關開始狀態
+        bringBalloonDog = levelStartBringDog; // 確保帶狗狀態
+        loadLevel(currentLevelIndex);
+        restart({ keepHp: true, preserveBringDog: true });
       })
     );
   }
