@@ -166,8 +166,21 @@
         <div id="pause-actions">
           <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續遊戲</button>
           <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重新開始</button>
+          <button id="btn-pause-bag" class="pause-btn pause-btn--secondary" onclick="openPauseBag()">🎒 查看背包</button>
         </div>
         <div id="pause-hint">桌機可按 ESC 繼續</div>
+      </div>
+    </div>
+
+    <!-- 暫停背包 overlay -->
+    <div id="pause-bag-panel" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,0.8);align-items:center;justify-content:center">
+      <div style="background:rgba(14,18,48,0.98);border:1.5px solid rgba(255,255,255,0.15);border-radius:16px;padding:20px;min-width:260px;max-width:380px;width:90%">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <span style="font-size:16px;font-weight:800;color:#fff">🎒 目前背包</span>
+          <button onclick="closePauseBag()" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div id="pause-bag-body"></div>
+        <div style="font-size:10px;color:#555;margin-top:12px;text-align:center">暫停中 · 背包僅供查看</div>
       </div>
     </div>
 
@@ -322,10 +335,11 @@
   function handleRetry(e) {
     e.preventDefault();
     if (gameState !== 'failed') return;
-    // 用 snapshot 還原（含 bringBalloonDog / HP / 耐久）
     if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+    // 用穩定的本關開始狀態還原帶狗
+    if (typeof levelStartBringDog !== 'undefined') bringBalloonDog = levelStartBringDog;
     loadLevel(currentLevelIndex);
-    if (typeof restart === 'function') restart({ keepHp: true });
+    if (typeof restart === 'function') restart({ keepHp: true, preserveBringDog: true });
   }
   const btnRetry = document.getElementById('btn-retry');
   if (btnRetry) {

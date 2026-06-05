@@ -412,7 +412,7 @@ const RECIPES = [
   {
     id:         'balloonDog',
     name:       '氣球小狗',
-    effect:     '可靠近隱藏寶物時讓鼻子發亮；製作時療癒 ❤️ +0.5，帶出門通關後也會恢復 ❤️ +0.5。',
+    effect:     '靠近隱藏寶物時鼻子會發亮。製作成功時療癒 ❤️ +0.5；帶牠出門並通關後，也會恢復 ❤️ +0.5。',
     durability: 0,             // 無耐久，以 turnsLeft 計算
     cost:       { balloon260: 1 },
     emoji:      '🐶',
@@ -1397,7 +1397,9 @@ function clearLevelStartSnapshot() {
 
 
 var bringBalloonDog  = false;
-var homeEntryMode    = 'normal'; // 'clear' | 'failed' | 'normal' // 本關是否帶狗出門（loadLevel 後才設定）
+var homeEntryMode       = 'normal'; // 'clear' | 'failed' | 'normal'
+var levelStartBringDog = false; // 本關開始時的帶狗狀態（穩定記錄）
+var levelStartHp       = 3;    // 本關開始時的 HP（穩定記錄）
 var nextBringDog     = false; // 下一關是否帶狗（帶狗按鈕設定，進下一關時轉移）
 var dogNoseGlow      = 0;     // 0～1（保留）
 var dogNoseLevel     = 0;     // 0-3：0=暗, 1=微亮, 2=亮, 3=閃爍
@@ -2167,6 +2169,8 @@ function resumeGame() {
 function triggerFailed() {
   // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
   restoreLevelStartSnapshot();
+  // 額外確保帶狗狀態用穩定變數還原（不依賴 snapshot 的 bringBalloonDog 欄位）
+  bringBalloonDog = levelStartBringDog;
 
   console.log('discard hidden treasure rewards on failed');
   updateChallengeOnRetry(); // 重試次數 +1
@@ -3682,12 +3686,16 @@ function renderHomeDog() {
   const canBringDog     = hasDog && (playerInventory.balloon260 || 0) >= 1;
 
   if (!hasDog) {
+    const canCraft = (playerInventory.balloon260 || 0) >= 1;
     el.innerHTML =
       '<div class="home-dog-card home-dog-card--empty">'
       + '<div class="home-dog-card__icon" style="opacity:0.3">🐶</div>'
-      + '<div class="home-dog-card__status" style="color:#666">尚未入住</div>'
-      + '<div class="home-dog-card__hint">可在氣球秘笈中製作氣球小狗</div>'
-      + '</div>';
+      + '<div class="home-dog-card__status" style="color:#aaa">還沒有氣球小狗</div>'
+      + '<div class="home-dog-card__hint">製作時療癒 ❤️ +0.5，帶牠出門並通關後也會恢復 ❤️ +0.5。</div>'
+      + '</div>'
+      + '<button class="home-btn ' + (canCraft ? 'home-btn--purple' : 'home-btn--dim') + '" '
+      + (canCraft ? '' : 'disabled') + ' onclick="homeMakeDog()" style="margin-top:8px">'
+      + (canCraft ? '🐶 製作氣球小狗 -1 🎈' : '260 氣球不足') + '</button>';
     return;
   }
 
@@ -3730,6 +3738,23 @@ function renderHomeDog() {
     + '</div>'
     + '<div class="home-dog-hint">' + dogHint + '</div>'
     + bringBtnHtml;
+}
+
+
+function homeMakeDog() {
+  const ok = craftItem('balloonDog');
+  if (ok) {
+    showCraftMessage('🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5');
+    renderHomeDog();
+    renderHomeInventory();
+    renderHomeSupply();
+    refreshResultDog();
+    refreshResultBag();
+    const supplyHp = document.getElementById('supply-hp');
+    if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
+  } else {
+    showCraftMessage('260 氣球不足，無法製作氣球小狗');
+  }
 }
 
 function homeBringDog() {
@@ -3816,12 +3841,12 @@ function homeGoNextLevel() {
   try {
     // 失敗模式：只能重試本關，不能前往下一關
     if (homeEntryMode === 'failed') {
-      // 使用 snapshot 還原（包含 bringBalloonDog、HP、耐久）
       restoreLevelStartSnapshot();
+      bringBalloonDog = levelStartBringDog; // 穩定還原帶狗狀態
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
       loadLevel(currentLevelIndex);
-      restart({ keepHp: true }); // HP 已由 snapshot 還原，keepHp 保持
+      restart({ keepHp: true, preserveBringDog: true });
       return;
     }
     // 通關模式：正常前往下一關，保留 HP
@@ -3853,6 +3878,28 @@ function openChallengeSummary() {
   alert('本次成績結算功能將在下一階段加入。');
 }
 
+
+// ── 暫停畫面：查看背包 ──────────────────────
+function openPauseBag() {
+  const panel = document.getElementById('pause-bag-panel');
+  if (!panel) return;
+  // 填入背包內容
+  const rows  = buildBagRows();
+  const html  = rows.length
+    ? rows.map(([label, val, cls]) =>
+        '<div class="home-row"><span class="home-row-label">' + label + '</span>'
+        + '<span class="home-row-val ' + cls + '">' + val + '</span></div>'
+      ).join('')
+    : '<div class="home-empty">背包是空的</div>';
+  document.getElementById('pause-bag-body').innerHTML = html;
+  panel.style.display = 'flex';
+}
+
+function closePauseBag() {
+  const panel = document.getElementById('pause-bag-panel');
+  if (panel) panel.style.display = 'none';
+}
+
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = text.split('');
   let line = '';
@@ -3871,7 +3918,12 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart(opts) {
-  const keepHp = opts && opts.keepHp;
+  const keepHp          = opts && opts.keepHp;
+  const preserveBringDog = opts && opts.preserveBringDog;
+  // 若要保留帶狗狀態，從穩定記錄還原
+  if (preserveBringDog) {
+    bringBalloonDog = levelStartBringDog;
+  }
   hideResultButtons();
   // 確保所有 overlay 關掉
   const pauseEl  = document.getElementById('pause-overlay');
