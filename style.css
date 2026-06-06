@@ -1194,3 +1194,323 @@ html, body {
   border-color: rgba(255,200,50,0.5);
   background: rgba(60,30,0,0.5);
 }
+
+/* =============================================
+   Phase 2C-1：小V的家正式版視覺美化
+   設計方向：氣球節慶工作室 · 霓虹派對基地
+   字體：圓潤活潑，色彩：軟糖色系
+   ============================================= */
+
+/* ── 字體 import ── */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap');
+
+/* ── 設計 tokens ── */
+:root {
+  --balloon-pink:   #FF6B9D;
+  --balloon-yellow: #FFD93D;
+  --balloon-blue:   #74B9FF;
+  --balloon-purple: #A29BFE;
+  --balloon-mint:   #55EFC4;
+  --balloon-orange: #FD79A8;
+  --bg-deep:        #0F0E2B;
+  --bg-mid:         #1A1840;
+  --glass-bg:       rgba(255,255,255,0.06);
+  --glass-border:   rgba(255,255,255,0.14);
+  --card-radius:    18px;
+  --font-home:      'Nunito', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+}
+
+/* ── home-screen 整體 ── */
+#home-screen {
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 20%, rgba(162,155,254,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(116,185,255,0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(255,107,157,0.08) 0%, transparent 60%),
+    linear-gradient(160deg, #0F0E2B 0%, #1A1840 60%, #130D2A 100%);
+  font-family: var(--font-home);
+}
+
+#home-panel {
+  background: rgba(20,18,56,0.92);
+  border: 1px solid rgba(162,155,254,0.25);
+  box-shadow:
+    0 0 60px rgba(162,155,254,0.12),
+    0 0 120px rgba(116,185,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px);
+}
+
+/* ── home-header ── */
+#home-title {
+  font-size: 24px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #FFD93D 0%, #FF6B9D 50%, #A29BFE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.02em;
+}
+#home-subtitle {
+  color: rgba(162,155,254,0.6);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── 主卡片網格 ── */
+#home-card-grid { gap: 10px; padding: 12px 14px 8px; }
+
+.hcard {
+  border-radius: 16px;
+  border: 1.5px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  padding: 14px 6px 10px;
+  gap: 6px;
+  transition: transform 0.15s cubic-bezier(.34,1.56,.64,1),
+              box-shadow 0.15s ease,
+              border-color 0.15s ease,
+              background 0.15s ease;
+}
+.hcard:hover {
+  transform: translateY(-3px) scale(1.03);
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(162,155,254,0.4);
+}
+.hcard:active { transform: scale(0.96); }
+.hcard-icon { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 8px rgba(255,255,255,0.3)); }
+.hcard-title { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.8); }
+
+/* 選中卡片：彩色光暈 */
+.hcard--open {
+  background: rgba(162,155,254,0.14);
+  border-color: rgba(162,155,254,0.6);
+  box-shadow:
+    0 0 16px rgba(162,155,254,0.35),
+    0 0 32px rgba(162,155,254,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.hcard--open .hcard-title { color: #D4C8FF; }
+
+/* 各卡片獨立顏色 */
+#hcard-inv.hcard--open    { border-color: rgba(255,217,61,0.6);  box-shadow: 0 0 16px rgba(255,217,61,0.3); }
+#hcard-guide.hcard--open  { border-color: rgba(116,185,255,0.6); box-shadow: 0 0 16px rgba(116,185,255,0.3); }
+#hcard-dog.hcard--open    { border-color: rgba(253,121,168,0.6); box-shadow: 0 0 16px rgba(253,121,168,0.3); }
+#hcard-supply.hcard--open { border-color: rgba(85,239,196,0.6);  box-shadow: 0 0 16px rgba(85,239,196,0.3); }
+#hcard-challenge.hcard--open { border-color: rgba(255,217,61,0.6); box-shadow: 0 0 16px rgba(255,217,61,0.3); }
+
+/* ── section 通用 ── */
+.home-section {
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(6px);
+}
+.home-section-title {
+  color: rgba(255,255,255,0.55);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+/* ── 下一關準備（固定顯示） ── */
+#home-next-stage-fixed { padding: 0 14px; margin-bottom: 6px; }
+#home-next-stage-section {
+  background: linear-gradient(135deg, rgba(255,217,61,0.08) 0%, rgba(162,155,254,0.06) 100%);
+  border-color: rgba(255,217,61,0.2);
+}
+.hns-stage-id { font-size: 12px; color: rgba(255,217,61,0.7); font-weight: 800; letter-spacing: 0.08em; }
+.hns-name { font-size: 18px; font-weight: 900; color: #fff; margin: 4px 0; letter-spacing: 0.02em; }
+.hns-hint { font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 4px; }
+.hns-hint--secret { color: rgba(162,155,254,0.8); }
+.hns-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; margin-bottom: 6px; }
+.hns-badge--warn  { background: rgba(255,100,80,0.2); color: #FF8A80; border: 1px solid rgba(255,100,80,0.3); }
+.hns-badge--clear { background: rgba(85,239,196,0.15); color: #55EFC4; border: 1px solid rgba(85,239,196,0.3); }
+
+/* ── 道具格子 ── */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.inv-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 10px 4px 8px;
+  transition: transform 0.1s, background 0.1s;
+}
+.inv-item:hover { background: rgba(255,255,255,0.1); transform: scale(1.04); }
+.inv-item__icon  { font-size: 22px; line-height: 1; }
+.inv-item__count { font-size: 18px; font-weight: 900; color: #fff; }
+.inv-item__name  { font-size: 9px; color: #888; font-weight: 700; letter-spacing: 0.05em; }
+.inv-item__dur   { font-size: 9px; color: rgba(162,155,254,0.7); margin-top: 1px; }
+.inv-coin   { border-color: rgba(255,217,61,0.25);  background: rgba(255,217,61,0.06); }
+.inv-coin .inv-item__count  { color: #FFD93D; }
+.inv-balloon { border-color: rgba(255,107,157,0.25); background: rgba(255,107,157,0.06); }
+.inv-balloon .inv-item__count { color: #FF6B9D; }
+.inv-sword   { border-color: rgba(116,185,255,0.25); background: rgba(116,185,255,0.06); }
+.inv-hammer  { border-color: rgba(162,155,254,0.25); background: rgba(162,155,254,0.06); }
+.inv-candy   { border-color: rgba(253,121,168,0.25); background: rgba(253,121,168,0.06); }
+.inv-empty   { font-size: 12px; color: rgba(255,255,255,0.25); text-align: center; padding: 16px 0; font-style: italic; }
+
+/* ── 氣球秘笈卡片 ── */
+.home-section--guidebook { padding: 0 !important; overflow: hidden; }
+.guidebook-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, rgba(116,185,255,0.12) 0%, rgba(162,155,254,0.1) 100%);
+  border: 1px solid rgba(116,185,255,0.3);
+  border-radius: 16px;
+  padding: 20px 18px;
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.guidebook-card:hover  { transform: scale(1.02); box-shadow: 0 0 24px rgba(116,185,255,0.25); }
+.guidebook-card:active { transform: scale(0.98); }
+.guidebook-card__glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 80% 20%, rgba(162,155,254,0.2), transparent 60%);
+  pointer-events: none;
+}
+.guidebook-card__icon  { font-size: 36px; margin-bottom: 8px; filter: drop-shadow(0 0 12px rgba(116,185,255,0.5)); }
+.guidebook-card__title { font-size: 16px; font-weight: 900; color: #fff; }
+.guidebook-card__desc  { font-size: 11px; color: rgba(116,185,255,0.7); margin-top: 4px; }
+.guidebook-card__cta   { font-size: 12px; font-weight: 800; color: #74B9FF; margin-top: 10px; letter-spacing: 0.06em; }
+
+/* ── 氣球小狗卡片 ── */
+.dog-card {
+  border-radius: 16px;
+  padding: 18px 14px;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.dog-card--present {
+  background: linear-gradient(135deg, rgba(253,121,168,0.1) 0%, rgba(162,155,254,0.08) 100%);
+  border: 1px solid rgba(253,121,168,0.25);
+}
+.dog-card--empty {
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.12);
+}
+.dog-card__face   { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.dog-card__title  { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 4px; }
+.dog-card__desc   { font-size: 11px; color: rgba(255,255,255,0.45); line-height: 1.5; }
+.dog-card__turns  { display: flex; justify-content: center; gap: 8px; margin: 10px 0; }
+.dog-wiggle       { animation: dogWiggle 3s ease-in-out infinite; display: inline-block; }
+@keyframes dogWiggle {
+  0%,100% { transform: rotate(-4deg); }
+  50%     { transform: rotate(4deg); }
+}
+.dog-turn-dot { width: 16px; height: 16px; border-radius: 50%; }
+.dog-turn-dot--filled {
+  background: linear-gradient(135deg, #FFD93D, #FF6B9D);
+  box-shadow: 0 0 8px rgba(255,107,157,0.5);
+}
+.dog-hint-text {
+  font-size: 12px; color: rgba(255,217,61,0.8);
+  background: rgba(255,217,61,0.08);
+  border: 1px solid rgba(255,217,61,0.15);
+  border-radius: 10px; padding: 8px 12px;
+  line-height: 1.5; margin-bottom: 10px;
+}
+.dog-craft-btn {
+  width: 100%; padding: 11px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(253,121,168,0.8), rgba(162,155,254,0.8));
+  border: none; color: #fff; font-size: 13px; font-weight: 800;
+  cursor: pointer; font-family: var(--font-home);
+  transition: transform 0.12s, box-shadow 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.dog-craft-btn:hover { transform: scale(1.02); box-shadow: 0 4px 16px rgba(253,121,168,0.4); }
+.dog-craft-btn:active { transform: scale(0.97); }
+.dog-craft-btn--disabled { background: rgba(255,255,255,0.1); color: #555; cursor: not-allowed; }
+.dog-bring-btn {
+  width: 100%; padding: 11px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(162,155,254,0.8), rgba(116,185,255,0.8));
+  border: none; color: #fff; font-size: 13px; font-weight: 800;
+  cursor: pointer; font-family: var(--font-home);
+  transition: transform 0.12s, box-shadow 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.dog-bring-btn:hover { transform: scale(1.02); box-shadow: 0 4px 16px rgba(162,155,254,0.4); }
+.dog-bring-btn--disabled { background: rgba(255,255,255,0.1); color: #555; cursor: not-allowed; }
+.dog-arranged {
+  text-align: center; font-size: 13px; font-weight: 800;
+  color: #55EFC4; padding: 10px;
+  background: rgba(85,239,196,0.1); border-radius: 10px;
+  border: 1px solid rgba(85,239,196,0.25);
+}
+
+/* ── 補給 ── */
+.supply-hp-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 12px; flex-wrap: wrap;
+}
+.hp-heart { font-size: 18px; filter: grayscale(1) opacity(0.3); transition: filter 0.2s; }
+.hp-heart--full { filter: none; }
+.hp-heart--half { filter: grayscale(0.5) opacity(0.7); }
+.supply-hp-num { font-size: 14px; font-weight: 900; color: #FF6B9D; margin-left: 4px; }
+.supply-bandage { background: rgba(85,239,196,0.06); border: 1px solid rgba(85,239,196,0.15); border-radius: 12px; padding: 12px; }
+.supply-bandage__label { font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+.supply-bandage__label span { color: rgba(85,239,196,0.6); font-size: 11px; font-weight: 600; }
+.supply-bandage__btn {
+  width: 100%; padding: 10px; border-radius: 10px;
+  font-size: 13px; font-weight: 800; font-family: var(--font-home);
+  border: none; cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.supply-bandage__btn--active {
+  background: linear-gradient(135deg, #FF6B9D, #FF8E53);
+  color: #fff; box-shadow: 0 4px 12px rgba(255,107,157,0.35);
+}
+.supply-bandage__btn--active:hover { transform: scale(1.02); box-shadow: 0 6px 18px rgba(255,107,157,0.5); }
+.supply-bandage__btn--disabled { background: rgba(255,255,255,0.08); color: #555; cursor: not-allowed; }
+
+/* ── 本次冒險格子 ── */
+.challenge-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px;
+}
+.challenge-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.04); border-radius: 10px; padding: 10px 4px;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.challenge-tile__icon { font-size: 18px; }
+.challenge-tile__val  { font-size: 16px; font-weight: 900; color: #FFD93D; }
+.challenge-tile__lbl  { font-size: 9px; color: #666; font-weight: 700; letter-spacing: 0.05em; }
+
+/* ── 大按鈕強化 ── */
+#btn-home-next-level {
+  font-family: var(--font-home);
+  font-size: 15px; font-weight: 900;
+  letter-spacing: 0.04em;
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: linear-gradient(135deg, #55EFC4 0%, #74B9FF 100%);
+  color: #0F0E2B;
+  border: none;
+  transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.15s ease;
+  box-shadow: 0 4px 16px rgba(85,239,196,0.3);
+}
+#btn-home-next-level:hover  { transform: scale(1.03); box-shadow: 0 6px 24px rgba(85,239,196,0.5); }
+#btn-home-next-level:active { transform: scale(0.97); }
+#btn-home-next-level.home-btn--red {
+  background: linear-gradient(135deg, #FF6B9D 0%, #FDCB6E 100%);
+  box-shadow: 0 4px 16px rgba(255,107,157,0.35);
+  color: #fff;
+}
+
+/* ── 版本號 ── */
+#home-version { color: rgba(162,155,254,0.3); font-size: 10px; }
+
+/* ── 手機適配 ── */
+@media (max-width: 420px), (max-height: 460px) {
+  .inv-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .challenge-grid { gap: 5px; }
+  .dog-card__face { font-size: 32px; }
+  .hcard-icon { font-size: 24px; }
+  .hcard-title { font-size: 9px; }
+}

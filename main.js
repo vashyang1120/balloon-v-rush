@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.1-home-ui';
-const BUILD_TIME   = '2026-06-04 21:00';
+const GAME_VERSION = 'adventure-v0.2.2-home-visual';
+const BUILD_TIME   = '2026-06-05 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3615,27 +3615,25 @@ function closeHomeScreen() {
 function renderHomeInventory() {
   const el = document.getElementById('home-inventory-body');
   if (!el) return;
-  const ci  = playerInventory.craftedItems || {};
-  // 圖示磚塊格式：emoji + 數量
+  const ci = playerInventory.craftedItems || {};
+  const eqSword  = (equippedSword.id && equippedSword.currentDur) ? equippedSword.currentDur + '/' + equippedSword.maxDur : null;
+  const eqHammer = (equippedHammer.id && equippedHammer.currentDur) ? equippedHammer.currentDur + '/' + equippedHammer.maxDur : null;
   const items = [
-    { e:'🪙',  v: playerInventory.coins,        label:'金幣',       cls:'result-gold'   },
-    { e:'🎈',  v: playerInventory.balloon260,    label:'260 氣球',   cls:'result-pink'   },
-    { e:'⚪',  v: playerInventory.roundBalloon,  label:'圓氣球',     cls:'result-purple' },
-    { e:'⚔️',  v: ci.basicSword     || 0,        label:'氣球劍',     cls:'result-cyan'   },
-    { e:'🔨',  v: ci.basicHammer    || 0,        label:'氣球槌',     cls:'result-purple' },
-    { e:'🍭',  v: ci.balloonLollipop|| 0,        label:'棒棒糖',     cls:'result-pink'   },
-  ].filter(i => i.v > 0); // 數量 0 不顯示
-
-  if (!items.length) {
-    el.innerHTML = '<div class="home-empty">背包是空的</div>';
-    return;
-  }
-  el.innerHTML = '<div class="home-inv-grid">'
+    { e:'🪙',  v: playerInventory.coins,       lbl:'金幣',    cls:'inv-coin',   dur:null },
+    { e:'🎈',  v: playerInventory.balloon260,  lbl:'260 氣球',cls:'inv-balloon',dur:null },
+    { e:'⚪',  v: playerInventory.roundBalloon,lbl:'圓氣球',  cls:'inv-round',  dur:null },
+    { e:'⚔️', v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
+    { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
+    { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
+  ].filter(i => i.v > 0);
+  if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; return; }
+  el.innerHTML = '<div class="inv-grid">'
     + items.map(i =>
-        '<div class="home-inv-tile">'
-        + '<div class="home-inv-emoji">' + i.e + '</div>'
-        + '<div class="home-inv-count ' + i.cls + '">' + i.v + '</div>'
-        + '<div class="home-inv-label">' + i.label + '</div>'
+        '<div class="inv-item ' + i.cls + '">'
+        + '<div class="inv-item__icon">' + i.e + '</div>'
+        + '<div class="inv-item__count">' + i.v + '</div>'
+        + '<div class="inv-item__name">' + i.lbl + '</div>'
+        + (i.dur ? '<div class="inv-item__dur">' + i.dur + '</div>' : '')
         + '</div>'
       ).join('')
     + '</div>';
@@ -3689,14 +3687,14 @@ function renderHomeDog() {
   if (!hasDog) {
     const canCraft = (playerInventory.balloon260 || 0) >= 1;
     el.innerHTML =
-      '<div class="home-dog-card home-dog-card--empty">'
-      + '<div class="home-dog-card__icon" style="opacity:0.3">🐶</div>'
-      + '<div class="home-dog-card__status" style="color:#aaa">還沒有氣球小狗</div>'
-      + '<div class="home-dog-card__hint">製作時療癒 ❤️ +0.5，帶牠出門並通關後也會恢復 ❤️ +0.5。</div>'
-      + '</div>'
-      + '<button class="home-btn ' + (canCraft ? 'home-btn--purple' : 'home-btn--dim') + '" '
-      + (canCraft ? '' : 'disabled') + ' onclick="homeMakeDog()" style="margin-top:8px">'
-      + (canCraft ? '🐶 製作氣球小狗 -1 🎈' : '260 氣球不足') + '</button>';
+      '<div class="dog-card dog-card--empty">'
+      + '<div class="dog-card__face">🐶</div>'
+      + '<div class="dog-card__title">還沒有氣球小狗</div>'
+      + '<div class="dog-card__desc">製作成功立刻療癒 ❤️+0.5<br>通關後也會療癒 ❤️+0.5</div>'
+      + '<button class="dog-craft-btn ' + (canCraft ? '' : 'dog-craft-btn--disabled') + '" '
+      + (canCraft ? 'onclick="homeMakeDog()"' : 'disabled') + '>'
+      + (canCraft ? '✨ 製作氣球小狗 −1 🎈' : '260 氣球不足') + '</button>'
+      + '</div>';
     return;
   }
 
@@ -3716,28 +3714,24 @@ function renderHomeDog() {
     bringBtnHtml = '<div style="font-size:11px;color:#ff8888;margin-top:6px">氣球小狗已消氣，無法帶出門</div>';
   } else if (nextBringDog) {
     // 已安排帶狗，顯示確認，不可重複扣
-    bringBtnHtml = '<button class="home-btn home-btn--dim" disabled>✅ 已安排帶狗出發</button>';
+    bringBtnHtml = '<div class="dog-arranged">✅ 已安排帶狗出發</div>';
   } else {
     const canBring = hasDog && (playerInventory.balloon260 || 0) >= 1;
     const btnText  = canBring ? '帶狗出發 -1 🎈' : '260 氣球不足';
-    bringBtnHtml =
-      '<button id="btn-home-bring-dog" class="home-btn '
-      + (canBring ? 'home-btn--purple' : 'home-btn--dim') + '" '
-      + (canBring ? '' : 'disabled') + ' onclick="homeBringDog()">'
-      + btnText + '</button>';
+    bringBtnHtml = '<button id="btn-home-bring-dog" class="dog-bring-btn '
+      + (canBring ? '' : 'dog-bring-btn--disabled') + '" '
+      + (canBring ? 'onclick="homeBringDog()"' : 'disabled') + '>'
+      + (canBring ? '🐾 ' : '') + btnText + '</button>';
   }
 
   el.innerHTML =
-    '<div class="home-dog-card">'
-    + '<div class="home-dog-card__icon">🐶</div>'
-    + '<div class="home-dog-card__status result-gold">已在小V的家</div>'
-    + '<div class="home-dog-card__turns">'
-    + '<span style="font-size:11px;color:#aaa">陪伴回合：</span>'
-    + turnsHtml
+    '<div class="dog-card dog-card--present">'
+    + '<div class="dog-card__face dog-wiggle">🐶</div>'
+    + '<div class="dog-card__title">氣球小狗在家</div>'
+    + '<div class="dog-card__turns">' + turnsHtml + '</div>'
+    + '<div class="dog-card__desc">通關療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
     + '</div>'
-    + '<div class="home-dog-card__hint">每次通關恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
-    + '</div>'
-    + '<div class="home-dog-hint">' + dogHint + '</div>'
+    + '<div class="dog-hint-text">' + dogHint + '</div>'
     + bringBtnHtml;
 }
 
@@ -3774,38 +3768,29 @@ function renderHomeNextStage() {
   const btn = document.getElementById('btn-home-next-level');
   if (!el) return;
 
-  // 失敗模式：本關尚未完成，只能重試
   if (homeEntryMode === 'failed') {
     const lv = LEVELS[currentLevelIndex];
     el.innerHTML =
-      '<div class="home-row"><span class="home-row-label">目前關卡</span>'
-      + '<span class="home-row-val result-red">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</span></div>'
-      + '<div class="home-dog-hint" style="color:#ffaaaa">本關尚未完成，請先重試本關。</div>';
-    if (btn) {
-      btn.textContent = '↺ 重試本關';
-      btn.className   = btn.className.replace('home-btn--green', 'home-btn--red');
-    }
+      '<div class="hns-badge hns-badge--warn">本關尚未完成</div>'
+      + '<div class="hns-name">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</div>'
+      + '<div class="hns-hint">擊退所有挑戰，帶著收穫回家吧！</div>';
+    if (btn) { btn.textContent = '↺ 重試本關'; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
     return;
   }
 
-  // 通關模式：可前往下一關
   const nextIdx = currentLevelIndex + 1;
   if (nextIdx >= LEVELS.length) {
-    el.innerHTML = '<div class="home-empty">已抵達最後一關！可以重玩或結算本次成績。</div>';
-    if (btn) { btn.textContent = '再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
+    el.innerHTML = '<div class="hns-badge hns-badge--clear">🎉 全部關卡完成！</div><div class="hns-hint">可以重玩或等待更多冒險！</div>';
+    if (btn) { btn.textContent = '🔄 再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
     return;
   }
   const lv = LEVELS[nextIdx];
-  let html = '<div class="home-row"><span class="home-row-label">下一關</span>'
-    + '<span class="home-row-val result-gold">' + (lv.stageId || '') + ' ' + (lv.shortName || lv.name) + '</span></div>';
-  if (lv.hiddenTreasure && playerInventory.balloonDog?.present) {
-    html += '<div class="home-dog-hint" style="color:#ffe080">這一關似乎藏著神秘寶物……</div>';
-  }
-  el.innerHTML = html;
-  if (btn) {
-    btn.textContent = '🚀 開始下一關';
-    btn.className   = btn.className.replace('home-btn--red', 'home-btn--green');
-  }
+  const hasSecret = lv.hiddenTreasure && playerInventory.balloonDog?.present;
+  el.innerHTML =
+    '<div class="hns-stage-id">' + (lv.stageId || '') + '</div>'
+    + '<div class="hns-name">' + (lv.shortName || lv.name) + '</div>'
+    + (hasSecret ? '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……</div>' : '');
+  if (btn) { btn.textContent = '🚀 出發冒險！'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
 }
 
 // ── 本次挑戰 ────────────────────────────────
@@ -3813,14 +3798,23 @@ function renderHomeChallenge() {
   const el = document.getElementById('home-challenge-body');
   if (!el) return;
   const c = currentChallenge;
-  el.innerHTML =
-    '<div class="home-row"><span class="home-row-label">完成關卡</span><span class="home-row-val result-blue">' + c.stagesCleared + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">最高進度</span><span class="home-row-val result-gold">' + (c.reachedStageId || '-') + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">總金幣</span><span class="home-row-val result-gold">' + c.totalCoinsCollected + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">秘笈發現</span><span class="home-row-val">' + c.hiddenRecipesFound + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">寶箱發現</span><span class="home-row-val">' + c.hiddenTreasuresFound + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">重試次數</span><span class="home-row-val result-red">' + c.retryCount + '</span></div>'
-    + '<div class="home-row"><span class="home-row-label">受傷次數</span><span class="home-row-val result-red">' + c.damageTaken + '</span></div>';
+  const stats = [
+    { e:'🗺️', v: c.stagesCleared,      lbl:'完成關卡' },
+    { e:'🪙',  v: c.totalCoinsCollected,lbl:'金幣' },
+    { e:'📖', v: c.hiddenRecipesFound,  lbl:'秘笈' },
+    { e:'🎁',  v: c.hiddenTreasuresFound,lbl:'寶箱' },
+    { e:'↺',  v: c.retryCount,          lbl:'重試' },
+    { e:'🩹',  v: c.damageTaken,         lbl:'受傷' },
+  ];
+  el.innerHTML = '<div class="challenge-grid">'
+    + stats.map(s =>
+        '<div class="challenge-tile">'
+        + '<div class="challenge-tile__icon">' + s.e + '</div>'
+        + '<div class="challenge-tile__val">' + s.v + '</div>'
+        + '<div class="challenge-tile__lbl">' + s.lbl + '</div>'
+        + '</div>'
+      ).join('')
+    + '</div>';
 }
 
 // ── 從小V的家進入下一關 ──────────────────────
