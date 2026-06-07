@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.6-retry-hp-fix';
-const BUILD_TIME   = '2026-06-05 19:30';
+const GAME_VERSION = 'adventure-v0.2.7-result-hp-dog-text';
+const BUILD_TIME   = '2026-06-05 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3197,8 +3197,9 @@ function refreshResultDog() {
   let inner = '';
   if (hasDog) {
     inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
-    inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>';
-    inner += '<div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">' + turns + ' 回合</span></div>';
+    const ds = getDogStatusText();
+    inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">' + ds.status + '</span></div>';
+    inner += '<div class="rp-row"><span class="rp-label">陪伴</span><span class="rp-val result-blue">' + ds.turns + '</span></div>';
     if (currentRunStats.dogHealed) {
       inner += '<div class="rp-row"><span class="rp-label">🐶 療癒</span><span class="rp-val result-red">❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</span></div>';
     }
@@ -3339,8 +3340,9 @@ function populateResultPanel() {
   if (hasDog) {
     let dogInner = '';
     dogInner += '<div class="rp-section-title">🐶 氣球小狗</div>';
-    dogInner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">已在小V的家</span></div>';
-    dogInner += '<div class="rp-row"><span class="rp-label">陪伴回合</span><span class="rp-val result-blue">' + dogTurns + ' 回合</span></div>';
+    const dsDog = getDogStatusText();
+    dogInner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val result-gold">' + dsDog.status + '</span></div>';
+    dogInner += '<div class="rp-row"><span class="rp-label">陪伴</span><span class="rp-val result-blue">' + dsDog.turns + '</span></div>';
     if (currentRunStats.dogHealed) {
       dogInner += '<div class="rp-row"><span class="rp-label">❤️ 結算回血</span><span class="rp-val result-red">+0.5</span></div>';
     }
@@ -3435,6 +3437,7 @@ function populateResultPanel() {
   html += '<div class="rp-clear-title">🎉 過關成功！</div>';
   html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
   html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
+  html += buildResultHpHtml(); // 直接顯示目前 HP
   // 第一層：重點收穫
   html += '<div class="rp-hero-section" id="rp-hero-section">'
     + '<div class="rp-reward-grid">' + mainTiles + '</div>'
@@ -3772,7 +3775,7 @@ function renderHomeDog() {
   el.innerHTML =
     '<div class="dog-card dog-card--present">'
     + '<div class="dog-card__face dog-wiggle">🐶</div>'
-    + '<div class="dog-card__title">氣球小狗在家</div>'
+    + '<div class="dog-card__title">' + (bringBalloonDog ? '🐶 氣球小狗同行中' : '氣球小狗在小V的家') + '</div>'
     + '<div class="dog-card__turns">' + turnsHtml + '</div>'
     + '<div class="dog-card__desc">通關療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
     + '</div>'
@@ -3869,6 +3872,41 @@ function renderHomeChallenge() {
 //  retryCurrentLevelFromStart()
 //  所有「重試本關」入口的統一函式（規格版）
 // =============================================
+
+// ── 結算畫面 HP 狀態 HTML ────────────────────
+
+// ── 氣球小狗狀態文字（依 bringBalloonDog）────
+function getDogStatusText() {
+  const dog = playerInventory.balloonDog || {};
+  if (!dog.present) return { status: '尚未製作氣球小狗', turns: '' };
+  const turns = dog.turnsLeft || 0;
+  const turnsText = '陪伴還剩 ' + turns + ' 次冒險';
+  if (bringBalloonDog) return { status: '🐶 氣球小狗同行中', turns: turnsText };
+  return { status: '🐶 氣球小狗在小V的家', turns: turnsText };
+}
+
+function buildResultHpHtml() {
+  const hpFilled = Math.floor(player.hp);
+  const hpHalf   = player.hp % 1 >= 0.5;
+  let hearts = '';
+  for (let i = 0; i < player.maxHp; i++) {
+    hearts += '<span class="rp-hp-heart'
+      + (i < hpFilled ? ' rp-hp-heart--full' : (i === hpFilled && hpHalf ? ' rp-hp-heart--half' : ''))
+      + '">❤️</span>';
+  }
+  const warn = player.hp <= 1
+    ? '<div class="rp-hp-warn">⚠️ 生命偏低，建議先補給再出發！</div>' : '';
+  return '<div class="rp-hp-status" id="rp-hp-status">'
+    + '<div class="rp-hp-status__row">' + hearts
+    + '<span class="rp-hp-status__num">' + player.hp + ' / ' + player.maxHp + '</span></div>'
+    + warn + '</div>';
+}
+
+function refreshResultHpStatus() {
+  const el = document.getElementById('rp-hp-status');
+  if (el) el.outerHTML = buildResultHpHtml();
+}
+
 function retryCurrentLevelFromStart() {
   // 1. restore snapshot
   if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
@@ -3994,7 +4032,8 @@ function openPauseBag() {
   const dog = playerInventory.balloonDog || {};
   let dogHtml = '';
   if (dog.present) {
-    dogHtml = '<div class="pause-bag-dog">🐶 氣球小狗在家 · 剩 ' + (dog.turnsLeft||0) + ' 回合</div>';
+    const ds = getDogStatusText();
+    dogHtml = '<div class="pause-bag-dog">' + ds.status + '　' + ds.turns + '</div>';
   }
 
   const body = document.getElementById('pause-bag-body');
