@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.3-home-mobile-scroll';
-const BUILD_TIME   = '2026-06-05 14:00';
+const GAME_VERSION = 'adventure-v0.2.4-result-visual';
+const BUILD_TIME   = '2026-06-05 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3343,57 +3343,68 @@ function populateResultPanel() {
 
   // 【第一層】主標題 + 本關收穫圖示磚
   const mainTiles = runRowsMain.map(([e, v, cls, lbl]) =>
-    '<div class="rp-tile"><div class="rp-tile-emoji">' + e + '</div>'
-    + '<div class="rp-tile-val ' + cls + '">' + v + '</div>'
-    + '<div class="rp-tile-label">' + lbl + '</div></div>'
+    '<div class="rp-reward-tile"><div class="rp-reward-tile__icon">' + e + '</div>'
+    + '<div class="rp-reward-tile__num ' + cls + '">+' + v + '</div>'
+    + '<div class="rp-reward-tile__lbl">' + lbl + '</div></div>'
   ).join('');
 
   // 徽章（隱藏物 + 狗療癒）
   const foundBadges = [];
   if (currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈')
-    foundBadges.push('<div class="rp-badge rp-badge--recipe">📖 新秘笈發現！</div>');
+    foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📖</span>新秘笈發現！</div>');
   if (currentRunStats.foundHiddenTreasureName === '金幣寶箱')
-    foundBadges.push('<div class="rp-badge rp-badge--chest">🎁 隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
+    foundBadges.push('<div class="rp-award-badge rp-award-badge--chest"><span>🎁</span>隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
   if (currentRunStats.dogHealed)
-    foundBadges.push('<div class="rp-badge rp-badge--dog">🐶 氣球小狗療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>');
+    foundBadges.push('<div class="rp-award-badge rp-award-badge--dog"><span>🐶</span>氣球小狗療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>');
   const badgesHtml = foundBadges.join('');
 
   // 【第二層】目前背包（預設收合）—— onclick 用 data-target，避免字串引號衝突
-  const bagHtml = '<div class="rp-section rp-collapsible" id="rp-inventory-section">'
-    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-inventory-body" onclick="rpToggle(this)">'
-    + '🎒 目前背包 <span class="rp-toggle-arrow">▶</span></div>'
+  const bagHtml = '<div class="rp-fold-card" id="rp-inventory-section">'
+    + '<div class="rp-fold-btn" data-target="rp-inventory-body" onclick="rpToggle(this)">'
+    + '<span class="rp-fold-icon">🎒</span><span>目前背包</span><span class="rp-toggle-arrow">▶</span></div>'
     + '<div id="rp-inventory-body" style="display:none">' + makeTable(buildBagRows()) + '</div></div>';
 
   // 【第三層】詳細紀錄（預設收合）
-  const detailHtml = '<div class="rp-section rp-collapsible" id="rp-run-section">'
-    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-detail-body" onclick="rpToggle(this)">'
-    + '📋 詳細紀錄 <span class="rp-toggle-arrow">▶</span></div>'
-    + '<div id="rp-detail-body" style="display:none">'
-    + makeTable(runRows)
-    + '</div></div>';
+  const detailHtml = '<div class="rp-fold-card" id="rp-run-section">'
+    + '<div class="rp-fold-btn" data-target="rp-detail-body" onclick="rpToggle(this)">'
+    + '<span class="rp-fold-icon">📋</span><span>詳細紀錄</span><span class="rp-toggle-arrow">▶</span></div>'
+    + '<div id="rp-detail-body" style="display:none">' + makeTable(runRows) + '</div></div>';
 
   // 【第四層】補給（預設收合）
-  const supplyHtml = '<div class="rp-section rp-collapsible" id="supply-section">'
-    + '<div class="rp-section-title rp-toggle-btn" data-target="rp-supply-body" onclick="rpToggle(this)">'
-    + '🏥 補給 <span class="rp-toggle-arrow">▶</span></div>'
+  const supplyHtml = '<div class="rp-fold-card" id="supply-section">'
+    + '<div class="rp-fold-btn" data-target="rp-supply-body" onclick="rpToggle(this)">'
+    + '<span class="rp-fold-icon">🏥</span><span>補給</span><span class="rp-toggle-arrow">▶</span></div>'
     + '<div id="rp-supply-body" style="display:none">'
-    + '<div class="rp-supply-hp">❤️ 目前生命：<span id="supply-hp">' + player.hp + ' / ' + player.maxHp + '</span></div>'
-    + '<div class="rp-supply-item"><div class="rp-supply-info">'
-    + '<span class="rp-supply-name">🩹 愛心貼布</span>'
-    + '<span class="rp-supply-price">20 🪙　+1 ❤️</span>'
-    + '</div><button id="btn-buy-bandage" class="rp-supply-btn" onclick="buyBandage()">'
-    + bandageBtnText + '</button></div>'
+    + (function(){
+        var hpFilled = Math.floor(player.hp);
+        var hpHalf   = player.hp % 1 >= 0.5;
+        var hearts   = '';
+        for(var i=0;i<player.maxHp;i++){
+          hearts += '<span class="rp-hp-heart'+(i<hpFilled?' rp-hp-heart--full':(i===hpFilled&&hpHalf?' rp-hp-heart--half':''))+'">❤️</span>';
+        }
+        return '<div class="rp-supply-hp-row">'+hearts+'<span class="rp-supply-hp-num" id="supply-hp">'+player.hp+' / '+player.maxHp+'</span></div>';
+      })()
+    + '<div class="rp-supply-bandage-row"><div class="rp-supply-bandage-info"><span class="rp-supply-name">🩹 愛心貼布</span><span class="rp-supply-price">−20 🪙　+1 ❤️</span></div>'
+    + '<button id="btn-buy-bandage" class="rp-supply-btn rp-supply-btn--'
+    + (player.hp>=player.maxHp||currentRunStats.usedHeartPatch||(playerInventory.coins||0)<BANDAGE_PRICE ? 'disabled' : 'active')
+    + '" onclick="buyBandage()">' + bandageBtnText + '</button></div>'
     + '<div id="bandage-msg" class="rp-supply-msg"></div>'
     + '</div></div>';
 
   // 組合
   let html = '';
-  html += '<div class="rp-level-name">' + (LEVELS[currentLevelIndex]?.emoji || '🌿') + ' ' + LEVEL_NAME + '</div>';
+  html += '<div class="rp-level-badge"><span class="rp-level-emoji">'
+    + (LEVELS[currentLevelIndex]?.emoji || '🌿')
+    + '</span><span class="rp-level-stageId">'
+    + (LEVELS[currentLevelIndex]?.stageId || '')
+    + '</span></div>';
+  html += '<div class="rp-clear-title">🎉 過關成功！</div>';
+  html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
+  html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
   // 第一層：重點收穫
-  html += '<div class="rp-section rp-hero-section" id="rp-hero-section">'
-    + '<div class="rp-hero-title">🎉 過關成功！本關帶回：</div>'
-    + '<div class="rp-tiles">' + mainTiles + '</div>'
-    + (badgesHtml ? '<div class="rp-badges">' + badgesHtml + '</div>' : '')
+  html += '<div class="rp-hero-section" id="rp-hero-section">'
+    + '<div class="rp-reward-grid">' + mainTiles + '</div>'
+    + (badgesHtml ? '<div class="rp-awards">' + badgesHtml + '</div>' : '')
     + '</div>';
   // 特殊提示（槌子解鎖 / 秘笈按鈕）
   html += treasureHint;
@@ -3406,7 +3417,7 @@ function populateResultPanel() {
   html += detailHtml;
   html += supplyHtml;
   // 氣球小知識
-  html += '<div class="rp-trivia">💡 ' + trivia + '</div>';
+  html += '<div class="rp-trivia-card"><span class="rp-trivia-icon">💡</span><span>' + trivia + '</span></div>';
 
   panel.innerHTML = html;
 
