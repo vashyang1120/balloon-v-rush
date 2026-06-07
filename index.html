@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.2-home-visual" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.2.3-home-mobile-scroll" />
 </head>
 <body>
 
@@ -45,7 +45,10 @@
       </div>
 
       <!-- 主要內容（可捲動） -->
-      <!-- ── 下一關準備（固定，不參與卡片收合）── -->
+      <!-- ── 主捲動區域（header 外全部在這裡）── -->
+      <div id="home-scroll-body">
+
+      <!-- 下一關準備（在 scroll 內，不固定吃高度）-->
       <div id="home-next-stage-fixed">
         <div id="home-next-stage-section" class="home-section">
           <div class="home-section-title">🗺️ 下一關準備</div>
@@ -54,7 +57,7 @@
         </div>
       </div>
 
-      <!-- ── 卡片網格（主入口，5 張）── -->
+      <!-- 卡片網格（在 scroll 內）-->
       <div id="home-card-grid">
 
         <!-- 背包 -->
@@ -142,9 +145,11 @@
 
       </div><!-- /#home-body -->
 
-      <!-- 版本號（底部小字） -->
+      </div><!-- /#home-scroll-body -->
+
+      <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.2.2-home-visual · 2026-06-04
+        adventure-v0.2.3-home-mobile-scroll · 2026-06-04
       </div>
 
     </div><!-- /#home-panel -->
@@ -249,7 +254,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.2-home-visual"></script>
+  <script src="main.js?v=adventure-v0.2.3-home-mobile-scroll"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

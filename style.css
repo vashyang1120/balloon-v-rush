@@ -791,7 +791,7 @@ html, body {
 
 #home-header {
   flex-shrink: 0;
-  padding: 18px 20px 12px;
+  padding: 14px 20px 10px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
   text-align: center;
 }
@@ -1238,6 +1238,10 @@ html, body {
     0 0 120px rgba(116,185,255,0.06),
     inset 0 1px 0 rgba(255,255,255,0.08);
   backdrop-filter: blur(20px);
+  max-height: 94dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ── home-header ── */
@@ -1513,4 +1517,107 @@ html, body {
   .dog-card__face { font-size: 32px; }
   .hcard-icon { font-size: 24px; }
   .hcard-title { font-size: 9px; }
+}
+
+/* ── Phase 2C-2：手機橫向捲動修正 ── */
+
+#home-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;           /* 關鍵：讓 flex child 能收縮 */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* home-body 本身不再獨立 flex 捲動 */
+#home-body {
+  overflow: visible;
+  padding: 12px 14px 16px;
+  flex: none;
+}
+
+/* home-next-stage-fixed 在 scroll 內，不固定吃高度 */
+#home-next-stage-fixed {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* home-card-grid 在 scroll 內 */
+#home-card-grid {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* 版本號固定在最底部 */
+#home-version {
+  flex-shrink: 0;
+  padding: 4px 0 4px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ── Compact mode：手機橫向 ── */
+@media (max-height: 500px) and (orientation: landscape) {
+  #home-screen { padding: 6px; }
+  #home-panel  { max-height: 98dvh; border-radius: 12px; }
+
+  #home-header { padding: 6px 14px 6px; }
+  #home-title  { font-size: 16px; }
+  #home-subtitle { display: none; } /* 橫向空間不足時隱藏副標 */
+
+  #home-header-top { gap: 4px; }
+  #btn-home-back   { font-size: 10px; padding: 4px 8px; }
+
+  /* 下一關準備：精簡 */
+  #home-next-stage-fixed { padding: 0 10px 4px; }
+  #home-next-stage-section { padding: 8px 12px; margin-bottom: 4px; }
+  .hns-name { font-size: 14px; }
+  .hns-stage-id { font-size: 10px; }
+  #btn-home-next-level { padding: 8px 12px; font-size: 13px; margin-top: 6px; }
+
+  /* 主卡片精簡 */
+  #home-card-grid { gap: 6px; padding: 6px 10px 4px; grid-template-columns: repeat(5, 1fr); }
+  .hcard { padding: 8px 4px 6px; border-radius: 10px; gap: 3px; }
+  .hcard-icon  { font-size: 20px; }
+  .hcard-title { font-size: 8px; }
+
+  /* 展開內容精簡 */
+  #home-body { padding: 8px 10px 12px; }
+  .home-section { padding: 8px 10px; margin-bottom: 6px; border-radius: 10px; }
+  .home-section-title { font-size: 10px; margin-bottom: 6px; }
+
+  /* 道具格子精簡 */
+  .inv-grid { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .inv-item { padding: 6px 3px; border-radius: 8px; }
+  .inv-item__icon  { font-size: 16px; }
+  .inv-item__count { font-size: 14px; }
+  .inv-item__name  { font-size: 8px; }
+
+  /* 狗卡精簡 */
+  .dog-card { padding: 10px; }
+  .dog-card__face { font-size: 28px; }
+  .dog-card__title { font-size: 12px; }
+  .dog-card__desc  { font-size: 10px; }
+
+  /* challenge 格子精簡 */
+  .challenge-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .challenge-tile { padding: 6px 3px; }
+  .challenge-tile__icon { font-size: 14px; }
+  .challenge-tile__val  { font-size: 13px; }
+
+  /* 補給精簡 */
+  .hp-heart { font-size: 14px; }
+  .supply-bandage { padding: 8px; }
+  .supply-bandage__btn { padding: 7px; font-size: 12px; }
+
+  /* 秘笈卡精簡 */
+  .guidebook-card { padding: 12px; }
+  .guidebook-card__icon { font-size: 26px; margin-bottom: 4px; }
+  .guidebook-card__title { font-size: 13px; }
+
+  /* 大按鈕 */
+  .home-btn { padding: 7px 10px; font-size: 12px; margin-top: 4px; border-radius: 8px; }
+  .dog-craft-btn, .dog-bring-btn { padding: 8px; font-size: 12px; border-radius: 8px; }
+
+  /* 版本號在 compact 下更小 */
+  #home-version { font-size: 9px; padding: 3px 0; }
 }
