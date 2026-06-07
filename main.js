@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.7-result-hp-dog-text';
-const BUILD_TIME   = '2026-06-05 21:00';
+const GAME_VERSION = 'adventure-v0.2.8-result-hp-dog-text-fix';
+const BUILD_TIME   = '2026-06-05 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3498,6 +3498,7 @@ function buyBandage() {
   // 更新補給區目前生命
   const supplyHp = document.getElementById('supply-hp');
   if (supplyHp) supplyHp.textContent = `${player.hp} / ${player.maxHp}`;
+  if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
   // 更新目前背包（金幣減少）
   refreshResultBag();
   // 更新按鈕狀態
