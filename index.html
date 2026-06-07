@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.4-result-visual" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.2.5-hud-visual" />
 </head>
 <body>
 
@@ -149,7 +149,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.2.4-result-visual · 2026-06-04
+        adventure-v0.2.5-hud-visual · 2026-06-04
       </div>
 
     </div><!-- /#home-panel -->
@@ -167,9 +167,9 @@
     <!-- 暫停 overlay -->
     <div id="pause-overlay">
       <div id="pause-panel">
-        <div id="pause-title">⏸ 遊戲暫停</div>
+        <div id="pause-title">⏸ 派對暫停中</div>
         <div id="pause-actions">
-          <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續遊戲</button>
+          <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續冒險</button>
           <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重試本關</button>
           <button id="btn-pause-bag" class="pause-btn pause-btn--secondary" onclick="openPauseBag()">🎒 查看背包</button>
         </div>
@@ -178,14 +178,14 @@
     </div>
 
     <!-- 暫停背包 overlay -->
-    <div id="pause-bag-panel" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,0.8);align-items:center;justify-content:center">
-      <div style="background:rgba(14,18,48,0.98);border:1.5px solid rgba(255,255,255,0.15);border-radius:16px;padding:20px;min-width:260px;max-width:380px;width:90%">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <span style="font-size:16px;font-weight:800;color:#fff">🎒 目前背包</span>
-          <button onclick="closePauseBag()" style="background:none;border:none;color:#aaa;font-size:18px;cursor:pointer">✕</button>
+    <div id="pause-bag-panel" class="pause-bag-overlay">
+      <div class="pause-bag-inner">
+        <div class="pause-bag-header">
+          <span>🎒 目前背包</span>
+          <button onclick="closePauseBag()" class="pause-bag-close">✕</button>
         </div>
-        <div id="pause-bag-body"></div>
-        <div style="font-size:10px;color:#555;margin-top:12px;text-align:center">暫停中 · 背包僅供查看</div>
+        <div id="pause-bag-body" class="pause-bag-body"></div>
+        <div class="pause-bag-footer">⏸ 暫停中 · 背包僅供查看</div>
       </div>
     </div>
 
@@ -254,7 +254,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.4-result-visual"></script>
+  <script src="main.js?v=adventure-v0.2.5-hud-visual"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

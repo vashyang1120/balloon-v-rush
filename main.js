@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.4-result-visual';
-const BUILD_TIME   = '2026-06-05 16:00';
+const GAME_VERSION = 'adventure-v0.2.5-hud-visual';
+const BUILD_TIME   = '2026-06-05 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2952,97 +2952,121 @@ function drawFinishFlag(cx) {
 
 function drawHUD() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
-  const barW = 200;
-  const pad  = 12;
+  const pad = 10;
 
-  // HUD background strip
-  ctx.fillStyle = COLORS.ui;
-  ctx.fillRect(0, 0, CANVAS_W, 46);
+  // ── HUD 背景：深色半透明帶 ──
+  ctx.fillStyle = 'rgba(8,6,30,0.72)';
+  ctx.fillRect(0, 0, CANVAS_W, 52);
+  // 底邊漸層線
+  const gLine = ctx.createLinearGradient(0, 51, CANVAS_W, 51);
+  gLine.addColorStop(0,   'rgba(162,155,254,0)');
+  gLine.addColorStop(0.5, 'rgba(162,155,254,0.45)');
+  gLine.addColorStop(1,   'rgba(162,155,254,0)');
+  ctx.fillStyle = gLine;
+  ctx.fillRect(0, 51, CANVAS_W, 1);
 
-  // HP（支援 0.5 單位：整格紅色、半格橘色、空格深灰）
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('❤️', pad, 28);
+  ctx.textBaseline = 'middle';
+
+  // ── 左上：HP 心心條 ──
+  const heartY = 26;
+  const heartSize = 18;
   for (let i = 0; i < player.maxHp; i++) {
-    const bx = pad + 28 + i * 22;
-    const by = 12;
-    const bw = 16;
-    const bh = 22;
-    const filled = player.hp - i; // >1 整格, 0.5~1 半格, <=0 空格
-    if (filled >= 1) {
-      ctx.fillStyle = COLORS.hpFull;
-      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-    } else if (filled > 0) {
-      // 空格底
-      ctx.fillStyle = COLORS.hpEmpty;
-      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-      // 半格填色（左半）
-      ctx.fillStyle = '#e08030'; // 橘色代表半格
-      ctx.beginPath(); ctx.roundRect(bx, by, bw / 2, bh, [4,0,0,4]); ctx.fill();
-    } else {
-      ctx.fillStyle = COLORS.hpEmpty;
-      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-    }
+    const hx  = pad + i * (heartSize + 4);
+    const fill = player.hp - i;
+    ctx.font = heartSize + 'px sans-serif';
+    if (fill >= 1)      ctx.globalAlpha = 1.0;     // 全心
+    else if (fill > 0)  ctx.globalAlpha = 0.6;     // 半心（淡色）
+    else                ctx.globalAlpha = 0.18;    // 空心
+    ctx.fillText('❤️', hx, heartY);
   }
-  // 文字顯示 hp（清楚顯示小數）
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(`${player.hp}/${player.maxHp}`, pad + 28, 44);
+  ctx.globalAlpha = 1.0;
+  // HP 數字（半心時特別標出）
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = player.hp % 1 > 0 ? '#FDCB6E' : 'rgba(255,255,255,0.5)';
+  ctx.fillText(player.hp + '/' + player.maxHp, pad, 44);
 
-  // Timer
-  ctx.fillStyle = timeLeft <= 10 ? '#ff6b6b' : '#fff';
-  ctx.font = `bold 20px monospace`;
-  ctx.textAlign = 'center';
-  ctx.fillText(`⏱ ${String(timeLeft).padStart(2,'0')}`, CANVAS_W / 2, 30);
-
-  // Coins & balloons & round balloon
+  // ── 右上：收集資料（金幣、氣球） ──
   ctx.textAlign = 'right';
-  ctx.font = '14px sans-serif';
-  // 圓氣球（只在有圓氣球收集物的關卡顯示，目前為第 3 關）
-  const showRound = roundBalloons.length > 0;
-  const colOffset = showRound ? 150 : 100;
-  ctx.fillStyle = '#FFD700';
-  ctx.fillText(`🪙 ${player.coinsCollected}`, CANVAS_W - pad - colOffset, 28);
-  ctx.fillStyle = '#FF69B4';
-  ctx.fillText(`🎈 ${player.balloonsCollected}`, CANVAS_W - pad - (showRound ? 50 : 0), 28);
+  ctx.font = 'bold 13px sans-serif';
+  const showRound  = roundBalloons.length > 0;
+  let rx = CANVAS_W - pad;
   if (showRound) {
-    ctx.fillStyle = '#c8aaff';
-    ctx.fillText(`⚪ ${currentRunStats.roundBalloon}`, CANVAS_W - pad, 28);
+    ctx.fillStyle = '#A29BFE';
+    ctx.fillText('⚪' + currentRunStats.roundBalloon, rx, 18);
+    rx -= 56;
   }
+  ctx.fillStyle = '#FF6B9D';
+  ctx.fillText('🎈' + player.balloonsCollected, rx, 18);
+  rx -= 60;
+  ctx.fillStyle = '#FFD93D';
+  ctx.fillText('🪙' + player.coinsCollected, rx, 18);
 
-  // 裝備顯示（右側 HUD 下方）
-  // 裝備顯示（依 activeSlot）
-  ctx.textAlign = 'right';
+  // ── 中央：計時器 ──
+  ctx.textAlign = 'center';
+  const timerColor = timeLeft <= 10 ? '#FF6B9D' : 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = timerColor;
+  ctx.fillText('⏱ ' + String(timeLeft).padStart(2, '0'), CANVAS_W / 2, 20);
+
+  // 進度條
+  const barW = 180;
+  const barX = CANVAS_W / 2 - barW / 2;
+  const progress = Math.min(1, cameraX / Math.max(1, LEVEL_LENGTH - CANVAS_W));
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.beginPath(); ctx.roundRect(barX, 34, barW, 4, 2); ctx.fill();
+  const barGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  barGrad.addColorStop(0, '#55EFC4'); barGrad.addColorStop(1, '#74B9FF');
+  ctx.fillStyle = barGrad;
+  ctx.beginPath(); ctx.roundRect(barX, 34, barW * progress, 4, 2); ctx.fill();
+
+  // ── 右下：裝備道具膠囊 ──
   const activeItem = activeSlot === 'hammer' ? equippedHammer : equippedSword;
   if (activeItem && activeItem.id) {
     const itemEmoji = activeSlot === 'hammer' ? '🔨' : '⚔️';
+    const durFrac   = activeItem.currentDur / activeItem.maxDur;
+    const capColor  = activeSlot === 'hammer' ? 'rgba(255,208,128,0.18)' : 'rgba(200,240,255,0.14)';
+    const capBorder = activeSlot === 'hammer' ? 'rgba(255,208,128,0.45)' : 'rgba(200,240,255,0.4)';
+    const capW = 96, capH = 22, capX = CANVAS_W - pad - capW, capY = 56;
+
+    // 膠囊背景
+    ctx.fillStyle = capColor;
+    ctx.beginPath(); ctx.roundRect(capX, capY, capW, capH, 8); ctx.fill();
+    ctx.strokeStyle = capBorder; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(capX, capY, capW, capH, 8); ctx.stroke();
+
+    // emoji + 耐久文字
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.font = '12px sans-serif';
+    ctx.fillText(itemEmoji, capX + 5, capY + 11);
+    ctx.font = 'bold 10px monospace';
     ctx.fillStyle = activeSlot === 'hammer' ? '#ffd080' : '#c8f0ff';
-    ctx.fillText(`${itemEmoji} ${activeItem.name}`, CANVAS_W - pad, 58);
-    const durBarW = 80;
-    const durBarX = CANVAS_W - pad - durBarW;
-    const durFrac = activeItem.currentDur / activeItem.maxDur;
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(durBarX, 62, durBarW, 5);
-    ctx.fillStyle = durFrac > 0.4 ? '#60d080' : '#e08040';
-    ctx.fillRect(durBarX, 62, durBarW * durFrac, 5);
-    ctx.fillStyle = 'rgba(200,240,255,0.6)';
-    ctx.font = '10px sans-serif';
-    ctx.fillText(`${activeItem.currentDur}/${activeItem.maxDur}`, CANVAS_W - pad, 76);
-  } else {
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.fillText('目前道具：無', CANVAS_W - pad, 60);
+    ctx.fillText(activeItem.currentDur + '/' + activeItem.maxDur, capX + 22, capY + 11);
+
+    // 耐久小橫條（膠囊底部）
+    const bx = capX + 4, bw2 = capW - 8, by2 = capY + capH - 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath(); ctx.roundRect(bx, by2, bw2, 3, 1); ctx.fill();
+    ctx.fillStyle = durFrac > 0.4 ? '#55EFC4' : '#FDCB6E';
+    ctx.beginPath(); ctx.roundRect(bx, by2, bw2 * durFrac, 3, 1); ctx.fill();
   }
 
-  // Progress bar
-  const progress = Math.min(1, (cameraX / (LEVEL_LENGTH - CANVAS_W)));
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(CANVAS_W / 2 - barW / 2, 38, barW, 5);
-  ctx.fillStyle = '#2ecc71';
-  ctx.fillRect(CANVAS_W / 2 - barW / 2, 38, barW * progress, 5);
+  // ── 氣球小狗 HUD ──
+  if (bringBalloonDog) {
+    const dogX = CANVAS_W - pad - 96;
+    const dogY = 84;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,179,209,0.15)';
+    ctx.beginPath(); ctx.roundRect(dogX, dogY, 96, 18, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,107,157,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(dogX, dogY, 96, 18, 6); ctx.stroke();
+    ctx.font = '11px sans-serif'; ctx.fillStyle = '#FFB3D1';
+    const noseText = dogNoseLevel >= 3 ? '🐶✨' : dogNoseLevel >= 2 ? '🐶🌟' : dogNoseLevel >= 1 ? '🐶💡' : '🐶';
+    ctx.fillText(noseText + ' 小狗同行', dogX + 5, dogY + 9);
+  }
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 function drawOverlay(text, color) {
@@ -3889,15 +3913,36 @@ function openChallengeSummary() {
 function openPauseBag() {
   const panel = document.getElementById('pause-bag-panel');
   if (!panel) return;
-  // 填入背包內容
-  const rows  = buildBagRows();
-  const html  = rows.length
-    ? rows.map(([label, val, cls]) =>
-        '<div class="home-row"><span class="home-row-label">' + label + '</span>'
-        + '<span class="home-row-val ' + cls + '">' + val + '</span></div>'
-      ).join('')
-    : '<div class="home-empty">背包是空的</div>';
-  document.getElementById('pause-bag-body').innerHTML = html;
+  const ci = playerInventory.craftedItems || {};
+  const eqSword  = (equippedSword.id  && equippedSword.currentDur)  ? equippedSword.currentDur  + '/' + equippedSword.maxDur  : null;
+  const eqHammer = (equippedHammer.id && equippedHammer.currentDur) ? equippedHammer.currentDur + '/' + equippedHammer.maxDur : null;
+  const items = [
+    { e:'🪙',  v:playerInventory.coins,        lbl:'金幣',   cls:'inv-coin',    dur:null },
+    { e:'🎈',  v:playerInventory.balloon260,   lbl:'260氣球',cls:'inv-balloon', dur:null },
+    { e:'⚪',  v:playerInventory.roundBalloon, lbl:'圓氣球', cls:'inv-round',   dur:null },
+    { e:'⚔️', v:ci.basicSword     ||0,         lbl:'氣球劍', cls:'inv-sword',   dur:eqSword },
+    { e:'🔨', v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
+    { e:'🍭', v:ci.balloonLollipop||0,         lbl:'棒棒糖', cls:'inv-candy',   dur:null },
+  ].filter(i => i.v > 0);
+
+  const dog = playerInventory.balloonDog || {};
+  let dogHtml = '';
+  if (dog.present) {
+    dogHtml = '<div class="pause-bag-dog">🐶 氣球小狗在家 · 剩 ' + (dog.turnsLeft||0) + ' 回合</div>';
+  }
+
+  const body = document.getElementById('pause-bag-body');
+  body.innerHTML = (items.length
+    ? '<div class="inv-grid">' + items.map(i =>
+        '<div class="inv-item ' + i.cls + '">'
+        + '<div class="inv-item__icon">' + i.e + '</div>'
+        + '<div class="inv-item__count">' + i.v + '</div>'
+        + '<div class="inv-item__name">' + i.lbl + '</div>'
+        + (i.dur ? '<div class="inv-item__dur">' + i.dur + '</div>' : '')
+        + '</div>'
+      ).join('') + '</div>'
+    : '<div class="inv-empty">背包空空如也 🎈</div>')
+    + dogHtml;
   panel.style.display = 'flex';
 }
 

@@ -1928,3 +1928,177 @@ html, body {
   .rp-fold-btn { padding: 9px 12px; font-size: 12px; }
   .rp-trivia-card { font-size: 10px; padding: 7px 10px; }
 }
+
+/* =============================================
+   Phase 2C-3：HUD / 暫停畫面正式版視覺
+   ============================================= */
+
+/* ── 暫停 overlay ── */
+#pause-overlay {
+  background: rgba(8,6,30,0.88);
+  backdrop-filter: blur(16px);
+}
+
+#pause-panel {
+  background: linear-gradient(160deg, rgba(26,24,64,0.98) 0%, rgba(17,13,48,0.98) 100%);
+  border: 1px solid rgba(162,155,254,0.3);
+  border-radius: 20px;
+  padding: 28px 28px 24px;
+  box-shadow:
+    0 0 40px rgba(162,155,254,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+  min-width: 240px; max-width: 320px;
+  font-family: var(--font-home, 'Nunito', sans-serif);
+}
+
+#pause-title {
+  font-size: 18px; font-weight: 900;
+  text-align: center; color: #D4C8FF;
+  margin-bottom: 20px;
+  letter-spacing: 0.06em;
+}
+
+#pause-actions {
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.pause-btn {
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07);
+  color: #fff;
+  font-size: 14px; font-weight: 800;
+  font-family: var(--font-home, 'Nunito', sans-serif);
+  cursor: pointer;
+  transition: transform 0.12s cubic-bezier(.34,1.56,.64,1), box-shadow 0.12s, background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-btn:hover  { transform: scale(1.03); background: rgba(255,255,255,0.13); }
+.pause-btn:active { transform: scale(0.97); }
+
+.pause-btn--primary {
+  background: linear-gradient(135deg, #55EFC4, #74B9FF);
+  border-color: transparent; color: #0F0E2B;
+  box-shadow: 0 4px 14px rgba(85,239,196,0.35);
+}
+.pause-btn--primary:hover { box-shadow: 0 6px 20px rgba(85,239,196,0.55); }
+
+.pause-btn--secondary {
+  background: rgba(162,155,254,0.1);
+  border-color: rgba(162,155,254,0.3); color: #C8C0FF;
+}
+
+#pause-hint {
+  font-size: 11px; color: rgba(255,255,255,0.25);
+  text-align: center; margin-top: 14px;
+}
+
+/* 手機橫向 compact */
+@media (max-height: 500px) and (orientation: landscape) {
+  #pause-panel { padding: 16px 20px; border-radius: 14px; }
+  #pause-title { font-size: 14px; margin-bottom: 12px; }
+  .pause-btn { padding: 9px 16px; font-size: 13px; }
+  #pause-actions { gap: 7px; }
+  #pause-hint { margin-top: 8px; font-size: 10px; }
+}
+
+/* ── 暫停背包 overlay ── */
+.pause-bag-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  z-index: 9600;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  align-items: center; justify-content: center;
+}
+.pause-bag-inner {
+  background: linear-gradient(160deg, rgba(20,18,52,0.98) 0%, rgba(14,10,36,0.98) 100%);
+  border: 1px solid rgba(162,155,254,0.25);
+  border-radius: 18px;
+  padding: 0;
+  min-width: 260px; max-width: 400px; width: 90%;
+  max-height: 88dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 0 40px rgba(162,155,254,0.15);
+  font-family: var(--font-home, 'Nunito', sans-serif);
+}
+.pause-bag-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 15px; font-weight: 900; color: #D4C8FF;
+}
+.pause-bag-close {
+  background: rgba(255,255,255,0.08); border: none;
+  color: rgba(255,255,255,0.5); font-size: 16px;
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.1s;
+}
+.pause-bag-close:hover { background: rgba(255,100,80,0.2); color: #FF8A80; }
+.pause-bag-body {
+  flex: 1; overflow-y: auto; padding: 12px 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.pause-bag-footer {
+  font-size: 10px; color: rgba(255,255,255,0.25);
+  text-align: center; padding: 8px 0 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.pause-bag-dog {
+  margin-top: 10px; padding: 8px 12px;
+  background: rgba(255,107,157,0.08);
+  border: 1px solid rgba(255,107,157,0.2);
+  border-radius: 10px;
+  font-size: 12px; font-weight: 700; color: #FFB3D1;
+}
+
+/* 手機橫向 */
+@media (max-height: 500px) and (orientation: landscape) {
+  .pause-bag-inner { max-height: 95dvh; border-radius: 12px; }
+  .pause-bag-header { padding: 10px 12px 8px; font-size: 13px; }
+  .pause-bag-body { padding: 8px 10px; }
+}
+
+/* ── 手機操作按鈕視覺強化 ── */
+.ctrl-btn {
+  background: rgba(20,18,56,0.72);
+  border: 1.5px solid rgba(162,155,254,0.35);
+  color: rgba(255,255,255,0.9);
+  border-radius: 50%;
+  font-size: 16px; font-weight: 800;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+  backdrop-filter: blur(8px);
+  transition: background 0.08s, transform 0.08s, box-shadow 0.08s;
+  -webkit-tap-highlight-color: transparent;
+}
+.ctrl-btn:active {
+  background: rgba(162,155,254,0.25);
+  transform: scale(0.92);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* 攻擊按鈕（亮色） */
+.action-btn {
+  background: rgba(255,107,157,0.25);
+  border-color: rgba(255,107,157,0.55);
+  color: #fff;
+  box-shadow:
+    0 2px 10px rgba(255,107,157,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.action-btn:active {
+  background: rgba(255,107,157,0.45);
+  box-shadow: 0 1px 6px rgba(255,107,157,0.35);
+}
+
+/* 切換道具按鈕（藍紫色） */
+.switch-btn {
+  background: rgba(162,155,254,0.2);
+  border-color: rgba(162,155,254,0.5);
+}
+.switch-btn:active { background: rgba(162,155,254,0.4); }
