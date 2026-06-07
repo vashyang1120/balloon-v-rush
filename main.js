@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.5-hud-visual';
-const BUILD_TIME   = '2026-06-05 18:00';
+const GAME_VERSION = 'adventure-v0.2.6-retry-hp-fix';
+const BUILD_TIME   = '2026-06-05 19:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2170,8 +2170,18 @@ function resumeGame() {
 function triggerFailed() {
   // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
   restoreLevelStartSnapshot();
-  // 額外確保帶狗狀態用穩定變數還原（不依賴 snapshot 的 bringBalloonDog 欄位）
   bringBalloonDog = levelStartBringDog;
+  console.log('[FAILED]', {
+    hp:          player.hp,
+    levelStartHp,
+    snapshotHp:  levelStartSnapshot && levelStartSnapshot.hp,
+  });
+  // 防呆：restore 後 hp 仍 <= 0，強制回本關開始 HP
+  if (player.hp <= 0) {
+    const fixHp = levelStartHp > 0 ? levelStartHp : player.maxHp;
+    console.warn('[FAILED] hp still <=0 after restore, fix to', fixHp);
+    player.hp = fixHp;
+  }
 
   console.log('discard hidden treasure rewards on failed');
   updateChallengeOnRetry(); // 重試次數 +1
@@ -3854,6 +3864,65 @@ function renderHomeChallenge() {
 
 // ── 從小V的家進入下一關 ──────────────────────
 
+
+// =============================================
+//  retryCurrentLevelFromStart()
+//  所有「重試本關」入口的統一函式（規格版）
+// =============================================
+function retryCurrentLevelFromStart() {
+  // 1. restore snapshot
+  if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+
+  // 2. 取得 retryHp
+  let retryHp = 0;
+  if (levelStartSnapshot && typeof levelStartSnapshot.hp === 'number' && levelStartSnapshot.hp > 0) {
+    retryHp = levelStartSnapshot.hp;
+  } else if (typeof levelStartHp === 'number' && levelStartHp > 0) {
+    retryHp = levelStartHp;
+  } else {
+    retryHp = player.maxHp;
+    console.warn('[RETRY] fallback hp to maxHp');
+  }
+
+  // 3. 取得 retryDog
+  let retryDog = false;
+  if (levelStartSnapshot && typeof levelStartSnapshot.bringBalloonDog === 'boolean') {
+    retryDog = levelStartSnapshot.bringBalloonDog;
+  } else {
+    retryDog = levelStartBringDog === true;
+  }
+
+  // 4. 先設定
+  player.hp = retryHp;
+  bringBalloonDog = retryDog;
+
+  // 5. 重新載入本關
+  loadLevel(currentLevelIndex);
+
+  // 6. restart
+  restart({ keepHp: true, preserveBringDog: true });
+
+  // 7. restart 後再次強制保險
+  player.hp = retryHp;
+  bringBalloonDog = retryDog;
+  levelStartHp = retryHp;
+  levelStartBringDog = retryDog;
+
+  if (levelStartSnapshot) {
+    levelStartSnapshot.hp = retryHp;
+    levelStartSnapshot.bringBalloonDog = retryDog;
+  }
+
+  gameState = 'playing';
+
+  console.log('[RETRY] retryCurrentLevelFromStart', {
+    retryHp,
+    retryDog,
+    finalHp: player.hp,
+    finalDog: bringBalloonDog
+  });
+}
+
 // ── 小V的家「返回」按鈕 ─────────────────────
 function homeGoBack() {
   closeHomeScreen();
@@ -3871,12 +3940,9 @@ function homeGoNextLevel() {
   try {
     // 失敗模式：只能重試本關，不能前往下一關
     if (homeEntryMode === 'failed') {
-      restoreLevelStartSnapshot();
-      bringBalloonDog = levelStartBringDog; // 穩定還原帶狗狀態
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-      loadLevel(currentLevelIndex);
-      restart({ keepHp: true, preserveBringDog: true });
+      retryCurrentLevelFromStart();
       return;
     }
     // 通關模式：正常前往下一關，保留 HP
@@ -3987,7 +4053,14 @@ function restart(opts) {
     x: 100, y: GROUND_Y - CONFIG.PLAYER_H,
     vx: 0, vy: 0,
     onGround: false, facingRight: true,
-    hp: keepHp ? player.hp : player.maxHp, invincible: 0,
+    hp: (() => {
+      if (!keepHp) return player.maxHp;
+      if (player.hp > 0) return player.hp;
+      // keepHp 但 hp <= 0：防呆
+      const fallback = levelStartHp > 0 ? levelStartHp : player.maxHp;
+      console.warn('[RESTART] keepHp but hp<=0, fallback=', fallback);
+      return fallback;
+    })(), invincible: 0,
     attackCooldown: 0, attackActive: 0,
     meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
@@ -4184,10 +4257,7 @@ function hideResultButtons() {
       btnRestart.addEventListener(ev, e => {
         e.preventDefault();
         gameState = 'playing'; // 先設回 playing 讓 restart() 不被擋
-        restoreLevelStartSnapshot(); // 還原到本關開始狀態
-        bringBalloonDog = levelStartBringDog; // 確保帶狗狀態
-        loadLevel(currentLevelIndex);
-        restart({ keepHp: true, preserveBringDog: true });
+        retryCurrentLevelFromStart();
       })
     );
   }

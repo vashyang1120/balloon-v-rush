@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.5-hud-visual" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.2.6-retry-hp-fix" />
 </head>
 <body>
 
@@ -149,7 +149,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.2.5-hud-visual · 2026-06-04
+        adventure-v0.2.6-retry-hp-fix · 2026-06-04
       </div>
 
     </div><!-- /#home-panel -->
@@ -254,7 +254,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.5-hud-visual"></script>
+  <script src="main.js?v=adventure-v0.2.6-retry-hp-fix"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
@@ -340,11 +340,7 @@
   function handleRetry(e) {
     e.preventDefault();
     if (gameState !== 'failed') return;
-    if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
-    // 用穩定的本關開始狀態還原帶狗
-    if (typeof levelStartBringDog !== 'undefined') bringBalloonDog = levelStartBringDog;
-    loadLevel(currentLevelIndex);
-    if (typeof restart === 'function') restart({ keepHp: true, preserveBringDog: true });
+    if (typeof retryCurrentLevelFromStart === 'function') retryCurrentLevelFromStart();
   }
   const btnRetry = document.getElementById('btn-retry');
   if (btnRetry) {
