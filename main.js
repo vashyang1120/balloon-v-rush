@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.9-dog-heal-ui-fix';
-const BUILD_TIME   = '2026-06-06 10:00';
+const GAME_VERSION = 'adventure-v0.2.10-fail-gameover-visual';
+const BUILD_TIME   = '2026-06-06 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -620,6 +620,32 @@ function updateChallengeOnClear() {
   currentChallenge.retryCount    += 0; // retry 在 triggerFailed 計
   currentChallenge.currentStageId = LEVELS[currentLevelIndex]?.stageId || null;
   currentChallenge.reachedStageId = currentChallenge.currentStageId;
+}
+
+
+// ── 死亡失敗畫面：顯示本關資訊 ────────────
+function updateFailedPanelInfo() {
+  const lv = LEVELS[currentLevelIndex];
+  const infoEl = document.getElementById('failed-info');
+  if (!infoEl) return;
+  const hp = levelStartHp > 0 ? levelStartHp
+    : (levelStartSnapshot?.hp > 0 ? levelStartSnapshot.hp : player.hp);
+  const hpFilled = Math.floor(hp);
+  const hpHalf   = hp % 1 >= 0.5;
+  let hearts = '';
+  for (let i = 0; i < 3; i++) {
+    hearts += '<span class="fi-heart'
+      + (i < hpFilled ? ' fi-heart--full' : (i === hpFilled && hpHalf ? ' fi-heart--half' : ''))
+      + '">❤️</span>';
+  }
+  const dogLine = bringBalloonDog
+    ? '<div class="fi-dog">🐶 氣球小狗也會回到本關開始狀態</div>' : '';
+  infoEl.innerHTML =
+    '<div class="fi-stage">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</div>'
+    + '<div class="fi-hp-row">' + hearts
+    + '<span class="fi-hp-num">本關開始 ' + hp + ' / 3</span></div>'
+    + dogLine
+    + '<div class="fi-hint">重試會回到本關開始狀態</div>';
 }
 
 function updateChallengeOnRetry() {
@@ -2188,6 +2214,8 @@ function triggerFailed() {
   console.log('discard hidden treasure rewards on failed');
   updateChallengeOnRetry(); // 重試次數 +1
 
+  // 更新失敗畫面顯示本關資訊
+  updateFailedPanelInfo();
   gameState = 'failed';
   showFailedOverlay();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
@@ -3436,9 +3464,15 @@ function populateResultPanel() {
     + '</span><span class="rp-level-stageId">'
     + (LEVELS[currentLevelIndex]?.stageId || '')
     + '</span></div>';
-  html += '<div class="rp-clear-title">🎉 過關成功！</div>';
-  html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
-  html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
+  if (gameState === 'gameover') {
+    html += '<div class="rp-clear-title rp-gameover-title">⏰ 時間到！</div>';
+    html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
+    html += '<div class="rp-clear-sub">這次沒有抵達終點，再挑戰一次吧！</div>';
+  } else {
+    html += '<div class="rp-clear-title">🎉 過關成功！</div>';
+    html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
+    html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
+  }
   html += buildResultHpHtml(); // 直接顯示目前 HP
   // 第一層：重點收穫
   html += '<div class="rp-hero-section" id="rp-hero-section">'

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.9-dog-heal-ui-fix" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.2.10-fail-gameover-visual" />
 </head>
 <body>
 
@@ -149,7 +149,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.2.9-dog-heal-ui-fix · 2026-06-04
+        adventure-v0.2.10-fail-gameover-visual · 2026-06-04
       </div>
 
     </div><!-- /#home-panel -->
@@ -192,15 +192,12 @@
     <!-- 挑戰失敗 overlay -->
     <div id="failed-overlay">
       <div id="failed-panel">
-        <div id="failed-icon">💔</div>
+        <div id="failed-icon">💥</div>
         <div id="failed-title">挑戰失敗</div>
-        <div id="failed-body">
-          小V這次沒能完成派對任務。<br>
-          本關取得的材料還留在關卡裡，<br>
-          再挑戰一次把它們帶回家吧！
-        </div>
+        <div id="failed-subtitle">別灰心，整理好氣球再出發！</div>
+        <div id="failed-info"><!-- updateFailedPanelInfo() 填入 --></div>
         <div id="failed-actions">
-          <button id="btn-retry"       class="failed-btn failed-btn--primary">↺ 重試本關</button>
+          <button id="btn-retry"          class="failed-btn failed-btn--primary">↺ 重試本關</button>
           <button id="btn-go-home-failed" class="failed-btn failed-btn--secondary">🏠 回小V的家</button>
         </div>
       </div>
@@ -254,7 +251,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.9-dog-heal-ui-fix"></script>
+  <script src="main.js?v=adventure-v0.2.10-fail-gameover-visual"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
