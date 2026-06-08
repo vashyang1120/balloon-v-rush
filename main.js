@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.11-ui-freeze-check';
-const BUILD_TIME   = '2026-06-06 14:00';
+const GAME_VERSION = 'adventure-v0.2.12-gameover-next-fix';
+const BUILD_TIME   = '2026-06-06 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2238,7 +2238,8 @@ function triggerGameOver() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
-  populateResultPanel(); // 顯示結算（但 updateNextLevelButton 不會加下一關）
+  populateResultPanel();
+  updateNextLevelButton(); // Game Over：確保主按鈕顯示「再玩一次」，_nextLevel = false
   showResultButtons();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
@@ -4252,7 +4253,7 @@ function hideResultButtons() {
         e.preventDefault();
         if (gameState !== 'playing') {
           try {
-            if (btnPlay._nextLevel) {
+            if (btnPlay._nextLevel && gameState === 'clear') { // 防呆：只有 clear 才能進下一關
               const nextIdx = currentLevelIndex + 1;
               console.log('NEXT LEVEL CLICKED', {
                 currentLevelIndex, nextIdx,
