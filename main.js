@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.8-result-hp-dog-text-fix';
-const BUILD_TIME   = '2026-06-05 22:00';
+const GAME_VERSION = 'adventure-v0.2.9-dog-heal-ui-fix';
+const BUILD_TIME   = '2026-06-06 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -412,7 +412,7 @@ const RECIPES = [
   {
     id:         'balloonDog',
     name:       '氣球小狗',
-    effect:     '靠近隱藏寶物時，鼻子會發亮。只要牠還在小V的家，每次通關結算時療癒 ❤️ +0.5；製作成功時也會立刻療癒 ❤️ +0.5。',
+    effect:     '製作成功時立刻療癒 ❤️ +0.5。之後只要牠還陪著小V，每次通關也會療癒 ❤️ +0.5。靠近隱藏寶物時，鼻子也會發亮。',
     durability: 0,             // 無耐久，以 turnsLeft 計算
     cost:       { balloon260: 1 },
     emoji:      '🐶',
@@ -460,6 +460,8 @@ function craftItem(recipeId) {
     playerInventory.balloonDog.turnsLeft = CONFIG.DOG_INITIAL_TURNS || 3;
     player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT); // 製作立即回血
     saveInventory();
+    if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
+    if (typeof renderHomeSupply === 'function') renderHomeSupply();
     return true;
   }
 // 製作道具（一般）
@@ -3739,7 +3741,7 @@ function renderHomeDog() {
       '<div class="dog-card dog-card--empty">'
       + '<div class="dog-card__face">🐶</div>'
       + '<div class="dog-card__title">還沒有氣球小狗</div>'
-      + '<div class="dog-card__desc">製作成功立刻療癒 ❤️+0.5<br>通關後也會療癒 ❤️+0.5</div>'
+      + '<div class="dog-card__desc">製作時立刻療癒 ❤️ +0.5<br>之後每次通關也療癒 ❤️ +0.5</div>'
       + '<button class="dog-craft-btn ' + (canCraft ? '' : 'dog-craft-btn--disabled') + '" '
       + (canCraft ? 'onclick="homeMakeDog()"' : 'disabled') + '>'
       + (canCraft ? '✨ 製作氣球小狗 −1 🎈' : '260 氣球不足') + '</button>'
@@ -3778,7 +3780,7 @@ function renderHomeDog() {
     + '<div class="dog-card__face dog-wiggle">🐶</div>'
     + '<div class="dog-card__title">' + (bringBalloonDog ? '🐶 氣球小狗同行中' : '氣球小狗在小V的家') + '</div>'
     + '<div class="dog-card__turns">' + turnsHtml + '</div>'
-    + '<div class="dog-card__desc">通關療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
+    + '<div class="dog-card__desc">製作時 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '，通關時也療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</div>'
     + '</div>'
     + '<div class="dog-hint-text">' + dogHint + '</div>'
     + bringBtnHtml;
@@ -3796,6 +3798,7 @@ function homeMakeDog() {
     refreshResultBag();
     const supplyHp = document.getElementById('supply-hp');
     if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
+    if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus(); // 結算主 HP
   } else {
     showCraftMessage('260 氣球不足，無法製作氣球小狗');
   }
@@ -4398,7 +4401,8 @@ function renderGuidebook() {
             const supplyHp = document.getElementById('supply-hp');
             if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
             if (recipe.id === 'balloonDog') {
-              refreshResultDog(); // 結算畫面狗區塊（含帶狗按鈕）
+              refreshResultDog();      // 結算畫面狗區塊
+              if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus(); // 結算主 HP
             }
             // 若小V的家已開啟，同步刷新
             if (document.getElementById('home-screen')?.style.display !== 'none') {
