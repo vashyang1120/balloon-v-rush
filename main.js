@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.10-fail-gameover-visual';
-const BUILD_TIME   = '2026-06-06 12:00';
+const GAME_VERSION = 'adventure-v0.2.11-ui-freeze-check';
+const BUILD_TIME   = '2026-06-06 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3123,7 +3123,7 @@ function drawOverlay(text, color) {
 function drawVersionInfo() {
   // 測試階段：明顯版本條（右上角，黑底白字）
   const vText = GAME_VERSION + '  Build: ' + BUILD_TIME;
-  ctx.font     = '12px monospace';
+  ctx.font     = '10px monospace';
   const tw     = ctx.measureText(vText).width;
   const px = CANVAS_W - tw - 10;
   const py = 4;
