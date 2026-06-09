@@ -3772,6 +3772,8 @@ function populateResultPanel() {
     const sub = btnGuide.querySelector('.result-btn-sub');
     if (sub) sub.textContent = isHammerUnlock ? '建議查看' : 'Guidebook';
   }
+  // Phase 3A：V幣明細顯示（DOM 建立後才呼叫）
+  if (typeof refreshResultVCoins === 'function') refreshResultVCoins();
 }
 
 
@@ -4170,6 +4172,28 @@ function renderHomeChallenge() {
 // ── 從小V的家進入下一關 ──────────────────────
 
 
+
+// ── 開發測試用：切換 playerKey（console only，無正式 UI）────
+window.setAdventurePlayerForTest = function(id, baseAvatarKey) {
+  const newKey = buildPlayerKey(id || 'Player', baseAvatarKey || 'boy1');
+  const newProfile = {
+    id:               id || 'Player',
+    name:             id || 'Player',
+    baseAvatarKey:    baseAvatarKey || 'boy1',
+    displayAvatarKey: baseAvatarKey || 'boy1',
+    avatarKey:        baseAvatarKey || 'boy1',
+    playerKey:        newKey,
+  };
+  localStorage.setItem(PLAYER_PROFILE_STORAGE_KEY, JSON.stringify(newProfile));
+  // 清掉執行期快取
+  playerProfile      = null;
+  playerWallet       = null;
+  playerDailyRewards = null;
+  playerHomeData     = null;
+  console.log('[setAdventurePlayerForTest] new playerKey:', newKey);
+  console.log('[setAdventurePlayerForTest] reload the page to apply: location.reload()');
+};
+
 // =============================================
 //  retryCurrentLevelFromStart()
 //  所有「重試本關」入口的統一函式（規格版）
@@ -4541,8 +4565,19 @@ function hideResultButtons() {
               console.log('BEFORE restart, bringBalloonDog:', bringBalloonDog);
               restart({ keepHp: true }); // 跨關保留 HP
               console.log('AFTER restart');
+            } else if (gameState === 'gameover') {
+              // Game Over 再玩一次：走同一套穩定還原流程（含 HP / 狗 / 背包）
+              if (typeof retryCurrentLevelFromStart === 'function') {
+                retryCurrentLevelFromStart();
+              } else {
+                // fallback
+                if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+                bringBalloonDog = levelStartBringDog;
+                loadLevel(currentLevelIndex);
+                restart({ keepHp: true, preserveBringDog: true });
+              }
             } else {
-              // 再玩一次（同關）：snapshot 還原後 keepHp
+              // 再玩一次（clear 同關）：snapshot 還原後 keepHp
               if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
               nextBringDog    = false;
               loadLevel(currentLevelIndex);
