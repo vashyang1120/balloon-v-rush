@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.2.12-gameover-next-fix';
-const BUILD_TIME   = '2026-06-06 16:00';
+const GAME_VERSION = 'adventure-v0.3.0-vcoin-foundation-test-1';
+const BUILD_TIME   = '2026-06-07 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -221,8 +221,16 @@ const PLAYER_PROFILE_DEFAULTS = {
 let playerProfile = null; // 由 loadPlayerProfile() 初始化
 
 // ── buildPlayerKey ───────────────────────────
+// ── encodeFirebaseKeyPart ──────────────────
+// encodeURIComponent 不會轉 '.'，但 Firebase key 禁止 '.'
+// 此函式在 encodeURIComponent 之後再替換 %2E 以外的 . 字元
+function encodeFirebaseKeyPart(value) {
+  return encodeURIComponent(value || 'Player').replace(/\./g, '%2E');
+}
+
 function buildPlayerKey(id, baseAvatarKey) {
-  return encodeURIComponent(id || 'Player') + '__' + (baseAvatarKey || 'boy1');
+  const newKey = encodeFirebaseKeyPart(id || 'Player') + '__' + (baseAvatarKey || 'boy1');
+  return newKey;
 }
 
 // ── createDefaultPlayerProfile ───────────────
@@ -237,10 +245,19 @@ function createDefaultPlayerProfile() {
 function normalizePlayerProfile(raw) {
   if (!raw || typeof raw !== 'object') return createDefaultPlayerProfile();
   const prof = Object.assign({}, PLAYER_PROFILE_DEFAULTS, raw);
-  // 確保 avatarKey 等於 displayAvatarKey
-  prof.avatarKey    = prof.displayAvatarKey || prof.baseAvatarKey || 'boy1';
-  // 確保 playerKey 正確（以 baseAvatarKey 為基礎）
-  prof.playerKey    = buildPlayerKey(prof.id, prof.baseAvatarKey);
+  // avatarKey 等於 displayAvatarKey，不影響 playerKey
+  prof.avatarKey = prof.displayAvatarKey || prof.baseAvatarKey || 'boy1';
+  // playerKey：沿用既有值，不覆蓋；僅在尚未設定時才用新 encode
+  const expectedKey = buildPlayerKey(prof.id, prof.baseAvatarKey);
+  if (prof.playerKey) {
+    if (prof.playerKey !== expectedKey) {
+      console.warn('[normalizePlayerProfile] playerKey mismatch, keep existing until migration:', prof.playerKey, 'expected:', expectedKey);
+    }
+    // 沿用 prof.playerKey，不覆蓋
+  } else {
+    // 新玩家：用 encodeFirebaseKeyPart 產生 playerKey
+    prof.playerKey = expectedKey;
+  }
   return prof;
 }
 
@@ -297,6 +314,233 @@ function setDisplayAvatarForTest(newDisplayAvatarKey) {
   });
   // 若小V的家已開啟，刷新玩家區塊
   if (typeof renderHomePlayer === 'function') renderHomePlayer();
+}
+
+
+// =============================================
+//  V幣 Foundation（Phase 3A / localStorage 測試版）
+//  Phase 3B 才接 Firebase players/{playerKey}/wallet
+//  所有 localStorage key 依 playerKey 分流
+// =============================================
+
+// ── Firebase safety wrapper（Phase 3B 才啟用）──
+function isFirebaseAvailable() {
+  // Phase 3B 才會接：return typeof firebase !== 'undefined';
+  return false;
+}
+
+// ── playerKey-scoped storage key ────────────
+function getPlayerScopedStorageKey(prefix) {
+  const p = playerProfile || loadPlayerProfile();
+  const key = p.playerKey || buildPlayerKey(p.id, p.baseAvatarKey);
+  return prefix + '__' + key;
+}
+
+// ── Wallet ───────────────────────────────────
+let playerWallet = null;
+
+function getDefaultWallet() {
+  return { vCoins: 0, totalEarnedVCoins: 0, totalSpentVCoins: 0, updatedAt: Date.now() };
+}
+function loadPlayerWallet() {
+  try {
+    const raw = localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureWallet'));
+    if (raw) { playerWallet = Object.assign(getDefaultWallet(), JSON.parse(raw)); }
+    else       { playerWallet = getDefaultWallet(); }
+  } catch(e) { playerWallet = getDefaultWallet(); }
+  return playerWallet;
+}
+function savePlayerWallet() {
+  try {
+    if (!playerWallet) return;
+    playerWallet.updatedAt = Date.now();
+    localStorage.setItem(getPlayerScopedStorageKey('balloonVAdventureWallet'), JSON.stringify(playerWallet));
+  } catch(e) { console.warn('savePlayerWallet failed:', e.message); }
+}
+function ensurePlayerWallet() {
+  if (!playerWallet) loadPlayerWallet();
+  return playerWallet;
+}
+
+// ── DailyRewards ─────────────────────────────
+let playerDailyRewards = null;
+
+function getTodayKey() {
+  // 台灣時間 UTC+8
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+function getDefaultDailyRewards() {
+  return { lastDailyPlayDate: '', dailyPlayClaimed: false, streak: 0, updatedAt: Date.now() };
+}
+function loadDailyRewards() {
+  try {
+    const raw = localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureDailyRewards'));
+    if (raw) { playerDailyRewards = Object.assign(getDefaultDailyRewards(), JSON.parse(raw)); }
+    else       { playerDailyRewards = getDefaultDailyRewards(); }
+  } catch(e) { playerDailyRewards = getDefaultDailyRewards(); }
+  return playerDailyRewards;
+}
+function saveDailyRewards() {
+  try {
+    if (!playerDailyRewards) return;
+    playerDailyRewards.updatedAt = Date.now();
+    localStorage.setItem(getPlayerScopedStorageKey('balloonVAdventureDailyRewards'), JSON.stringify(playerDailyRewards));
+  } catch(e) { console.warn('saveDailyRewards failed:', e.message); }
+}
+function canClaimDailyPlayReward() {
+  const dr = playerDailyRewards || loadDailyRewards();
+  return dr.lastDailyPlayDate !== getTodayKey();
+}
+function grantDailyPlayReward() {
+  const dr = playerDailyRewards || loadDailyRewards();
+  const yesterday = (() => {
+    const d = new Date(Date.now() + 8*3600*1000 - 86400*1000);
+    return d.toISOString().slice(0, 10);
+  })();
+  dr.streak            = (dr.lastDailyPlayDate === yesterday) ? (dr.streak || 0) + 1 : 1;
+  dr.lastDailyPlayDate = getTodayKey();
+  dr.dailyPlayClaimed  = true;
+  playerDailyRewards   = dr;
+  saveDailyRewards();
+}
+
+// ── PlayerHome ───────────────────────────────
+let playerHomeData = null;
+
+function getDefaultPlayerHome() {
+  const p = playerProfile || loadPlayerProfile();
+  return {
+    name: (p.name || p.id || 'Player') + '的家',
+    status: 'building',
+    layoutVersion: 1,
+    placedItems: {},
+    updatedAt: Date.now(),
+  };
+}
+function loadPlayerHome() {
+  try {
+    const raw = localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureHome'));
+    if (raw) { playerHomeData = Object.assign(getDefaultPlayerHome(), JSON.parse(raw)); }
+    else       { playerHomeData = getDefaultPlayerHome(); }
+  } catch(e) { playerHomeData = getDefaultPlayerHome(); }
+  return playerHomeData;
+}
+function savePlayerHome() {
+  try {
+    if (!playerHomeData) return;
+    playerHomeData.updatedAt = Date.now();
+    localStorage.setItem(getPlayerScopedStorageKey('balloonVAdventureHome'), JSON.stringify(playerHomeData));
+  } catch(e) { console.warn('savePlayerHome failed:', e.message); }
+}
+function ensurePlayerHome() {
+  if (!playerHomeData) loadPlayerHome();
+  if (!playerHomeData.name) playerHomeData = getDefaultPlayerHome();
+  return playerHomeData;
+}
+
+// ── VCoinLogs ────────────────────────────────
+function loadVCoinLogs() {
+  try {
+    const raw = localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureVCoinLogs'));
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+function saveVCoinLogs(logs) {
+  try {
+    // 最多保留 50 筆
+    const trimmed = logs.slice(-50);
+    localStorage.setItem(getPlayerScopedStorageKey('balloonVAdventureVCoinLogs'), JSON.stringify(trimmed));
+  } catch(e) { console.warn('saveVCoinLogs failed:', e.message); }
+}
+function appendVCoinLog(entry) {
+  const logs = loadVCoinLogs();
+  logs.push(Object.assign({ ts: Date.now(), date: getTodayKey() }, entry));
+  saveVCoinLogs(logs);
+}
+
+// ── addVCoins ────────────────────────────────
+function addVCoins(amount, source, meta) {
+  if (!amount || amount <= 0) return;
+  ensurePlayerWallet();
+  playerWallet.vCoins             += amount;
+  playerWallet.totalEarnedVCoins  += amount;
+  savePlayerWallet();
+  appendVCoinLog({
+    gameId:  'adventure',
+    source,
+    amount,
+    stageId: meta?.stageId || '',
+  });
+  // UI 刷新（元素不存在時安全 return）
+  if (typeof refreshResultVCoins === 'function') refreshResultVCoins();
+  if (typeof renderHomeWallet    === 'function') renderHomeWallet();
+  if (typeof renderHomeInventory === 'function') renderHomeInventory();
+  if (typeof renderHomePreviewCard === 'function') renderHomePreviewCard();
+}
+
+// ── tryGrantVCoinsOnClear ────────────────────
+function tryGrantVCoinsOnClear() {
+  if (currentRunStats.vCoinsGranted) return;
+  currentRunStats.vCoinsGranted = true; // 先鎖，防重入
+  if (gameState !== 'clear') return;
+
+  let total = 0;
+  const details = [];
+
+  if (currentLevelIndex === 0) {
+    addVCoins(10, 'adventure_stage_clear', { stageId: LEVELS[currentLevelIndex]?.stageId });
+    total += 10;
+    details.push({ label: '第一關完成', amount: 10 });
+  }
+
+  if (canClaimDailyPlayReward()) {
+    grantDailyPlayReward();
+    addVCoins(30, 'daily_first_play', { stageId: LEVELS[currentLevelIndex]?.stageId });
+    total += 30;
+    details.push({ label: '今日首次遊玩', amount: 30 });
+  }
+
+  currentRunStats.vCoinsEarnedThisClear = total;
+  currentRunStats.vCoinEarnDetails      = details;
+  console.log('[V幣] tryGrantVCoinsOnClear total=', total, details);
+}
+
+// ── UI render ────────────────────────────────
+function refreshResultVCoins() {
+  const el = document.getElementById('rp-vcoin-section');
+  if (!el) return;
+  const w = playerWallet || loadPlayerWallet();
+  const earned  = currentRunStats.vCoinsEarnedThisClear || 0;
+  const details = currentRunStats.vCoinEarnDetails || [];
+  if (earned <= 0) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const detailHtml = details.map(d =>
+    '<div class="rp-vcoin-detail">' + d.label + ' <span class="result-gold">+' + d.amount + '</span></div>'
+  ).join('');
+  el.innerHTML =
+    '<div class="rp-vcoin-badge">🐷 本次獲得 V幣 <span class="result-gold">+' + earned + '</span></div>'
+    + detailHtml
+    + '<div class="rp-vcoin-total">目前 V幣：' + w.vCoins + '</div>';
+}
+
+function renderHomeWallet() {
+  const el = document.getElementById('home-wallet-body');
+  if (!el) return;
+  const w = playerWallet || loadPlayerWallet();
+  el.innerHTML =
+    '<div class="home-wallet-coins">🐷 <span class="hw-num">' + w.vCoins + '</span> <span class="hw-label">V幣</span></div>';
+}
+
+function renderHomePreviewCard() {
+  const el = document.getElementById('home-preview-body');
+  if (!el) return;
+  const h = playerHomeData || loadPlayerHome();
+  const w = playerWallet  || loadPlayerWallet();
+  el.innerHTML =
+    '<div class="home-preview-name">' + (h.name || '小V的家') + '</div>'
+    + '<div class="home-preview-status">🏗️ 建構中</div>'
+    + '<div class="home-preview-hint">目前 V幣：' + w.vCoins + '<br>未來可用 V幣購買擺設與家具</div>';
 }
 
 // ── Input state ───────────────────────────────
@@ -663,10 +907,15 @@ let currentRunStats = {
   usedHeartPatch:           false,
   foundHiddenTreasure:      false,
   foundTreasureCoins:       0,
-  pendingRecipeUnlocks:     {},  // 本關暫時解鎖（通關才寫入）
+  pendingRecipeUnlocks:     {},
   pendingCoins:             0,
-  foundHiddenTreasureName:  null, // 本關找到的隱藏物名稱
-  foundTreasureCoins:       0,      // 本關從寶箱獲得的金幣
+  foundHiddenTreasureName:  null,
+  dogHealed:                false,
+  dogGoneThisClear:         false,
+  // V幣（Phase 3A）
+  vCoinsGranted:            false,
+  vCoinsEarnedThisClear:    0,
+  vCoinEarnDetails:         [],
 };
 
 // ── Asset loading ─────────────────────────────
@@ -2303,6 +2552,7 @@ function triggerClear() {
 
   saveInventory();
   gameState = 'clear';
+  tryGrantVCoinsOnClear(); // Phase 3A：發放 V幣（只在 clear 時）
   populateResultPanel();
   updateNextLevelButton();
   showResultButtons();
@@ -3181,7 +3431,9 @@ function toggleRpDetail() {
 
 function buildBagRows() {
   const ci = playerInventory.craftedItems || {};
+  const w  = playerWallet || getDefaultWallet(); // V幣（Phase 3A）
   const rows = [
+    ['🐷 V幣',              `${w.vCoins || 0}`,                'result-gold'],
     ['🪙 金幣總計',         `${playerInventory.coins} 枚`,          'result-gold'],
     ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,     'result-pink'],
   ];
@@ -3458,6 +3710,9 @@ function populateResultPanel() {
     + '<div id="bandage-msg" class="rp-supply-msg"></div>'
     + '</div></div>';
 
+  // 確保 wallet 已載入（結算畫面顯示用）
+  ensurePlayerWallet();
+
   // 組合
   let html = '';
   html += '<div class="rp-level-badge"><span class="rp-level-emoji">'
@@ -3480,6 +3735,9 @@ function populateResultPanel() {
     + '<div class="rp-reward-grid">' + mainTiles + '</div>'
     + (badgesHtml ? '<div class="rp-awards">' + badgesHtml + '</div>' : '')
     + '</div>';
+  // V幣獎勵 section（Phase 3A，earned > 0 才顯示）
+  html += '<div id="rp-vcoin-section" style="display:none"></div>';
+
   // 特殊提示（槌子解鎖 / 秘笈按鈕）
   html += treasureHint;
   html += hammerHint;
@@ -3654,6 +3912,9 @@ function renderHomePlayer() {
 
 function openHomeScreen(from) {
   homeEntryMode = from || 'normal';
+  // 初始化 V幣資料（Phase 3A）
+  loadPlayerWallet();
+  loadPlayerHome();
   // 同步隱藏其他 overlay（但保留在背後，可返回）
   const resultEl = document.getElementById('result-overlay');
   const failedEl = document.getElementById('failed-overlay');
@@ -3681,6 +3942,8 @@ function openHomeScreen(from) {
   renderHomeNextStage();
   renderHomeChallenge();
   renderHomePlayer();
+  renderHomeWallet();
+  renderHomePreviewCard();
   initHomeCards();
   // home-next-stage-section 現在是固定顯示，不需要 JS show/hide
   // 確保所有其他 section 預設收合（首次進入時）
@@ -4159,6 +4422,9 @@ function restart(opts) {
   if (currentHiddenTreasure) currentHiddenTreasure.found = false; // 重試時重置取得狀態
   currentRunStats.dogHealed               = false;
   currentRunStats.dogGoneThisClear        = false;
+  currentRunStats.vCoinsGranted           = false;
+  currentRunStats.vCoinsEarnedThisClear   = 0;
+  currentRunStats.vCoinEarnDetails        = [];
   // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
   dogNoseGlow  = 0;
   dogNoseLevel = 0;

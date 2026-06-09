@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.2.12-gameover-next-fix" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.0-vcoin-foundation-test-1" />
 </head>
 <body>
 
@@ -90,6 +90,19 @@
           <div class="hcard-title">本次冒險</div>
         </div>
 
+
+        <!-- 卡：V幣 -->
+        <div class="hcard" id="hcard-wallet" data-target="home-wallet-section">
+          <div class="hcard-icon">🐷</div>
+          <div class="hcard-title">V幣</div>
+        </div>
+
+        <!-- 卡：玩家的家 -->
+        <div class="hcard" id="hcard-preview" data-target="home-preview-section">
+          <div class="hcard-icon">🏠</div>
+          <div class="hcard-title">玩家的家</div>
+        </div>
+
       </div><!-- /#home-card-grid -->
 
       <div id="home-body">
@@ -137,6 +150,18 @@
           </div>
         </section>
 
+        <!-- 9. V幣存錢筒 -->
+        <section class="home-section" id="home-wallet-section" style="display:none">
+          <div class="home-section-title">🐷 V幣存錢筒</div>
+          <div id="home-wallet-body"></div>
+        </section>
+
+        <!-- 10. 玩家的家 建構中 -->
+        <section class="home-section" id="home-preview-section" style="display:none">
+          <div class="home-section-title">🏠 玩家的家</div>
+          <div id="home-preview-body"></div>
+        </section>
+
         <!-- 8. 玩家資訊（預設收合） -->
         <section class="home-section" id="home-player-section" style="display:none">
           <div class="home-section-title">🪪 玩家資訊</div>
@@ -149,7 +174,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.2.12-gameover-next-fix · 2026-06-06
+        adventure-v0.3.0-vcoin-foundation-test-1 · 2026-06-06
       </div>
 
     </div><!-- /#home-panel -->
@@ -251,7 +276,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.2.12-gameover-next-fix"></script>
+  <script src="main.js?v=adventure-v0.3.0-vcoin-foundation-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
