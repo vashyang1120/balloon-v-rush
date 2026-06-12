@@ -1,4 +1,3 @@
-
 // ── 全域錯誤捕捉 + 畫面顯示 ──────────────────
 function showDebugError(type, message, file, line, col, stack) {
   // 確保面板存在
@@ -43,8 +42,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.0-vcoin-foundation-test-1';
-const BUILD_TIME   = '2026-06-07 10:00';
+const GAME_VERSION = 'adventure-v0.3.1-vcoin-achievement-once-test-1';
+const BUILD_TIME   = '2026-06-07 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -455,11 +454,60 @@ function saveVCoinLogs(logs) {
 }
 function appendVCoinLog(entry) {
   const logs = loadVCoinLogs();
-  logs.push(Object.assign({ ts: Date.now(), date: getTodayKey() }, entry));
+  logs.push(Object.assign({ ts: Date.now(), date: getTodayKey(), achievementKey: '' }, entry));
   saveVCoinLogs(logs);
 }
 
 // ── addVCoins ────────────────────────────────
+
+// ── Achievements（一次性成就，Phase 3A）────────
+// key: balloonVAdventureAchievements__{playerKey}
+let playerAchievements = null;
+
+function getDefaultAchievements() {
+  return { claimed: {}, updatedAt: Date.now() };
+}
+function loadPlayerAchievements() {
+  try {
+    const raw = localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureAchievements'));
+    if (raw) { playerAchievements = Object.assign(getDefaultAchievements(), JSON.parse(raw)); }
+    else       { playerAchievements = getDefaultAchievements(); }
+  } catch(e) { playerAchievements = getDefaultAchievements(); }
+  return playerAchievements;
+}
+function savePlayerAchievements() {
+  try {
+    if (!playerAchievements) return;
+    playerAchievements.updatedAt = Date.now();
+    localStorage.setItem(
+      getPlayerScopedStorageKey('balloonVAdventureAchievements'),
+      JSON.stringify(playerAchievements)
+    );
+  } catch(e) { console.warn('savePlayerAchievements failed:', e.message); }
+}
+function hasClaimedAchievement(achievementKey) {
+  const a = playerAchievements || loadPlayerAchievements();
+  return !!(a.claimed && a.claimed[achievementKey]);
+}
+function grantAchievementReward(achievementKey, amount, meta) {
+  if (!amount || amount <= 0) return false;
+  if (hasClaimedAchievement(achievementKey))  return false; // 已領過，直接 return
+  // 先記錄成就，再發 V幣
+  const a = playerAchievements || loadPlayerAchievements();
+  a.claimed[achievementKey] = {
+    claimedAt:     Date.now(),
+    amount,
+    gameId:        meta?.gameId  || 'adventure',
+    stageId:       meta?.stageId || '',
+    achievementKey,
+  };
+  playerAchievements = a;
+  savePlayerAchievements();
+  // addVCoins 包含 appendVCoinLog（帶 achievementKey）
+  addVCoins(amount, 'achievement', meta);
+  return true;
+}
+
 function addVCoins(amount, source, meta) {
   if (!amount || amount <= 0) return;
   ensurePlayerWallet();
@@ -467,10 +515,11 @@ function addVCoins(amount, source, meta) {
   playerWallet.totalEarnedVCoins  += amount;
   savePlayerWallet();
   appendVCoinLog({
-    gameId:  'adventure',
+    gameId:         'adventure',
     source,
     amount,
-    stageId: meta?.stageId || '',
+    stageId:        meta?.stageId        || '',
+    achievementKey: meta?.achievementKey || '',
   });
   // UI 刷新（元素不存在時安全 return）
   if (typeof refreshResultVCoins === 'function') refreshResultVCoins();
@@ -489,9 +538,16 @@ function tryGrantVCoinsOnClear() {
   const details = [];
 
   if (currentLevelIndex === 0) {
-    addVCoins(10, 'adventure_stage_clear', { stageId: LEVELS[currentLevelIndex]?.stageId });
-    total += 10;
-    details.push({ label: '第一關完成', amount: 10 });
+    const ach = 'adventure_level_1_first_clear';
+    const granted = grantAchievementReward(ach, 10, {
+      achievementKey: ach,
+      gameId:  'adventure',
+      stageId: LEVELS[currentLevelIndex]?.stageId || '1-1',
+    });
+    if (granted) {
+      total += 10;
+      details.push({ label: '第一關首次通關成就', amount: 10 });
+    }
   }
 
   if (canClaimDailyPlayReward()) {
@@ -4173,6 +4229,25 @@ function renderHomeChallenge() {
 
 
 
+
+// ── 開發測試用：清掉 V幣相關 localStorage（不清背包、不清身份）────
+window.resetAdventureVCoinTestData = function() {
+  const keys = [
+    getPlayerScopedStorageKey('balloonVAdventureWallet'),
+    getPlayerScopedStorageKey('balloonVAdventureDailyRewards'),
+    getPlayerScopedStorageKey('balloonVAdventureAchievements'),
+    getPlayerScopedStorageKey('balloonVAdventureVCoinLogs'),
+  ];
+  keys.forEach(k => {
+    localStorage.removeItem(k);
+    console.log('[resetAdventureVCoinTestData] removed:', k);
+  });
+  playerWallet       = null;
+  playerDailyRewards = null;
+  playerAchievements = null;
+  console.log('[resetAdventureVCoinTestData] cache cleared. Reload to apply: location.reload()');
+};
+
 // ── 開發測試用：切換 playerKey（console only，無正式 UI）────
 window.setAdventurePlayerForTest = function(id, baseAvatarKey) {
   const newKey = buildPlayerKey(id || 'Player', baseAvatarKey || 'boy1');
@@ -4190,6 +4265,7 @@ window.setAdventurePlayerForTest = function(id, baseAvatarKey) {
   playerWallet       = null;
   playerDailyRewards = null;
   playerHomeData     = null;
+  playerAchievements = null;
   console.log('[setAdventurePlayerForTest] new playerKey:', newKey);
   console.log('[setAdventurePlayerForTest] reload the page to apply: location.reload()');
 };
