@@ -1,3 +1,4 @@
+
 // ── 全域錯誤捕捉 + 畫面顯示 ──────────────────
 function showDebugError(type, message, file, line, col, stack) {
   // 確保面板存在
@@ -42,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.1-vcoin-achievement-once-test-1';
-const BUILD_TIME   = '2026-06-07 14:00';
+const GAME_VERSION = 'adventure-v0.3.2-firebase-gamelog-test-1';
+const BUILD_TIME   = '2026-06-07 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -324,8 +325,10 @@ function setDisplayAvatarForTest(newDisplayAvatarKey) {
 
 // ── Firebase safety wrapper（Phase 3B 才啟用）──
 function isFirebaseAvailable() {
-  // Phase 3B 才會接：return typeof firebase !== 'undefined';
-  return false;
+  return typeof firebase !== 'undefined'
+    && firebase.apps
+    && firebase.apps.length
+    && typeof firebase.database === 'function';
 }
 
 // ── playerKey-scoped storage key ────────────
@@ -526,6 +529,106 @@ function addVCoins(amount, source, meta) {
   if (typeof renderHomeWallet    === 'function') renderHomeWallet();
   if (typeof renderHomeInventory === 'function') renderHomeInventory();
   if (typeof renderHomePreviewCard === 'function') renderHomePreviewCard();
+}
+
+
+// =============================================
+//  Firebase gameLogs（Phase 3B 正式）
+//  本版只寫入 gameLogs/adventure/{autoPushId}
+//  不寫 leaderboard / players / wallet / V幣
+// =============================================
+
+function calcAdventureScore() {
+  const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
+  const score =
+    (currentRunStats.coins            || 0) * 10
+  + (currentRunStats.balloon260       || 0) * 20
+  + (currentRunStats.roundBalloon     || 0) * 50
+  + (currentRunStats.enemiesDefeated  || 0) * 30
+  + timeLeft * 5
+  + Math.floor((player.hp || 0) * 100)
+  + (currentRunStats.foundHiddenTreasure ? 200 : 0)
+  - (currentRunStats.damageTaken      || 0) * 20;
+  return Math.max(0, Math.floor(score));
+}
+
+function buildAdventureResultSnapshot(clearStatus) {
+  const identity = getPlayerIdentityForResult();
+  const lv = LEVELS[currentLevelIndex] || {};
+  const ci = playerInventory.craftedItems || {};
+
+  const foundRecipe   = currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈';
+  const foundTreasure = currentRunStats.foundHiddenTreasureName === '金幣寶箱';
+  const progressLabel = [lv.stageId || '', lv.shortName || lv.name || ''].filter(Boolean).join(' ');
+
+  return {
+    gameId:           'adventure',
+    playerKey:        identity.playerKey,     // 來自 playerProfile.playerKey
+    id:               identity.id,
+    name:             identity.name,
+    baseAvatarKey:    identity.baseAvatarKey, // 身份頭像
+    displayAvatarKey: identity.displayAvatarKey, // 顯示頭像
+    avatarKey:        identity.avatarKey,     // 舊 UI 相容
+    avatarSrc:        '',                     // Phase 3B 接 avatarCatalog 後補
+
+    score:            calcAdventureScore(),
+    ts:               Date.now(),
+    date:             getTodayKey(),
+    version:          GAME_VERSION,
+
+    levelId:          lv.stageId || '',
+    levelName:        LEVEL_NAME || lv.name || '',
+    completed:        clearStatus === 'clear',
+    clearStatus,
+    progressLabel,
+
+    coins:            currentRunStats.coins            || 0,
+    hp:               player.hp                        || 0,
+    maxHp:            player.maxHp                     || 0,
+    timeUsed:         Math.floor(elapsedSec            || 0),
+    retryCount:       currentChallenge.retryCount      || 0,
+    damageTaken:      currentRunStats.damageTaken      || 0,
+    enemiesDefeated:  currentRunStats.enemiesDefeated  || 0,
+
+    materials: {
+      balloon260:   currentRunStats.balloon260   || 0,
+      roundBalloon: currentRunStats.roundBalloon || 0,
+    },
+    items: {
+      basicSword:       ci.basicSword        || 0,
+      basicHammer:      ci.basicHammer       || 0,
+      balloonLollipop:  ci.balloonLollipop   || 0,
+    },
+
+    recipesFound:   foundRecipe   ? 1 : 0,
+    recipesTotal:   lv.hiddenTreasure?.type === 'recipe'    ? 1 : 0,
+    treasuresFound: foundTreasure ? 1 : 0,
+    treasuresTotal: lv.hiddenTreasure?.type === 'goldChest' ? 1 : 0,
+  };
+}
+
+async function submitAdventureGameLog(clearStatus) {
+  try {
+    const snapshot = buildAdventureResultSnapshot(clearStatus);
+
+    if (!isFirebaseAvailable()) {
+      console.warn('[Firebase] unavailable, skip adventure gameLog:', snapshot);
+      return false;
+    }
+
+    await firebase.database().ref('gameLogs/adventure').push(snapshot);
+
+    console.log('[Firebase] adventure gameLog submitted:', {
+      clearStatus,
+      playerKey: snapshot.playerKey,
+      score:     snapshot.score,
+      levelId:   snapshot.levelId,
+    });
+    return true;
+  } catch(e) {
+    console.warn('[Firebase] submitAdventureGameLog failed:', e.message, e);
+    return false;
+  }
 }
 
 // ── tryGrantVCoinsOnClear ────────────────────
@@ -2543,6 +2646,7 @@ function triggerGameOver() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
+  submitAdventureGameLog('gameover'); // Phase 3B：gameLogs/adventure（不阻塞，不發 V幣）
   populateResultPanel();
   updateNextLevelButton(); // Game Over：確保主按鈕顯示「再玩一次」，_nextLevel = false
   showResultButtons();
@@ -2608,6 +2712,7 @@ function triggerClear() {
 
   saveInventory();
   gameState = 'clear';
+  submitAdventureGameLog('clear'); // Phase 3B：gameLogs/adventure（不阻塞 V幣）
   tryGrantVCoinsOnClear(); // Phase 3A：發放 V幣（只在 clear 時）
   populateResultPanel();
   updateNextLevelButton();

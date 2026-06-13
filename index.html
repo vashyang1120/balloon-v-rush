@@ -4,7 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.1-vcoin-achievement-once-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.2-firebase-gamelog-test-1" />
+  <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script>
+    var FIREBASE_CONFIG = {
+      apiKey:            "AIzaSyAZ8WTuAHOslZSa4eqqX3dHR771mkaSNd8",
+      authDomain:        "vparty-rhythm-game.firebaseapp.com",
+      databaseURL:       "https://vparty-rhythm-game-default-rtdb.firebaseio.com",
+      projectId:         "vparty-rhythm-game",
+      storageBucket:     "vparty-rhythm-game.firebasestorage.app",
+      messagingSenderId: "1043884247859",
+      appId:             "1:1043884247859:web:24b1c030d159d1e9374c46",
+      measurementId:     "G-ZB7430NTBR"
+    };
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      firebase.auth().signInAnonymously()
+        .then(function() { console.log('[Firebase] adventure auth ready'); })
+        .catch(function(e) { console.warn('[Firebase] adventure auth failed:', e.message); });
+    } catch(e) {
+      console.warn('[Firebase] adventure init failed:', e.message);
+    }
+  </script>
 </head>
 <body>
 
@@ -174,7 +198,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.1-vcoin-achievement-once-test-1 · 2026-06-06
+        adventure-v0.3.2-firebase-gamelog-test-1 · 2026-06-06
       </div>
 
     </div><!-- /#home-panel -->
@@ -276,7 +300,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.1-vcoin-achievement-once-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.2-firebase-gamelog-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
