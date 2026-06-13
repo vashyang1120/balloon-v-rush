@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.2-firebase-gamelog-test-1';
-const BUILD_TIME   = '2026-06-07 18:00';
+const GAME_VERSION = 'adventure-v0.3.3-player-title-display-sync-test-1';
+const BUILD_TIME   = '2026-06-07 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4057,20 +4057,102 @@ function initHomeCards() {
   });
 }
 
+
+// =============================================
+//  共用裝備稱號讀取（Phase 3B：read-only）
+//  讀取 players/{playerKey}/equippedTitle
+//  fallback: players/{playerKey}/quizEquippedTitle
+//  本版只讀取顯示，不寫入、不解鎖、不收藏
+// =============================================
+
+let playerEquippedTitle = null;
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getDefaultEquippedTitle() {
+  return { titleKey: '', name: '', gameId: '', source: '', equippedAt: 0, fromFallback: false };
+}
+
+function normalizeEquippedTitle(raw, fromFallback) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    if (!raw.trim()) return null;
+    return { titleKey: raw, name: raw, gameId: '', source: '', equippedAt: 0, fromFallback: !!fromFallback };
+  }
+  if (typeof raw === 'object') {
+    const titleKey = raw.titleKey || raw.key || '';
+    const name     = raw.name || titleKey;
+    if (!name && !titleKey) return null;
+    return {
+      titleKey:    titleKey,
+      name:        name,
+      gameId:      raw.gameId  || '',
+      source:      raw.source  || '',
+      equippedAt:  raw.equippedAt || 0,
+      fromFallback: !!fromFallback,
+    };
+  }
+  return null;
+}
+
+function getEquippedTitleDisplayText() {
+  if (!playerEquippedTitle) return '未裝備';
+  return playerEquippedTitle.name || playerEquippedTitle.titleKey || '未裝備';
+}
+
+async function loadEquippedTitleFromFirebase() {
+  try {
+    const identity  = getPlayerIdentityForResult();
+    const playerKey = identity.playerKey;
+    if (!playerKey || !isFirebaseAvailable()) {
+      playerEquippedTitle = null;
+      return null;
+    }
+    const db = firebase.database();
+
+    // 先讀主欄位 equippedTitle
+    const mainSnap  = await db.ref('players/' + playerKey + '/equippedTitle').once('value');
+    const mainTitle = normalizeEquippedTitle(mainSnap.val(), false);
+    if (mainTitle) {
+      playerEquippedTitle = mainTitle;
+      console.log('[Title] equippedTitle loaded:', mainTitle.name);
+      return playerEquippedTitle;
+    }
+
+    // 主欄位不存在才讀 fallback
+    const fbSnap      = await db.ref('players/' + playerKey + '/quizEquippedTitle').once('value');
+    const fallbackTitle = normalizeEquippedTitle(fbSnap.val(), true);
+    playerEquippedTitle = fallbackTitle || null;
+    if (playerEquippedTitle) console.log('[Title] quizEquippedTitle (fallback) loaded:', playerEquippedTitle.name);
+    return playerEquippedTitle;
+  } catch(e) {
+    console.warn('[Title] loadEquippedTitleFromFirebase failed:', e.message, e);
+    playerEquippedTitle = null;
+    return null;
+  }
+}
+
 function renderHomePlayer() {
   const el = document.getElementById('home-player-body');
   if (!el) return;
   const p = playerProfile || createDefaultPlayerProfile();
+  const titleText = getEquippedTitleDisplayText();
   const row = (k, v, style) =>
     '<div class="home-row"><span class="home-row-label" style="min-width:180px">' + k + '</span>'
-    + '<span class="home-row-val' + (style ? '" style="' + style : '') + '">' + v + '</span></div>';
+    + '<span class="home-row-val' + (style ? '" style="' + style : '') + '">' + escapeHtml(v) + '</span></div>';
   el.innerHTML =
-    row('id', p.id, 'color:#ffd080')
-    + row('name', p.name, 'color:#ffd080')
-    + row('baseAvatarKey', p.baseAvatarKey)
-    + row('displayAvatarKey', p.displayAvatarKey)
-    + row('avatarKey', p.avatarKey, 'color:#aaa')
-    + row('playerKey', p.playerKey, 'font-size:10px;color:#888;word-break:break-all');
+    row('玩家名稱', p.name || p.id, 'color:#ffd080')
+    + row('玩家身份 playerKey', p.playerKey, 'font-size:10px;color:#888;word-break:break-all')
+    + row('身份頭像 baseAvatarKey', p.baseAvatarKey)
+    + row('顯示頭像 displayAvatarKey', p.displayAvatarKey)
+    + row('目前稱號', titleText, titleText === '未裝備' ? 'color:#555' : 'color:#ffd080;font-weight:900');
 }
 
 function openHomeScreen(from) {
@@ -4104,9 +4186,13 @@ function openHomeScreen(from) {
   renderHomeDog();
   renderHomeNextStage();
   renderHomeChallenge();
-  renderHomePlayer();
+  renderHomePlayer(); // 先顯示現有狀態（未裝備）
   renderHomeWallet();
   renderHomePreviewCard();
+  // 非同步讀取裝備稱號，完成後刷新玩家資訊
+  loadEquippedTitleFromFirebase().then(function() {
+    if (typeof renderHomePlayer === 'function') renderHomePlayer();
+  });
   initHomeCards();
   // home-next-stage-section 現在是固定顯示，不需要 JS show/hide
   // 確保所有其他 section 預設收合（首次進入時）
