@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.3-player-title-display-sync-test-2';
-const BUILD_TIME   = '2026-06-07 21:00';
+const GAME_VERSION = 'adventure-v0.3.3-player-title-display-sync-test-3';
+const BUILD_TIME   = '2026-06-07 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4139,20 +4139,60 @@ async function loadEquippedTitleFromFirebase() {
   }
 }
 
+// ── 頭像圖片路徑（共用 vparty-rhythm-game assets）──
+const ADVENTURE_AVATAR_BASE = 'https://vashyang1120.github.io/vparty-rhythm-game/assets/avatars/';
+function getAvatarImgUrl(avatarKey) {
+  if (!avatarKey) return '';
+  return ADVENTURE_AVATAR_BASE + avatarKey + '.png';
+}
+
+// ── 冒險通行證 avatar HTML ──
+function buildPassportAvatarHtml(avatarKey, size, label) {
+  const url = getAvatarImgUrl(avatarKey);
+  const sz = size || 80;
+  return '<div class="passport-avatar-wrap">'
+    + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(avatarKey) + '"'
+    + ' class="passport-avatar-img" style="width:' + sz + 'px;height:' + sz + 'px;"'
+    + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+    + '<div class="passport-avatar-fallback" style="width:' + sz + 'px;height:' + sz + 'px;display:none">🎈</div>'
+    + (label ? '<div class="passport-avatar-label">' + escapeHtml(label) + '</div>' : '')
+    + '</div>';
+}
+
 function renderHomePlayer() {
   const el = document.getElementById('home-player-body');
   if (!el) return;
   const p = playerProfile || createDefaultPlayerProfile();
-  const titleText = getEquippedTitleDisplayText();
-  const row = (k, v, style) =>
-    '<div class="home-row"><span class="home-row-label" style="min-width:180px">' + k + '</span>'
-    + '<span class="home-row-val' + (style ? '" style="' + style : '') + '">' + escapeHtml(v) + '</span></div>';
+  const titleText  = getEquippedTitleDisplayText();
+  const hasTitle   = titleText && titleText !== '未裝備';
+  const showAlt    = p.displayAvatarKey && p.displayAvatarKey !== p.baseAvatarKey;
+
+  // 主頭像區（角色身份）
+  const mainAvatarHtml = buildPassportAvatarHtml(p.baseAvatarKey, 88, '角色身份');
+
+  // 副頭像區（目前外觀，只在與身份不同時顯示）
+  const altAvatarHtml = showAlt
+    ? '<div class="passport-alt-avatar">'
+      + buildPassportAvatarHtml(p.displayAvatarKey, 52, '目前外觀')
+      + '</div>'
+    : '';
+
   el.innerHTML =
-    row('玩家名稱', p.name || p.id, 'color:#ffd080')
-    + row('玩家身份 playerKey', p.playerKey, 'font-size:10px;color:#888;word-break:break-all')
-    + row('身份頭像 baseAvatarKey', p.baseAvatarKey)
-    + row('顯示頭像 displayAvatarKey', p.displayAvatarKey)
-    + row('目前稱號', titleText, titleText === '未裝備' ? 'color:#555' : 'color:#ffd080;font-weight:900');
+    '<div class="passport-card">'
+    // 頭像列
+    + '<div class="passport-avatar-row">'
+    + mainAvatarHtml
+    + altAvatarHtml
+    + '</div>'
+    // 玩家名稱
+    + '<div class="passport-name">' + escapeHtml(p.name || p.id || 'Player') + '</div>'
+    // 稱號
+    + '<div class="passport-title' + (hasTitle ? ' passport-title--active' : ' passport-title--empty') + '">'
+    + (hasTitle ? '✦ ' + escapeHtml(titleText) : '未裝備稱號')
+    + '</div>'
+    // 說明小字
+    + '<div class="passport-hint">這個身份會記錄你的冒險成績、稱號與獎勵。</div>'
+    + '</div>';
 }
 
 function openHomeScreen(from) {

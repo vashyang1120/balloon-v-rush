@@ -2286,3 +2286,139 @@ html, body {
 @media (min-width: 480px) {
   #home-card-grid { grid-template-columns: repeat(7, 1fr); }
 }
+
+/* =============================================
+   冒險通行證（Phase 3B：玩家資訊 UI）
+   設計方向：融入小V的家玻璃感卡片風格
+   ============================================= */
+
+/* ── 通行證主卡片 ── */
+.passport-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 12px 12px;
+  background: linear-gradient(
+    150deg,
+    rgba(162,155,254,0.1) 0%,
+    rgba(116,185,255,0.07) 100%
+  );
+  border: 1.5px solid rgba(162,155,254,0.25);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.passport-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 120% 60% at 50% 0%, rgba(162,155,254,0.12), transparent 65%);
+  pointer-events: none;
+}
+
+/* ── 頭像列 ── */
+.passport-avatar-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+}
+.passport-avatar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.passport-avatar-img {
+  border-radius: 50%;
+  border: 2.5px solid rgba(162,155,254,0.5);
+  object-fit: cover;
+  background: rgba(30,24,60,0.6);
+  box-shadow:
+    0 0 12px rgba(162,155,254,0.2),
+    0 2px 8px rgba(0,0,0,0.4);
+}
+.passport-avatar-fallback {
+  border-radius: 50%;
+  border: 2px solid rgba(162,155,254,0.3);
+  background: rgba(30,24,60,0.6);
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+.passport-avatar-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(162,155,254,0.6);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── 副頭像（目前外觀，只在與身份不同時出現）── */
+.passport-alt-avatar { opacity: 0.85; }
+.passport-alt-avatar .passport-avatar-img {
+  border-color: rgba(116,185,255,0.45);
+  box-shadow: 0 0 8px rgba(116,185,255,0.2);
+}
+.passport-alt-avatar .passport-avatar-label { color: rgba(116,185,255,0.6); }
+
+/* ── 玩家名稱 ── */
+.passport-name {
+  font-size: 18px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 8px rgba(162,155,254,0.3);
+}
+
+/* ── 稱號 ── */
+.passport-title {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 5px 16px;
+  border-radius: 99px;
+  letter-spacing: 0.05em;
+}
+.passport-title--active {
+  color: #FFD93D;
+  background: rgba(255,217,61,0.12);
+  border: 1.5px solid rgba(255,217,61,0.35);
+  box-shadow: 0 0 10px rgba(255,217,61,0.15);
+}
+.passport-title--empty {
+  color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.12);
+  font-weight: 600;
+}
+
+/* ── 說明小字 ── */
+.passport-hint {
+  font-size: 10px;
+  color: rgba(255,255,255,0.28);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 220px;
+  margin-top: 2px;
+}
+
+/* ── hcard-player 的 open state（與其他 hcard 同步）── */
+#hcard-player.hcard--open {
+  border-color: rgba(162,155,254,0.6);
+  box-shadow:
+    0 0 16px rgba(162,155,254,0.35),
+    0 0 32px rgba(162,155,254,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+#hcard-player.hcard--open .hcard-title { color: #D4C8FF; }
+
+/* ── 手機橫向 compact ── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .passport-card { padding: 10px 10px 8px; gap: 6px; }
+  .passport-avatar-img { width: 56px !important; height: 56px !important; }
+  .passport-alt-avatar .passport-avatar-img { width: 36px !important; height: 36px !important; }
+  .passport-name { font-size: 14px; }
+  .passport-title { font-size: 11px; padding: 4px 12px; }
+  .passport-hint { font-size: 9px; }
+}
