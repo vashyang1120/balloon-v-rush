@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.3-player-title-display-sync-test-3';
-const BUILD_TIME   = '2026-06-07 22:00';
+const GAME_VERSION = 'adventure-v0.3.4-passport-title-snapshot-test-1';
+const BUILD_TIME   = '2026-06-08 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -604,6 +604,12 @@ function buildAdventureResultSnapshot(clearStatus) {
     recipesTotal:   lv.hiddenTreasure?.type === 'recipe'    ? 1 : 0,
     treasuresFound: foundTreasure ? 1 : 0,
     treasuresTotal: lv.hiddenTreasure?.type === 'goldChest' ? 1 : 0,
+
+    // 當場裝備稱號快照（Phase 3B：讀取 equippedTitle / quizEquippedTitle）
+    equippedTitleKey:          playerEquippedTitle?.titleKey          || '',
+    equippedTitleName:         playerEquippedTitle?.name              || '',
+    equippedTitleGameId:       playerEquippedTitle?.gameId            || '',
+    equippedTitleFromFallback: !!playerEquippedTitle?.fromFallback,
   };
 }
 
@@ -4173,7 +4179,7 @@ function renderHomePlayer() {
   // 副頭像區（目前外觀，只在與身份不同時顯示）
   const altAvatarHtml = showAlt
     ? '<div class="passport-alt-avatar">'
-      + buildPassportAvatarHtml(p.displayAvatarKey, 52, '目前外觀')
+      + buildPassportAvatarHtml(p.displayAvatarKey, 72, '目前外觀')
       + '</div>'
     : '';
 
@@ -5093,8 +5099,25 @@ function loop(timestamp) {
   requestAnimationFrame(loop);
 }
 
+
+// ── ensurePlayerProfileSaved：若 localStorage 無 profile，保存預設值 ──
+function ensurePlayerProfileSaved() {
+  try {
+    const existing = localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY);
+    if (!existing) {
+      // 尚未落地：把 normalized profile 存入 localStorage
+      const p = playerProfile || loadPlayerProfile();
+      savePlayerProfile(p);
+      console.log('[Profile] default profile saved to localStorage, playerKey:', p.playerKey);
+    }
+  } catch(e) {
+    console.warn('[Profile] ensurePlayerProfileSaved failed:', e.message);
+  }
+}
+
 // ── 初始化並啟動 ────────────────────────────
 playerProfile = loadPlayerProfile(); // 初始化玩家身份
+ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
