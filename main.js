@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.5';
-const BUILD_TIME   = '2026-06-09 14:00';
+const GAME_VERSION = 'adventure-v0.3.6-hero-basic-sprites-test-1';
+const BUILD_TIME   = '2026-06-09 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -575,17 +575,27 @@ function resolveAdventureAvatarSrc(avatarKey) {
 
 // 主角素材路徑（未來替換只需改這裡）
 const ADVENTURE_HERO_ASSETS = {
-  idle: 'assets/adventure/hero/hero_idle.png',
-  run1: 'assets/adventure/hero/hero_run_1.png',
-  run2: 'assets/adventure/hero/hero_run_2.png',
-  jump: 'assets/adventure/hero/hero_jump.png',
-  fall: 'assets/adventure/hero/hero_fall.png',
-  hurt: 'assets/adventure/hero/hero_hurt.png',
+  idle:  'assets/adventure/hero/hero_idle.png',
+  run01: 'assets/adventure/hero/hero_run_01.png',  // 起跑過渡
+  run02: 'assets/adventure/hero/hero_run_02.png',  // 跑步左極限
+  run03: 'assets/adventure/hero/hero_run_03.png',  // 跑步中間回收
+  run04: 'assets/adventure/hero/hero_run_04.png',  // 跑步右極限
+  jump:  'assets/adventure/hero/hero_jump.png',
+  fall:  'assets/adventure/hero/hero_fall.png',
+  hurt:  'assets/adventure/hero/hero_hurt.png',
 };
 
 // 圖片快取（key → Image 物件，只載入一次）
 const adventureImages = {};
 let adventureHeroLoaded = false;  // 至少一張 hero 圖片可用
+
+// ── 跑步動畫狀態機 ──
+// 動畫序列：起跑 run01→run02，持續主循環 run02→run03→run04→run03，停下 run03→run01→idle
+// _heroRunPhase: 'entry'（起跑）| 'loop'（持續主循環）| 'exit'（停下）
+let _heroRunPhase   = 'idle';  // 目前動畫階段
+let _heroRunFrame   = 0;       // 在目前動畫序列裡的位置
+let _heroWasMoving  = false;   // 上一幀是否在移動（偵測起跑/停下邊界）
+let _heroFrameTimer = 0;       // 計幀器（控制每張圖停留幾幀）
 
 // 安全圖片載入（快取 + 404 不 crash）
 function loadAdventureImage(key, src) {
@@ -622,18 +632,59 @@ function initAdventureHeroArt() {
   });
 }
 
-// 依玩家目前物理狀態選擇最適合的素材 key
+// 依玩家目前物理狀態選擇最適合的素材 key（4 張 run 動畫狀態機）
 function getHeroArtKey() {
-  if (player.invincible > 0) return 'hurt';
+  // 受傷
+  if (player.invincible > 0) {
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
+    return 'hurt';
+  }
+  // 空中
   if (!player.onGround) {
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
     return player.vy < -0.5 ? 'jump' : 'fall';
   }
+
   const moving = Math.abs(player.vx) > 0.5;
-  if (moving) {
-    // run1 / run2 每 10 幀輪播
-    return Math.floor(frameCount / 10) % 2 === 0 ? 'run1' : 'run2';
+
+  // ── 停下：exit phase（run03 → run01 → idle）──
+  if (_heroWasMoving && !moving) {
+    _heroRunPhase = 'exit'; _heroRunFrame = 0;
   }
-  return 'idle';
+  // ── 起跑：entry phase（idle → run01 → run02）──
+  if (!_heroWasMoving && moving) {
+    _heroRunPhase = 'entry'; _heroRunFrame = 0;
+  }
+  _heroWasMoving = moving;
+
+  if (!moving) {
+    if (_heroRunPhase === 'exit') {
+      // exit：run03 → run01 → idle（每 8 幀換一張）
+      _heroFrameTimer++;
+      if (_heroFrameTimer >= 8) { _heroFrameTimer = 0; _heroRunFrame++; }
+      if (_heroRunFrame === 0) return 'run03';
+      if (_heroRunFrame === 1) return 'run01';
+      _heroRunPhase = 'idle'; _heroRunFrame = 0;
+    }
+    return 'idle';
+  }
+
+  // 移動中
+  if (_heroRunPhase === 'entry') {
+    // entry：run01 → run02（各 6 幀），然後進 loop
+    _heroFrameTimer++;
+    if (_heroFrameTimer >= 6) { _heroFrameTimer = 0; _heroRunFrame++; }
+    if (_heroRunFrame === 0) return 'run01';
+    if (_heroRunFrame === 1) return 'run02';
+    // entry 完成，進入持續主循環
+    _heroRunPhase = 'loop'; _heroRunFrame = 0; _heroFrameTimer = 0;
+  }
+
+  // loop：run02 → run03 → run04 → run03（各 7 幀，避免 run04 直跳 run01）
+  _heroFrameTimer++;
+  if (_heroFrameTimer >= 7) { _heroFrameTimer = 0; _heroRunFrame = (_heroRunFrame + 1) % 4; }
+  const loopFrames = ['run02','run03','run04','run03'];
+  return loopFrames[_heroRunFrame];
 }
 
 function calcAdventureScore() {
