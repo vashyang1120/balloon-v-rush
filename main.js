@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.4-passport-title-snapshot-test-1';
-const BUILD_TIME   = '2026-06-08 10:00';
+const GAME_VERSION = 'adventure-v0.3.4-system-polish-art-prep-test-2';
+const BUILD_TIME   = '2026-06-08 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -538,6 +538,33 @@ function addVCoins(amount, source, meta) {
 //  不寫 leaderboard / players / wallet / V幣
 // =============================================
 
+
+// =============================================
+//  Asset Resolver（美術前置，Phase Art-Foundation）
+//  resolveAdventureAssetSrc(path) — 安全路徑 helper
+//  resolveAdventureAvatarSrc(key) — 頭像路徑
+//  本版只建立 helper，不替換任何遊戲美術
+// =============================================
+
+// 冒險遊戲部署根路徑（GitHub Pages）
+const ADVENTURE_BASE_URL = 'https://vashyang1120.github.io/balloon-v-rush/';
+
+function resolveAdventureAssetSrc(path) {
+  if (!path) return '';
+  const s = String(path).trim();
+  if (!s) return '';
+  // 已是完整 URL，直接回傳
+  if (/^https?:\/\//.test(s)) return s;
+  // 相對路徑：組完整 URL
+  return ADVENTURE_BASE_URL + s.replace(/^\//, '');
+}
+
+function resolveAdventureAvatarSrc(avatarKey) {
+  if (!avatarKey) return resolveAdventureAvatarSrc('boy1');
+  // 共用 vparty-rhythm-game 的頭像資源
+  return 'https://vashyang1120.github.io/vparty-rhythm-game/assets/avatars/' + avatarKey + '.png';
+}
+
 function calcAdventureScore() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
   const score =
@@ -569,7 +596,9 @@ function buildAdventureResultSnapshot(clearStatus) {
     baseAvatarKey:    identity.baseAvatarKey, // 身份頭像
     displayAvatarKey: identity.displayAvatarKey, // 顯示頭像
     avatarKey:        identity.avatarKey,     // 舊 UI 相容
-    avatarSrc:        '',                     // Phase 3B 接 avatarCatalog 後補
+    avatarSrc: resolveAdventureAvatarSrc(
+      identity.displayAvatarKey || identity.avatarKey || identity.baseAvatarKey || 'boy1'
+    ),
 
     score:            calcAdventureScore(),
     ts:               Date.now(),
@@ -615,20 +644,29 @@ function buildAdventureResultSnapshot(clearStatus) {
 
 async function submitAdventureGameLog(clearStatus) {
   try {
-    const snapshot = buildAdventureResultSnapshot(clearStatus);
-
     if (!isFirebaseAvailable()) {
-      console.warn('[Firebase] unavailable, skip adventure gameLog:', snapshot);
+      console.warn('[Firebase] adventure gameLog skipped: firebase unavailable');
       return false;
     }
+
+    // 先嘗試讀取最新稱號，讓快照包含正確稱號資料
+    try {
+      await loadEquippedTitleFromFirebase();
+    } catch(titleErr) {
+      console.warn('[Title] preload before gameLog failed:', titleErr && titleErr.message ? titleErr.message : titleErr);
+    }
+
+    const snapshot = buildAdventureResultSnapshot(clearStatus);
 
     await firebase.database().ref('gameLogs/adventure').push(snapshot);
 
     console.log('[Firebase] adventure gameLog submitted:', {
       clearStatus,
-      playerKey: snapshot.playerKey,
-      score:     snapshot.score,
-      levelId:   snapshot.levelId,
+      playerKey:         snapshot.playerKey,
+      score:             snapshot.score,
+      levelId:           snapshot.levelId,
+      equippedTitleKey:  snapshot.equippedTitleKey,
+      equippedTitleName: snapshot.equippedTitleName,
     });
     return true;
   } catch(e) {
@@ -4154,7 +4192,7 @@ function getAvatarImgUrl(avatarKey) {
 
 // ── 冒險通行證 avatar HTML ──
 function buildPassportAvatarHtml(avatarKey, size, label) {
-  const url = getAvatarImgUrl(avatarKey);
+  const url = resolveAdventureAvatarSrc(avatarKey || 'boy1'); // 使用統一 resolver
   const sz = size || 80;
   return '<div class="passport-avatar-wrap">'
     + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(avatarKey) + '"'
