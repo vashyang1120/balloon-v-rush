@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-hero-basic-sprites-test-1';
-const BUILD_TIME   = '2026-06-09 18:00';
+const GAME_VERSION = 'adventure-v0.3.6-sword-attack-art-test-1';
+const BUILD_TIME   = '2026-06-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -575,14 +575,19 @@ function resolveAdventureAvatarSrc(avatarKey) {
 
 // 主角素材路徑（未來替換只需改這裡）
 const ADVENTURE_HERO_ASSETS = {
-  idle:  'assets/adventure/hero/hero_idle.png',
-  run01: 'assets/adventure/hero/hero_run_01.png',  // 起跑過渡
-  run02: 'assets/adventure/hero/hero_run_02.png',  // 跑步左極限
-  run03: 'assets/adventure/hero/hero_run_03.png',  // 跑步中間回收
-  run04: 'assets/adventure/hero/hero_run_04.png',  // 跑步右極限
-  jump:  'assets/adventure/hero/hero_jump.png',
-  fall:  'assets/adventure/hero/hero_fall.png',
-  hurt:  'assets/adventure/hero/hero_hurt.png',
+  idle:          'assets/adventure/hero/hero_idle.png',
+  run01:         'assets/adventure/hero/hero_run_01.png',  // 起跑過渡
+  run02:         'assets/adventure/hero/hero_run_02.png',  // 跑步左極限
+  run03:         'assets/adventure/hero/hero_run_03.png',  // 跑步中間回收
+  run04:         'assets/adventure/hero/hero_run_04.png',  // 跑步右極限
+  run05:         'assets/adventure/hero/hero_run_05.png',  // 右腳前伸
+  jump:          'assets/adventure/hero/hero_jump.png',
+  fall:          'assets/adventure/hero/hero_fall.png',
+  hurt:          'assets/adventure/hero/hero_hurt.png',
+  swordAttack01: 'assets/adventure/hero/hero_sword_attack_01.png',
+  swordAttack02: 'assets/adventure/hero/hero_sword_attack_02.png',
+  swordAttack03: 'assets/adventure/hero/hero_sword_attack_03.png',
+  swordAttack04: 'assets/adventure/hero/hero_sword_attack_04.png',
 };
 
 // 圖片快取（key → Image 物件，只載入一次）
@@ -632,14 +637,25 @@ function initAdventureHeroArt() {
   });
 }
 
-// 依玩家目前物理狀態選擇最適合的素材 key（4 張 run 動畫狀態機）
+// 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
 function getHeroArtKey() {
-  // 受傷
+  // ── 優先：劍攻擊動畫（meleeActive > 0 且裝備劍）──
+  // 攻擊期間（14 幀）分成 4 等份，依序顯示 4 張攻擊圖
+  if (player.meleeActive > 0 && activeSlot === 'sword') {
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
+    const dur = CONFIG.BASIC_SWORD_ATTACK_DURATION || 14;
+    const elapsed = dur - player.meleeActive;           // 已過幀數 0~13
+    const step    = Math.floor(elapsed / (dur / 4));    // 0~3
+    return ['swordAttack01','swordAttack02','swordAttack03','swordAttack04'][Math.min(step, 3)];
+  }
+
+  // ── 受傷 ──
   if (player.invincible > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
     return 'hurt';
   }
-  // 空中
+
+  // ── 空中 ──
   if (!player.onGround) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
     return player.vy < -0.5 ? 'jump' : 'fall';
@@ -647,21 +663,17 @@ function getHeroArtKey() {
 
   const moving = Math.abs(player.vx) > 0.5;
 
-  // ── 停下：exit phase（run03 → run01 → idle）──
-  if (_heroWasMoving && !moving) {
-    _heroRunPhase = 'exit'; _heroRunFrame = 0;
-  }
-  // ── 起跑：entry phase（idle → run01 → run02）──
-  if (!_heroWasMoving && moving) {
-    _heroRunPhase = 'entry'; _heroRunFrame = 0;
-  }
+  // ── 邊界偵測 ──
+  if (_heroWasMoving && !moving) { _heroRunPhase = 'exit';  _heroRunFrame = 0; _heroFrameTimer = 0; }
+  if (!_heroWasMoving && moving)  { _heroRunPhase = 'entry'; _heroRunFrame = 0; _heroFrameTimer = 0; }
   _heroWasMoving = moving;
 
+  // ── 靜止 ──
   if (!moving) {
     if (_heroRunPhase === 'exit') {
-      // exit：run03 → run01 → idle（每 8 幀換一張）
       _heroFrameTimer++;
       if (_heroFrameTimer >= 8) { _heroFrameTimer = 0; _heroRunFrame++; }
+      // exit 過渡：run03 → run01 → idle
       if (_heroRunFrame === 0) return 'run03';
       if (_heroRunFrame === 1) return 'run01';
       _heroRunPhase = 'idle'; _heroRunFrame = 0;
@@ -669,21 +681,22 @@ function getHeroArtKey() {
     return 'idle';
   }
 
-  // 移動中
+  // ── 起跑過渡（entry）：run01 → run02，各 6 幀 ──
   if (_heroRunPhase === 'entry') {
-    // entry：run01 → run02（各 6 幀），然後進 loop
     _heroFrameTimer++;
     if (_heroFrameTimer >= 6) { _heroFrameTimer = 0; _heroRunFrame++; }
     if (_heroRunFrame === 0) return 'run01';
     if (_heroRunFrame === 1) return 'run02';
-    // entry 完成，進入持續主循環
     _heroRunPhase = 'loop'; _heroRunFrame = 0; _heroFrameTimer = 0;
   }
 
-  // loop：run02 → run03 → run04 → run03（各 7 幀，避免 run04 直跳 run01）
+  // ── 持續跑步主循環：1→2→3→4→5→4→3→2→1（共 9 格，每格 6 幀）──
+  const loopFrames = ['run01','run02','run03','run04','run05','run04','run03','run02','run01'];
   _heroFrameTimer++;
-  if (_heroFrameTimer >= 7) { _heroFrameTimer = 0; _heroRunFrame = (_heroRunFrame + 1) % 4; }
-  const loopFrames = ['run02','run03','run04','run03'];
+  if (_heroFrameTimer >= 6) {
+    _heroFrameTimer = 0;
+    _heroRunFrame = (_heroRunFrame + 1) % loopFrames.length;
+  }
   return loopFrames[_heroRunFrame];
 }
 
