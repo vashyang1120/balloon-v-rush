@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.4';
-const BUILD_TIME   = '2026-06-08 18:00';
+const GAME_VERSION = 'adventure-v0.3.5-art-foundation-test-1';
+const BUILD_TIME   = '2026-06-09 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -563,6 +563,77 @@ function resolveAdventureAvatarSrc(avatarKey) {
   if (!avatarKey) return resolveAdventureAvatarSrc('boy1');
   // 共用 vparty-rhythm-game 的頭像資源
   return 'https://vashyang1120.github.io/vparty-rhythm-game/assets/avatars/' + avatarKey + '.png';
+}
+
+
+// =============================================
+//  Adventure Hero Art Foundation（Phase Art）
+//  ADVENTURE_HERO_ASSETS：主角素材路徑規格
+//  adventureImages：載入快取（不在 draw loop 裡 new Image）
+//  heroArtState：目前最佳可用狀態圖片 key
+// =============================================
+
+// 主角素材路徑（未來替換只需改這裡）
+const ADVENTURE_HERO_ASSETS = {
+  idle: 'assets/adventure/hero/hero_idle.png',
+  run1: 'assets/adventure/hero/hero_run_1.png',
+  run2: 'assets/adventure/hero/hero_run_2.png',
+  jump: 'assets/adventure/hero/hero_jump.png',
+  fall: 'assets/adventure/hero/hero_fall.png',
+  hurt: 'assets/adventure/hero/hero_hurt.png',
+};
+
+// 圖片快取（key → Image 物件，只載入一次）
+const adventureImages = {};
+let adventureHeroLoaded = false;  // 至少一張 hero 圖片可用
+
+// 安全圖片載入（快取 + 404 不 crash）
+function loadAdventureImage(key, src) {
+  if (adventureImages[key]) return; // 已載入過
+  const img = new Image();
+  const fullSrc = resolveAdventureAssetSrc(src);
+  img.onload = function() {
+    adventureImages[key] = img;
+    adventureHeroLoaded = true;
+    // console.log('[Art] hero image loaded:', key, fullSrc);
+  };
+  img.onerror = function() {
+    // 圖片不存在 → 不 crash，保留 undefined，fallback 自動啟動
+    // 只在首次失敗時 log 一次
+    if (!img._errLogged) {
+      img._errLogged = true;
+      console.warn('[Art] hero image not found:', key, fullSrc, '(fallback active)');
+    }
+  };
+  img.src = fullSrc;
+}
+
+// 取得已載入的圖片（未載入回 null）
+function getAdventureImage(key) {
+  const img = adventureImages[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
+}
+
+// 初始化：非阻塞地嘗試載入所有 hero 素材
+function initAdventureHeroArt() {
+  Object.entries(ADVENTURE_HERO_ASSETS).forEach(([key, src]) => {
+    loadAdventureImage(key, src);
+  });
+}
+
+// 依玩家目前物理狀態選擇最適合的素材 key
+function getHeroArtKey() {
+  if (player.invincible > 0) return 'hurt';
+  if (!player.onGround) {
+    return player.vy < -0.5 ? 'jump' : 'fall';
+  }
+  const moving = Math.abs(player.vx) > 0.5;
+  if (moving) {
+    // run1 / run2 每 10 幀輪播
+    return Math.floor(frameCount / 10) % 2 === 0 ? 'run1' : 'run2';
+  }
+  return 'idle';
 }
 
 function calcAdventureScore() {
@@ -2977,17 +3048,36 @@ function drawPlayer(cx) {
   if (player.invincible > 0 && frameCount % 6 < 3) return;
 
   ctx.save();
+
+  // Art Foundation（Phase Art）：優先使用 hero 素材，fallback 維持原本邏輯
+  const heroKey = getHeroArtKey();
+  const heroImg = getAdventureImage(heroKey)
+    || getAdventureImage('idle'); // fallback 到 idle 素材
+
   if (!player.facingRight) {
     ctx.translate(sx + player.w, sy);
     ctx.scale(-1, 1);
-    if (playerImg.complete && playerImg.naturalWidth > 0) {
+    if (heroImg) {
+      // Hero 素材繪製（對齊碰撞盒，可稍微放大）
+      const dW = player.w * 1.2;
+      const dH = player.h * 1.2;
+      const dX = (player.w - dW) / 2;      // 水平置中
+      const dY = player.h - dH;            // 腳底對齊
+      ctx.drawImage(heroImg, dX, dY, dW, dH);
+    } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
     } else {
       drawPlayerFallback(0, 0, player.w, player.h);
     }
   } else {
     ctx.translate(sx, sy);
-    if (playerImg.complete && playerImg.naturalWidth > 0) {
+    if (heroImg) {
+      const dW = player.w * 1.2;
+      const dH = player.h * 1.2;
+      const dX = (player.w - dW) / 2;
+      const dY = player.h - dH;
+      ctx.drawImage(heroImg, dX, dY, dW, dH);
+    } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
     } else {
       drawPlayerFallback(0, 0, player.w, player.h);
@@ -5156,6 +5246,7 @@ function ensurePlayerProfileSaved() {
 // ── 初始化並啟動 ────────────────────────────
 playerProfile = loadPlayerProfile(); // 初始化玩家身份
 ensurePlayerProfileSaved();           // 確保 localStorage 有落地
+initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
