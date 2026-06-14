@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-sword-attack-art-test-1';
-const BUILD_TIME   = '2026-06-09 20:00';
+const GAME_VERSION = 'adventure-v0.3.6-sword-attack-art-test-2';
+const BUILD_TIME   = '2026-06-09 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -639,14 +639,15 @@ function initAdventureHeroArt() {
 
 // 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
 function getHeroArtKey() {
-  // ── 優先：劍攻擊動畫（meleeActive > 0 且裝備劍）──
-  // 攻擊期間（14 幀）分成 4 等份，依序顯示 4 張攻擊圖
-  if (player.meleeActive > 0 && activeSlot === 'sword') {
+  // ── 優先：劍攻擊視覺動畫（swordAnimTimer > 0，與 hitbox 獨立）──
+  // 幀分配：attack01=6幀, attack02=6幀, attack03=8幀, attack04=10幀（共 30 幀）
+  if (player.swordAnimTimer > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
-    const dur = CONFIG.BASIC_SWORD_ATTACK_DURATION || 14;
-    const elapsed = dur - player.meleeActive;           // 已過幀數 0~13
-    const step    = Math.floor(elapsed / (dur / 4));    // 0~3
-    return ['swordAttack01','swordAttack02','swordAttack03','swordAttack04'][Math.min(step, 3)];
+    const t = 30 - player.swordAnimTimer; // 已過幀數 0~29
+    if (t < 6)  return 'swordAttack01';   // 0~5  : 6 幀
+    if (t < 12) return 'swordAttack02';   // 6~11 : 6 幀
+    if (t < 20) return 'swordAttack03';   // 12~19: 8 幀（命中主要畫面）
+    return 'swordAttack04';               // 20~29: 10 幀（收招）
   }
 
   // ── 受傷 ──
@@ -691,7 +692,7 @@ function getHeroArtKey() {
   }
 
   // ── 持續跑步主循環：1→2→3→4→5→4→3→2→1（共 9 格，每格 6 幀）──
-  const loopFrames = ['run01','run02','run03','run04','run05','run04','run03','run02','run01'];
+  const loopFrames = ['run01','run02','run03','run05','run04','run05','run03','run02','run01'];
   _heroFrameTimer++;
   if (_heroFrameTimer >= 6) {
     _heroFrameTimer = 0;
@@ -1344,6 +1345,7 @@ const player = {
   meleeHit: false,
   meleeHammerActive: 0, // hammer melee hitbox live frames
   hammerHit: false,
+  swordAnimTimer: 0,   // 揮劍視覺動畫獨立計時（與 hitbox 分開）
   // Stats
   coinsCollected: 0,
   balloonsCollected: 0,
@@ -2350,6 +2352,7 @@ function updatePlayer(dt) {
   if (player.attackCooldown > 0) player.attackCooldown--;
   if (player.attackActive > 0)   player.attackActive--;
   if (player.meleeActive > 0)    player.meleeActive--;
+  if (player.swordAnimTimer > 0)  player.swordAnimTimer--;
 
   if (player.meleeHammerActive > 0) player.meleeHammerActive--;
 
@@ -2362,6 +2365,7 @@ function updatePlayer(dt) {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
       player.meleeHit       = false;
+      player.swordAnimTimer = 30; // 視覺動畫獨立計時（30 幀）
     } else {
       player.attackCooldown = 30;
       player.attackActive   = 12;
@@ -4932,7 +4936,7 @@ function restart(opts) {
       return fallback;
     })(), invincible: 0,
     attackCooldown: 0, attackActive: 0,
-    meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false,
+    meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false, swordAnimTimer: 0,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
   // Reset currentRunStats（本局歸零，inventory 不動）
