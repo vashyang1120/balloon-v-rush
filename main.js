@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-run-debug-mobile-controls-test-6';
-const BUILD_TIME   = '2026-06-10 16:00';
+const GAME_VERSION = 'adventure-v0.3.7-mobile-controls-polish-test-1';
+const BUILD_TIME   = '2026-06-10 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────

@@ -2434,64 +2434,94 @@ html, body {
   .passport-hint { font-size: 9px; }
 }
 
-/* ── 手機操控按鈕優化（Phase Mobile-Controls）── */
+/* ── 手機操控按鈕優化（Phase 3.7 polish）──
+   設計方向：白框 + 淡白透明底，不厚重，不模糊，接近手遊覆蓋式按鍵
+   ── */
 
-/* 攻擊鍵：較大、粉紅色半透明 */
-.action-btn {
-  width: clamp(80px, 11vw, 100px) !important;
-  height: clamp(80px, 11vw, 100px) !important;
-  background: rgba(255,107,157,0.32) !important;
-  border-color: rgba(255,180,210,0.6) !important;
-  box-shadow: 0 4px 16px rgba(255,107,157,0.3), inset 0 1px 0 rgba(255,255,255,0.15) !important;
-  font-size: 22px !important;
+/* 全部 ctrl-btn 統一白框淡白底，覆蓋舊的深色設定 */
+.ctrl-btn {
+  width: clamp(68px, 9vw, 80px) !important;
+  height: clamp(68px, 9vw, 80px) !important;
+  background: rgba(255,255,255,0.14) !important;
+  border: 2px solid rgba(255,255,255,0.6) !important;
+  color: rgba(255,255,255,0.95) !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
 }
 
-/* 跳躍鍵：稍大、藍紫色半透明 */
+/* 攻擊鍵（砍）：稍大一點，淡紅白框 */
+.action-btn {
+  width: clamp(72px, 10vw, 84px) !important;
+  height: clamp(72px, 10vw, 84px) !important;
+  background: rgba(255,160,180,0.18) !important;
+  border-color: rgba(255,200,210,0.7) !important;
+  font-size: 18px !important;
+}
+
+/* 跳躍鍵 */
 #btn-jump {
-  width: clamp(74px, 10vw, 92px) !important;
-  height: clamp(74px, 10vw, 92px) !important;
-  background: rgba(116,185,255,0.25) !important;
-  border-color: rgba(160,210,255,0.55) !important;
-  font-size: 16px !important;
+  background: rgba(200,220,255,0.15) !important;
+  border-color: rgba(200,220,255,0.65) !important;
 }
 
 /* 切換武器鍵：稍小 */
 .switch-btn {
-  width: clamp(56px, 7vw, 68px) !important;
-  height: clamp(56px, 7vw, 68px) !important;
-  background: rgba(162,155,254,0.22) !important;
-  border-color: rgba(200,190,255,0.45) !important;
-  font-size: 16px !important;
+  width: clamp(54px, 7vw, 64px) !important;
+  height: clamp(54px, 7vw, 64px) !important;
+  background: rgba(210,200,255,0.14) !important;
+  border-color: rgba(210,200,255,0.6) !important;
+  font-size: 17px !important;
 }
 
-/* 按下時的回饋 */
+/* 按下回饋 */
 .ctrl-btn:active,
 .ctrl-btn.pressed {
-  background: rgba(255,255,255,0.28) !important;
-  border-color: rgba(255,255,255,0.85) !important;
-  transform: scale(0.93);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+  background: rgba(255,255,255,0.32) !important;
+  border-color: rgba(255,255,255,1) !important;
+  transform: scale(0.92) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
 }
 
-/* 手機橫向 compact（更緊湊的間距） */
+/* 右側三顆三角形排列 */
+#ctrl-right-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: all;
+}
+.ctrl-right-top {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 8px; /* 上方切換鍵向右偏移，對齊跳鍵右側 */
+}
+.ctrl-right-bottom {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+}
+
+/* 手機橫向 compact */
 @media (max-height: 500px) and (orientation: landscape) {
-  #mobile-controls { padding: 0 12px 12px; }
+  #mobile-controls { padding: 0 10px 10px; }
   #ctrl-left-group  { gap: 14px; }
-  #ctrl-right-group { gap: 10px; }
   .ctrl-btn {
-    width: clamp(58px, 9vw, 72px) !important;
-    height: clamp(58px, 9vw, 72px) !important;
+    width: clamp(56px, 9vw, 68px) !important;
+    height: clamp(56px, 9vw, 68px) !important;
+    font-size: 17px !important;
   }
   .action-btn {
-    width: clamp(68px, 10vw, 84px) !important;
-    height: clamp(68px, 10vw, 84px) !important;
-  }
-  #btn-jump {
-    width: clamp(62px, 9vw, 76px) !important;
-    height: clamp(62px, 9vw, 76px) !important;
+    width: clamp(60px, 10vw, 72px) !important;
+    height: clamp(60px, 10vw, 72px) !important;
+    font-size: 16px !important;
   }
   .switch-btn {
-    width: clamp(48px, 7vw, 58px) !important;
-    height: clamp(48px, 7vw, 58px) !important;
+    width: clamp(46px, 7vw, 56px) !important;
+    height: clamp(46px, 7vw, 56px) !important;
+    font-size: 15px !important;
   }
+  .ctrl-right-bottom { gap: 8px; }
 }
