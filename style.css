@@ -94,41 +94,52 @@ html, body {
 /* ── Mobile Controls ── */
 #mobile-controls {
   position: absolute;
-  bottom: 10px;
+  bottom: 0;
   left: 0;
   right: 0;
   display: flex;
   justify-content: space-between;
-  padding: 0 12px;
+  align-items: flex-end;
+  padding: 0 16px 18px;
   pointer-events: none;
   z-index: 100;
 }
 
-#ctrl-left-group,
+#ctrl-left-group {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  align-items: center;
+  pointer-events: all;
+}
+
 #ctrl-right-group {
   display: flex;
-  gap: 8px;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-end;
   pointer-events: all;
 }
 
 .ctrl-btn {
-  width: 50px; height: 50px;
+  width: clamp(68px, 9vw, 84px);
+  height: clamp(68px, 9vw, 84px);
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.4);
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
+  border: 2.5px solid rgba(255,255,255,0.45);
+  background: rgba(20,20,40,0.32);
+  color: rgba(255,255,255,0.95);
+  font-size: 20px;
+  font-weight: 800;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.1s, transform 0.1s;
-  backdrop-filter: blur(3px);
-  /* 留一點底部 safe area */
-  margin-bottom: env(safe-area-inset-bottom, 0px);
+  touch-action: manipulation;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.15);
+  transition: background 0.08s, transform 0.08s, box-shadow 0.08s;
 }
 
 .ctrl-btn:active, .ctrl-btn.pressed {
@@ -2421,4 +2432,66 @@ html, body {
   .passport-name { font-size: 14px; }
   .passport-title { font-size: 11px; padding: 4px 12px; }
   .passport-hint { font-size: 9px; }
+}
+
+/* ── 手機操控按鈕優化（Phase Mobile-Controls）── */
+
+/* 攻擊鍵：較大、粉紅色半透明 */
+.action-btn {
+  width: clamp(80px, 11vw, 100px) !important;
+  height: clamp(80px, 11vw, 100px) !important;
+  background: rgba(255,107,157,0.32) !important;
+  border-color: rgba(255,180,210,0.6) !important;
+  box-shadow: 0 4px 16px rgba(255,107,157,0.3), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+  font-size: 22px !important;
+}
+
+/* 跳躍鍵：稍大、藍紫色半透明 */
+#btn-jump {
+  width: clamp(74px, 10vw, 92px) !important;
+  height: clamp(74px, 10vw, 92px) !important;
+  background: rgba(116,185,255,0.25) !important;
+  border-color: rgba(160,210,255,0.55) !important;
+  font-size: 16px !important;
+}
+
+/* 切換武器鍵：稍小 */
+.switch-btn {
+  width: clamp(56px, 7vw, 68px) !important;
+  height: clamp(56px, 7vw, 68px) !important;
+  background: rgba(162,155,254,0.22) !important;
+  border-color: rgba(200,190,255,0.45) !important;
+  font-size: 16px !important;
+}
+
+/* 按下時的回饋 */
+.ctrl-btn:active,
+.ctrl-btn.pressed {
+  background: rgba(255,255,255,0.28) !important;
+  border-color: rgba(255,255,255,0.85) !important;
+  transform: scale(0.93);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+
+/* 手機橫向 compact（更緊湊的間距） */
+@media (max-height: 500px) and (orientation: landscape) {
+  #mobile-controls { padding: 0 12px 12px; }
+  #ctrl-left-group  { gap: 14px; }
+  #ctrl-right-group { gap: 10px; }
+  .ctrl-btn {
+    width: clamp(58px, 9vw, 72px) !important;
+    height: clamp(58px, 9vw, 72px) !important;
+  }
+  .action-btn {
+    width: clamp(68px, 10vw, 84px) !important;
+    height: clamp(68px, 10vw, 84px) !important;
+  }
+  #btn-jump {
+    width: clamp(62px, 9vw, 76px) !important;
+    height: clamp(62px, 9vw, 76px) !important;
+  }
+  .switch-btn {
+    width: clamp(48px, 7vw, 58px) !important;
+    height: clamp(48px, 7vw, 58px) !important;
+  }
 }

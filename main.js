@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-5';
-const BUILD_TIME   = '2026-06-10 14:00';
+const GAME_VERSION = 'adventure-v0.3.6-run-debug-mobile-controls-test-6';
+const BUILD_TIME   = '2026-06-10 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3203,9 +3203,8 @@ function drawPlayer(cx) {
     ctx.fill();
   }
 
-    // ── DEBUG：角色上方顯示目前幀 key（移除時刪此段）──
-  // 在 ctx.restore() 之後，使用 canvas 畫面座標（sx/sy），不受 translate/scale 影響
-  if (typeof _lastHeroArtKey !== 'undefined') {
+    // ── DEBUG 角色頭上文字：已停用，改用 drawHeroDebugPanel() 固定面板 ──
+  if (false && typeof _lastHeroArtKey !== 'undefined') { // 停用
     ctx.save();
     ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'center';
@@ -3627,6 +3626,46 @@ function drawFinishFlag(cx) {
   ctx.font = 'bold 11px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('GOAL', sx + 10, GROUND_Y - 98);
+}
+
+
+// ── DEBUG 固定面板（移除時刪 drawHeroDebugPanel 及其呼叫）────────────
+function drawHeroDebugPanel() {
+  // 取得 loopDurations 的目前 dur（只在 loop 狀態有意義）
+  const loopFrames    = ['run01','run02','run03','run05','run04','run05','run03','run02'];
+  const loopDurations = [    6,      6,      7,     14,     16,     14,      7,      6 ];
+  const curDur = (_heroRunPhase === 'loop') ? (loopDurations[_heroRunFrame] || 6) : 0;
+
+  const lines = [
+    { label: 'ART',        val: _lastHeroArtKey || '—',     color: '#FFD700' },
+    { label: 'RUN_PHASE',  val: _heroRunPhase,               color: '#fff' },
+    { label: 'RUN_INDEX',  val: _heroRunFrame + ' / ' + loopFrames.length, color: '#fff' },
+    { label: 'RUN_TIMER',  val: _heroFrameTimer + ' / ' + curDur,          color: '#fff' },
+    { label: 'SWORD_TMR',  val: (player.swordAnimTimer || 0).toString(),   color: '#adf' },
+  ];
+
+  const px = 12, py = 68;
+  const lh = 16, pad = 6, fw = 138;
+  const boxH = lines.length * lh + pad * 2;
+
+  ctx.save();
+  // 半透明黑底
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.beginPath();
+  ctx.roundRect(px - 2, py - 2, fw, boxH, 5);
+  ctx.fill();
+
+  ctx.font = '11px monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  lines.forEach((ln, i) => {
+    ctx.fillStyle = 'rgba(160,160,160,0.9)';
+    ctx.fillText(ln.label + ': ', px + pad, py + pad + i * lh);
+    ctx.fillStyle = ln.color;
+    ctx.fillText(ln.val, px + pad + 68, py + pad + i * lh);
+  });
+
+  ctx.restore();
 }
 
 function drawHUD() {
