@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-3';
-const BUILD_TIME   = '2026-06-10 10:00';
+const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-4';
+const BUILD_TIME   = '2026-06-10 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -695,7 +695,7 @@ function getHeroArtKey() {
   // ── 持續跑步主循環：12354532（8格循環）──
   // run04 / run05 各停較久，確保玩家能看見
   const loopFrames    = ['run01','run02','run03','run05','run04','run05','run03','run02'];
-  const loopDurations = [    6,      6,      6,      9,      9,      9,      6,      6 ];
+  const loopDurations = [    6,      6,      7,     14,     16,     14,      7,      6 ];
   //  frames per key: 01=6  02=6  03=6  05=9  04=9  05=9  03=6  02=6
   _heroFrameTimer++;
   const curDur = loopDurations[_heroRunFrame] || 6;
@@ -3201,15 +3201,17 @@ function drawPlayer(cx) {
   }
 
     // ── DEBUG：角色上方顯示目前幀 key（移除時刪此段）──
+  // 座標使用 canvas 畫面座標（sx/sy），不受 translate/scale 影響
   if (typeof _lastHeroArtKey !== 'undefined') {
     ctx.save();
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
     ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
     ctx.fillStyle = 'rgba(255,255,0,0.95)';
-    const dbX = player.x - cx + player.w / 2;
-    const dbY = player.y - 6;
+    const dbX = sx + player.w / 2;   // canvas 座標，不在 translate 內
+    const dbY = sy - 10;              // 角色頂部再往上 10px
     ctx.strokeText(_lastHeroArtKey, dbX, dbY);
     ctx.fillText(_lastHeroArtKey, dbX, dbY);
     ctx.restore();
