@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-4';
-const BUILD_TIME   = '2026-06-10 12:00';
+const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-5';
+const BUILD_TIME   = '2026-06-10 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -572,6 +572,9 @@ function resolveAdventureAvatarSrc(avatarKey) {
 //  adventureImages：載入快取（不在 draw loop 裡 new Image）
 //  heroArtState：目前最佳可用狀態圖片 key
 // =============================================
+
+// 主角美術繪製比例（只改顯示，不改碰撞盒）
+const HERO_DRAW_SCALE = 1.35;
 
 // 主角素材路徑（未來替換只需改這裡）
 const ADVENTURE_HERO_ASSETS = {
@@ -3133,8 +3136,8 @@ function drawPlayer(cx) {
     ctx.scale(-1, 1);
     if (heroImg) {
       // Hero 素材繪製（對齊碰撞盒，可稍微放大）
-      const dW = player.w * 1.2;
-      const dH = player.h * 1.2;
+      const dW = player.w * HERO_DRAW_SCALE;
+      const dH = player.h * HERO_DRAW_SCALE;
       const dX = (player.w - dW) / 2;      // 水平置中
       const dY = player.h - dH;            // 腳底對齊
       ctx.drawImage(heroImg, dX, dY, dW, dH);
@@ -3146,8 +3149,8 @@ function drawPlayer(cx) {
   } else {
     ctx.translate(sx, sy);
     if (heroImg) {
-      const dW = player.w * 1.2;
-      const dH = player.h * 1.2;
+      const dW = player.w * HERO_DRAW_SCALE;
+      const dH = player.h * HERO_DRAW_SCALE;
       const dX = (player.w - dW) / 2;
       const dY = player.h - dH;
       ctx.drawImage(heroImg, dX, dY, dW, dH);
@@ -3201,17 +3204,17 @@ function drawPlayer(cx) {
   }
 
     // ── DEBUG：角色上方顯示目前幀 key（移除時刪此段）──
-  // 座標使用 canvas 畫面座標（sx/sy），不受 translate/scale 影響
+  // 在 ctx.restore() 之後，使用 canvas 畫面座標（sx/sy），不受 translate/scale 影響
   if (typeof _lastHeroArtKey !== 'undefined') {
     ctx.save();
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillStyle = 'rgba(255,255,0,0.95)';
-    const dbX = sx + player.w / 2;   // canvas 座標，不在 translate 內
-    const dbY = sy - 10;              // 角色頂部再往上 10px
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillStyle = 'rgba(255,255,0,1)';
+    const dbX = sx + player.w / 2;   // canvas 座標，不在 translate 內，不受翻轉影響
+    const dbY = sy - 28;              // 角色頂部再往上 28px，地面跑步也看得到
     ctx.strokeText(_lastHeroArtKey, dbX, dbY);
     ctx.fillText(_lastHeroArtKey, dbX, dbY);
     ctx.restore();
