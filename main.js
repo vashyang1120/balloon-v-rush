@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.6-sword-attack-art-test-2';
-const BUILD_TIME   = '2026-06-09 22:00';
+const GAME_VERSION = 'adventure-v0.3.6-run-debug-test-3';
+const BUILD_TIME   = '2026-06-10 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -593,6 +593,7 @@ const ADVENTURE_HERO_ASSETS = {
 // 圖片快取（key → Image 物件，只載入一次）
 const adventureImages = {};
 let adventureHeroLoaded = false;  // 至少一張 hero 圖片可用
+let _lastHeroArtKey = 'idle';      // DEBUG：目前主角幀 key
 
 // ── 跑步動畫狀態機 ──
 // 動畫序列：起跑 run01→run02，持續主循環 run02→run03→run04→run03，停下 run03→run01→idle
@@ -691,10 +692,14 @@ function getHeroArtKey() {
     _heroRunPhase = 'loop'; _heroRunFrame = 0; _heroFrameTimer = 0;
   }
 
-  // ── 持續跑步主循環：1→2→3→4→5→4→3→2→1（共 9 格，每格 6 幀）──
-  const loopFrames = ['run01','run02','run03','run05','run04','run05','run03','run02','run01'];
+  // ── 持續跑步主循環：12354532（8格循環）──
+  // run04 / run05 各停較久，確保玩家能看見
+  const loopFrames    = ['run01','run02','run03','run05','run04','run05','run03','run02'];
+  const loopDurations = [    6,      6,      6,      9,      9,      9,      6,      6 ];
+  //  frames per key: 01=6  02=6  03=6  05=9  04=9  05=9  03=6  02=6
   _heroFrameTimer++;
-  if (_heroFrameTimer >= 6) {
+  const curDur = loopDurations[_heroRunFrame] || 6;
+  if (_heroFrameTimer >= curDur) {
     _heroFrameTimer = 0;
     _heroRunFrame = (_heroRunFrame + 1) % loopFrames.length;
   }
@@ -3119,6 +3124,7 @@ function drawPlayer(cx) {
 
   // Art Foundation（Phase Art）：優先使用 hero 素材，fallback 維持原本邏輯
   const heroKey = getHeroArtKey();
+  _lastHeroArtKey = heroKey; // DEBUG
   const heroImg = getAdventureImage(heroKey)
     || getAdventureImage('idle'); // fallback 到 idle 素材
 
@@ -3194,6 +3200,20 @@ function drawPlayer(cx) {
     ctx.fill();
   }
 
+    // ── DEBUG：角色上方顯示目前幀 key（移除時刪此段）──
+  if (typeof _lastHeroArtKey !== 'undefined') {
+    ctx.save();
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = 'rgba(255,255,0,0.95)';
+    const dbX = player.x - cx + player.w / 2;
+    const dbY = player.y - 6;
+    ctx.strokeText(_lastHeroArtKey, dbX, dbY);
+    ctx.fillText(_lastHeroArtKey, dbX, dbY);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
