@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.8-scorpion-walk-test-1';
-const BUILD_TIME   = '2026-06-10 22:00';
+const GAME_VERSION = 'adventure-v0.3.8-character-render-anchor-test-2';
+const BUILD_TIME   = '2026-06-11 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -644,14 +644,15 @@ function initAdventureHeroArt() {
 // 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
 function getHeroArtKey() {
   // ── 優先：劍攻擊視覺動畫（swordAnimTimer > 0，與 hitbox 獨立）──
-  // 幀分配：attack01=6幀, attack02=6幀, attack03=8幀, attack04=10幀（共 30 幀）
+  // 播放順序：01→02→03→02→01（5段，各 6 幀，共 30 幀）不使用 swordAttack04
   if (player.swordAnimTimer > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
     const t = 30 - player.swordAnimTimer; // 已過幀數 0~29
-    if (t < 6)  return 'swordAttack01';   // 0~5  : 6 幀
-    if (t < 12) return 'swordAttack02';   // 6~11 : 6 幀
-    if (t < 20) return 'swordAttack03';   // 12~19: 8 幀（命中主要畫面）
-    return 'swordAttack04';               // 20~29: 10 幀（收招）
+    if (t < 6)  return 'swordAttack01';   //  0~5  : 6 幀（起手）
+    if (t < 12) return 'swordAttack02';   //  6~11 : 6 幀（揮出）
+    if (t < 18) return 'swordAttack03';   // 12~17 : 6 幀（命中）
+    if (t < 24) return 'swordAttack02';   // 18~23 : 6 幀（回收）
+    return 'swordAttack01';               // 24~29 : 6 幀（收招）
   }
 
   // ── 受傷 ──
@@ -695,14 +696,11 @@ function getHeroArtKey() {
     _heroRunPhase = 'loop'; _heroRunFrame = 0; _heroFrameTimer = 0;
   }
 
-  // ── 持續跑步主循環：12354532（8格循環）──
-  // run04 / run05 各停較久，確保玩家能看見
-  const loopFrames    = ['run01','run02','run03','run05','run04','run05','run03','run02'];
-  const loopDurations = [    6,      6,      7,     14,     16,     14,      7,      6 ];
-  //  frames per key: 01=6  02=6  03=6  05=9  04=9  05=9  03=6  02=6
+  // ── 持續跑步主循環：123454321（9格，每幀 5 game frames，平均自然節奏）──
+  const loopFrames    = ['run01','run02','run03','run04','run05','run04','run03','run02','run01'];
+  const LOOP_DUR = 5; // 每幀停留時間（game frames），平均節奏不拉長特定幀
   _heroFrameTimer++;
-  const curDur = loopDurations[_heroRunFrame] || 6;
-  if (_heroFrameTimer >= curDur) {
+  if (_heroFrameTimer >= LOOP_DUR) {
     _heroFrameTimer = 0;
     _heroRunFrame = (_heroRunFrame + 1) % loopFrames.length;
   }
@@ -721,8 +719,11 @@ const SCORPION_WALK_ASSETS = [
   'assets/enemies/scorpion/scorpion_walk_03.png',
   'assets/enemies/scorpion/scorpion_walk_04.png',
 ];
-const SCORPION_DRAW_SCALE = 1.25;  // 顯示比例（只影響繪製，不改 hitbox）
-const SCORPION_ANIM_SPEED = 7;     // 每幾 game frames 換一張（6~8 推薦值）
+const SCORPION_DRAW_SCALE    = 2.2;   // 顯示比例（只影響繪製，不改 hitbox）
+const SCORPION_FOOT_ANCHOR_Y = 0.883; // 腳底線位於圖片高度的 88.3%（512px 圖，腳底約在 452px）
+const SCORPION_DRAW_OFFSET_X = 0;     // 水平微調（正值往右）
+const SCORPION_DRAW_OFFSET_Y = 0;     // 垂直微調（正值往下）
+const SCORPION_ANIM_SPEED    = 7;     // 每幾 game frames 換一張
 
 // 預載圖片快取（key=0~3，載入失敗保留 undefined）
 const scorpionWalkImgs = [];
@@ -3579,30 +3580,37 @@ function drawEnemy(x, y, w, h, flashing, enemyVx) {
   // ── 蠍子圖片模式（有素材時優先使用）──
   const img = getScorpionWalkImg();
   if (img) {
-    // 顯示尺寸（以 hitbox 底部為基準，SCORPION_DRAW_SCALE 只影響繪製）
-    const dW = w * SCORPION_DRAW_SCALE;
-    const dH = h * SCORPION_DRAW_SCALE;
-    const dX = (w - dW) / 2;   // 水平置中於 hitbox
-    const dY = h - dH;         // 腳底對齊 hitbox 底部
+    // ── Foot anchor 對齊：讓圖片 88.3% 高度處對齊 hitbox 底部 ──
+    const drawW  = w * SCORPION_DRAW_SCALE;
+    const drawH  = drawW * (img.height / img.width); // 保持圖片比例（512×512 → 正方形）
+    const groundY  = y + h;                          // hitbox 底部（地面）
+    const centerX  = x + w / 2;
+    const drawX    = centerX - drawW / 2 + SCORPION_DRAW_OFFSET_X;
+    const drawY    = groundY - drawH * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
 
     ctx.save();
-    // 閃白效果（受傷）：半透明白色疊加
+    // 圖片平滑：非像素風圖片需要開啟
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // 閃白效果（受傷）
     if (flashing) ctx.globalAlpha = 0.5;
 
     // 依移動方向水平翻轉（素材面向右，往左走時翻轉）
     const goingLeft = (enemyVx !== undefined ? enemyVx : 0) < 0;
     if (goingLeft) {
-      ctx.translate(x + w, 0);    // 移到右端
-      ctx.scale(-1, 1);           // 水平翻轉
-      ctx.drawImage(img, dX, y + dY, dW, dH);
+      // 以圖片中心為翻轉基準
+      ctx.translate(drawX + drawW / 2, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -drawW / 2, drawY, drawW, drawH);
     } else {
-      ctx.drawImage(img, x + dX, y + dY, dW, dH);
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
     }
 
     if (flashing) ctx.globalAlpha = 1;
     ctx.restore();
 
-    // HP 指示條（畫在圖片上方，不受翻轉影響）
+    // HP 指示條（不受翻轉影響）
     for (let i = 0; i < 2; i++) {
       ctx.fillStyle = '#e00';
       ctx.fillRect(x + 8 + i * 18, y - 10, 14, 6);

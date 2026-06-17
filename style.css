@@ -88,7 +88,8 @@ html, body {
   display: block;
   width: 100%;
   height: 100%;
-  image-rendering: pixelated;
+  /* image-rendering: pixelated; -- removed for smooth art scaling */
+  image-rendering: auto;
 }
 
 /* ── Mobile Controls ── */
