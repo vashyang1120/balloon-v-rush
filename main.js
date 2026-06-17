@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.7-mobile-controls-polish-test-1';
-const BUILD_TIME   = '2026-06-10 20:00';
+const GAME_VERSION = 'adventure-v0.3.8-scorpion-walk-test-1';
+const BUILD_TIME   = '2026-06-10 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -707,6 +707,48 @@ function getHeroArtKey() {
     _heroRunFrame = (_heroRunFrame + 1) % loopFrames.length;
   }
   return loopFrames[_heroRunFrame];
+}
+
+
+// =============================================
+//  氣球蠍子 Walk 動畫素材（Phase Enemy-Art）
+//  walk_01~04 循環播放，僅接外觀，不改碰撞/AI
+// =============================================
+
+const SCORPION_WALK_ASSETS = [
+  'assets/enemies/scorpion/scorpion_walk_01.png',
+  'assets/enemies/scorpion/scorpion_walk_02.png',
+  'assets/enemies/scorpion/scorpion_walk_03.png',
+  'assets/enemies/scorpion/scorpion_walk_04.png',
+];
+const SCORPION_DRAW_SCALE = 1.25;  // 顯示比例（只影響繪製，不改 hitbox）
+const SCORPION_ANIM_SPEED = 7;     // 每幾 game frames 換一張（6~8 推薦值）
+
+// 預載圖片快取（key=0~3，載入失敗保留 undefined）
+const scorpionWalkImgs = [];
+let scorpionWalkReady = false;  // 至少一張載入完成才設 true
+
+function initScorpionWalkArt() {
+  let loadedCount = 0;
+  SCORPION_WALK_ASSETS.forEach((src, i) => {
+    const img = new Image();
+    img.onload = function() {
+      scorpionWalkImgs[i] = img;
+      loadedCount++;
+      if (loadedCount >= 1) scorpionWalkReady = true;
+    };
+    img.onerror = function() {
+      console.warn('[Scorpion] walk image not found:', src, '(fallback active)');
+    };
+    img.src = resolveAdventureAssetSrc(src);
+  });
+}
+
+// 取得目前應顯示的蠍子 walk 圖（依 frameCount 輪播）
+function getScorpionWalkImg() {
+  if (!scorpionWalkReady) return null;
+  const idx = Math.floor(frameCount / SCORPION_ANIM_SPEED) % 4;
+  return scorpionWalkImgs[idx] || null;
 }
 
 function calcAdventureScore() {
@@ -3025,7 +3067,7 @@ function drawWorld() {
     if (!e.active) return;
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
-    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0);
+    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx);
   });
 
   // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
@@ -3513,30 +3555,63 @@ function drawSpike(x, y, w, h) {
   }
 }
 
-function drawEnemy(x, y, w, h, flashing) {
+// 蠍子 fallback：保留原本程式繪製（圖片不可用時使用）
+function drawEnemyFallback(x, y, w, h, flashing) {
   ctx.fillStyle = flashing ? '#fff' : COLORS.enemy;
-  // Body
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 8);
   ctx.fill();
-  // Eyes
   ctx.fillStyle = COLORS.enemyEye;
   ctx.beginPath(); ctx.arc(x + 12, y + 16, 6, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + 34, y + 16, 6, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#333';
   ctx.beginPath(); ctx.arc(x + 14, y + 16, 3, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + 36, y + 16, 3, 0, Math.PI * 2); ctx.fill();
-  // Mouth
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x + w / 2, y + h * 0.65, 8, 0, Math.PI);
-  ctx.stroke();
-  // HP pip
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x + w / 2, y + h * 0.65, 8, 0, Math.PI); ctx.stroke();
   for (let i = 0; i < 2; i++) {
-    ctx.fillStyle = i < 2 ? '#e00' : '#444';  // always show 2 since max is 2
+    ctx.fillStyle = '#e00';
     ctx.fillRect(x + 8 + i * 18, y - 10, 14, 6);
   }
+}
+
+function drawEnemy(x, y, w, h, flashing, enemyVx) {
+  // ── 蠍子圖片模式（有素材時優先使用）──
+  const img = getScorpionWalkImg();
+  if (img) {
+    // 顯示尺寸（以 hitbox 底部為基準，SCORPION_DRAW_SCALE 只影響繪製）
+    const dW = w * SCORPION_DRAW_SCALE;
+    const dH = h * SCORPION_DRAW_SCALE;
+    const dX = (w - dW) / 2;   // 水平置中於 hitbox
+    const dY = h - dH;         // 腳底對齊 hitbox 底部
+
+    ctx.save();
+    // 閃白效果（受傷）：半透明白色疊加
+    if (flashing) ctx.globalAlpha = 0.5;
+
+    // 依移動方向水平翻轉（素材面向右，往左走時翻轉）
+    const goingLeft = (enemyVx !== undefined ? enemyVx : 0) < 0;
+    if (goingLeft) {
+      ctx.translate(x + w, 0);    // 移到右端
+      ctx.scale(-1, 1);           // 水平翻轉
+      ctx.drawImage(img, dX, y + dY, dW, dH);
+    } else {
+      ctx.drawImage(img, x + dX, y + dY, dW, dH);
+    }
+
+    if (flashing) ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // HP 指示條（畫在圖片上方，不受翻轉影響）
+    for (let i = 0; i < 2; i++) {
+      ctx.fillStyle = '#e00';
+      ctx.fillRect(x + 8 + i * 18, y - 10, 14, 6);
+    }
+    return;
+  }
+
+  // ── Fallback：原本 placeholder 繪製 ──
+  drawEnemyFallback(x, y, w, h, flashing);
 }
 
 
@@ -5379,6 +5454,7 @@ function ensurePlayerProfileSaved() {
 playerProfile = loadPlayerProfile(); // 初始化玩家身份
 ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
+initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
