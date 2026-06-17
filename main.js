@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.8-character-render-anchor-test-2';
-const BUILD_TIME   = '2026-06-11 14:00';
+const GAME_VERSION = 'adventure-v0.3.8-character-render-anchor-test-3';
+const BUILD_TIME   = '2026-06-11 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -698,7 +698,7 @@ function getHeroArtKey() {
 
   // ── 持續跑步主循環：123454321（9格，每幀 5 game frames，平均自然節奏）──
   const loopFrames    = ['run01','run02','run03','run04','run05','run04','run03','run02','run01'];
-  const LOOP_DUR = 5; // 每幀停留時間（game frames），平均節奏不拉長特定幀
+  const LOOP_DUR = 6; // 每幀停留時間（game frames）：5→6，讓跑步差異更清楚
   _heroFrameTimer++;
   if (_heroFrameTimer >= LOOP_DUR) {
     _heroFrameTimer = 0;
@@ -722,7 +722,7 @@ const SCORPION_WALK_ASSETS = [
 const SCORPION_DRAW_SCALE    = 2.2;   // 顯示比例（只影響繪製，不改 hitbox）
 const SCORPION_FOOT_ANCHOR_Y = 0.883; // 腳底線位於圖片高度的 88.3%（512px 圖，腳底約在 452px）
 const SCORPION_DRAW_OFFSET_X = 0;     // 水平微調（正值往右）
-const SCORPION_DRAW_OFFSET_Y = 0;     // 垂直微調（正值往下）
+const SCORPION_DRAW_OFFSET_Y = 8;     // 垂直微調（正值往下），補正蠍子略微浮空
 const SCORPION_ANIM_SPEED    = 7;     // 每幾 game frames 換一張
 
 // 預載圖片快取（key=0~3，載入失敗保留 undefined）
@@ -3178,11 +3178,13 @@ function drawPlayer(cx) {
     ctx.translate(sx + player.w, sy);
     ctx.scale(-1, 1);
     if (heroImg) {
-      // Hero 素材繪製（對齊碰撞盒，可稍微放大）
+      // Foot anchor 對齊：圖片 88.3% 高度處對齊 hitbox 底部（local 座標）
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       const dW = player.w * HERO_DRAW_SCALE;
-      const dH = player.h * HERO_DRAW_SCALE;
-      const dX = (player.w - dW) / 2;      // 水平置中
-      const dY = player.h - dH;            // 腳底對齊
+      const dH = dW * (heroImg.height / heroImg.width); // 保持圖片比例
+      const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
+      const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
       ctx.drawImage(heroImg, dX, dY, dW, dH);
     } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
@@ -3192,10 +3194,13 @@ function drawPlayer(cx) {
   } else {
     ctx.translate(sx, sy);
     if (heroImg) {
+      // Foot anchor 對齊（local 座標，往右走）
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       const dW = player.w * HERO_DRAW_SCALE;
-      const dH = player.h * HERO_DRAW_SCALE;
-      const dX = (player.w - dW) / 2;
-      const dY = player.h - dH;
+      const dH = dW * (heroImg.height / heroImg.width);
+      const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
+      const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
       ctx.drawImage(heroImg, dX, dY, dW, dH);
     } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
