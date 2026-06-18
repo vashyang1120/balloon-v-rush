@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.8-character-render-anchor-test-3-fix-1';
-const BUILD_TIME   = '2026-06-11 20:00';
+const GAME_VERSION = 'adventure-v0.3.8-character-run-polish-test-4';
+const BUILD_TIME   = '2026-06-11 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -574,7 +574,7 @@ function resolveAdventureAvatarSrc(avatarKey) {
 // =============================================
 
 // 主角美術繪製比例（只改顯示，不改碰撞盒）
-const HERO_DRAW_SCALE    = 1.35;  // 主角美術繪製比例（只改顯示，不改碰撞盒）
+const HERO_DRAW_SCALE    = 2.0;   // 主角美術繪製比例（1.35→2.0，放大主角視覺，不改碰撞盒）
 const HERO_FOOT_ANCHOR_Y = 0.883; // 腳底線位於圖片高度 88.3%（512px 圖腳底約 452px）
 const HERO_DRAW_OFFSET_X = 0;     // 水平微調（正值往右）
 const HERO_DRAW_OFFSET_Y = 0;     // 垂直微調（正值往下）
