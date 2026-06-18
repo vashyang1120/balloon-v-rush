@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1';
-const BUILD_TIME   = '2026-06-12 14:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-1';
+const BUILD_TIME   = '2026-06-12 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -776,10 +776,10 @@ const HAMMER_ATTACK_SCALE_MULTIPLIER = 1.465; // 補回素材端縮小比率（6
 const HAMMER_ATTACK_FRAME_DUR        = 6;     // 每幀停留（game frames），接近 sword attack 節奏
 
 const HAMMER_ATTACK_ASSETS = [
-  'assets/hero/hero_hammer_attack_01.png',
-  'assets/hero/hero_hammer_attack_02.png',
-  'assets/hero/hero_hammer_attack_03.png',
-  'assets/hero/hero_hammer_attack_04.png',
+  'assets/adventure/hero/hero_hammer_attack_01.png',
+  'assets/adventure/hero/hero_hammer_attack_02.png',
+  'assets/adventure/hero/hero_hammer_attack_03.png',
+  'assets/adventure/hero/hero_hammer_attack_04.png',
 ];
 // 注意：hero_hammer_attack_05.png 不存在也不引用
 
@@ -789,14 +789,16 @@ let   hammerAttackReady = false;
 function initHammerAttackArt() {
   HAMMER_ATTACK_ASSETS.forEach((src, i) => {
     const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
     img.onload = function() {
       hammerAttackImgs[i] = img;
       hammerAttackReady = true;
+      console.log('[HammerArt] loaded:', i + 1, fullSrc);
     };
     img.onerror = function() {
-      console.warn('[HammerArt] image not found:', src, '(fallback active)');
+      console.warn('[HammerArt] image not found:', i + 1, fullSrc, '(fallback active)');
     };
-    img.src = resolveAdventureAssetSrc(src);
+    img.src = fullSrc;
   });
 }
 
@@ -3234,11 +3236,28 @@ function drawPlayer(cx) {
   _lastHeroArtKey = heroKey; // DEBUG
 
   // Hammer attack 幀：用 hammerAttackImgs 取圖 + 套用放大補償
-  const isHammerFrame  = heroKey.startsWith('hammerAttack');
-  const heroImg        = isHammerFrame
-    ? (getHammerAttackImg(player.hammerAnimTimer) || getAdventureImage('idle'))
-    : (getAdventureImage(heroKey) || getAdventureImage('idle'));
-  const effectiveScale = isHammerFrame ? HAMMER_ATTACK_SCALE_MULTIPLIER : 1;
+  const isHammerFrame = heroKey.startsWith('hammerAttack');
+
+  // 取圖：hammer 幀優先用 hammerAttackImgs，取不到才 fallback idle（但不套放大倍率）
+  let heroImg       = null;
+  let useHammerScale = false;
+
+  if (isHammerFrame) {
+    const hamImg = getHammerAttackImg(player.hammerAnimTimer);
+    if (hamImg) {
+      heroImg       = hamImg;
+      useHammerScale = true;
+    } else {
+      // 圖片尚未載入或路徑不對：fallback 到 idle，不套放大
+      console.warn('[HammerArt] hammer frame missing, fallback idle (no scale):', heroKey, player.hammerAnimTimer);
+      heroImg       = getAdventureImage('idle');
+      useHammerScale = false;
+    }
+  } else {
+    heroImg = getAdventureImage(heroKey) || getAdventureImage('idle');
+  }
+
+  const effectiveScale = useHammerScale ? HAMMER_ATTACK_SCALE_MULTIPLIER : 1;
 
   if (!player.facingRight) {
     ctx.translate(sx + player.w, sy);
