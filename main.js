@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.8-character-run-polish-test-4';
-const BUILD_TIME   = '2026-06-11 22:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1';
+const BUILD_TIME   = '2026-06-12 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -593,7 +593,8 @@ const ADVENTURE_HERO_ASSETS = {
   swordAttack01: 'assets/adventure/hero/hero_sword_attack_01.png',
   swordAttack02: 'assets/adventure/hero/hero_sword_attack_02.png',
   swordAttack03: 'assets/adventure/hero/hero_sword_attack_03.png',
-  swordAttack04: 'assets/adventure/hero/hero_sword_attack_04.png',
+  swordAttack04:   'assets/adventure/hero/hero_sword_attack_04.png',
+  // Hammer attack（路徑在 HAMMER_ATTACK_ASSETS，由 initHammerAttackArt 預載）
 };
 
 // 圖片快取（key → Image 物件，只載入一次）
@@ -646,7 +647,17 @@ function initAdventureHeroArt() {
 
 // 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
 function getHeroArtKey() {
-  // ── 優先：劍攻擊視覺動畫（swordAnimTimer > 0，與 hitbox 獨立）──
+  // ── 優先 0：槌子攻擊視覺動畫（hammerAnimTimer > 0）──
+  // 01→02→03→04，一次性下砸動作，不循環
+  if (player.hammerAnimTimer > 0) {
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
+    const totalDur = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR;
+    const elapsed  = totalDur - player.hammerAnimTimer;
+    const fi = Math.min(Math.floor(elapsed / HAMMER_ATTACK_FRAME_DUR), 3);
+    return ['hammerAttack01','hammerAttack02','hammerAttack03','hammerAttack04'][fi];
+  }
+
+  // ── 優先 1：劍攻擊視覺動畫（swordAnimTimer > 0，與 hitbox 獨立）──
   // 播放順序：01→02→03→02→01（5段，各 6 幀，共 30 幀）不使用 swordAttack04
   if (player.swordAnimTimer > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
@@ -753,6 +764,50 @@ function getScorpionWalkImg() {
   if (!scorpionWalkReady) return null;
   const idx = Math.floor(frameCount / SCORPION_ANIM_SPEED) % 4;
   return scorpionWalkImgs[idx] || null;
+}
+
+
+// =============================================
+//  Hammer Attack 動畫素材（Phase Art v0.3.9）
+//  01→02→03→04 一次性下砸，不循環，不補第 5 幀
+// =============================================
+
+const HAMMER_ATTACK_SCALE_MULTIPLIER = 1.465; // 補回素材端縮小比率（610→416px，需放大補回）
+const HAMMER_ATTACK_FRAME_DUR        = 6;     // 每幀停留（game frames），接近 sword attack 節奏
+
+const HAMMER_ATTACK_ASSETS = [
+  'assets/hero/hero_hammer_attack_01.png',
+  'assets/hero/hero_hammer_attack_02.png',
+  'assets/hero/hero_hammer_attack_03.png',
+  'assets/hero/hero_hammer_attack_04.png',
+];
+// 注意：hero_hammer_attack_05.png 不存在也不引用
+
+const hammerAttackImgs = [];  // 快取，key 0-3
+let   hammerAttackReady = false;
+
+function initHammerAttackArt() {
+  HAMMER_ATTACK_ASSETS.forEach((src, i) => {
+    const img = new Image();
+    img.onload = function() {
+      hammerAttackImgs[i] = img;
+      hammerAttackReady = true;
+    };
+    img.onerror = function() {
+      console.warn('[HammerArt] image not found:', src, '(fallback active)');
+    };
+    img.src = resolveAdventureAssetSrc(src);
+  });
+}
+
+// 依 hammerAnimTimer 取得目前應顯示的 hammer attack 圖
+// hammerAnimTimer 從 totalDur 倒數到 0
+function getHammerAttackImg(hammerAnimTimer) {
+  if (!hammerAttackReady || hammerAnimTimer <= 0) return null;
+  const totalDur = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR; // 4×6 = 24
+  const elapsed  = totalDur - hammerAnimTimer;
+  const frameIdx = Math.min(Math.floor(elapsed / HAMMER_ATTACK_FRAME_DUR), 3); // 0~3
+  return hammerAttackImgs[frameIdx] || null;
 }
 
 function calcAdventureScore() {
@@ -1400,6 +1455,7 @@ const player = {
   meleeHammerActive: 0, // hammer melee hitbox live frames
   hammerHit: false,
   swordAnimTimer: 0,   // 揮劍視覺動畫獨立計時（與 hitbox 分開）
+  hammerAnimTimer: 0,  // 槌子視覺動畫獨立計時
   // Stats
   coinsCollected: 0,
   balloonsCollected: 0,
@@ -2407,6 +2463,7 @@ function updatePlayer(dt) {
   if (player.attackActive > 0)   player.attackActive--;
   if (player.meleeActive > 0)    player.meleeActive--;
   if (player.swordAnimTimer > 0)  player.swordAnimTimer--;
+  if (player.hammerAnimTimer > 0)  player.hammerAnimTimer--;
 
   if (player.meleeHammerActive > 0) player.meleeHammerActive--;
 
@@ -2414,6 +2471,7 @@ function updatePlayer(dt) {
     if (activeSlot === 'hammer' && equippedHammer.id) {
       player.attackCooldown     = CONFIG.HAMMER_ATTACK_COOLDOWN;
       player.meleeHammerActive  = CONFIG.HAMMER_ATTACK_DURATION;
+      player.hammerAnimTimer    = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR; // 視覺動畫 24 幀
       player.hammerHit          = false;
     } else if (activeSlot === 'sword' && equippedSword.id === 'basicSword') {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
@@ -3174,8 +3232,13 @@ function drawPlayer(cx) {
   // Art Foundation（Phase Art）：優先使用 hero 素材，fallback 維持原本邏輯
   const heroKey = getHeroArtKey();
   _lastHeroArtKey = heroKey; // DEBUG
-  const heroImg = getAdventureImage(heroKey)
-    || getAdventureImage('idle'); // fallback 到 idle 素材
+
+  // Hammer attack 幀：用 hammerAttackImgs 取圖 + 套用放大補償
+  const isHammerFrame  = heroKey.startsWith('hammerAttack');
+  const heroImg        = isHammerFrame
+    ? (getHammerAttackImg(player.hammerAnimTimer) || getAdventureImage('idle'))
+    : (getAdventureImage(heroKey) || getAdventureImage('idle'));
+  const effectiveScale = isHammerFrame ? HAMMER_ATTACK_SCALE_MULTIPLIER : 1;
 
   if (!player.facingRight) {
     ctx.translate(sx + player.w, sy);
@@ -3184,7 +3247,7 @@ function drawPlayer(cx) {
       // Foot anchor 對齊：圖片 88.3% 高度處對齊 hitbox 底部（local 座標）
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      const dW = player.w * HERO_DRAW_SCALE;
+      const dW = player.w * HERO_DRAW_SCALE * effectiveScale; // hammer 時乘以補償倍率
       const dH = dW * (heroImg.height / heroImg.width); // 保持圖片比例
       const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
       const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
@@ -3200,7 +3263,7 @@ function drawPlayer(cx) {
       // Foot anchor 對齊（local 座標，往右走）
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      const dW = player.w * HERO_DRAW_SCALE;
+      const dW = player.w * HERO_DRAW_SCALE * effectiveScale; // hammer 時乘以補償倍率
       const dH = dW * (heroImg.height / heroImg.width);
       const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
       const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
@@ -5091,7 +5154,7 @@ function restart(opts) {
       return fallback;
     })(), invincible: 0,
     attackCooldown: 0, attackActive: 0,
-    meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false, swordAnimTimer: 0,
+    meleeActive: 0, meleeHit: false, meleeHammerActive: 0, hammerHit: false, swordAnimTimer: 0, hammerAnimTimer: 0,
     coinsCollected: 0, balloonsCollected: 0, enemiesDefeated: 0,
   });
   // Reset currentRunStats（本局歸零，inventory 不動）
@@ -5471,6 +5534,7 @@ playerProfile = loadPlayerProfile(); // 初始化玩家身份
 ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
+initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
