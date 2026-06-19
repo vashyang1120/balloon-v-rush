@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-1';
-const BUILD_TIME   = '2026-06-12 16:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-2';
+const BUILD_TIME   = '2026-06-12 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -772,7 +772,8 @@ function getScorpionWalkImg() {
 //  01→02→03→04 一次性下砸，不循環，不補第 5 幀
 // =============================================
 
-const HAMMER_ATTACK_SCALE_MULTIPLIER = 1.465; // 補回素材端縮小比率（610→416px，需放大補回）
+const HAMMER_ATTACK_SCALE_MULTIPLIER  = 1.465;
+const ROUND_BALLOON_CARRY_LIMIT       = 2;    // 玩家最多攜帶 2 顆圓氣球（可補充材料） // 補回素材端縮小比率（610→416px，需放大補回）
 const HAMMER_ATTACK_FRAME_DUR        = 6;     // 每幀停留（game frames），接近 sword attack 節奏
 
 const HAMMER_ATTACK_ASSETS = [
@@ -810,6 +811,40 @@ function getHammerAttackImg(hammerAnimTimer) {
   const elapsed  = totalDur - hammerAnimTimer;
   const frameIdx = Math.min(Math.floor(elapsed / HAMMER_ATTACK_FRAME_DUR), 3); // 0~3
   return hammerAttackImgs[frameIdx] || null;
+}
+
+
+// =============================================
+//  Hammer Attack 視覺測試工具（測試版限定）
+//  GAME_VERSION 含 hammer-attack-foundation-test 時啟用
+//  正式版自動關閉
+// =============================================
+const HAMMER_ATTACK_VISUAL_TEST_LOADOUT =
+  GAME_VERSION.includes('hammer-attack-foundation-test');
+const ADVENTURE_TEST_TOOLS_ENABLED =
+  GAME_VERSION.includes('hammer-attack-foundation-test');
+
+// runtime-only 槌子（不寫 playerInventory / localStorage / Firebase）
+function applyHammerAttackVisualTestLoadout() {
+  if (!HAMMER_ATTACK_VISUAL_TEST_LOADOUT) return;
+  equippedHammer.id         = 'basicHammer';
+  equippedHammer.name       = '基礎氣球槌（測試）';
+  equippedHammer.maxDur     = 999;
+  equippedHammer.currentDur = 999;
+  activeSlot = 'hammer';
+  console.log('[HammerTest] runtime-only hammer equipped for visual test');
+}
+
+// 測試版：重置冒險測試狀態（不清 playerProfile / V幣 / Firebase）
+function resetAdventureTestState() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  // 只清冒險背包與關卡進度，不清玩家身份
+  resetInventory();
+  currentLevelIndex = 0;
+  gameState = 'home';
+  openHomeScreen('normal');
+  showHint('已重置測試狀態，從第 1 關重新開始', 180);
+  console.log('[TestTools] resetAdventureTestState: inventory cleared, back to level 0');
 }
 
 function calcAdventureScore() {
@@ -1099,7 +1134,7 @@ const RECIPES = [
     name:       '基礎氣球槌',
     effect:     '可以敲擊小怪，也可觸發特定場景機關（下一版開放）',
     durability: 3,
-    cost:       { roundBalloon: 1, balloon260: 1 },
+    cost:       { roundBalloon: 2, balloon260: 1 },  // 2 顆圓氣球（槌頭）+ 1 條 260（握把）
     emoji:      '🔨',
     unlockKey:  'basicHammer',   // 對應 unlockedRecipes.basicHammer
   },
@@ -1899,9 +1934,14 @@ const LEVELS = [
         sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false },
     ],
     buildRoundBalloons: () => {
-      const uc = playerInventory.uniqueCollectibles || {};
-      if (uc.level3RoundBalloon) return [];
-      return [{ x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 }];
+      // 圓氣球是可消耗材料，不用一次性旗標決定是否生成
+      // 依缺量生成：最多讓玩家補到 ROUND_BALLOON_CARRY_LIMIT (2) 顆
+      const have    = Number(playerInventory.roundBalloon || 0);
+      const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
+      const results = [];
+      if (missing >= 1) results.push({ x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
+      if (missing >= 2) results.push({ x: 1700, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
+      return results;
     },
     hiddenTreasure: {
       type:      'recipe',
@@ -2155,6 +2195,11 @@ function initEquippedHammer() {
 
 function consumeHammerDurability() {
   if (!equippedHammer.id) return;
+  // 測試版槌子：耐久不耗盡
+  if (HAMMER_ATTACK_VISUAL_TEST_LOADOUT && equippedHammer.currentDur >= 990) {
+    equippedHammer.currentDur = equippedHammer.maxDur || 999;
+    return;
+  }
   equippedHammer.currentDur--;
   if (equippedHammer.currentDur <= 0) {
     const ci = playerInventory.craftedItems;
@@ -3893,12 +3938,18 @@ function drawHUD() {
   ctx.fillStyle = '#FFD93D';
   ctx.fillText('🪙' + player.coinsCollected, rx, 18);
 
-  // ── 中央：計時器 ──
+  // ── 中央：關卡名稱 + 計時器（正式 UI，非 debug）──
   ctx.textAlign = 'center';
+  const lv      = LEVELS[currentLevelIndex] || {};
+  const stageLabel = ((lv.stageId || '') + ' ' + (lv.shortName || lv.name || '')).trim();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = 'rgba(200,195,255,0.85)';
+  ctx.fillText(stageLabel, CANVAS_W / 2, 13);
+
   const timerColor = timeLeft <= 10 ? '#FF6B9D' : 'rgba(255,255,255,0.9)';
   ctx.font = 'bold 18px monospace';
   ctx.fillStyle = timerColor;
-  ctx.fillText('⏱ ' + String(timeLeft).padStart(2, '0'), CANVAS_W / 2, 20);
+  ctx.fillText('⏱ ' + String(timeLeft).padStart(2, '0'), CANVAS_W / 2, 31);
 
   // 進度條
   const barW = 180;
@@ -5554,6 +5605,7 @@ ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
+applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
