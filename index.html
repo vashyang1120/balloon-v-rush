@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.9-hammer-attack-foundation-test-1-fix-3" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.9-hammer-attack-foundation-test-1-fix-4" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -202,15 +202,9 @@
 
       </div><!-- /#home-scroll-body -->
 
-      <!-- 測試工具（只在測試版顯示，由 main.js 控制 display）-->
-      <div id="home-test-tools" style="display:none;margin:8px 12px 4px;padding:8px 10px;background:rgba(255,200,0,0.1);border:1.5px solid rgba(255,200,0,0.3);border-radius:8px;text-align:center">
-        <div style="font-size:10px;color:rgba(255,200,0,0.8);margin-bottom:6px;letter-spacing:0.05em" id="home-test-label">[TEST MODE]</div>
-        <button id="btn-reset-adventure-test" style="background:rgba(255,100,100,0.25);border:1.5px solid rgba(255,120,120,0.6);color:#fff;padding:6px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%">🔄 重新開始測試</button>
-      </div>
-
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.9-hammer-attack-foundation-test-1-fix-3 · 2026-06-13
+        adventure-v0.3.9-hammer-attack-foundation-test-1-fix-4 · 2026-06-13
       </div>
 
     </div><!-- /#home-panel -->
@@ -233,6 +227,8 @@
           <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續冒險</button>
           <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重試本關</button>
           <button id="btn-pause-bag" class="pause-btn pause-btn--secondary" onclick="openPauseBag()">🎒 查看背包</button>
+          <!-- 測試版限定：重新開始測試（由 main.js 控制顯示）-->
+          <button id="btn-pause-reset-test" class="pause-btn pause-btn--danger" style="display:none">🔄 重新開始測試</button>
         </div>
         <div id="pause-hint">桌機可按 ESC 繼續</div>
       </div>
@@ -316,7 +312,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.9-hammer-attack-foundation-test-1-fix-3"></script>
+  <script src="main.js?v=adventure-v0.3.9-hammer-attack-foundation-test-1-fix-4"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

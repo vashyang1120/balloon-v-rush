@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-3';
-const BUILD_TIME   = '2026-06-13 10:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-4';
+const BUILD_TIME   = '2026-06-13 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -857,8 +857,11 @@ function resetAdventureTestState() {
   initEquippedHammer();
   normalizeActiveWeaponSlot();
   applyHammerAttackVisualTestLoadout(); // 重置後補回 runtime-only 槌子
-  gameState = 'home';
-  openHomeScreen('normal');
+  // 關閉 pause-overlay（若目前在暫停狀態）
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) pauseEl.classList.remove('active');
+  // 直接進入遊戲（1-1），不繞小V的家
+  gameState = 'playing';
   showHint('已重置測試狀態，從第 1 關重新開始', 180);
   console.log('[TestTools] resetAdventureTestState complete:', {
     currentLevelIndex,
@@ -4059,6 +4062,20 @@ function drawOverlay(text, color) {
 // drawResultBox：Canvas 只畫模糊遮罩，所有內容由 HTML overlay 負責
 
 function drawVersionInfo() {
+  // 測試版：[TEST MODE] 顯示在版本號下方（正式版自動隱藏）
+  if (ADVENTURE_TEST_TOOLS_ENABLED) {
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = 'rgba(255,230,120,0.95)';
+    ctx.fillText(
+      '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
+      CANVAS_W - 14,
+      32
+    );
+    ctx.restore();
+  }
+  // --- original drawVersionInfo below ---
   // 測試階段：明顯版本條（右上角，黑底白字）
   const vText = GAME_VERSION + '  Build: ' + BUILD_TIME;
   ctx.font     = '10px monospace';
@@ -4751,17 +4768,6 @@ function openHomeScreen(from) {
   renderHomeSupply();
   renderHomeDog();
   renderHomeNextStage();
-  // 測試工具 DOM 顯示控制 + 按鈕綁定
-  const testToolsEl = document.getElementById('home-test-tools');
-  if (testToolsEl) testToolsEl.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? 'block' : 'none';
-  const testLabelEl = document.getElementById('home-test-label');
-  if (testLabelEl) testLabelEl.textContent = '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF');
-  const resetBtn = document.getElementById('btn-reset-adventure-test');
-  if (resetBtn && !resetBtn._bound) {
-    resetBtn.addEventListener('click', resetAdventureTestState);
-    resetBtn._bound = true;
-  }
-
   renderHomeChallenge();
   renderHomePlayer(); // 先顯示現有狀態（未裝備）
   renderHomeWallet();
@@ -5660,4 +5666,16 @@ initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
 normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
 applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子（必須在 initEquipped 之後）
+
+// 測試版：綁定暫停畫面「重新開始測試」按鈕
+(function bindPauseResetTestBtn() {
+  const btnPauseReset = document.getElementById('btn-pause-reset-test');
+  if (btnPauseReset) {
+    btnPauseReset.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnPauseReset.addEventListener('click', function() {
+      resetAdventureTestState();
+    });
+  }
+})();
+
 requestAnimationFrame(loop);
