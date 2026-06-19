@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-2';
-const BUILD_TIME   = '2026-06-12 20:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-3';
+const BUILD_TIME   = '2026-06-13 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -600,7 +600,8 @@ const ADVENTURE_HERO_ASSETS = {
 // 圖片快取（key → Image 物件，只載入一次）
 const adventureImages = {};
 let adventureHeroLoaded = false;  // 至少一張 hero 圖片可用
-let _lastHeroArtKey = 'idle';      // DEBUG：目前主角幀 key
+let _lastHeroArtKey     = 'idle'; // DEBUG：目前主角幀 key
+let screenFreezeForTest = false;  // 測試版 F8 凍結畫面（不改 gameState，不顯示 overlay）
 
 // ── 跑步動畫狀態機 ──
 // 動畫序列：起跑 run01→run02，持續主循環 run02→run03→run04→run03，停下 run03→run01→idle
@@ -824,6 +825,16 @@ const HAMMER_ATTACK_VISUAL_TEST_LOADOUT =
 const ADVENTURE_TEST_TOOLS_ENABLED =
   GAME_VERSION.includes('hammer-attack-foundation-test');
 
+// 安全化 activeSlot：若指向不存在的武器，自動切到有效武器
+function normalizeActiveWeaponSlot() {
+  if (activeSlot === 'hammer' && !(equippedHammer && equippedHammer.id)) {
+    if (equippedSword && equippedSword.id) activeSlot = 'sword';
+  }
+  if (activeSlot === 'sword' && !(equippedSword && equippedSword.id)) {
+    if (equippedHammer && equippedHammer.id) activeSlot = 'hammer';
+  }
+}
+
 // runtime-only 槌子（不寫 playerInventory / localStorage / Firebase）
 function applyHammerAttackVisualTestLoadout() {
   if (!HAMMER_ATTACK_VISUAL_TEST_LOADOUT) return;
@@ -838,13 +849,23 @@ function applyHammerAttackVisualTestLoadout() {
 // 測試版：重置冒險測試狀態（不清 playerProfile / V幣 / Firebase）
 function resetAdventureTestState() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
-  // 只清冒險背包與關卡進度，不清玩家身份
+  // 只清冒險背包與關卡進度，不清玩家身份 / V幣 / Firebase
   resetInventory();
   currentLevelIndex = 0;
+  loadLevel(0);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyHammerAttackVisualTestLoadout(); // 重置後補回 runtime-only 槌子
   gameState = 'home';
   openHomeScreen('normal');
   showHint('已重置測試狀態，從第 1 關重新開始', 180);
-  console.log('[TestTools] resetAdventureTestState: inventory cleared, back to level 0');
+  console.log('[TestTools] resetAdventureTestState complete:', {
+    currentLevelIndex,
+    stageId: LEVELS[currentLevelIndex] && LEVELS[currentLevelIndex].stageId,
+    activeSlot,
+    equippedHammerDur: equippedHammer && equippedHammer.currentDur,
+  });
 }
 
 function calcAdventureScore() {
@@ -1051,6 +1072,13 @@ window.addEventListener('keydown', e => {
   }
   keys[e.code] = true;
   if (['Space','ArrowLeft','ArrowRight','ArrowUp','KeyZ'].includes(e.code)) e.preventDefault();
+  // 測試版：F8 凍結 / 解凍畫面（不觸發 pause overlay）
+  if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F8') {
+    screenFreezeForTest = !screenFreezeForTest;
+    console.log('[TestTools] screenFreezeForTest:', screenFreezeForTest);
+    showHint(screenFreezeForTest ? '畫面暫停：ON（F8 恢復）' : '畫面暫停：OFF', 120);
+    e.preventDefault();
+  }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -2515,12 +2543,20 @@ function updatePlayer(dt) {
   if (player.meleeHammerActive > 0) player.meleeHammerActive--;
 
   if (inp('attack') && player.attackCooldown === 0) {
-    if (activeSlot === 'hammer' && equippedHammer.id) {
+    // activeSlot fallback：若指向不存在的武器，自動切到有效武器
+    if (activeSlot === 'hammer' && !(equippedHammer && equippedHammer.id)) {
+      if (equippedSword && equippedSword.id) { activeSlot = 'sword'; }
+      else { showHint('目前沒有可用武器', 90); }
+    } else if (activeSlot === 'sword' && !(equippedSword && equippedSword.id === 'basicSword')) {
+      if (equippedHammer && equippedHammer.id) { activeSlot = 'hammer'; }
+      else { showHint('目前沒有可用武器', 90); }
+    }
+    if (activeSlot === 'hammer' && equippedHammer && equippedHammer.id) {
       player.attackCooldown     = CONFIG.HAMMER_ATTACK_COOLDOWN;
       player.meleeHammerActive  = CONFIG.HAMMER_ATTACK_DURATION;
       player.hammerAnimTimer    = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR; // 視覺動畫 24 幀
       player.hammerHit          = false;
-    } else if (activeSlot === 'sword' && equippedSword.id === 'basicSword') {
+    } else if (activeSlot === 'sword' && equippedSword && equippedSword.id === 'basicSword') {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
       player.meleeHit       = false;
@@ -4715,6 +4751,17 @@ function openHomeScreen(from) {
   renderHomeSupply();
   renderHomeDog();
   renderHomeNextStage();
+  // 測試工具 DOM 顯示控制 + 按鈕綁定
+  const testToolsEl = document.getElementById('home-test-tools');
+  if (testToolsEl) testToolsEl.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? 'block' : 'none';
+  const testLabelEl = document.getElementById('home-test-label');
+  if (testLabelEl) testLabelEl.textContent = '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF');
+  const resetBtn = document.getElementById('btn-reset-adventure-test');
+  if (resetBtn && !resetBtn._bound) {
+    resetBtn.addEventListener('click', resetAdventureTestState);
+    resetBtn._bound = true;
+  }
+
   renderHomeChallenge();
   renderHomePlayer(); // 先顯示現有狀態（未裝備）
   renderHomeWallet();
@@ -5256,7 +5303,8 @@ function restart(opts) {
   // 重新初始化裝備
   initEquippedSword();
   initEquippedHammer();
-  activeSlot = equippedSword.id ? 'sword' : (equippedHammer.id ? 'hammer' : 'sword');
+  normalizeActiveWeaponSlot();         // 確保 activeSlot 正確
+  applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子（每次 restart 後補回）
 
   // Reset world
   cameraX    = 0;
@@ -5577,8 +5625,10 @@ function loop(timestamp) {
   const dt   = dtMs / 16.667; // frame multiplier for physics (1.0 at 60fps)
   lastTime   = timestamp;
 
-  update(dt, dtMs);
-  draw();
+  if (!screenFreezeForTest) {
+    update(dt, dtMs); // 測試版 F8 凍結時跳過 update（不扣時間/不推進動畫）
+  }
+  draw();  // 保留 draw，讓畫面可截圖
 
   requestAnimationFrame(loop);
 }
@@ -5605,8 +5655,9 @@ ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
-applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
+normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
+applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子（必須在 initEquipped 之後）
 requestAnimationFrame(loop);
