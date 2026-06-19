@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-4';
-const BUILD_TIME   = '2026-06-15 10:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-5';
+const BUILD_TIME   = '2026-06-15 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -848,10 +848,10 @@ function getHammerAttackImg(hammerAnimTimer) {
 //  GAME_VERSION 含 hammer-attack-foundation-test 時啟用
 //  正式版自動關閉
 // =============================================
-const HAMMER_ATTACK_VISUAL_TEST_LOADOUT =
-  GAME_VERSION.includes('hammer-attack-foundation-test');
-const ADVENTURE_TEST_TOOLS_ENABLED =
-  GAME_VERSION.includes('hammer-attack-foundation-test');
+// 通用測試版判斷：版本號含 -test- 即為測試版
+const IS_ADVENTURE_TEST_VERSION      = GAME_VERSION.includes('-test-');
+const HAMMER_ATTACK_VISUAL_TEST_LOADOUT = IS_ADVENTURE_TEST_VERSION;
+const ADVENTURE_TEST_TOOLS_ENABLED      = IS_ADVENTURE_TEST_VERSION;
 
 // 安全化 activeSlot：若指向不存在的武器，自動切到有效武器
 function normalizeActiveWeaponSlot() {
@@ -861,6 +861,21 @@ function normalizeActiveWeaponSlot() {
   if (activeSlot === 'sword' && !(equippedSword && equippedSword.id)) {
     if (equippedHammer && equippedHammer.id) activeSlot = 'hammer';
   }
+}
+
+// 測試版完整裝備（sword + hammer，runtime-only，不寫背包）
+function applyAdventureTestLoadout() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  equippedSword.id         = 'basicSword';
+  equippedSword.name       = '基礎氣球劍（測試）';
+  equippedSword.maxDur     = 999;
+  equippedSword.currentDur = 999;
+  equippedHammer.id         = 'basicHammer';
+  equippedHammer.name       = '基礎氣球槌（測試）';
+  equippedHammer.maxDur     = 999;
+  equippedHammer.currentDur = 999;
+  activeSlot = 'sword';
+  console.log('[AdventureTest] runtime test loadout: sword + hammer equipped');
 }
 
 // runtime-only 槌子（不寫 playerInventory / localStorage / Firebase）
@@ -874,6 +889,28 @@ function applyHammerAttackVisualTestLoadout() {
   console.log('[HammerTest] runtime-only hammer equipped for visual test');
 }
 
+// 測試版：直接跳第 3 關（不清玩家身份/V幣/Firebase）
+function startAdventureTestLevel3() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  resetInventory();
+  currentLevelIndex = 2;
+  loadLevel(2);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) pauseEl.classList.remove('active');
+  gameState = 'playing';
+  showHint('已進入第 3 關測試：已配備測試用氣球劍與氣球槌', 220);
+  console.log('[TestTools] startAdventureTestLevel3 complete:', {
+    stageId: LEVELS[2] && LEVELS[2].stageId,
+    activeSlot,
+    swordDur: equippedSword && equippedSword.currentDur,
+    hammerDur: equippedHammer && equippedHammer.currentDur,
+  });
+}
+
 // 測試版：重置冒險測試狀態（不清 playerProfile / V幣 / Firebase）
 function resetAdventureTestState() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
@@ -884,7 +921,7 @@ function resetAdventureTestState() {
   initEquippedSword();
   initEquippedHammer();
   normalizeActiveWeaponSlot();
-  applyHammerAttackVisualTestLoadout(); // 重置後補回 runtime-only 槌子
+  applyAdventureTestLoadout(); // 重置後補回 runtime-only sword + hammer
   // 關閉 pause-overlay（若目前在暫停狀態）
   const pauseEl = document.getElementById('pause-overlay');
   if (pauseEl) pauseEl.classList.remove('active');
@@ -2256,7 +2293,7 @@ function initEquippedHammer() {
 function consumeHammerDurability() {
   if (!equippedHammer.id) return;
   // 測試版槌子：耐久不耗盡
-  if (HAMMER_ATTACK_VISUAL_TEST_LOADOUT && equippedHammer.currentDur >= 990) {
+  if (ADVENTURE_TEST_TOOLS_ENABLED && equippedHammer.currentDur >= 990) {
     equippedHammer.currentDur = equippedHammer.maxDur || 999;
     return;
   }
@@ -5516,7 +5553,7 @@ function restart(opts) {
   initEquippedSword();
   initEquippedHammer();
   normalizeActiveWeaponSlot();         // 確保 activeSlot 正確
-  applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子（每次 restart 後補回）
+  applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
 
   // Reset world
   cameraX    = 0;
@@ -5878,16 +5915,19 @@ loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
 normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
-applyHammerAttackVisualTestLoadout(); // 測試版：runtime-only 槌子（必須在 initEquipped 之後）
+applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
 
-// 測試版：綁定暫停畫面「重新開始測試」按鈕
-(function bindPauseResetTestBtn() {
+// 測試版：綁定暫停畫面測試按鈕
+(function bindPauseTestBtns() {
   const btnPauseReset = document.getElementById('btn-pause-reset-test');
   if (btnPauseReset) {
     btnPauseReset.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
-    btnPauseReset.addEventListener('click', function() {
-      resetAdventureTestState();
-    });
+    btnPauseReset.addEventListener('click', resetAdventureTestState);
+  }
+  const btnTestLevel3 = document.getElementById('btn-pause-test-level3');
+  if (btnTestLevel3) {
+    btnTestLevel3.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestLevel3.addEventListener('click', startAdventureTestLevel3);
   }
 })();
 
