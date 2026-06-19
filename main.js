@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-1';
-const BUILD_TIME   = '2026-06-14 10:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-2';
+const BUILD_TIME   = '2026-06-14 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1674,6 +1674,7 @@ function generateEnemies() {
     patrolRange: d.range,
     active: true,
     hitFlash: 0,
+    deathTimer: 0,  // 被劍砍死後短暫顯示 hurt 圖再消失
   }));
 }
 
@@ -2383,6 +2384,37 @@ let HINTS = []; // 勿在此直接填資料
 
 let activeHint = null; // { msg, duration, framesLeft }
 
+
+// ── 桌機 / 手機操作提示分流（v0.3.10）──────────────────
+function isMobileControlMode() {
+  // 觸控裝置或手機橫向：使用 pointer: coarse 判斷
+  return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+
+function getControlHintText(type) {
+  const m = isMobileControlMode();
+  switch (type) {
+    case 'stage1':
+      return m
+        ? '左側按鈕移動，右側「跳」跳躍，按「砍」使用氣球劍！先熟悉基本操作吧！'
+        : '方向鍵移動，空白鍵跳躍，Z 使用氣球劍！先熟悉基本操作吧！';
+    case 'stage3':
+      return m
+        ? '收集圓氣球，回小V的家製作氣球槌，再用「換武器」和「砍」敲飛蠍子！'
+        : '收集圓氣球，回小V的家製作氣球槌，再用槌子敲飛蠍子！';
+    case 'hammerCrafted':
+      return m
+        ? '氣球槌完成！先按「換武器」，再按「砍」把蠍子敲飛！'
+        : '氣球槌完成！按 2 切換武器，再按 Z 敲飛蠍子！';
+    case 'scorpionHammer':
+      return m
+        ? '蠍子擋路！裝備氣球槌後按「砍」，可以把牠敲飛！'
+        : '蠍子擋路！裝備氣球槌後按 Z，可以把牠敲飛！';
+    default:
+      return '';
+  }
+}
+
 // ── Stage Flow Hints（v0.3.10 關卡引導提示）──────────────
 // 純 runtime 狀態，不寫 localStorage / Firebase
 let stageFlowHints = {
@@ -2398,11 +2430,11 @@ function showStageStartHint(levelIndex) {
   if (stageFlowHints.stageStart[levelIndex]) return; // 本次啟動內只提示一次
   stageFlowHints.stageStart[levelIndex] = true;
   if (levelIndex === 0) {
-    showHint('方向鍵移動，空白鍵跳躍，Z 使用氣球劍！先熟悉基本操作吧！', 240);
+    showHint(getControlHintText('stage1'), 240);
   } else if (levelIndex === 1) {
     showHint('小心尖刺與障礙！觀察路線，安全通過氣球森林！', 240);
   } else if (levelIndex === 2) {
-    showHint('收集圓氣球，回小V的家製作氣球槌，再用槌子敲飛蠍子！', 260);
+    showHint(getControlHintText('stage3'), 260);
   }
 }
 let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
@@ -2655,7 +2687,7 @@ function updateProjectiles() {
         const dist = Math.abs((player.x + player.w / 2) - (e.x + e.w / 2));
         if (dist < 220) {
           stageFlowHints.scorpionHammerHintShown = true;
-          showHint('蠍子擋路！裝備氣球槌後按 Z，可以把牠敲飛！', 260);
+          showHint(getControlHintText('scorpionHammer'), 260);
         }
       });
     }
@@ -2667,8 +2699,8 @@ function updateProjectiles() {
         e.hp--;
         e.hitFlash = 8;
         e.vx = (p.vx > 0 ? 3 : -3); // knockback
-        if (e.hp <= 0) {
-          e.active = false;
+        if (e.hp <= 0 && e.deathTimer <= 0) {
+          e.deathTimer = 10;
           player.enemiesDefeated++;
         }
         consumeSwordDurability(); // 打中才扣耐久
@@ -2698,8 +2730,8 @@ function updateMeleeAttack() {
       e.hp--;
       e.hitFlash = 8;
       e.vx = (player.facingRight ? 3.5 : -3.5); // knockback
-      if (e.hp <= 0) {
-        e.active = false;
+      if (e.hp <= 0 && e.deathTimer <= 0) {
+        e.deathTimer = 10; // 短暫 hurt 顯示再消失（約 167ms @ 60fps）
         player.enemiesDefeated++;
       }
       if (!player.meleeHit) {
@@ -2919,6 +2951,12 @@ function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
     if (e.hitFlash > 0) e.hitFlash--;
+    // 被劍砍死：deathTimer 倒數到 0 才真正 active = false
+    if (e.deathTimer > 0) {
+      e.deathTimer--;
+      if (e.deathTimer <= 0) e.active = false;
+      return; // 死亡緩衝期：跳過 patrol / 傷害玩家
+    }
 
     // Patrol
     e.x += e.vx;
@@ -3838,8 +3876,10 @@ function drawEnemyFallback(x, y, w, h, flashing) {
 }
 
 function drawEnemy(x, y, w, h, flashing, enemyVx) {
-  // ── 蠍子圖片模式（有素材時優先使用）──
-  const img = getScorpionWalkImg();
+  // ── 蠍子圖片模式：hitFlash 時優先使用 hurt 圖（受擊回饋）──
+  const img = flashing
+    ? (getScorpionHurtImg() || getScorpionWalkImg()) // 受擊時優先 hurt 圖
+    : getScorpionWalkImg();
   if (img) {
     // ── Foot anchor 對齊：讓圖片 88.3% 高度處對齊 hitbox 底部 ──
     const drawW  = w * SCORPION_DRAW_SCALE;
@@ -3871,6 +3911,19 @@ function drawEnemy(x, y, w, h, flashing, enemyVx) {
     if (flashing) ctx.globalAlpha = 1;
     ctx.restore();
 
+    // 受擊白閃：hitFlash 時在 hurt 圖上疊一層半透明白色
+    if (flashing) {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = '#ffffff';
+      const drawW2 = w * SCORPION_DRAW_SCALE;
+      const drawH2 = drawW2 * (img.height / img.width);
+      const groundY2 = y + h;
+      const drawX2   = x + w / 2 - drawW2 / 2 + SCORPION_DRAW_OFFSET_X;
+      const drawY2   = groundY2 - drawH2 * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
+      ctx.fillRect(drawX2, drawY2, drawW2, drawH2);
+      ctx.restore();
+    }
     // HP 指示條（不受翻轉影響）
     for (let i = 0; i < 2; i++) {
       ctx.fillStyle = '#e00';
