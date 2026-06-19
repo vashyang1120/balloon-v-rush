@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9';
-const BUILD_TIME   = '2026-06-13 18:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-1';
+const BUILD_TIME   = '2026-06-14 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2338,8 +2338,13 @@ function loadLevel(index) {
   // 複製 hints（每次都要 reset shown 狀態）
   HINTS.length = 0;
   lv.hints.forEach(h => HINTS.push(Object.assign({}, h, { shown: false })));
+  // 延遲一點讓畫面載入後再顯示，避免第一幀閃過
+  setTimeout(() => showStageStartHint(index), 400);
 
   currentLevelIndex = index;
+  // 重設本局 stage flow hint 狀態（roundBalloon 每關重設）
+  stageFlowHints.roundBalloonHintShown  = false;
+  stageFlowHints.scorpionHammerHintShown = false;
 
   // 隱藏寶物（深拷貝，避免 found 狀態污染 LEVELS 原始資料）
   const rawTreasure = lv.hiddenTreasure || null;
@@ -2377,6 +2382,29 @@ function loadLevel(index) {
 let HINTS = []; // 勿在此直接填資料
 
 let activeHint = null; // { msg, duration, framesLeft }
+
+// ── Stage Flow Hints（v0.3.10 關卡引導提示）──────────────
+// 純 runtime 狀態，不寫 localStorage / Firebase
+let stageFlowHints = {
+  stageStart:             {},    // { [levelIndex]: true } 已顯示關卡開始提示
+  roundBalloonHintShown:  false, // 第 3 關首次撿圓氣球提示
+  hammerCraftHintShown:   false, // 製作 basicHammer 後提示
+  scorpionHammerHintShown:false, // 接近蠍子提示槌子用途
+  hammerUsedOnScorpion:   false, // 曾用槌子打飛過蠍子
+};
+
+// 關卡開始提示
+function showStageStartHint(levelIndex) {
+  if (stageFlowHints.stageStart[levelIndex]) return; // 本次啟動內只提示一次
+  stageFlowHints.stageStart[levelIndex] = true;
+  if (levelIndex === 0) {
+    showHint('方向鍵移動，空白鍵跳躍，Z 使用氣球劍！先熟悉基本操作吧！', 240);
+  } else if (levelIndex === 1) {
+    showHint('小心尖刺與障礙！觀察路線，安全通過氣球森林！', 240);
+  } else if (levelIndex === 2) {
+    showHint('收集圓氣球，回小V的家製作氣球槌，再用槌子敲飛蠍子！', 260);
+  }
+}
 let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
 
 function checkHints() {
@@ -2620,6 +2648,18 @@ function updateProjectiles() {
     p.life--;
     if (p.life <= 0) { projectiles.splice(i, 1); continue; }
 
+    // 第 3 關蠍子接近提示（首次接近時提示槌子用途）
+    if (currentLevelIndex === 2 && !stageFlowHints.scorpionHammerHintShown && !stageFlowHints.hammerUsedOnScorpion) {
+      enemies.forEach(e => {
+        if (!e.active) return;
+        const dist = Math.abs((player.x + player.w / 2) - (e.x + e.w / 2));
+        if (dist < 220) {
+          stageFlowHints.scorpionHammerHintShown = true;
+          showHint('蠍子擋路！裝備氣球槌後按 Z，可以把牠敲飛！', 260);
+        }
+      });
+    }
+
     // Hit enemies
     enemies.forEach(e => {
       if (!e.active) return;
@@ -2726,7 +2766,8 @@ function updateHammerMelee() {
     if (!e.active) return;
     if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
       e.active = false; // 從場上移除
-      spinningEnemies.push({
+      stageFlowHints.hammerUsedOnScorpion = true; // 記錄曾用槌子打過蠍子
+          spinningEnemies.push({
         x: e.x, y: e.y, w: e.w, h: e.h,
         vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
         life: CONFIG.HAMMER_SPIN_LIFE,
@@ -2922,8 +2963,16 @@ function checkCollectibles() {
     if (rectsOverlap(px, py, pw, ph, r.x - R, r.y - R, R*2, R*2)) {
       r.collected = true;
       currentRunStats.roundBalloon++;
-      playerInventory.roundBalloon++;
+      playerInventory.roundBalloon = Math.min(
+        ROUND_BALLOON_CARRY_LIMIT,
+        (playerInventory.roundBalloon || 0) + 1
+      );
       saveInventory();
+      // 第 3 關：首次撿到圓氣球，提示它是槌子材料
+      if (currentLevelIndex === 2 && !stageFlowHints.roundBalloonHintShown) {
+        stageFlowHints.roundBalloonHintShown = true;
+        showHint('拿到圓氣球！收集 2 顆圓氣球 + 1 條 260，就能在小V的家製作氣球槌！', 280);
+      }
     }
   });
 }
@@ -5620,6 +5669,11 @@ function renderGuidebook() {
             let craftMsg = `成功製作 ${recipe.name}！`;
             if (recipe.id === 'balloonDog') craftMsg = '🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5';
             showCraftMessage(craftMsg);
+            // 製作 basicHammer 後提示如何使用
+            if (recipe.id === 'basicHammer' && !stageFlowHints.hammerCraftHintShown) {
+              stageFlowHints.hammerCraftHintShown = true;
+              setTimeout(() => showHint('氣球槌完成！按 2 或點擊切換武器，再按 Z 敲飛蠍子！', 280), 800);
+            }
             renderGuidebook();
             refreshResultBag();
             // 更新生命顯示
