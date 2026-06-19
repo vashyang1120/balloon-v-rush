@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-4';
-const BUILD_TIME   = '2026-06-13 14:00';
+const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-5';
+const BUILD_TIME   = '2026-06-13 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -744,6 +744,34 @@ const SCORPION_ANIM_SPEED    = 7;     // 每幾 game frames 換一張
 const scorpionWalkImgs = [];
 let scorpionWalkReady = false;  // 至少一張載入完成才設 true
 
+
+// ── 蠍子受傷圖（被槌子擊飛旋轉時使用）────────────────
+const SCORPION_HURT_ASSET = 'assets/enemies/scorpion/scorpion_hurt_01.png';
+let scorpionHurtImg   = null;
+let scorpionHurtReady = false;
+
+function initScorpionHurtArt() {
+  const img      = new Image();
+  const fullSrc  = resolveAdventureAssetSrc(SCORPION_HURT_ASSET);
+  img.onload = function() {
+    scorpionHurtImg   = img;
+    scorpionHurtReady = true;
+    console.log('[Scorpion] hurt image loaded:', fullSrc);
+  };
+  img.onerror = function() {
+    console.warn('[Scorpion] hurt image not found:', fullSrc, '(fallback: walk_01 or box)');
+  };
+  img.src = fullSrc;
+}
+
+// 取受傷圖：優先 scorpion_hurt_01，fallback scorpion_walk_01，再 fallback null（紅色方塊）
+function getScorpionHurtImg() {
+  if (scorpionHurtReady && scorpionHurtImg && scorpionHurtImg.complete && scorpionHurtImg.naturalWidth > 0) {
+    return scorpionHurtImg;
+  }
+  return (scorpionWalkImgs && scorpionWalkImgs[0]) || null;
+}
+
 function initScorpionWalkArt() {
   let loadedCount = 0;
   SCORPION_WALK_ASSETS.forEach((src, i) => {
@@ -773,7 +801,7 @@ function getScorpionWalkImg() {
 //  01→02→03→04 一次性下砸，不循環，不補第 5 幀
 // =============================================
 
-const HAMMER_ATTACK_SCALE_MULTIPLIER  = 1.465;
+const HAMMER_ATTACK_SCALE_MULTIPLIER  = 1.383; // 1.465 × 0.944 = 1.383（補回縮小比率後再校正）
 const ROUND_BALLOON_CARRY_LIMIT       = 2;    // 玩家最多攜帶 2 顆圓氣球（可補充材料） // 補回素材端縮小比率（610→416px，需放大補回）
 const HAMMER_ATTACK_FRAME_DUR        = 6;     // 每幀停留（game frames），接近 sword attack 節奏
 
@@ -3252,22 +3280,32 @@ function drawWorld() {
     drawBreakableTree(sx, t);
   });
 
-  // 旋轉飛出的小怪
+  // 旋轉飛出的小怪（被槌子擊飛時改用 scorpion_hurt_01.png）
   spinningEnemies.forEach(s => {
     const sx = s.x - cx;
     if (sx > CANVAS_W + 60 || sx + s.w < -60) return;
+    const hurtImg = getScorpionHurtImg();
     ctx.save();
     ctx.translate(sx + s.w/2, s.y + s.h/2);
     ctx.rotate(s.angle);
-    ctx.fillStyle = '#e05050';
-    ctx.beginPath();
-    ctx.roundRect(-s.w/2, -s.h/2, s.w, s.h, 8);
-    ctx.fill();
-    // 暈眩星星
-    ctx.fillStyle = '#fff';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('★', 0, 4);
+    if (hurtImg) {
+      // 使用蠍子受傷圖，尺寸與 walk 一致（SCORPION_DRAW_SCALE）
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      const drawW = s.w * SCORPION_DRAW_SCALE;
+      const drawH = drawW * (hurtImg.height / hurtImg.width);
+      ctx.drawImage(hurtImg, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else {
+      // Fallback：原本紅色方塊（圖片未載入時）
+      ctx.fillStyle = '#e05050';
+      ctx.beginPath();
+      ctx.roundRect(-s.w/2, -s.h/2, s.w, s.h, 8);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('★', 0, 4);
+    }
     ctx.restore();
   });
 
@@ -5660,6 +5698,7 @@ playerProfile = loadPlayerProfile(); // 初始化玩家身份
 ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
+initScorpionHurtArt();                // 非阻塞地嘗試載入蠍子受傷圖
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
