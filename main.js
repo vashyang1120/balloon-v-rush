@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.9-hammer-attack-foundation-test-1-fix-5';
-const BUILD_TIME   = '2026-06-13 16:00';
+const GAME_VERSION = 'adventure-v0.3.9';
+const BUILD_TIME   = '2026-06-13 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
