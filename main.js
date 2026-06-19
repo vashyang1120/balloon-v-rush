@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-2';
-const BUILD_TIME   = '2026-06-14 14:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-3';
+const BUILD_TIME   = '2026-06-14 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2684,6 +2684,7 @@ function updateProjectiles() {
     if (currentLevelIndex === 2 && !stageFlowHints.scorpionHammerHintShown && !stageFlowHints.hammerUsedOnScorpion) {
       enemies.forEach(e => {
         if (!e.active) return;
+        if (e.deathTimer > 0) return; // 死亡演出中的蠍子不觸發提示
         const dist = Math.abs((player.x + player.w / 2) - (e.x + e.w / 2));
         if (dist < 220) {
           stageFlowHints.scorpionHammerHintShown = true;
@@ -2697,11 +2698,14 @@ function updateProjectiles() {
       if (!e.active) return;
       if (rectsOverlap(p.x, p.y, p.w, p.h, e.x, e.y, e.w, e.h)) {
         e.hp--;
-        e.hitFlash = 8;
-        e.vx = (p.vx > 0 ? 3 : -3); // knockback
         if (e.hp <= 0 && e.deathTimer <= 0) {
+          e.vx        = 0;
+          e.hitFlash  = 0;
           e.deathTimer = 10;
           player.enemiesDefeated++;
+        } else if (e.hp > 0) {
+          e.hitFlash = 6;
+          e.vx = (p.vx > 0 ? 3 : -3);
         }
         consumeSwordDurability(); // 打中才扣耐久
         projectiles.splice(i, 1);
@@ -2726,13 +2730,19 @@ function updateMeleeAttack() {
 
   enemies.forEach(e => {
     if (!e.active) return;
+    if (e.deathTimer > 0) return; // 死亡演出中不受攻擊
     if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
       e.hp--;
-      e.hitFlash = 8;
-      e.vx = (player.facingRight ? 3.5 : -3.5); // knockback
       if (e.hp <= 0 && e.deathTimer <= 0) {
-        e.deathTimer = 10; // 短暫 hurt 顯示再消失（約 167ms @ 60fps）
+        // 死亡：立刻停止移動，清除 hitFlash，進入死亡緩衝
+        e.vx        = 0;
+        e.hitFlash  = 0;
+        e.deathTimer = 10;
         player.enemiesDefeated++;
+      } else if (e.hp > 0) {
+        // 受擊未死：短暫閃爍 + knockback
+        e.hitFlash = 6;
+        e.vx = (player.facingRight ? 3.5 : -3.5);
       }
       if (!player.meleeHit) {
         player.meleeHit = true;
@@ -2796,6 +2806,7 @@ function updateHammerMelee() {
   // 打一般小怪 → 旋轉飛出
   enemies.forEach(e => {
     if (!e.active) return;
+    if (e.deathTimer > 0) return; // 死亡演出中不受攻擊
     if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
       e.active = false; // 從場上移除
       stageFlowHints.hammerUsedOnScorpion = true; // 記錄曾用槌子打過蠍子
@@ -2950,13 +2961,14 @@ function checkHiddenTreasure() {
 function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
-    if (e.hitFlash > 0) e.hitFlash--;
-    // 被劍砍死：deathTimer 倒數到 0 才真正 active = false
+    // 死亡緩衝期：只倒數計時，不做其他事
     if (e.deathTimer > 0) {
       e.deathTimer--;
       if (e.deathTimer <= 0) e.active = false;
-      return; // 死亡緩衝期：跳過 patrol / 傷害玩家
+      return;
     }
+    // 正常狀態才更新 hitFlash
+    if (e.hitFlash > 0) e.hitFlash--;
 
     // Patrol
     e.x += e.vx;
@@ -3040,6 +3052,7 @@ function checkHazards() {
   // Enemies (contact damage)
   enemies.forEach(e => {
     if (!e.active) return;
+    if (e.deathTimer > 0) return; // 死亡演出中：不傷害玩家
     if (rectsOverlap(px, py, pw, ph, e.x + 4, e.y + 4, e.w - 8, e.h - 8)) {
       damagePlayer();
     }
@@ -3330,7 +3343,7 @@ function drawWorld() {
     if (!e.active) return;
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
-    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx);
+    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0 && !e.deathTimer, e.vx, e.deathTimer > 0);
   });
 
   // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
@@ -3875,10 +3888,10 @@ function drawEnemyFallback(x, y, w, h, flashing) {
   }
 }
 
-function drawEnemy(x, y, w, h, flashing, enemyVx) {
-  // ── 蠍子圖片模式：hitFlash 時優先使用 hurt 圖（受擊回饋）──
-  const img = flashing
-    ? (getScorpionHurtImg() || getScorpionWalkImg()) // 受擊時優先 hurt 圖
+function drawEnemy(x, y, w, h, flashing, enemyVx, isDying) {
+  // ── 蠍子圖片模式：dying / hitFlash 時優先使用 hurt 圖（受擊回饋）──
+  const img = (isDying || flashing)
+    ? (getScorpionHurtImg() || getScorpionWalkImg()) // dying / 受擊時優先 hurt 圖
     : getScorpionWalkImg();
   if (img) {
     // ── Foot anchor 對齊：讓圖片 88.3% 高度處對齊 hitbox 底部 ──
