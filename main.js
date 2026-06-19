@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-3';
-const BUILD_TIME   = '2026-06-14 18:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-4';
+const BUILD_TIME   = '2026-06-15 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2335,6 +2335,7 @@ function loadLevel(index) {
   breakableTrees.length = 0;
   if (lv.buildTrees) lv.buildTrees().forEach(t => breakableTrees.push(t));
   spinningEnemies.length = 0;
+  scorpionDefeatEffects.length = 0;
 
   // 複製 hints（每次都要 reset shown 狀態）
   HINTS.length = 0;
@@ -2521,6 +2522,7 @@ function update(dt, dtMs = 16.667) {
   updateMeleeAttack();
   updateHammerMelee();
   updateSpinningEnemies(dt);
+  updateScorpionDefeatEffects(dt);
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
   checkCollectibles();
@@ -2684,7 +2686,6 @@ function updateProjectiles() {
     if (currentLevelIndex === 2 && !stageFlowHints.scorpionHammerHintShown && !stageFlowHints.hammerUsedOnScorpion) {
       enemies.forEach(e => {
         if (!e.active) return;
-        if (e.deathTimer > 0) return; // 死亡演出中的蠍子不觸發提示
         const dist = Math.abs((player.x + player.w / 2) - (e.x + e.w / 2));
         if (dist < 220) {
           stageFlowHints.scorpionHammerHintShown = true;
@@ -2698,12 +2699,11 @@ function updateProjectiles() {
       if (!e.active) return;
       if (rectsOverlap(p.x, p.y, p.w, p.h, e.x, e.y, e.w, e.h)) {
         e.hp--;
-        if (e.hp <= 0 && e.deathTimer <= 0) {
-          e.vx        = 0;
-          e.hitFlash  = 0;
-          e.deathTimer = 10;
+        if (e.hp <= 0) {
+          spawnScorpionDefeatEffect(e);
+          e.active = false;
           player.enemiesDefeated++;
-        } else if (e.hp > 0) {
+        } else {
           e.hitFlash = 6;
           e.vx = (p.vx > 0 ? 3 : -3);
         }
@@ -2730,16 +2730,14 @@ function updateMeleeAttack() {
 
   enemies.forEach(e => {
     if (!e.active) return;
-    if (e.deathTimer > 0) return; // 死亡演出中不受攻擊
     if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
       e.hp--;
-      if (e.hp <= 0 && e.deathTimer <= 0) {
-        // 死亡：立刻停止移動，清除 hitFlash，進入死亡緩衝
-        e.vx        = 0;
-        e.hitFlash  = 0;
-        e.deathTimer = 10;
+      if (e.hp <= 0) {
+        // 死亡：立刻失效 + 產生純視覺死亡演出
+        spawnScorpionDefeatEffect(e);
+        e.active = false;
         player.enemiesDefeated++;
-      } else if (e.hp > 0) {
+      } else {
         // 受擊未死：短暫閃爍 + knockback
         e.hitFlash = 6;
         e.vx = (player.facingRight ? 3.5 : -3.5);
@@ -2791,7 +2789,68 @@ function updateOrangeNemeses(dtMs) {
 
 
 // ── Spinning enemies（被槌子打飛的小怪）────────
-let spinningEnemies = []; // { x, y, w, h, vx, life }
+let spinningEnemies = [];
+let scorpionDefeatEffects = []; // 純視覺死亡演出（不參與碰撞/攻擊/扣血）
+
+function spawnScorpionDefeatEffect(e) {
+  scorpionDefeatEffects.push({
+    x:          e.x,
+    y:          e.y,
+    w:          e.w,
+    h:          e.h,
+    vx:         0,
+    vy:         -0.4,
+    life:       12,
+    maxLife:    12,
+    facingLeft: (e.vx || 0) < 0,
+  });
+}
+
+function updateScorpionDefeatEffects(dt) {
+  for (let i = scorpionDefeatEffects.length - 1; i >= 0; i--) {
+    const fx = scorpionDefeatEffects[i];
+    fx.life -= 1;
+    fx.x += (fx.vx || 0) * dt;
+    fx.y += (fx.vy || 0) * dt;
+    if (fx.life <= 0) scorpionDefeatEffects.splice(i, 1);
+  }
+}
+
+function drawScorpionDefeatEffects(cx) {
+  scorpionDefeatEffects.forEach(fx => {
+    const sx = fx.x - cx;
+    if (sx > CANVAS_W + 60 || sx + fx.w < -60) return;
+
+    const img = getScorpionHurtImg();
+    const t   = fx.life / fx.maxLife; // 1 → 0 淡出
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, t));
+
+    if (img) {
+      const drawW = fx.w * SCORPION_DRAW_SCALE;
+      const drawH = drawW * (img.height / img.width);
+      const groundY = fx.y + fx.h;
+      const drawX   = sx + fx.w / 2 - drawW / 2 + SCORPION_DRAW_OFFSET_X;
+      const drawY   = groundY - drawH * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      if (!fx.facingLeft) {
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      } else {
+        ctx.translate(sx + fx.w / 2, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, -drawW / 2, drawY, drawW, drawH);
+      }
+    } else {
+      // fallback 方塊
+      ctx.fillStyle = '#e05050';
+      ctx.fillRect(sx, fx.y, fx.w, fx.h);
+    }
+
+    ctx.restore();
+  });
+} // { x, y, w, h, vx, life }
 
 function updateHammerMelee() {
   if (player.meleeHammerActive <= 0) return;
@@ -2806,7 +2865,6 @@ function updateHammerMelee() {
   // 打一般小怪 → 旋轉飛出
   enemies.forEach(e => {
     if (!e.active) return;
-    if (e.deathTimer > 0) return; // 死亡演出中不受攻擊
     if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
       e.active = false; // 從場上移除
       stageFlowHints.hammerUsedOnScorpion = true; // 記錄曾用槌子打過蠍子
@@ -2961,13 +3019,6 @@ function checkHiddenTreasure() {
 function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
-    // 死亡緩衝期：只倒數計時，不做其他事
-    if (e.deathTimer > 0) {
-      e.deathTimer--;
-      if (e.deathTimer <= 0) e.active = false;
-      return;
-    }
-    // 正常狀態才更新 hitFlash
     if (e.hitFlash > 0) e.hitFlash--;
 
     // Patrol
@@ -3052,7 +3103,6 @@ function checkHazards() {
   // Enemies (contact damage)
   enemies.forEach(e => {
     if (!e.active) return;
-    if (e.deathTimer > 0) return; // 死亡演出中：不傷害玩家
     if (rectsOverlap(px, py, pw, ph, e.x + 4, e.y + 4, e.w - 8, e.h - 8)) {
       damagePlayer();
     }
@@ -3343,7 +3393,7 @@ function drawWorld() {
     if (!e.active) return;
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
-    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0 && !e.deathTimer, e.vx, e.deathTimer > 0);
+    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx);
   });
 
   // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
@@ -3379,6 +3429,9 @@ function drawWorld() {
     if (sx > CANVAS_W + 80 || sx + 80 < -10) return;
     drawBreakableTree(sx, t);
   });
+
+  // 蠍子死亡視覺演出（獨立 effects 陣列，不參與碰撞）
+  drawScorpionDefeatEffects(cameraX);
 
   // 旋轉飛出的小怪（被槌子擊飛時改用 scorpion_hurt_01.png）
   spinningEnemies.forEach(s => {
@@ -3888,9 +3941,9 @@ function drawEnemyFallback(x, y, w, h, flashing) {
   }
 }
 
-function drawEnemy(x, y, w, h, flashing, enemyVx, isDying) {
-  // ── 蠍子圖片模式：dying / hitFlash 時優先使用 hurt 圖（受擊回饋）──
-  const img = (isDying || flashing)
+function drawEnemy(x, y, w, h, flashing, enemyVx) {
+  // ── 蠍子圖片模式：hitFlash 時優先使用 hurt 圖（受擊回饋）──
+  const img = flashing
     ? (getScorpionHurtImg() || getScorpionWalkImg()) // dying / 受擊時優先 hurt 圖
     : getScorpionWalkImg();
   if (img) {
@@ -5502,6 +5555,7 @@ function restart(opts) {
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
+  scorpionDefeatEffects.length = 0;
   breakableTrees.forEach(t => { t.state = 'standing'; t.fallTimer = 0; t.safeZone = null; });
   projectiles.length = 0;
   resetHints();
