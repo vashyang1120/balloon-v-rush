@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-5';
-const BUILD_TIME   = '2026-06-15 14:00';
+const GAME_VERSION = 'adventure-v0.3.10-stage-flow-polish-test-6';
+const BUILD_TIME   = '2026-06-15 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -889,25 +889,49 @@ function applyHammerAttackVisualTestLoadout() {
   console.log('[HammerTest] runtime-only hammer equipped for visual test');
 }
 
-// 測試版：直接跳第 3 關（不清玩家身份/V幣/Firebase）
+// 測試版：直接跳第 3 關（完整重設 runtime state，不清玩家身份/V幣/Firebase）
 function startAdventureTestLevel3() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+
+  // 清冒險背包（不清身份/V幣/Firebase）
   resetInventory();
+
+  // 設定目標關卡
   currentLevelIndex = 2;
+
+  // 1. 載入第 3 關資料（地圖、平台、敵人、圓氣球、關卡長度）
   loadLevel(2);
+
+  // 2. 正式初始化裝備（先用正式流程）
   initEquippedSword();
   initEquippedHammer();
   normalizeActiveWeaponSlot();
+
+  // 3. 補測試用 sword + hammer 999（runtime-only，不寫背包）
   applyAdventureTestLoadout();
+
+  // 4. 完整重設 runtime state（沿用 restart() 的穩定流程）
+  //    restart() 會重設：player.x/y/vx/vy, cameraX, elapsedSec, frameCount,
+  //    currentRunStats, projectiles, meleeAttacks, spinningEnemies,
+  //    scorpionDefeatEffects, etc.
+  restart({ keepHp: false, preserveBringDog: false });
+
+  // 5. restart() 後再補 applyAdventureTestLoadout（restart 會呼叫 initEquipped 再 normalizeSlot）
+  applyAdventureTestLoadout();
+
+  // 6. 確保 pause overlay 關閉（restart 應已關閉，但雙重保險）
   const pauseEl = document.getElementById('pause-overlay');
-  if (pauseEl) pauseEl.classList.remove('active');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+
   gameState = 'playing';
   showHint('已進入第 3 關測試：已配備測試用氣球劍與氣球槌', 220);
   console.log('[TestTools] startAdventureTestLevel3 complete:', {
-    stageId: LEVELS[2] && LEVELS[2].stageId,
+    stageId:     LEVELS[2] && LEVELS[2].stageId,
+    playerX:     player.x,
+    playerY:     player.y,
     activeSlot,
-    swordDur: equippedSword && equippedSword.currentDur,
-    hammerDur: equippedHammer && equippedHammer.currentDur,
+    swordDur:    equippedSword && equippedSword.currentDur,
+    hammerDur:   equippedHammer && equippedHammer.currentDur,
   });
 }
 
