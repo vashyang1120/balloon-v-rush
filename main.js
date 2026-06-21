@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-1';
-const BUILD_TIME   = '2026-06-16 10:00';
+const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-2';
+const BUILD_TIME   = '2026-06-17 09:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1504,7 +1504,7 @@ function updateFailedPanelInfo() {
   const dogLine = bringBalloonDog
     ? '<div class="fi-dog">🐶 氣球小狗也會回到本關開始狀態</div>' : '';
   infoEl.innerHTML =
-    '<div class="fi-stage">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</div>'
+    '<div class="fi-stage">' + getChapterDisplayTitle(currentLevelIndex) + '</div>'
     + '<div class="fi-hp-row">' + hearts
     + '<span class="fi-hp-num">本關開始 ' + hp + ' / 3</span></div>'
     + dogLine
@@ -2346,6 +2346,37 @@ function ensureChapter1Flags() {
     };
   }
   return playerInventory.chapter1Flow;
+}
+
+// ════════════════════════════════════════════════════════
+//  v0.3.11-test-2：章節式顯示標題
+//  ──────────────────────────────────────────────────────
+//  玩家畫面上不應該看到工程用的 stageId（1-1 / 1-2b / 1-3）
+//  或個別小關全名（氣球森林小徑 / 氣球小狗尋寶...），
+//  本版先用統一的「第一章」標題取代，段落副標可選用。
+//
+//  stageId 仍保留在 LEVELS 資料與 gameLogs / debug 用途，
+//  本函式只負責「玩家看得到的畫面」要顯示什麼字。
+// ════════════════════════════════════════════════════════
+function getChapterDisplayTitle(levelIndex) {
+  if (isInChapter1Flow(levelIndex)) {
+    return '第一章 森林氣球小徑';
+  }
+  // 不在第一章流程內的關卡（橘子果園、1-4 等），暫時 fallback 用原本 shortName，
+  // 避免影響未來章節尚未設計標題前就被本函式覆蓋掉
+  const lv = LEVELS[levelIndex];
+  return (lv && (lv.shortName || lv.name)) || '';
+}
+
+// 第一章內部段落副標（給願意顯示副標的 UI 使用，非必要）
+function getChapter1FlowSubLabel(levelIndex) {
+  const step = getChapter1FlowStep(levelIndex);
+  switch (step) {
+    case 0:  return '第 1 段：氣球劍與基礎戰鬥';
+    case 1:  return '第 2 段：氣球狗尋寶';
+    case 2:  return '第 3 段：氣球槌戰鬥';
+    default: return '';
+  }
 }
 
 // ════════════════════════════════════════════════════════
@@ -3670,12 +3701,13 @@ function updateNextLevelButton() {
     if (sub) sub.textContent = 'Next Level';
     btn._nextLevel = true;
 
-    // v0.3.11：製作槌子前不能進 Chapter1-3 → 按鈕灰階提示（仍可點，點擊後會被
-    // checkChapter1ProgressionGate 擋下並跳提示，這裡只是視覺上先告知）
+    // v0.3.11-test-2：兩種第一章流程阻擋都給視覺提示，文字分開避免混淆
     const blockedByCraftGate = (nextIdx === 2)
       && isInChapter1Flow(currentLevelIndex)
       && ((playerInventory.craftedItems || {}).basicHammer || 0) <= 0;
-    btn.style.opacity = blockedByCraftGate ? '0.5' : '';
+    const blockedByDogGate = (nextIdx === dogHammerStageIndex)
+      && (nextBringDog !== true);
+    btn.style.opacity = (blockedByCraftGate || blockedByDogGate) ? '0.5' : '';
   } else {
     btn.childNodes[0].textContent = '再玩一次';
     const sub = btn.querySelector('.result-btn-sub');
@@ -4572,7 +4604,8 @@ function drawHUD() {
   // ── 中央：關卡名稱 + 計時器（正式 UI，非 debug）──
   ctx.textAlign = 'center';
   const lv      = LEVELS[currentLevelIndex] || {};
-  const stageLabel = ((lv.stageId || '') + ' ' + (lv.shortName || lv.name || '')).trim();
+  // v0.3.11-test-2：HUD 不再顯示工程用 stageId，改用章節標題
+  const stageLabel = getChapterDisplayTitle(currentLevelIndex);
   ctx.font = 'bold 12px sans-serif';
   ctx.fillStyle = 'rgba(200,195,255,0.85)';
   ctx.fillText(stageLabel, CANVAS_W / 2, 13);
@@ -4769,7 +4802,7 @@ function refreshResultDog() {
   const dog    = playerInventory.balloonDog || {};
   const hasDog = dog.present;
   const turns  = dog.turnsLeft || 0;
-  const nextLvIndex       = currentLevelIndex + 1;
+  const nextLvIndex       = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
   const canBringDog       = hasDog && (playerInventory.balloon260 || 0) >= 1 && !nextBringDog;
 
@@ -4784,9 +4817,13 @@ function refreshResultDog() {
     }
     // 帶狗按鈕（不論下一關是否有隱藏物）
     if (!currentRunStats.dogGoneThisClear && turns > 0) {
-      const hint = nextLvHasTreasure
-        ? '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
-        : '氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
+      // v0.3.11-test-2：下一關需要帶狗才能進入時，用更直接的行動呼籲
+      const dogTripRequired = (nextLvIndex === dogHammerStageIndex) && !nextBringDog;
+      const hint = dogTripRequired
+        ? '先帶氣球小狗出發，牠會幫你找到隱藏寶藏！'
+        : nextLvHasTreasure
+          ? '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
+          : '氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
       inner += '<div class="rp-supply-hp" style="color:#ffe080">' + hint + '</div>';
       if (nextBringDog) {
         // 已安排，顯示確認狀態，不可重複點擊
@@ -4882,7 +4919,7 @@ function populateResultPanel() {
   const dogData       = playerInventory.balloonDog || {};
   const hasDog        = dogData.present;
   const dogTurns      = dogData.turnsLeft || 0;
-  const nextLvIndex   = currentLevelIndex + 1;
+  const nextLvIndex   = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length
     && !!LEVELS[nextLvIndex].hiddenTreasure;
   const canBringDog   = hasDog && (playerInventory.balloon260 || 0) >= 1;
@@ -4961,7 +4998,13 @@ function populateResultPanel() {
       dogInner += '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>';
     }
     if (nextLvHasTreasure && !currentRunStats.dogGoneThisClear) {
-      dogInner += '<div class="rp-supply-hp" style="color:#ffe080">氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！</div>';
+      // v0.3.11-test-2：下一關是狗狗尋寶關且尚未安排帶狗時，用更直接的行動呼籲
+      const dogTripRequired = (nextLvIndex === dogHammerStageIndex) && !nextBringDog;
+      dogInner += '<div class="rp-supply-hp" style="color:#ffe080">'
+        + (dogTripRequired
+            ? '先帶氣球小狗出發，牠會幫你找到隱藏寶藏！'
+            : '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！')
+        + '</div>';
       const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
       const btnDisStr = canBringDog ? '' : 'disabled';
       const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
@@ -5043,18 +5086,23 @@ function populateResultPanel() {
 
   // 組合
   let html = '';
+  // v0.3.11-test-2：badge 不再顯示工程用 stageId（如 1-2b），
+  // 改顯示第一章段落副標（若不在第一章流程內則留空）
+  const chapterSubLabel = getChapter1FlowSubLabel(currentLevelIndex);
   html += '<div class="rp-level-badge"><span class="rp-level-emoji">'
     + (LEVELS[currentLevelIndex]?.emoji || '🌿')
     + '</span><span class="rp-level-stageId">'
-    + (LEVELS[currentLevelIndex]?.stageId || '')
+    + chapterSubLabel
     + '</span></div>';
+  // v0.3.11-test-2：主標題改用章節標題（不再顯示「1-1 氣球森林小徑」這類工程命名）
+  const chapterTitle = getChapterDisplayTitle(currentLevelIndex);
   if (gameState === 'gameover') {
     html += '<div class="rp-clear-title rp-gameover-title">⏰ 時間到！</div>';
-    html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
+    html += '<div class="rp-level-display-name">' + chapterTitle + '</div>';
     html += '<div class="rp-clear-sub">這次沒有抵達終點，再挑戰一次吧！</div>';
   } else {
     html += '<div class="rp-clear-title">🎉 過關成功！</div>';
-    html += '<div class="rp-level-display-name">' + LEVEL_NAME + '</div>';
+    html += '<div class="rp-level-display-name">' + chapterTitle + '</div>';
     html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
   }
   html += buildResultHpHtml(); // 直接顯示目前 HP
@@ -5174,8 +5222,19 @@ function bringDogNextLevel() {
   });
   if (!dog.present) { console.warn('no dog'); return; }
   if ((playerInventory.balloon260 || 0) < 1) {
-    showHint('需要 260 長條氣球 x1 作為牽繩', 180);
-    return;
+    // v0.3.11-test-2：第一章流程下，260 不足不能讓玩家卡死在「帶狗出發」這一步。
+    // 用既有 chapter1Flow.forcedDogTripDone 旗標，限定補發一次 260 作狗繩費用。
+    const nextIdx = getNextLevelIndex(currentLevelIndex);
+    const flags   = ensureChapter1Flags();
+    if (nextIdx === dogHammerStageIndex && !flags.forcedDogTripDone) {
+      playerInventory.balloon260 = (playerInventory.balloon260 || 0) + 1;
+      flags.forcedDogTripDone = true;
+      showHint('小V幫你準備了 1 條 260 氣球，做成狗繩帶氣球狗出發吧！', 260);
+      // 補完後直接往下走原本流程（扣 1 條、設 nextBringDog）
+    } else {
+      showHint('需要 260 長條氣球 x1 作為牽繩', 180);
+      return;
+    }
   }
   playerInventory.balloon260--;
   nextBringDog = true;  // 下一關才生效，不是現在
@@ -5486,7 +5545,7 @@ function renderHomeDog() {
   const dog             = playerInventory.balloonDog || {};
   const hasDog          = dog.present;
   const turns           = dog.turnsLeft || 0;
-  const nextLvIdx       = currentLevelIndex + 1;
+  const nextLvIdx       = getNextLevelIndex(currentLevelIndex);
   const nextHasTreasure = nextLvIdx < LEVELS.length && !!LEVELS[nextLvIdx]?.hiddenTreasure;
   const canBringDog     = hasDog && (playerInventory.balloon260 || 0) >= 1;
 
@@ -5511,9 +5570,14 @@ function renderHomeDog() {
   }
 
   // 帶狗提示（不論下一關是否有隱藏物，只要有狗就可帶）
-  const dogHint = nextHasTreasure
-    ? '🐶 氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
-    : '🐶 氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
+  // v0.3.11-test-2：若下一關需要帶狗才能進入，且玩家還沒安排，
+  // 用更直接的行動呼籲取代原本「好像聞到了什麼」的軟性提示
+  const dogTripRequired = (nextLvIdx === dogHammerStageIndex) && !nextBringDog;
+  const dogHint = dogTripRequired
+    ? '🐶 先帶氣球小狗出發，牠會幫你找到隱藏寶藏！'
+    : nextHasTreasure
+      ? '🐶 氣球小狗好像聞到了什麼……下一關也許有隱藏寶物！'
+      : '🐶 氣球小狗可以陪小V一起冒險，通關後恢復 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。';
 
   let bringBtnHtml = '';
   if (turns <= 0) {
@@ -5577,15 +5641,16 @@ function renderHomeNextStage() {
 
   if (homeEntryMode === 'failed') {
     const lv = LEVELS[currentLevelIndex];
+    // v0.3.11-test-2：不顯示工程用 stageId，改用章節標題（橘子果園等非第一章流程關卡仍 fallback 原名稱）
     el.innerHTML =
       '<div class="hns-badge hns-badge--warn">本關尚未完成</div>'
-      + '<div class="hns-name">' + (lv?.stageId || '') + ' ' + (lv?.shortName || lv?.name || '') + '</div>'
+      + '<div class="hns-name">' + getChapterDisplayTitle(currentLevelIndex) + '</div>'
       + '<div class="hns-hint">擊退所有挑戰，帶著收穫回家吧！</div>';
     if (btn) { btn.textContent = '↺ 重試本關'; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
     return;
   }
 
-  const nextIdx = currentLevelIndex + 1;
+  const nextIdx = getNextLevelIndex(currentLevelIndex);
   if (nextIdx >= LEVELS.length) {
     el.innerHTML = '<div class="hns-badge hns-badge--clear">🎉 全部關卡完成！</div><div class="hns-hint">可以重玩或等待更多冒險！</div>';
     if (btn) { btn.textContent = '🔄 再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
@@ -5593,9 +5658,11 @@ function renderHomeNextStage() {
   }
   const lv = LEVELS[nextIdx];
   const hasSecret = lv.hiddenTreasure && playerInventory.balloonDog?.present;
+  // v0.3.11-test-2：不顯示工程用 stageId（如 1-2b），改用章節段落副標 + 章節標題
+  const nextSubLabel = getChapter1FlowSubLabel(nextIdx);
   el.innerHTML =
-    '<div class="hns-stage-id">' + (lv.stageId || '') + '</div>'
-    + '<div class="hns-name">' + (lv.shortName || lv.name) + '</div>'
+    '<div class="hns-stage-id">' + nextSubLabel + '</div>'
+    + '<div class="hns-name">' + getChapterDisplayTitle(nextIdx) + '</div>'
     + (hasSecret ? '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……</div>' : '');
   if (btn) { btn.textContent = '🚀 出發冒險！'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
 }
