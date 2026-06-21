@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.10';
-const BUILD_TIME   = '2026-06-15 22:00';
+const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-1';
+const BUILD_TIME   = '2026-06-16 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1231,9 +1231,18 @@ const INVENTORY_DEFAULTS = {
   equippedSwordDur:     0,
   equippedHammerDur:    0,       // 裝備中的氣球槌耐久
   tutorialSwordGranted: false,
+  tutorialDogGranted:   false,
   uniqueCollectibles: {
     level3RoundBalloon: false,  // 第 3 關圓氣球是否已成功帶回（通關）
     // 未來可在此擴充更多一次性收集物
+  },
+  // v0.3.11 Chapter1 核心流程旗標（一次性教學 / 保底機制，隨背包存檔）
+  chapter1Flow: {
+    dogIntroDone:                false,
+    forcedDogTripDone:           false,
+    hammerRecipeGranted:         false,
+    hammerMaterialGuaranteeDone: false,
+    hammerCraftIntroShown:       false,
   },
 };
 
@@ -1377,12 +1386,16 @@ function loadInventory() {
       merged.balloonDog = Object.assign(
         {}, INVENTORY_DEFAULTS.balloonDog, parsed.balloonDog || {}
       );
+      merged.chapter1Flow = Object.assign(
+        {}, INVENTORY_DEFAULTS.chapter1Flow, parsed.chapter1Flow || {}
+      );
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
   // 深複製 defaults（避免共用同一個 craftedItems 物件參考）
   const d = Object.assign({}, INVENTORY_DEFAULTS);
   d.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
+  d.chapter1Flow = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
   return d;
 }
 
@@ -1396,6 +1409,7 @@ function resetInventory() {
   playerInventory.unlockedRecipes    = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
   playerInventory.uniqueCollectibles = Object.assign({}, INVENTORY_DEFAULTS.uniqueCollectibles);
   playerInventory.balloonDog         = Object.assign({}, INVENTORY_DEFAULTS.balloonDog);
+  playerInventory.chapter1Flow       = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
   playerInventory.equippedSwordDur     = 0;
   playerInventory.tutorialSwordGranted = false;
   saveInventory();
@@ -2065,12 +2079,14 @@ const LEVELS = [
       return results;
     },
     hiddenTreasure: {
-      type:      'recipe',
-      recipeKey: 'balloonLollipop',
-      x:         2900,            // 段 3 上方路線，需要狗找
-      y:         GROUND_Y - 175,  // 浮在空中的隱藏秘笈
-      found:     false,
-      emoji:     '🍭',
+      type:       'recipe',
+      recipeKey:  'balloonLollipop',
+      recipeName: '氣球棒棒糖秘笈',
+      foundMsg:   '找到隱藏秘笈：氣球棒棒糖！',
+      x:          2900,            // 段 3 上方路線，需要狗找
+      y:          GROUND_Y - 175,  // 浮在空中的隱藏秘笈
+      found:      false,
+      emoji:      '🍭',
     },
   },
 
@@ -2165,7 +2181,222 @@ const LEVELS = [
     },
   },
 
+  // ════════════════════════════════════════════
+  //  v0.3.11 Chapter1 流程專用：氣球小狗尋寶關
+  //  ──────────────────────────────────────────
+  //  這一關「不是」遊戲裡原本順序中的「第二關」。
+  //  它被刻意附加在 LEVELS 陣列最後面（而非插入），
+  //  目的是避免影響既有 7 處 currentLevelIndex === 2
+  //  的硬編碼判斷（那些判斷假設 index 2 是糖果氣球懸崖／槌子關）。
+  //
+  //  本關在遊戲「順序」中的位置，是由下方的
+  //  CHAPTER1_FLOW_LEVEL_INDICES / getNextLevelIndex()
+  //  路由機制決定，不是由它在 LEVELS 陣列中的實際 index 決定。
+  //
+  //  未來若要做正式的章節系統，應改為 stageId-based routing，
+  //  屆時這個暫時的「附加 + 流程表」做法可以整個替換掉。
+  // ════════════════════════════════════════════
+  {
+    chapterId:   1,
+    stageId:     '1-2b', // 暫時 stageId，避免與既有 1-2（橘子果園）衝突
+    displayName: '第 2 關：氣球小狗尋寶',
+    name:        '第 2 關：氣球小狗尋寶',
+    shortName:   '氣球小狗尋寶',
+    length:      5200,
+    emoji:       '🐶',
+    hints: [
+      { triggerX:   30, msg: '🐶 氣球小狗陪你出發！靠近隱藏物時，牠的鼻子會發亮！', shown: false, duration: 280 },
+      { triggerX:  900, msg: '👃 鼻子越亮，代表隱藏寶物越近！',                       shown: false, duration: 240 },
+      { triggerX: 2400, msg: '✨ 寶物應該就在附近，仔細找找看！',                     shown: false, duration: 240 },
+    ],
+    buildPlatforms: () => [
+      { x:  400, y: GROUND_Y - 90,  w: 130, h: 18 },
+      { x:  700, y: GROUND_Y - 120, w: 110, h: 18 },
+      { x: 1100, y: GROUND_Y - 100, w: 140, h: 18 },
+      { x: 1500, y: GROUND_Y - 140, w: 120, h: 18 },
+      { x: 1900, y: GROUND_Y - 110, w: 150, h: 18 },
+      { x: 2300, y: GROUND_Y - 180, w: 160, h: 18 }, // 秘笈所在高平台
+      { x: 2700, y: GROUND_Y - 120, w: 130, h: 18 },
+      { x: 3200, y: GROUND_Y - 100, w: 140, h: 18 },
+      { x: 3700, y: GROUND_Y - 130, w: 150, h: 18 },
+      { x: 4200, y: GROUND_Y - 100, w: 160, h: 18 },
+      { x: 4700, y: GROUND_Y - 120, w: 150, h: 18 },
+    ],
+    buildCoins: () => {
+      const placements = [
+        [180,55],[260,55],[340,55],[420,130],
+        [560,55],[660,140],[760,55],
+        [1120,55],[1220,55],[1320,120],
+        [1520,170],[1620,170],[1720,170],
+        [1920,55],[2020,55],[2120,140],
+        [2330,210],[2420,210],[2510,210], // 秘笈平台附近
+        [2720,150],[2820,55],[2920,55],
+        [3220,55],[3320,140],[3420,55],
+        [3720,160],[3820,55],[3920,55],
+        [4220,55],[4320,140],[4420,55],
+        [4720,150],[4820,55],[4920,55],[5020,55],
+      ];
+      return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
+    },
+    buildBalloons: () =>
+      [450,750,1150,1550,1950,2750,3250,3750,4250,4750].map(x => ({
+        x: x+20, y: GROUND_Y-85, collected:false, bobOffset:Math.random()*Math.PI*2
+      })),
+    buildSpikes: () => [
+      { x:1850, y:GROUND_Y-24, w:40, h:24 },
+      { x:3050, y:GROUND_Y-24, w:40, h:24 },
+      { x:4050, y:GROUND_Y-24, w:40, h:24 },
+    ],
+    buildEnemies: () => [
+      { x:1300, patrol:1300, patrolRange:110 },
+      { x:3400, patrol:3400, patrolRange:120 },
+    ].map(d => ({
+      x:d.x, y:GROUND_Y-CONFIG.ENEMY_H,
+      w:CONFIG.ENEMY_W, h:CONFIG.ENEMY_H,
+      vx:-CONFIG.ENEMY_SPEED, hp:2,
+      patrol:d.patrol, patrolRange:d.patrolRange,
+      active:true, hitFlash:0,
+    })),
+    buildOranges: () => [],
+    buildRoundBalloons: () => {
+      // 依缺量生成，與既有 1-3 邏輯一致：補到 ROUND_BALLOON_CARRY_LIMIT (2) 顆為止
+      const have    = Number(playerInventory.roundBalloon || 0);
+      const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
+      const results = [];
+      if (missing >= 1) results.push({ x: 1600, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
+      if (missing >= 2) results.push({ x: 2000, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
+      return results;
+    },
+    hiddenTreasure: {
+      type:       'recipe',
+      recipeKey:  'basicHammer',
+      recipeName: '氣球槌秘笈',
+      foundMsg:   '找到氣球槌秘笈！原來圓球可以做成氣球槌！',
+      x:          2450,            // 高平台上，需要狗才容易察覺
+      y:          GROUND_Y - 195,
+      found:      false,
+      emoji:      '🔨',
+    },
+  },
+
 ];  // end LEVELS
+
+
+// ════════════════════════════════════════════════════════════
+//  v0.3.11 Chapter1 核心流程路由（測試版專用，暫時映射）
+//  ──────────────────────────────────────────────────────────
+//  目的：在不搬動 LEVELS 既有 index、不改動既有 7 處
+//  currentLevelIndex === 2 硬編碼判斷的前提下，
+//  讓「劍 → 狗 → 槌」三關可以串成一條可測試的固定流程。
+//
+//  Chapter1-1 = LEVELS[0]              （現有 1-1，劍 / 基礎戰鬥）
+//  Chapter1-2 = dogHammerStageIndex     （附加在陣列最後的狗狗尋寶關）
+//  Chapter1-3 = LEVELS[2]               （現有 1-3，槌子戰鬥展示）
+//
+//  橘子果園（LEVELS[1]）視為未來 Chapter 2 雛形，本流程完全跳過，
+//  不會被路由到，也不會被本版任何邏輯修改。
+//
+//  ⚠️ 重要：未來若要做正式章節系統，請改成 stageId-based routing，
+//  屆時這整個區塊（含 CHAPTER1_FLOW_LEVEL_INDICES）應該被取代，
+//  不要再用「LEVELS 陣列 index」當作章節流程的依據。
+// ════════════════════════════════════════════════════════════
+
+const dogHammerStageIndex = LEVELS.findIndex(lv => lv.stageId === '1-2b');
+
+const CHAPTER1_FLOW_LEVEL_INDICES = [
+  0,                    // Chapter 1-1：劍 / 基礎戰鬥
+  dogHammerStageIndex,  // Chapter 1-2：狗狗尋寶 / basicHammer 秘笈
+  2,                    // Chapter 1-3：槌子戰鬥展示（沿用現有糖果氣球懸崖）
+];
+
+// 回傳 levelIndex 在第一章流程表中的第幾步（0-based），不在流程表中回傳 -1
+function getChapter1FlowStep(levelIndex) {
+  return CHAPTER1_FLOW_LEVEL_INDICES.indexOf(levelIndex);
+}
+
+// 判斷某個 levelIndex 是否屬於第一章核心流程
+function isInChapter1Flow(levelIndex) {
+  return getChapter1FlowStep(levelIndex) !== -1;
+}
+
+// 取得「下一關」的真正 LEVELS index。
+// 若目前關卡在第一章流程表內，依流程表前進；
+// 流程表最後一步時回傳 LEVELS.length（代表流程結束，避免誤跳到橘子果園）。
+// 若目前關卡不在流程表內（例如未來其他章節關卡），fallback 回傳 levelIndex + 1，
+// 維持舊行為，不影響流程表以外的關卡。
+function getNextLevelIndex(levelIndex) {
+  const step = getChapter1FlowStep(levelIndex);
+  if (step === -1) return levelIndex + 1; // 不在第一章流程內：維持舊行為
+  if (step + 1 < CHAPTER1_FLOW_LEVEL_INDICES.length) {
+    return CHAPTER1_FLOW_LEVEL_INDICES[step + 1];
+  }
+  return LEVELS.length; // 流程表最後一步：視為「沒有下一關」
+}
+
+// 確保 playerInventory.chapter1Flow 旗標物件存在，並回傳它
+// 這些旗標只服務 v0.3.11 第一章核心流程的一次性教學 / 保底機制
+function ensureChapter1Flags() {
+  if (!playerInventory.chapter1Flow) {
+    playerInventory.chapter1Flow = {
+      dogIntroDone:               false,
+      forcedDogTripDone:          false,
+      hammerRecipeGranted:        false,
+      hammerMaterialGuaranteeDone:false,
+      hammerCraftIntroShown:      false,
+    };
+  }
+  return playerInventory.chapter1Flow;
+}
+
+// ════════════════════════════════════════════════════════
+//  v0.3.11 Chapter1 進度阻擋檢查
+//  在「前往下一關」之前呼叫，回傳 true 代表可以放行，
+//  回傳 false 代表已被阻擋（呼叫端應該 return，不要繼續前進）。
+//  兩個既有的「下一關」入口（結算畫面按鈕 / 小V的家）都呼叫這個函式，
+//  確保第一章流程的關卡阻擋邏輯只需要維護一份。
+// ════════════════════════════════════════════════════════
+function checkChapter1ProgressionGate(nextIdx) {
+  // 阻擋一：前往 Chapter1-2（狗狗尋寶關）前，必須帶狗出門
+  if (nextIdx === dogHammerStageIndex) {
+    const flags = ensureChapter1Flags();
+    const dog   = playerInventory.balloonDog || {};
+    const wantsToBringDog = (nextBringDog === true);
+
+    if (!dog.present) {
+      // 理論上第 1 關已自動發狗，這裡只是防呆
+      showHint('這一關要帶氣球小狗一起出發！牠會教你怎麼找到隱藏的寶藏。', 260);
+      return false;
+    }
+
+    if (!wantsToBringDog) {
+      showHint('這一關要帶氣球小狗一起出發！牠會教你怎麼找到隱藏的寶藏。', 260);
+      return false;
+    }
+
+    // 玩家想帶狗，但 260 不足以付狗繩費用 → 第一章教學限定補發一次
+    if ((playerInventory.balloon260 || 0) < CONFIG.DOG_LEASH_COST_BALLOON260
+        && !flags.forcedDogTripDone) {
+      playerInventory.balloon260 = (playerInventory.balloon260 || 0) + CONFIG.DOG_LEASH_COST_BALLOON260;
+      flags.forcedDogTripDone = true;
+      saveInventory();
+      showHint('小V幫你準備了 1 條 260 氣球，做成狗繩帶氣球狗出發吧！', 260);
+    }
+    return true;
+  }
+
+  // 阻擋二：前往 Chapter1-3（槌子戰鬥展示關）前，必須已製作 basicHammer
+  // 只在「從第一章流程內前進」時檢查，避免影響流程表以外的關卡跳轉
+  if (nextIdx === 2 && isInChapter1Flow(currentLevelIndex)) {
+    const ci = playerInventory.craftedItems || {};
+    if ((ci.basicHammer || 0) <= 0) {
+      showHint('材料準備好了嗎？打開氣球秘笈，先製作第一把氣球槌吧！', 280);
+      return false;
+    }
+    return true;
+  }
+
+  return true; // 其他關卡不受第一章流程阻擋
+}
 
 
 // ── 第 1 關教學劍發放 ────────────────────────
@@ -2189,6 +2420,28 @@ function grantTutorialSwordIfNeeded() {
   initEquippedSword();
   // 顯示一次性教學提示（插在目前提示序列前）
   showHint('⚔️ 小V獲得了基礎氣球劍！按 Z 打退小怪。', 320);
+}
+
+// ── 第 1 關教學狗發放（v0.3.11 Chapter1）──────
+// 規則：第 1 關 + 未曾發放 + 目前沒有狗 → 給 1 隻，顯示一次性提示
+// 做法仿照 grantTutorialSwordIfNeeded()，避免重複發放
+function grantTutorialDogIfNeeded() {
+  if (currentLevelIndex !== 0) return;                        // 只在第 1 關
+  if (playerInventory.tutorialDogGranted) return;             // 已發放過
+  const dog = playerInventory.balloonDog || {};
+  if (dog.present) {                                          // 已有狗就不送
+    playerInventory.tutorialDogGranted = true;
+    saveInventory();
+    return;
+  }
+  // 發放教學狗
+  playerInventory.balloonDog = {
+    present:   true,
+    turnsLeft: CONFIG.DOG_INITIAL_TURNS,
+  };
+  playerInventory.tutorialDogGranted = true;
+  saveInventory();
+  showHint('🐶 氣球小狗加入了！牠會陪你冒險，也能幫你找到隱藏寶物。', 320);
 }
 
 
@@ -2424,6 +2677,8 @@ function loadLevel(index) {
   // 注意：此時 initEquippedSword 尚未被 restart() 呼叫，
   // grantTutorialSwordIfNeeded 裡有獨立的 initEquippedSword 呼叫
   if (index === 0) grantTutorialSwordIfNeeded();
+  // 第 1 關：比照氣球劍，自動發放一隻氣球小狗（有保護機制，不會重複）
+  if (index === 0) grantTutorialDogIfNeeded();
   activeSlot = equippedSword.id ? 'sword' : (equippedHammer.id ? 'hammer' : 'sword');
 }
 
@@ -2464,6 +2719,12 @@ function getControlHintText(type) {
       return m
         ? '收集圓氣球，回小V的家製作氣球槌，再用「換武器」和「砍」敲飛蠍子！'
         : '收集圓氣球，回小V的家製作氣球槌，再用槌子敲飛蠍子！';
+    case 'stage3Chapter1Flow':
+      // v0.3.11：玩家透過第一章流程抵達時，槌子應該已經做好了，
+      // 文案改成槌子戰鬥教學，而不是舊版「去收集圓氣球」的文字
+      return m
+        ? '氣球槌比較重，但可以把蠍子打飛！按「換武器」切換，再按「砍」試試看！'
+        : '氣球槌比較重，但可以把蠍子打飛！有時候一槌可以連續清掉好幾隻怪！';
     case 'hammerCrafted':
       return m
         ? '氣球槌完成！先按「換武器」，再按「砍」把蠍子敲飛！'
@@ -2496,7 +2757,13 @@ function showStageStartHint(levelIndex) {
   } else if (levelIndex === 1) {
     showHint('小心尖刺與障礙！觀察路線，安全通過氣球森林！', 240);
   } else if (levelIndex === 2) {
-    showHint(getControlHintText('stage3'), 260);
+    // v0.3.11：若玩家是透過第一章流程抵達（已經有槌子），改用槌子戰鬥教學文案
+    const hasHammer = ((playerInventory.craftedItems || {}).basicHammer || 0) > 0;
+    if (isInChapter1Flow(levelIndex) && hasHammer) {
+      showHint(getControlHintText('stage3Chapter1Flow'), 260);
+    } else {
+      showHint(getControlHintText('stage3'), 260);
+    }
   }
 }
 let hintQueue  = [];   // 待顯示的提示（保留供未來排隊用）
@@ -3053,11 +3320,12 @@ function checkHiddenTreasure() {
     currentRunStats.foundHiddenTreasure = true;
 
     if (t.type === 'recipe') {
-      // 棒棒糖秘笈：pending 模式，通關才正式寫入
+      // 秘笈類隱藏物：pending 模式，通關才正式寫入
+      // recipeName / foundMsg 由關卡資料提供，避免文字寫死成棒棒糖
       if (!currentRunStats.pendingRecipeUnlocks) currentRunStats.pendingRecipeUnlocks = {};
       currentRunStats.pendingRecipeUnlocks[t.recipeKey] = true;
-      currentRunStats.foundHiddenTreasureName = '氣球棒棒糖秘笈';
-      showHint('找到隱藏秘笈：氣球棒棒糖！', 320);
+      currentRunStats.foundHiddenTreasureName = t.recipeName || '隱藏秘笈';
+      showHint(t.foundMsg || ('找到隱藏秘笈：' + (t.recipeName || '') + '！'), 320);
       console.log('hidden treasure found:', { type: 'recipe', recipeKey: t.recipeKey, bringBalloonDog,
         pending: currentRunStats.pendingRecipeUnlocks });
     } else if (t.type === 'goldChest') {
@@ -3276,26 +3544,72 @@ function triggerGameOver() {
 function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
 
+  // v0.3.11：basicHammer 不再於 1-3（index 2）通關時自動解鎖。
+  // 解鎖職責已移轉到 Chapter1-2 狗狗尋寶關（見下方 dogHammerStageIndex 區塊）。
+  // 1-3 在 Chapter1 流程中現在純粹是槌子戰鬥展示關。
   if (currentLevelIndex === 2) {
-    if (!playerInventory.unlockedRecipes)    playerInventory.unlockedRecipes    = {};
     if (!playerInventory.uniqueCollectibles) playerInventory.uniqueCollectibles = {};
-
-    // Debug log
-    console.log('[triggerClear] Before unlock basicHammer:', playerInventory.unlockedRecipes.basicHammer);
-
-    // 這局是否第一次解鎖 basicHammer？（先判斷，再設值）
-    const firstUnlock = playerInventory.unlockedRecipes.basicHammer !== true;
-    if (firstUnlock) {
-      playerInventory.unlockedRecipes.basicHammer  = true;
-      currentRunStats.unlockedHammerThisClear      = true;
-    }
-
-    console.log('[triggerClear] unlockedHammerThisClear:', currentRunStats.unlockedHammerThisClear);
-
-    // 通關帶回圓氣球：鎖定一次性收集物
+    // 通關帶回圓氣球：鎖定一次性收集物（與 hammer 解鎖無關，維持原行為）
     if (currentRunStats.roundBalloon > 0) {
       playerInventory.uniqueCollectibles.level3RoundBalloon = true;
     }
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  v0.3.11 Chapter1-2（狗狗尋寶關）結算：保底三件套
+  //  1. 槌子秘笈保底（若狗狗尋寶沒找到，這裡補發）
+  //  2. 槌子材料保底（roundBalloon 補到 2、balloon260 補到 1）
+  //  3. 製作引導（材料+秘笈到位後，提示並讓秘笈按鈕閃爍）
+  //  全部使用 playerInventory.chapter1Flow 旗標防止重玩時反覆觸發
+  // ════════════════════════════════════════════════════════
+  if (currentLevelIndex === dogHammerStageIndex) {
+    const flags = ensureChapter1Flags();
+    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+
+    // 1. 槌子秘笈保底
+    if (!flags.hammerRecipeGranted) {
+      if (playerInventory.unlockedRecipes.basicHammer !== true) {
+        playerInventory.unlockedRecipes.basicHammer = true;
+        currentRunStats.unlockedHammerThisClear     = true;
+        currentRunStats.chapter1HammerRecipeFallback = true;
+        showHint('小V突然靈光乍現，領悟了氣球槌的作法！你的氣球秘笈新增了「氣球槌」秘笈。', 320);
+      } else {
+        // 狗狗尋寶已正常找到，這裡只標記本局有解鎖供結算面板顯示
+        currentRunStats.unlockedHammerThisClear = true;
+      }
+      flags.hammerRecipeGranted = true;
+    }
+
+    // 2. 槌子材料保底（roundBalloon 補到 2、balloon260 補到 1，不可突破上限）
+    if (!flags.hammerMaterialGuaranteeDone) {
+      const haveRound = Number(playerInventory.roundBalloon || 0);
+      if (haveRound < ROUND_BALLOON_CARRY_LIMIT) {
+        const missing = ROUND_BALLOON_CARRY_LIMIT - haveRound;
+        playerInventory.roundBalloon = ROUND_BALLOON_CARRY_LIMIT;
+        currentRunStats.chapter1RoundBalloonGranted = missing;
+        showHint('氣球小狗在家門口找到 ' + missing + ' 顆圓氣球！牠搖著尾巴把材料帶回來了！', 280);
+      }
+      const have260 = Number(playerInventory.balloon260 || 0);
+      if (have260 < 1) {
+        playerInventory.balloon260 = 1;
+        currentRunStats.chapter1Balloon260Granted = true;
+        showHint('氣球小狗又找到 1 條 260 氣球！剛好可以準備製作氣球槌！', 280);
+      }
+      flags.hammerMaterialGuaranteeDone = true;
+    }
+
+    // 3. 製作引導：材料 + 秘笈都到位後提示製作（guidebook 按鈕沿用既有 highlight class）
+    if (!flags.hammerCraftIntroShown) {
+      const hasRecipe   = playerInventory.unlockedRecipes.basicHammer === true;
+      const hasMaterial = Number(playerInventory.roundBalloon || 0) >= 2
+        && Number(playerInventory.balloon260 || 0) >= 1;
+      if (hasRecipe && hasMaterial) {
+        flags.hammerCraftIntroShown = true;
+        currentRunStats.chapter1CraftIntroShown = true;
+      }
+    }
+
+    saveInventory();
   }
 
   // 隱藏物通關正式結算
@@ -3346,17 +3660,28 @@ function triggerClear() {
 function updateNextLevelButton() {
   const btn = document.getElementById('btn-play-again');
   if (!btn) return;
-  const hasNext = currentLevelIndex < LEVELS.length - 1;
+  // v0.3.11：用 getNextLevelIndex 判斷是否有下一關，
+  // 避免 dogHammerStageIndex 被附加在陣列尾端造成 LEVELS.length-1 誤判
+  const nextIdx = getNextLevelIndex(currentLevelIndex);
+  const hasNext = nextIdx < LEVELS.length;
   if (hasNext && gameState === 'clear') {
     btn.childNodes[0].textContent = '下一關';
     const sub = btn.querySelector('.result-btn-sub');
     if (sub) sub.textContent = 'Next Level';
     btn._nextLevel = true;
+
+    // v0.3.11：製作槌子前不能進 Chapter1-3 → 按鈕灰階提示（仍可點，點擊後會被
+    // checkChapter1ProgressionGate 擋下並跳提示，這裡只是視覺上先告知）
+    const blockedByCraftGate = (nextIdx === 2)
+      && isInChapter1Flow(currentLevelIndex)
+      && ((playerInventory.craftedItems || {}).basicHammer || 0) <= 0;
+    btn.style.opacity = blockedByCraftGate ? '0.5' : '';
   } else {
     btn.childNodes[0].textContent = '再玩一次';
     const sub = btn.querySelector('.result-btn-sub');
     if (sub) sub.textContent = 'Play Again';
     btn._nextLevel = false;
+    btn.style.opacity = '';
   }
 }
 
@@ -4568,7 +4893,7 @@ function populateResultPanel() {
     <div class="rp-guidebook-hint" style="border-color:rgba(160,120,255,0.4);background:rgba(80,40,160,0.15)">
       <div class="rp-guidebook-hint__title">🔨 新秘笈解鎖：基礎氣球槌！</div>
       <div class="rp-guidebook-hint__body">
-        你找到圓氣球了！可以用 <strong>圓氣球 x1 + 260 長條氣球 x1</strong> 製作基礎氣球槌。<br>
+        你找到圓氣球了！可以用 <strong>圓氣球 x2 + 260 長條氣球 x1</strong> 製作基礎氣球槌。<br>
         點選下方「氣球秘笈」查看。
       </div>
     </div>
@@ -4583,6 +4908,25 @@ function populateResultPanel() {
       </div>
     </div>
   ` : '';
+
+  // v0.3.11：第 1 關結算低血量補給教學（HP <= 1.5 才啟動，避免打斷血量健康的玩家）
+  const lowHpRescueHint = (currentLevelIndex === 0 && player.hp <= 1.5) ? (
+    (playerInventory.coins || 0) >= BANDAGE_PRICE ? `
+    <div class="rp-guidebook-hint" style="border-color:rgba(255,140,140,0.4);background:rgba(160,40,40,0.15)">
+      <div class="rp-guidebook-hint__title">🩹 你受傷了！</div>
+      <div class="rp-guidebook-hint__body">
+        可以用金幣買貼布恢復 HP！打開下方「補給」區，花 ${BANDAGE_PRICE} 🪙 買一個愛心貼布吧。
+      </div>
+    </div>
+  ` : `
+    <div class="rp-guidebook-hint" style="border-color:rgba(255,140,140,0.4);background:rgba(160,40,40,0.15)">
+      <div class="rp-guidebook-hint__title">🩹 你受傷了！</div>
+      <div class="rp-guidebook-hint__body">
+        金幣不夠也沒關係，氣球小狗會陪你繼續冒險！
+      </div>
+    </div>
+  `) : '';
+
 
   const panel = document.getElementById('result-panel-body');
   if (!panel) return;
@@ -4599,6 +4943,19 @@ function populateResultPanel() {
     dogInner += '<div class="rp-row"><span class="rp-label">陪伴</span><span class="rp-val result-blue">' + dsDog.turns + '</span></div>';
     if (currentRunStats.dogHealed) {
       dogInner += '<div class="rp-row"><span class="rp-label">❤️ 結算回血</span><span class="rp-val result-red">+0.5</span></div>';
+    }
+    // v0.3.11：第 1 關結算，完整說明氣球狗陪伴機制（只顯示一次，避免重玩洗版）
+    if (currentLevelIndex === 0) {
+      const ch1Flags = ensureChapter1Flags();
+      if (!ch1Flags.dogIntroDone) {
+        ch1Flags.dogIntroDone = true;
+        saveInventory();
+        dogInner += '<div class="rp-supply-hp" style="color:#ffe080">'
+          + '氣球狗療癒了你的心，HP +' + CONFIG.DOG_HEAL_AMOUNT + '！牠還能陪你冒險 '
+          + CONFIG.DOG_INITIAL_TURNS + ' 回合。帶牠出門需要消耗 1 條 260 氣球作為狗繩。'
+          + '氣球狗會幫你找到隱藏的寶藏！'
+          + '</div>';
+      }
     }
     if (currentRunStats.dogGoneThisClear) {
       dogInner += '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>';
@@ -4713,6 +5070,7 @@ function populateResultPanel() {
   html += treasureHint;
   html += hammerHint;
   html += guideBookHint;
+  html += lowHpRescueHint;
   // 氣球小狗
   html += dogSectionHtml;
   // 可收合的三層
@@ -5427,7 +5785,8 @@ function homeGoNextLevel() {
       return;
     }
     // 通關模式：正常前往下一關，保留 HP
-    const nextIdx = currentLevelIndex + 1;
+    // v0.3.11：第一章流程用 getNextLevelIndex 算下一關，而不是裸寫 + 1
+    const nextIdx = getNextLevelIndex(currentLevelIndex);
     if (nextIdx >= LEVELS.length) {
       // 最後一關再玩：snapshot 還原
       if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
@@ -5436,6 +5795,10 @@ function homeGoNextLevel() {
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
       restart({ keepHp: true });
+      return;
+    }
+    // v0.3.11：第一章流程阻擋檢查（強制帶狗 / 製作槌子才能進下一關）
+    if (!checkChapter1ProgressionGate(nextIdx)) {
       return;
     }
     bringBalloonDog = (nextBringDog === true);
@@ -5663,7 +6026,9 @@ function hideResultButtons() {
         if (gameState !== 'playing') {
           try {
             if (btnPlay._nextLevel && gameState === 'clear') { // 防呆：只有 clear 才能進下一關
-              const nextIdx = currentLevelIndex + 1;
+              // v0.3.11：第一章流程用 getNextLevelIndex 算下一關，
+              // 而不是裸寫 currentLevelIndex + 1（避免誤跳橘子果園）
+              const nextIdx = getNextLevelIndex(currentLevelIndex);
               console.log('NEXT LEVEL CLICKED', {
                 currentLevelIndex, nextIdx,
                 levelsLength: LEVELS.length,
@@ -5674,6 +6039,10 @@ function hideResultButtons() {
                 console.warn('No more levels, restarting current');
                 loadLevel(currentLevelIndex);
                 restart();
+                return;
+              }
+              // v0.3.11：第一章流程阻擋檢查（強制帶狗 / 製作槌子才能進下一關）
+              if (!checkChapter1ProgressionGate(nextIdx)) {
                 return;
               }
               bringBalloonDog = (nextBringDog === true);
