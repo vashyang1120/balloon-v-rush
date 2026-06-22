@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.12-first-chapter-experience-polish-test-1';
-const BUILD_TIME   = '2026-06-23 14:00';
+const GAME_VERSION = 'adventure-v0.3.12-first-chapter-experience-polish-test-2';
+const BUILD_TIME   = '2026-06-23 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -942,16 +942,16 @@ function resetAdventureTestState() {
   resetInventory();
   currentLevelIndex = 0;
   loadLevel(0);
-  initEquippedSword();
-  initEquippedHammer();
-  normalizeActiveWeaponSlot();
-  applyAdventureTestLoadout(); // 重置後補回 runtime-only sword + hammer
-  // 關閉 pause-overlay（若目前在暫停狀態）
+  // v0.3.12-test-2：呼叫 restart() 確保 player 位置 / HP / currentRunStats 全部歸零，
+  // 避免從第 2 / 3 節重置後帶著舊狀態進入第 1 節（原本只有 loadLevel 是不夠的）
+  nextBringDog  = false;
+  bringBalloonDog = false;
+  restart({ keepHp: false });
+  // 關閉 pause-overlay（restart 裡也關，但這裡多做一次防呆）
   const pauseEl = document.getElementById('pause-overlay');
   if (pauseEl) pauseEl.classList.remove('active');
-  // 直接進入遊戲（1-1），不繞小V的家
-  gameState = 'playing';
-  showHint('已重置測試狀態，從第 1 關重新開始', 180);
+  if (pauseEl) pauseEl.style.display = 'none';
+  showHint('已重置測試狀態，從第 1 節重新開始', 180);
   console.log('[TestTools] resetAdventureTestState complete:', {
     currentLevelIndex,
     stageId: LEVELS[currentLevelIndex] && LEVELS[currentLevelIndex].stageId,
@@ -3479,14 +3479,19 @@ function checkHiddenTreasure() {
     // v0.3.12：取得瞬間最小視覺回饋（文字上飄 + 淡出，不影響任何取得邏輯）
     // 在這裡先 spawn，後面 showHint 和 pendingRecipe 邏輯不受影響
     {
-      const pickupLabel = t.recipeName
-        ? '獲得：' + t.recipeName + '！'
-        : (t.type === 'goldChest' ? '獲得金幣寶箱！' : '找到隱藏寶藏！');
-      spawnTreasurePickupEffect(
-        t.x,
-        typeof t.y === 'number' ? t.y - 20 : player.y - 30,
-        pickupLabel
-      );
+      // v0.3.12-test-2：RPG 式重要道具通知框，title + subtitle 兩行
+      let notifTitle, notifSubtitle;
+      if (t.type === 'recipe') {
+        notifTitle    = '📖 獲得' + (t.recipeName ? t.recipeName + '！' : '秘笈！');
+        notifSubtitle = t.recipeName ? '氣球秘笈新增：' + t.recipeName : '';
+      } else if (t.type === 'goldChest') {
+        notifTitle    = '🎁 獲得金幣寶箱！';
+        notifSubtitle = '金幣 +' + (t.rewardCoins || 30);
+      } else {
+        notifTitle    = '找到隱藏寶藏！';
+        notifSubtitle = '';
+      }
+      spawnTreasurePickupEffect(notifTitle, notifSubtitle);
     }
 
     if (t.type === 'recipe') {
@@ -3897,6 +3902,7 @@ function draw() {
     drawWorld();
     drawHUD();
     drawHintBox();
+    drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
   } else if (gameState === 'paused') {
     drawWorld();
     drawHUD();
@@ -4022,8 +4028,7 @@ function drawWorld() {
 
   // 蠍子死亡視覺演出（獨立 effects 陣列，不參與碰撞）
   drawScorpionDefeatEffects(cameraX);
-  // v0.3.12：隱藏寶藏取得視覺回饋（完全獨立，不共用蠍子特效）
-  drawTreasurePickupEffects(cameraX);
+  // treasurePickupEffects 已移至 draw() 頂層，在 HUD 上方渲染（screen-space）
 
   // 旋轉飛出的小怪（被槌子擊飛時改用 scorpion_hurt_01.png）
   spinningEnemies.forEach(s => {
@@ -4322,14 +4327,14 @@ function drawHiddenTreasure(sx, t) {
   } else {
     switch (dogNoseLevel) {
       case 0:  treasureAlpha = 0;    break; // 很遠：完全不可見
-      case 1:  treasureAlpha = 0.1;  break; // 微亮：剛剛隱約
-      case 2:  treasureAlpha = 0.3;  break; // 亮：愈來愈清楚
-      case 3:  treasureAlpha = 0.55; break; // 閃爍：清楚可見
+      case 1:  treasureAlpha = 0.25; break; // 微亮：稍微可見
+      case 2:  treasureAlpha = 0.45; break; // 亮：清楚可見
+      case 3:  treasureAlpha = 0.70; break; // 閃爍：非常清楚
       default: treasureAlpha = 0;
     }
     // 非常靠近取得範圍時（dist <= 80），再拉高透明度讓玩家確認自己快拿到了
     const dist = Math.abs(player.x - t.x);
-    if (dist <= 80) treasureAlpha = 0.75;
+    if (dist <= 80) treasureAlpha = 0.95;
   }
 
   if (treasureAlpha <= 0) return; // 完全不可見：直接跳過
@@ -4363,14 +4368,16 @@ function drawHiddenTreasure(sx, t) {
 // 設計：純文字上飄 + alpha 淡出，不需粒子、不需音效、不需圖片素材。
 // 完全獨立於 scorpionDefeatEffects，不共用任何結構。
 // ──────────────────────────────────────────────────────
-function spawnTreasurePickupEffect(worldX, worldY, text) {
-  treasurePickupEffects.push({
-    x:        worldX,
-    y:        worldY,
-    text:     text,
-    timer:    0,
-    duration: 52, // 約 0.87 秒 @60fps，在 0.4～0.8 秒建議範圍邊緣上（夠明顯）
-  });
+// v0.3.12-test-2：RPG 式重要道具通知框（screen-space，畫面中央偏上）
+// duration = 90 frames @60fps ≈ 1.5s；淡入 9f / 停留 54f / 淡出 27f
+const TREASURE_NOTIF_DURATION  = 90;
+const TREASURE_NOTIF_FADE_IN   = 9;
+const TREASURE_NOTIF_FADE_OUT  = 27;
+
+function spawnTreasurePickupEffect(title, subtitle) {
+  // 最多同時只顯示一個（新通知蓋掉舊的，避免多通知堆疊）
+  treasurePickupEffects.length = 0;
+  treasurePickupEffects.push({ title, subtitle, timer: 0, duration: TREASURE_NOTIF_DURATION });
 }
 
 function updateTreasurePickupEffects() {
@@ -4382,24 +4389,66 @@ function updateTreasurePickupEffects() {
   }
 }
 
-function drawTreasurePickupEffects(cx) {
+function drawTreasurePickupEffects(cx) { // cx 保留參數名相容呼叫端，此版未使用（screen-space）
   if (treasurePickupEffects.length === 0) return;
+  const e = treasurePickupEffects[0]; // 只顯示第一個
+  const t = e.timer, d = e.duration;
+
+  // alpha 計算：淡入 → 停留 → 淡出
+  let alpha;
+  if (t < TREASURE_NOTIF_FADE_IN) {
+    alpha = t / TREASURE_NOTIF_FADE_IN;
+  } else if (t < d - TREASURE_NOTIF_FADE_OUT) {
+    alpha = 1;
+  } else {
+    alpha = (d - t) / TREASURE_NOTIF_FADE_OUT;
+  }
+  alpha = Math.max(0, Math.min(1, alpha));
+  if (alpha <= 0) return;
+
   ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 通知框尺寸與位置（中央偏上）
+  const boxW  = 290;
+  const boxH  = e.subtitle ? 66 : 46;
+  const boxX  = (CANVAS_W - boxW) / 2;
+  const boxY  = CANVAS_H * 0.24;
+  const rad   = 10;
+
+  // 半透明深色底
+  ctx.fillStyle = 'rgba(10,5,30,0.82)';
+  ctx.beginPath();
+  ctx.moveTo(boxX + rad, boxY);
+  ctx.lineTo(boxX + boxW - rad, boxY);
+  ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + rad);
+  ctx.lineTo(boxX + boxW, boxY + boxH - rad);
+  ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - rad, boxY + boxH);
+  ctx.lineTo(boxX + rad, boxY + boxH);
+  ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - rad);
+  ctx.lineTo(boxX, boxY + rad);
+  ctx.quadraticCurveTo(boxX, boxY, boxX + rad, boxY);
+  ctx.closePath();
+  ctx.fill();
+
+  // 金色邊框
+  ctx.strokeStyle = 'rgba(255,210,80,0.75)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 標題文字（第一行，金色）
   ctx.textAlign = 'center';
   ctx.font = 'bold 15px sans-serif';
-  for (const e of treasurePickupEffects) {
-    const progress = e.timer / e.duration;         // 0→1
-    const alpha    = Math.max(0, 1 - progress);    // 1→0 淡出
-    const floatY   = e.y - progress * 36;          // 往上飄 36px
-    const sx       = e.x - cx;
-    if (sx < -80 || sx > CANVAS_W + 80) continue;
-    ctx.globalAlpha = alpha;
-    // 字後面的亮底讓文字在任何背景都清楚
-    ctx.fillStyle = 'rgba(40,20,0,0.55)';
-    ctx.fillText(e.text, sx + 2, floatY + 2);     // 陰影
-    ctx.fillStyle = '#ffe066';
-    ctx.fillText(e.text, sx, floatY);
+  ctx.fillStyle = '#ffe066';
+  ctx.fillText(e.title, CANVAS_W / 2, boxY + 22);
+
+  // 副標題（第二行，白色）
+  if (e.subtitle) {
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = 'rgba(230,220,255,0.9)';
+    ctx.fillText(e.subtitle, CANVAS_W / 2, boxY + 44);
   }
+
   ctx.restore();
 }
 
@@ -6637,11 +6686,57 @@ function showCraftMessage(msg) {
   }
 })();
 
+// v0.3.12-test-2：核心素材就緒判斷
+// 只檢查幾張最基本的圖片，避免閃爍；不等太久（有 timeout fallback）
+const CORE_ART_KEYS = ['idle', 'run01', 'run02', 'run03', 'run04', 'run05', 'jump', 'fall'];
+let _artReadyConfirmed = false;
+let _artReadyStartMs   = 0;
+const ART_READY_TIMEOUT_MS = 5000; // 5 秒後強制 fallback，避免卡死
+
+function isAdventureCoreArtReady() {
+  if (_artReadyConfirmed) return true;
+  // 每幀檢查：所有 CORE_ART_KEYS 都已載入完成
+  const heroOk = CORE_ART_KEYS.every(k => {
+    const img = adventureImages[k];
+    return img && img.complete && img.naturalWidth > 0;
+  });
+  const scorpionOk = scorpionWalkReady; // 至少 1 張蠍子 walk 圖已就緒
+  if (heroOk && scorpionOk) {
+    _artReadyConfirmed = true;
+    return true;
+  }
+  // timeout fallback：超過 5 秒就不再等了
+  if (_artReadyStartMs > 0 && (performance.now() - _artReadyStartMs) > ART_READY_TIMEOUT_MS) {
+    console.warn('[Art] Core art timeout after 5s, proceeding with fallback geometry.');
+    _artReadyConfirmed = true;
+    return true;
+  }
+  return false;
+}
+
 // ── Game loop ─────────────────────────────────
 function loop(timestamp) {
   const dtMs = lastTime ? Math.min(timestamp - lastTime, 50) : 16.667;
   const dt   = dtMs / 16.667; // frame multiplier for physics (1.0 at 60fps)
   lastTime   = timestamp;
+
+  // v0.3.12-test-2：核心素材尚未就緒時，只繪製等待畫面，不跑 update/draw，
+  // 避免 hero / 蠍子在幾何 fallback 與正式圖片之間閃爍
+  if (!isAdventureCoreArtReady()) {
+    if (_artReadyStartMs === 0) _artReadyStartMs = performance.now();
+    ctx.fillStyle = '#1a1230';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = 'rgba(200,180,255,0.85)';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('氣球正在充氣中…', CANVAS_W / 2, CANVAS_H / 2);
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = 'rgba(180,160,220,0.6)';
+    const elapsed = Math.floor((performance.now() - _artReadyStartMs) / 1000);
+    ctx.fillText('素材準備中 ' + elapsed + 's', CANVAS_W / 2, CANVAS_H / 2 + 28);
+    requestAnimationFrame(loop);
+    return;
+  }
 
   if (!screenFreezeForTest) {
     update(dt, dtMs); // 測試版 F8 凍結時跳過 update（不扣時間/不推進動畫）
