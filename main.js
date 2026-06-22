@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-4';
-const BUILD_TIME   = '2026-06-19 10:00';
+const GAME_VERSION = 'adventure-v0.3.12-first-chapter-experience-polish-test-1';
+const BUILD_TIME   = '2026-06-23 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2802,6 +2802,7 @@ function loadLevel(index) {
   if (lv.buildTrees) lv.buildTrees().forEach(t => breakableTrees.push(t));
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
+  treasurePickupEffects.length = 0; // v0.3.12
 
   // 複製 hints（每次都要 reset shown 狀態）
   HINTS.length = 0;
@@ -3003,6 +3004,7 @@ function update(dt, dtMs = 16.667) {
   updateHammerMelee();
   updateSpinningEnemies(dt);
   updateScorpionDefeatEffects(dt);
+  updateTreasurePickupEffects(); // v0.3.12
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
   checkCollectibles();
@@ -3272,6 +3274,9 @@ function updateOrangeNemeses(dtMs) {
 let spinningEnemies = [];
 let scorpionDefeatEffects = []; // 純視覺死亡演出（不參與碰撞/攻擊/扣血）
 
+// v0.3.12：隱藏寶藏取得瞬間最小視覺回饋（完全獨立，不共用蠍子特效）
+let treasurePickupEffects = [];
+
 function spawnScorpionDefeatEffect(e) {
   scorpionDefeatEffects.push({
     x:          e.x,
@@ -3470,6 +3475,19 @@ function checkHiddenTreasure() {
 
     t.found = true;
     currentRunStats.foundHiddenTreasure = true;
+
+    // v0.3.12：取得瞬間最小視覺回饋（文字上飄 + 淡出，不影響任何取得邏輯）
+    // 在這裡先 spawn，後面 showHint 和 pendingRecipe 邏輯不受影響
+    {
+      const pickupLabel = t.recipeName
+        ? '獲得：' + t.recipeName + '！'
+        : (t.type === 'goldChest' ? '獲得金幣寶箱！' : '找到隱藏寶藏！');
+      spawnTreasurePickupEffect(
+        t.x,
+        typeof t.y === 'number' ? t.y - 20 : player.y - 30,
+        pickupLabel
+      );
+    }
 
     if (t.type === 'recipe') {
       // 秘笈類隱藏物：pending 模式，通關才正式寫入
@@ -4004,6 +4022,8 @@ function drawWorld() {
 
   // 蠍子死亡視覺演出（獨立 effects 陣列，不參與碰撞）
   drawScorpionDefeatEffects(cameraX);
+  // v0.3.12：隱藏寶藏取得視覺回饋（完全獨立，不共用蠍子特效）
+  drawTreasurePickupEffects(cameraX);
 
   // 旋轉飛出的小怪（被槌子擊飛時改用 scorpion_hurt_01.png）
   spinningEnemies.forEach(s => {
@@ -4294,9 +4314,31 @@ function drawRoundBalloon(x, y) {
 
 
 function drawHiddenTreasure(sx, t) {
-  // 寶物：輕微上下浮動，帶狗時有輝光
-  const bob = Math.sin(frameCount * 0.05) * 4;
+  // v0.3.12：寶藏透明度依狗鼻亮度（dogNoseLevel）逐步浮現
+  // 沒帶狗時呼叫端已攔截（外層 bringBalloonDog 判斷），但做 fallback 防呆
+  let treasureAlpha;
+  if (!bringBalloonDog) {
+    treasureAlpha = 0;
+  } else {
+    switch (dogNoseLevel) {
+      case 0:  treasureAlpha = 0;    break; // 很遠：完全不可見
+      case 1:  treasureAlpha = 0.1;  break; // 微亮：剛剛隱約
+      case 2:  treasureAlpha = 0.3;  break; // 亮：愈來愈清楚
+      case 3:  treasureAlpha = 0.55; break; // 閃爍：清楚可見
+      default: treasureAlpha = 0;
+    }
+    // 非常靠近取得範圍時（dist <= 80），再拉高透明度讓玩家確認自己快拿到了
+    const dist = Math.abs(player.x - t.x);
+    if (dist <= 80) treasureAlpha = 0.75;
+  }
+
+  if (treasureAlpha <= 0) return; // 完全不可見：直接跳過
+
+  const bob  = Math.sin(frameCount * 0.05) * 4;
   const glow = bringBalloonDog ? dogNoseGlow * 0.6 : 0;
+
+  ctx.save();
+  ctx.globalAlpha = treasureAlpha;
 
   if (glow > 0.1) {
     ctx.fillStyle = `rgba(255,240,100,${glow * 0.35})`;
@@ -4304,18 +4346,61 @@ function drawHiddenTreasure(sx, t) {
     ctx.arc(sx + 16, t.y + bob + 16, 32, 0, Math.PI * 2);
     ctx.fill();
   }
-  // 圖示
   ctx.font = '28px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(t.emoji, sx + 16, t.y + bob + 20);
-  // 問號（帶狗時才顯示，否則完全隱藏）
-  if (!bringBalloonDog) {
-    ctx.fillStyle = 'rgba(255,255,255,0)'; // 完全透明：沒帶狗看不到
-  } else if (dogNoseGlow < 0.5) {
-    ctx.fillStyle = 'rgba(255,255,150,0.3)';
+  // 問號提示（靠近但尚未最亮時顯示）
+  if (dogNoseGlow < 0.5) {
+    ctx.fillStyle = 'rgba(255,255,150,0.6)';
     ctx.font = '12px sans-serif';
     ctx.fillText('?', sx + 16, t.y + bob - 8);
   }
+  ctx.restore();
+}
+
+// v0.3.12：隱藏寶藏取得瞬間最小視覺回饋
+// ──────────────────────────────────────────────────────
+// 設計：純文字上飄 + alpha 淡出，不需粒子、不需音效、不需圖片素材。
+// 完全獨立於 scorpionDefeatEffects，不共用任何結構。
+// ──────────────────────────────────────────────────────
+function spawnTreasurePickupEffect(worldX, worldY, text) {
+  treasurePickupEffects.push({
+    x:        worldX,
+    y:        worldY,
+    text:     text,
+    timer:    0,
+    duration: 52, // 約 0.87 秒 @60fps，在 0.4～0.8 秒建議範圍邊緣上（夠明顯）
+  });
+}
+
+function updateTreasurePickupEffects() {
+  for (let i = treasurePickupEffects.length - 1; i >= 0; i--) {
+    treasurePickupEffects[i].timer++;
+    if (treasurePickupEffects[i].timer >= treasurePickupEffects[i].duration) {
+      treasurePickupEffects.splice(i, 1);
+    }
+  }
+}
+
+function drawTreasurePickupEffects(cx) {
+  if (treasurePickupEffects.length === 0) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 15px sans-serif';
+  for (const e of treasurePickupEffects) {
+    const progress = e.timer / e.duration;         // 0→1
+    const alpha    = Math.max(0, 1 - progress);    // 1→0 淡出
+    const floatY   = e.y - progress * 36;          // 往上飄 36px
+    const sx       = e.x - cx;
+    if (sx < -80 || sx > CANVAS_W + 80) continue;
+    ctx.globalAlpha = alpha;
+    // 字後面的亮底讓文字在任何背景都清楚
+    ctx.fillStyle = 'rgba(40,20,0,0.55)';
+    ctx.fillText(e.text, sx + 2, floatY + 2);     // 陰影
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(e.text, sx, floatY);
+  }
+  ctx.restore();
 }
 
 // 鼻子顏色：4 段（dogNoseLevel 0-3）
@@ -5471,6 +5556,11 @@ function initHomeCards() {
       const targetId = card.dataset.target;
       const section  = document.getElementById(targetId);
       if (!section) return;
+      // v0.3.12：「氣球秘笈」卡片直接打開秘笈 overlay，不再需要展開區塊後再按一次按鈕
+      if (targetId === 'home-guidebook-section') {
+        openGuidebook();
+        return;
+      }
       // 收合其他 section（不含 home-next-stage-section，它是固定的）
       document.querySelectorAll('#home-body .home-section').forEach(s => {
         s.style.display = 'none';
@@ -6251,6 +6341,7 @@ function restart(opts) {
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
+  treasurePickupEffects.length = 0; // v0.3.12
   breakableTrees.forEach(t => { t.state = 'standing'; t.fallTimer = 0; t.safeZone = null; });
   projectiles.length = 0;
   resetHints();
