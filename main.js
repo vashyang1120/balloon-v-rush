@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-3';
-const BUILD_TIME   = '2026-06-18 11:00';
+const GAME_VERSION = 'adventure-v0.3.11-chapter1-core-flow-test-4';
+const BUILD_TIME   = '2026-06-19 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1238,11 +1238,12 @@ const INVENTORY_DEFAULTS = {
   },
   // v0.3.11 Chapter1 核心流程旗標（一次性教學 / 保底機制，隨背包存檔）
   chapter1Flow: {
-    dogIntroDone:                false,
-    forcedDogTripDone:           false,
-    hammerRecipeGranted:         false,
-    hammerMaterialGuaranteeDone: false,
-    hammerCraftIntroShown:       false,
+    dogIntroDone:                  false,
+    forcedDogTripDone:             false,
+    hammerRecipeGranted:           false,
+    hammerMaterialGuaranteeDone:   false,
+    hammerCraftIntroShown:         false,
+    chapter1LowHpSupplyRescueDone: false,
   },
 };
 
@@ -2215,7 +2216,7 @@ const LEVELS = [
       { x: 1100, y: GROUND_Y - 100, w: 140, h: 18 },
       { x: 1500, y: GROUND_Y - 140, w: 120, h: 18 },
       { x: 1900, y: GROUND_Y - 110, w: 150, h: 18 },
-      { x: 2300, y: GROUND_Y - 180, w: 160, h: 18 }, // 秘笈所在高平台
+      { x: 2300, y: GROUND_Y - 120, w: 160, h: 18 }, // v0.3.11-test-4：秘笈平台，原本 -180 玩家跳不上去，改成 -120（與其他主路線平台同高度）
       { x: 2700, y: GROUND_Y - 120, w: 130, h: 18 },
       { x: 3200, y: GROUND_Y - 100, w: 140, h: 18 },
       { x: 3700, y: GROUND_Y - 130, w: 150, h: 18 },
@@ -2272,8 +2273,8 @@ const LEVELS = [
       recipeKey:  'basicHammer',
       recipeName: '氣球槌秘笈',
       foundMsg:   '找到氣球槌秘笈！原來圓球可以做成氣球槌！',
-      x:          2450,            // 高平台上，需要狗才容易察覺
-      y:          GROUND_Y - 195,
+      x:          2380,            // v0.3.11-test-4：對齊新平台（x:2300, w:160），位於平台中段偏右
+      y:          GROUND_Y - 150,  // v0.3.11-test-4：浮在平台（GROUND_Y-120）上方 30px，玩家站上平台後一抬頭就能碰到
       found:      false,
       emoji:      '🔨',
     },
@@ -2338,11 +2339,12 @@ function getNextLevelIndex(levelIndex) {
 function ensureChapter1Flags() {
   if (!playerInventory.chapter1Flow) {
     playerInventory.chapter1Flow = {
-      dogIntroDone:               false,
-      forcedDogTripDone:          false,
-      hammerRecipeGranted:        false,
-      hammerMaterialGuaranteeDone:false,
-      hammerCraftIntroShown:      false,
+      dogIntroDone:                  false,
+      forcedDogTripDone:             false,
+      hammerRecipeGranted:           false,
+      hammerMaterialGuaranteeDone:   false,
+      hammerCraftIntroShown:         false,
+      chapter1LowHpSupplyRescueDone: false,
     };
   }
   return playerInventory.chapter1Flow;
@@ -3706,6 +3708,27 @@ function triggerClear() {
   }
 
   // ════════════════════════════════════════════════════════
+  //  v0.3.11-test-4 第一章低血量補給救濟
+  //  ──────────────────────────────────────────────────────
+  //  第 1 節通關結算時，若玩家 HP <= 1.5 且金幣不夠買一張愛心貼布，
+  //  把金幣「補足」到剛好能買一張（不是直接送貼布），
+  //  讓玩家仍然要自己按「購買並使用」才會學到補給機制。
+  //  限定第一章流程內，只發一次（chapter1Flow.chapter1LowHpSupplyRescueDone）。
+  // ════════════════════════════════════════════════════════
+  if (currentLevelIndex === 0 && isInChapter1Flow(currentLevelIndex)) {
+    const flags = ensureChapter1Flags();
+    if (!flags.chapter1LowHpSupplyRescueDone
+        && player.hp <= 1.5
+        && (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST) {
+      const missing = CONFIG.HEART_PATCH_COST - (playerInventory.coins || 0);
+      playerInventory.coins = (playerInventory.coins || 0) + missing;
+      flags.chapter1LowHpSupplyRescueDone = true;
+      currentRunStats.chapter1LowHpSupplyRescueGranted = missing; // 給結算面板顯示用
+      saveInventory();
+    }
+  }
+
+  // ════════════════════════════════════════════════════════
   //  v0.3.11 Chapter1-2（狗狗尋寶關）結算：保底三件套
   //  1. 槌子秘笈保底（若狗狗尋寶沒找到，這裡補發）
   //  2. 槌子材料保底（roundBalloon 補到 2、balloon260 補到 1）
@@ -3717,14 +3740,24 @@ function triggerClear() {
     if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
 
     // 1. 槌子秘笈保底
+    // v0.3.11-test-4 修正：原本用 playerInventory.unlockedRecipes.basicHammer 是否為 true
+    // 來判斷玩家「是否已經真的找到」，但這個欄位要等到下面「隱藏物通關正式結算」
+    // 區塊（在這之後才執行）才會真的被寫入 true，導致即使玩家這局真的有碰到
+    // hiddenTreasure，這裡判斷時欄位仍是 undefined，誤判成保底、顯示錯誤文案。
+    // 改用 currentRunStats.foundHiddenTreasure（在 checkHiddenTreasure() 玩家實際
+    // 碰到時就會立刻設成 true，不受結算區塊執行順序影響）來判斷，並且這裡直接把
+    // 秘笈寫入 playerInventory，讓後面的正式結算區塊即使重複寫一次也是 idempotent。
     if (!flags.hammerRecipeGranted) {
-      if (playerInventory.unlockedRecipes.basicHammer !== true) {
+      const genuinelyFound = currentRunStats.foundHiddenTreasure === true;
+      if (!genuinelyFound) {
         playerInventory.unlockedRecipes.basicHammer = true;
         currentRunStats.unlockedHammerThisClear     = true;
         currentRunStats.chapter1HammerRecipeFallback = true;
         showHint('小V突然靈光乍現，領悟了氣球槌的作法！你的氣球秘笈新增了「氣球槌」秘笈。', 320);
       } else {
-        // 狗狗尋寶已正常找到，這裡只標記本局有解鎖供結算面板顯示
+        // 狗狗尋寶已正常找到：這裡也直接寫入秘笈（不等下面正式結算區塊），
+        // 確保不管後面區塊有沒有跑、跑的順序如何，秘笈一定會到位
+        playerInventory.unlockedRecipes.basicHammer = true;
         currentRunStats.unlockedHammerThisClear = true;
       }
       flags.hammerRecipeGranted = true;
@@ -5035,7 +5068,9 @@ function populateResultPanel() {
       + '<div class="rp-guidebook-hint__body">'
       + (currentRunStats.foundHiddenTreasureName === '金幣寶箱'
           ? '金幣寶箱 +' + (currentRunStats.pendingCoins || 30) + ' 金幣 已加入背包！'
-          : '氣球棒棒糖秘笈已解鎖！可在氣球秘笈中查看。')
+          : currentRunStats.foundHiddenTreasureName === '氣球槌秘笈'
+            ? '找到氣球槌秘笈！原來圓球可以做成氣球槌！'
+            : '氣球棒棒糖秘笈已解鎖！可在氣球秘笈中查看。')
       + '</div></div>')
     : '';
 
@@ -5049,16 +5084,26 @@ function populateResultPanel() {
   const canBringDog   = hasDog && (playerInventory.balloon260 || 0) >= 1;
 
   // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
+  // v0.3.11-test-4：實際找到 vs 結算保底，文案分流（不要讓保底也說「你找到了」）
   const ur = playerInventory.unlockedRecipes || {};
-  const hammerHint = currentRunStats.unlockedHammerThisClear ? `
+  const hammerHint = currentRunStats.unlockedHammerThisClear ? (
+    currentRunStats.chapter1HammerRecipeFallback ? `
     <div class="rp-guidebook-hint" style="border-color:rgba(160,120,255,0.4);background:rgba(80,40,160,0.15)">
       <div class="rp-guidebook-hint__title">🔨 新秘笈解鎖：基礎氣球槌！</div>
       <div class="rp-guidebook-hint__body">
-        你找到圓氣球了！可以用 <strong>圓氣球 x2 + 260 長條氣球 x1</strong> 製作基礎氣球槌。<br>
+        小V靈光乍現，突然領悟了氣球槌的製作方法！氣球秘笈新增：<strong>基礎氣球槌</strong>。<br>
+        用 <strong>圓氣球 x2 + 260 長條氣球 x1</strong> 即可製作。點選下方「氣球秘笈」查看。
+      </div>
+    </div>
+  ` : `
+    <div class="rp-guidebook-hint" style="border-color:rgba(160,120,255,0.4);background:rgba(80,40,160,0.15)">
+      <div class="rp-guidebook-hint__title">🔨 新秘笈解鎖：基礎氣球槌！</div>
+      <div class="rp-guidebook-hint__body">
+        找到氣球槌秘笈！原來圓球可以做成氣球槌！可以用 <strong>圓氣球 x2 + 260 長條氣球 x1</strong> 製作。<br>
         點選下方「氣球秘笈」查看。
       </div>
     </div>
-  ` : '';
+  `) : '';
 
   // 第 1 關結算：加入氣球秘笈教學區塊
   const guideBookHint = currentLevelIndex === 0 ? `
@@ -5071,8 +5116,24 @@ function populateResultPanel() {
   ` : '';
 
   // v0.3.11：第 1 關結算低血量補給教學（HP <= 1.5 才啟動，避免打斷血量健康的玩家）
-  const lowHpRescueHint = (currentLevelIndex === 0 && player.hp <= 1.5) ? (
-    (playerInventory.coins || 0) >= BANDAGE_PRICE ? `
+  // v0.3.11-test-4：低血量補給救濟若這次有觸發（chapter1LowHpSupplyRescueGranted 有值），
+  // 顯示救濟專屬文案；否則維持原本「夠/不夠」兩種文案
+  // ──────────────────────────────────────────────────────
+  // 重要：救濟判定（triggerClear 內）發生在氣球狗回血（+0.5）之前，
+  // 但這個提示是在 populateResultPanel 才組裝，回血早就跑完了。
+  // 如果外層只看「目前 player.hp <= 1.5」，玩家剛好以 1.5 結算、
+  // 觸發了救濟、卻被狗狗回血到 2.0，提示就會憑空消失——金幣多了卻不知道為什麼。
+  // 所以外層判斷要「這次有觸發救濟」OR「目前仍然血量低」兩者其一即可顯示。
+  const lowHpRescueHint = (currentLevelIndex === 0
+      && (currentRunStats.chapter1LowHpSupplyRescueGranted || player.hp <= 1.5)) ? (
+    currentRunStats.chapter1LowHpSupplyRescueGranted ? `
+    <div class="rp-guidebook-hint" style="border-color:rgba(255,140,140,0.4);background:rgba(160,40,40,0.15)">
+      <div class="rp-guidebook-hint__title">🩹 你受傷了！</div>
+      <div class="rp-guidebook-hint__body">
+        小V幫你補足了補給金，可以先買一張愛心貼布！打開下方「補給」區看看吧。
+      </div>
+    </div>
+  ` : (playerInventory.coins || 0) >= BANDAGE_PRICE ? `
     <div class="rp-guidebook-hint" style="border-color:rgba(255,140,140,0.4);background:rgba(160,40,40,0.15)">
       <div class="rp-guidebook-hint__title">🩹 你受傷了！</div>
       <div class="rp-guidebook-hint__body">
