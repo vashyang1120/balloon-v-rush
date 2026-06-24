@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.12-first-chapter-experience-polish-test-2';
-const BUILD_TIME   = '2026-06-23 16:00';
+const GAME_VERSION = 'adventure-v0.3.12-first-chapter-experience-polish-test-3';
+const BUILD_TIME   = '2026-06-24 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4327,14 +4327,14 @@ function drawHiddenTreasure(sx, t) {
   } else {
     switch (dogNoseLevel) {
       case 0:  treasureAlpha = 0;    break; // 很遠：完全不可見
-      case 1:  treasureAlpha = 0.25; break; // 微亮：稍微可見
-      case 2:  treasureAlpha = 0.45; break; // 亮：清楚可見
-      case 3:  treasureAlpha = 0.70; break; // 閃爍：非常清楚
+      case 1:  treasureAlpha = 0.35; break; // 微亮：比較有感
+      case 2:  treasureAlpha = 0.60; break; // 亮：明顯可見
+      case 3:  treasureAlpha = 0.90; break; // 閃爍：非常清楚（約 90%）
       default: treasureAlpha = 0;
     }
     // 非常靠近取得範圍時（dist <= 80），再拉高透明度讓玩家確認自己快拿到了
     const dist = Math.abs(player.x - t.x);
-    if (dist <= 80) treasureAlpha = 0.95;
+    if (dist <= 80) treasureAlpha = 1.00;
   }
 
   if (treasureAlpha <= 0) return; // 完全不可見：直接跳過
