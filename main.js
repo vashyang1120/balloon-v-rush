@@ -4326,40 +4326,98 @@ function drawHiddenTreasure(sx, t) {
     treasureAlpha = 0;
   } else {
     switch (dogNoseLevel) {
-      case 0:  treasureAlpha = 0;    break; // 很遠：完全不可見
-      case 1:  treasureAlpha = 0.35; break; // 微亮：比較有感
-      case 2:  treasureAlpha = 0.60; break; // 亮：明顯可見
-      case 3:  treasureAlpha = 0.90; break; // 閃爍：非常清楚（約 90%）
+      case 0:  treasureAlpha = 0;   break; // 很遠：完全不可見
+      case 1:  treasureAlpha = 0.4; break; // 微亮：開始有感
+      case 2:  treasureAlpha = 0.7; break; // 亮：明顯可見
+      case 3:  treasureAlpha = 1.0; break; // 閃爍：幾乎完整顯示
       default: treasureAlpha = 0;
     }
-    // 非常靠近取得範圍時（dist <= 80），再拉高透明度讓玩家確認自己快拿到了
     const dist = Math.abs(player.x - t.x);
-    if (dist <= 80) treasureAlpha = 1.00;
+    if (dist <= 80) treasureAlpha = 1.0; // 非常近：完整顯示
   }
 
-  if (treasureAlpha <= 0) return; // 完全不可見：直接跳過
+  if (treasureAlpha <= 0) return;
 
-  const bob  = Math.sin(frameCount * 0.05) * 4;
-  const glow = bringBalloonDog ? dogNoseGlow * 0.6 : 0;
+  const bob    = Math.sin(frameCount * 0.05) * 4;
+  const cx     = sx + 16;
+  const cy     = t.y + bob + 16;
+  const isHigh = treasureAlpha >= 0.7; // ≥ Lv2：加強光暈
+  const isFull = treasureAlpha >= 1.0; // ≥ Lv3 / dist≤80：完整顯示
 
   ctx.save();
-  ctx.globalAlpha = treasureAlpha;
 
-  if (glow > 0.1) {
-    ctx.fillStyle = `rgba(255,240,100,${glow * 0.35})`;
+  // ── 底層：金色圓形光暈 ──────────────────────────────
+  // 高亮時光暈更亮、更大、更實；低亮度時保留原本的淡光暈
+  if (isHigh) {
+    // 強光暈：較大半徑、更高不透明度
+    const glowR   = isFull ? 42 : 36;
+    const glowAlpha = isFull ? 0.55 : 0.38;
+    ctx.globalAlpha = treasureAlpha * glowAlpha;
+    const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, glowR);
+    grad.addColorStop(0,   'rgba(255,230,80,0.9)');
+    grad.addColorStop(0.5, 'rgba(255,200,40,0.4)');
+    grad.addColorStop(1,   'rgba(255,160,0,0)');
+    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(sx + 16, t.y + bob + 16, 32, 0, Math.PI * 2);
+    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
     ctx.fill();
+  } else {
+    // 基礎光暈（原本邏輯，維持低亮度時的行為）
+    const dogGlow = bringBalloonDog ? dogNoseGlow * 0.6 : 0;
+    if (dogGlow > 0.1) {
+      ctx.globalAlpha = treasureAlpha * dogGlow * 0.35;
+      ctx.fillStyle = 'rgba(255,240,100,1)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  ctx.font = '28px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(t.emoji, sx + 16, t.y + bob + 20);
-  // 問號提示（靠近但尚未最亮時顯示）
-  if (dogNoseGlow < 0.5) {
-    ctx.fillStyle = 'rgba(255,255,150,0.6)';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('?', sx + 16, t.y + bob - 8);
+
+  // ── 中層：圓形描邊（高亮時才出現，避免低亮度時太突兀）──
+  if (isHigh) {
+    const strokeAlpha = isFull ? 0.92 : 0.65;
+    const strokeColor = isFull ? 'rgba(255,255,180,1)' : 'rgba(255,220,80,1)';
+    ctx.globalAlpha = treasureAlpha * strokeAlpha;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth   = isFull ? 2.5 : 1.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+    ctx.stroke();
   }
+
+  // ── 上層：emoji 本體 ────────────────────────────────
+  // 低亮度時跟著外層 alpha 淡入；高亮度時強制 alpha=1 確保清晰
+  ctx.globalAlpha = isHigh ? 1.0 : treasureAlpha;
+  ctx.font        = '28px sans-serif';
+  ctx.textAlign   = 'center';
+  ctx.fillText(t.emoji, cx, t.y + bob + 20);
+
+  // ── 最高層：完整顯示時加 4 個小閃光點 ──────────────
+  if (isFull) {
+    const sparkPhase  = frameCount * 0.12;
+    const sparkDist   = 26;
+    const sparkPoints = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+    ctx.globalAlpha   = 0.85 * (0.6 + 0.4 * Math.sin(frameCount * 0.25));
+    ctx.fillStyle     = 'rgba(255,255,200,0.95)';
+    for (let i = 0; i < sparkPoints.length; i++) {
+      const angle  = sparkPoints[i] + sparkPhase;
+      const spx    = cx + Math.cos(angle) * sparkDist;
+      const spy    = cy + Math.sin(angle) * sparkDist;
+      const spSize = 2.5 + Math.sin(frameCount * 0.3 + i * 1.5) * 1.2;
+      ctx.beginPath();
+      ctx.arc(spx, spy, spSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ── 問號提示（仍在遠處時顯示）──
+  if (!isHigh) {
+    ctx.globalAlpha = treasureAlpha * 0.7;
+    ctx.fillStyle   = 'rgba(255,255,150,1)';
+    ctx.font        = '12px sans-serif';
+    ctx.fillText('?', cx, t.y + bob - 8);
+  }
+
   ctx.restore();
 }
 
