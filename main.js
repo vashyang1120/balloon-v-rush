@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.12';
+const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-1';
 const BUILD_TIME   = '2026-06-24 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -840,6 +840,76 @@ function getHammerAttackImg(hammerAnimTimer) {
   const elapsed  = totalDur - hammerAnimTimer;
   const frameIdx = Math.min(Math.floor(elapsed / HAMMER_ATTACK_FRAME_DUR), 3); // 0~3
   return hammerAttackImgs[frameIdx] || null;
+}
+
+
+// =============================================
+//  橘子怪 Orange Enemy Art（v0.3.13-orange-skin-foundation）
+//  素材路徑、載入快取、繪製參數
+//  不改碰撞 / AI / hitbox
+// =============================================
+
+// 橘子怪素材路徑
+const ORANGE_ENEMY_ASSETS = {
+  idle:    'assets/enemies/orange/orange_idle_01.png',
+  warning: 'assets/enemies/orange/orange_warning_01.png',
+  spray:   'assets/enemies/orange/orange_spray_01.png',
+  oil01:   'assets/enemies/orange/orange_oil_spray_01.png',
+  oil02:   'assets/enemies/orange/orange_oil_spray_02.png',
+  oil03:   'assets/enemies/orange/orange_oil_spray_03.png',
+};
+
+// 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
+const ORANGE_DRAW_SCALE      = 1.6;   // 本體顯示比例（基於 hitbox 尺寸 44×44 放大）
+const ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
+const ORANGE_SPRAY_SCALE     = 1.2;   // 噴射本體 (spray_01) 顯示比例（可獨立調整）
+
+// orange_spray_01 的噴口像素座標（素材原圖座標）
+const ORANGE_SPRAY_MOUTH_X   = 1156;
+const ORANGE_SPRAY_MOUTH_Y   = 237;
+
+// orange_oil_spray_XX 的接點像素座標（素材原圖座標）
+const ORANGE_OIL_ANCHOR_X    = 1024;
+const ORANGE_OIL_ANCHOR_Y    = 132;
+
+// 橘子怪圖片快取（key → Image）
+const orangeEnemyImgs = {};
+let orangeEnemyCoreReady = false;  // idle + warning + spray 至少全部就緒才設 true
+
+// 核心 key（影響 preload gate 判斷）
+const ORANGE_CORE_KEYS = ['idle', 'warning', 'spray'];
+
+function initOrangeEnemyArt() {
+  let coreLoaded = 0;
+  Object.entries(ORANGE_ENEMY_ASSETS).forEach(([key, src]) => {
+    if (orangeEnemyImgs[key]) return; // 已載入
+    const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
+    img.onload = function() {
+      orangeEnemyImgs[key] = img;
+      // 核心三張全部就緒才設 ready
+      if (ORANGE_CORE_KEYS.every(k => {
+        const i = orangeEnemyImgs[k];
+        return i && i.complete && i.naturalWidth > 0;
+      })) {
+        orangeEnemyCoreReady = true;
+        console.log('[OrangeArt] core assets ready');
+      }
+      console.log('[OrangeArt] loaded:', key, fullSrc);
+    };
+    img.onerror = function() {
+      // 油圖失敗不 crash；核心圖失敗 fallback 幾何圖
+      console.warn('[OrangeArt] image not found:', key, fullSrc, '(fallback active)');
+    };
+    img.src = fullSrc;
+  });
+}
+
+// 取橘子怪圖片（未載入回 null）
+function getOrangeEnemyImg(key) {
+  const img = orangeEnemyImgs[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
 }
 
 
@@ -4768,77 +4838,194 @@ function drawEnemy(x, y, w, h, flashing, enemyVx) {
 
 
 function drawOrangeNemesis(sx, o) {
-  const cx_local = cameraX; // 已在呼叫前轉為螢幕 x
+  // ── 判斷素材是否就緒，決定走 skin 路徑還是 fallback 幾何路徑 ──
+  const useSkin = orangeEnemyCoreReady;
 
-  // ── 噴油範圍（先畫，在本體之下）──
-  if (o.sprayActive) {
-    const spx = o.sprayDir < 0
-      ? sx - CONFIG.ORANGE_SPRAY_W
-      : sx + o.w;
-    const spy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
-    const sprayProgress = o.phaseTimer / CONFIG.ORANGE_SPRAY_MS;
-    const alpha = 0.45 - sprayProgress * 0.25;
-    ctx.fillStyle = `rgba(255,140,0,${alpha})`;
-    ctx.beginPath();
-    ctx.roundRect(spx, spy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H, 8);
-    ctx.fill();
-    // 油滴粒子（簡單三顆）
-    ctx.fillStyle = `rgba(255,180,30,${alpha + 0.1})`;
-    [0.2, 0.5, 0.8].forEach(t => {
-      const px = spx + CONFIG.ORANGE_SPRAY_W * t;
-      const py = spy + CONFIG.ORANGE_SPRAY_H / 2 + Math.sin(frameCount * 0.3 + t * 10) * 5;
-      ctx.beginPath();
-      ctx.arc(px, py, 4, 0, Math.PI * 2);
-      ctx.fill();
-    });
+  // ── helper：依腳底錨點將圖片置於 hitbox 下緣，回傳是否成功 ──
+  function drawBodySprite(img, scale, extraShakeX) {
+    if (!img) return false;
+    const drawW = img.naturalWidth  * scale;
+    const drawH = img.naturalHeight * scale;
+    const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
+    const drawX = sx + (o.w - drawW) / 2 + (extraShakeX || 0);
+    const drawY = (o.y + o.h) - footY;
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    return true;
   }
 
-  // ── 預備光暈（windup 時閃爍）──
-  if (o.phase === 'windup') {
+  // ── helper：取得本體繪製座標（供油圖錨點計算用）──
+  function getBodyDrawInfo(img, scale) {
+    if (!img) return null;
+    const drawW = img.naturalWidth  * scale;
+    const drawH = img.naturalHeight * scale;
+    const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
+    const drawX = sx + (o.w - drawW) / 2;
+    const drawY = (o.y + o.h) - footY;
+    return { drawX, drawY, drawW, drawH, scale };
+  }
+
+  ctx.save();
+
+  // ─────────────────────────────────────────────
+  //  1. 噴油效果（先畫，在本體之下）
+  // ─────────────────────────────────────────────
+  if (o.phase === 'spraying' && o.sprayActive) {
+    if (useSkin) {
+      // ── Skin 路徑：橘皮油三段動畫 ──
+      const ratio  = Math.min(o.phaseTimer / CONFIG.ORANGE_SPRAY_MS, 1.0);
+      const oilKey = ratio < 1/3 ? 'oil01' : ratio < 2/3 ? 'oil02' : 'oil03';
+      const oilImg   = getOrangeEnemyImg(oilKey);
+      const sprayImg = getOrangeEnemyImg('spray');
+
+      if (sprayImg && oilImg) {
+        // 計算 spray 本體的繪製位置
+        const info = getBodyDrawInfo(sprayImg, ORANGE_SPRAY_SCALE);
+        if (info) {
+          // 噴口世界座標 = 圖片左上角 + 噴口像素座標 × 縮放比例
+          const mouthWorldX = info.drawX + ORANGE_SPRAY_MOUTH_X * info.scale;
+          const mouthWorldY = info.drawY + ORANGE_SPRAY_MOUTH_Y * info.scale;
+
+          // 油圖使用相同 ORANGE_SPRAY_SCALE
+          const oilScale = ORANGE_SPRAY_SCALE;
+          const oilW     = oilImg.naturalWidth  * oilScale;
+          const oilH     = oilImg.naturalHeight * oilScale;
+
+          // 讓油圖 anchor 對準噴口
+          const oilDrawX = mouthWorldX - ORANGE_OIL_ANCHOR_X * oilScale;
+          const oilDrawY = mouthWorldY - ORANGE_OIL_ANCHOR_Y * oilScale;
+
+          if (o.sprayDir < 0) {
+            // 面朝左：以噴口為軸水平翻轉
+            ctx.save();
+            ctx.translate(mouthWorldX * 2, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
+            ctx.restore();
+          } else {
+            ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
+          }
+        }
+      } else {
+        // 油圖尚未載入，fallback 幾何
+        _drawOrangeSprayGeometry(sx, o);
+      }
+    } else {
+      _drawOrangeSprayGeometry(sx, o);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  2. 本體繪製
+  // ─────────────────────────────────────────────
+  if (useSkin) {
+    if (o.phase === 'windup') {
+      // ── warning 圖 + pulse 縮放 + 輕微 glow ──
+      const warnImg = getOrangeEnemyImg('warning');
+      const t       = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS; // 0→1
+      const pulse   = 1.0 + Math.sin(t * Math.PI * 4) * 0.06; // 0.96~1.08，約 2 次呼吸
+      const glowAlpha = (Math.sin(t * Math.PI * 6) * 0.5 + 0.5) * 0.35;
+
+      if (warnImg) {
+        const drawW = warnImg.naturalWidth  * ORANGE_DRAW_SCALE * pulse;
+        const drawH = warnImg.naturalHeight * ORANGE_DRAW_SCALE * pulse;
+        const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
+        const drawX = sx + (o.w - drawW) / 2;
+        const drawY = (o.y + o.h) - footY;
+
+        // 外框 glow（純視覺，不動 hitbox）
+        if (glowAlpha > 0.05) {
+          ctx.save();
+          ctx.globalAlpha = glowAlpha;
+          ctx.shadowColor = '#ff8800';
+          ctx.shadowBlur  = 18;
+          ctx.drawImage(warnImg, drawX, drawY, drawW, drawH);
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        ctx.drawImage(warnImg, drawX, drawY, drawW, drawH);
+      } else {
+        _drawOrangeBodyGeometry(sx, o, true);
+      }
+
+    } else if (o.phase === 'spraying') {
+      // ── spray 本體圖 ──
+      const sprayImg = getOrangeEnemyImg('spray');
+      if (!drawBodySprite(sprayImg, ORANGE_SPRAY_SCALE, 0)) {
+        _drawOrangeBodyGeometry(sx, o, false);
+      }
+
+    } else {
+      // ── idle（含 cooldown）── 
+      const idleImg = getOrangeEnemyImg('idle');
+      if (!drawBodySprite(idleImg, ORANGE_DRAW_SCALE, 0)) {
+        _drawOrangeBodyGeometry(sx, o, false);
+      }
+    }
+  } else {
+    // ── 全幾何 fallback ──
+    _drawOrangeBodyGeometry(sx, o, o.phase === 'windup');
+  }
+
+  ctx.restore();
+}
+
+// ── 幾何 fallback：橘色圓本體 ──
+function _drawOrangeBodyGeometry(sx, o, isWindup) {
+  const shakeX = isWindup ? (Math.random() - 0.5) * 4 : 0;
+  if (isWindup) {
     const t = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS;
-    const glow = Math.sin(t * Math.PI * 6) * 0.3 + 0.3; // 快速閃爍
+    const glow = Math.sin(t * Math.PI * 6) * 0.3 + 0.3;
     ctx.fillStyle = `rgba(255,180,0,${glow})`;
     ctx.beginPath();
     ctx.arc(sx + o.w / 2, o.y + o.h / 2, o.w * 0.75, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  // ── 本體：橘色圓形 ──
-  // 抖動（windup 時）
-  const shakeX = o.phase === 'windup'
-    ? (Math.random() - 0.5) * 4 : 0;
-
   ctx.fillStyle = '#e87020';
   ctx.beginPath();
   ctx.arc(sx + o.w / 2 + shakeX, o.y + o.h / 2, o.w / 2, 0, Math.PI * 2);
   ctx.fill();
-
-  // 橘子紋路
   ctx.strokeStyle = 'rgba(200,100,0,0.5)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(sx + o.w / 2 + shakeX, o.y + o.h / 2, o.w / 2 - 2, 0, Math.PI * 2);
   ctx.stroke();
-
-  // 橘子蒂頭
   ctx.fillStyle = '#4a8a20';
   ctx.fillRect(sx + o.w / 2 - 3 + shakeX, o.y + 2, 6, 7);
-
-  // 噴油方向指示箭頭（idle 時顯示）
-  if (o.phase === 'idle') {
+  if (!isWindup) {
     const arrowX = o.sprayDir < 0 ? sx + 4 : sx + o.w - 4;
     ctx.fillStyle = 'rgba(255,160,0,0.5)';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(o.sprayDir < 0 ? '💨' : '💨', arrowX, o.y - 4);
+    ctx.fillText('💨', arrowX, o.y - 4);
   }
-
-  // 標籤
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
   ctx.font = 'bold 9px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('橘子怪', sx + o.w / 2 + shakeX, o.y - 6);
 }
+
+// ── 幾何 fallback：噴油效果 ──
+function _drawOrangeSprayGeometry(sx, o) {
+  const spx = o.sprayDir < 0
+    ? sx - CONFIG.ORANGE_SPRAY_W
+    : sx + o.w;
+  const spy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
+  const sprayProgress = o.phaseTimer / CONFIG.ORANGE_SPRAY_MS;
+  const alpha = 0.45 - sprayProgress * 0.25;
+  ctx.fillStyle = `rgba(255,140,0,${alpha})`;
+  ctx.beginPath();
+  ctx.roundRect(spx, spy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H, 8);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,180,30,${alpha + 0.1})`;
+  [0.2, 0.5, 0.8].forEach(t => {
+    const px = spx + CONFIG.ORANGE_SPRAY_W * t;
+    const py = spy + CONFIG.ORANGE_SPRAY_H / 2 + Math.sin(frameCount * 0.3 + t * 10) * 5;
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
 
 function drawFinishFlag(cx) {
   const sx = FINISH_X - cx;
@@ -6759,7 +6946,8 @@ function isAdventureCoreArtReady() {
     return img && img.complete && img.naturalWidth > 0;
   });
   const scorpionOk = scorpionWalkReady; // 至少 1 張蠍子 walk 圖已就緒
-  if (heroOk && scorpionOk) {
+  const orangeOk   = orangeEnemyCoreReady; // idle + warning + spray 全部就緒
+  if (heroOk && scorpionOk && orangeOk) {
     _artReadyConfirmed = true;
     return true;
   }
@@ -6827,6 +7015,7 @@ initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
 initScorpionHurtArt();                // 非阻塞地嘗試載入蠍子受傷圖
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
+initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
