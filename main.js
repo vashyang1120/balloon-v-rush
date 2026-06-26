@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-1';
-const BUILD_TIME   = '2026-06-26 10:00';
+const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-2';
+const BUILD_TIME   = '2026-06-26 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -874,6 +874,11 @@ const ORANGE_SPRAY_MOUTH_Y   = 365;
 // orange_oil_spray_XX 的接點像素座標（素材原圖座標）
 const ORANGE_OIL_ANCHOR_X    = 1024;
 const ORANGE_OIL_ANCHOR_Y    = 132;
+
+// v0.3.14-test-2：oil_spray_03 有效噴出距離（原圖素材單位）
+// oil_spray_03 實際寬度 685px，與 spray 本體重疊約 55px，有效噴出距離 = 685 - 55 = 630px
+// 整段 spraying 固定使用 oil_spray_03 最遠有效範圍作為傷害判定，不做三段式 hitbox
+const ORANGE_OIL_HITBOX_SOURCE_W = 630;
 
 // 橘子怪圖片快取（key → Image）
 const orangeEnemyImgs = {};
@@ -3725,14 +3730,38 @@ function checkHazards() {
       damagePlayer();
       return; // 同幀只扣一次
     }
-    // 噴油範圍
+    // 噴油範圍（v0.3.14-test-2：固定使用 oil_spray_03 最遠有效距離，不做三段式 hitbox）
     if (o.sprayActive) {
-      const sx = o.sprayDir < 0
-        ? o.x - CONFIG.ORANGE_SPRAY_W
-        : o.x + o.w;
-      const sy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
-      if (rectsOverlap(px, py, pw, ph, sx, sy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H)) {
-        damagePlayer();
+      const sprayImg = getOrangeEnemyImg && getOrangeEnemyImg('spray');
+      if (sprayImg && sprayImg.naturalWidth) {
+        // bodyScale = 與 drawOrangeNemesis 完全相同的計算，不重新發明
+        const baseW      = o.w * ORANGE_BODY_DRAW_SCALE;
+        const baseH      = baseW * (sprayImg.naturalHeight / sprayImg.naturalWidth);
+        const bodyScale  = baseW / sprayImg.naturalWidth;
+        const footY      = baseH * ORANGE_FOOT_ANCHOR_Y;
+        const spImgDrawX = o.x + o.w / 2 - baseW / 2;
+        const spImgDrawY = (o.y + o.h) - footY;
+        const mouthWorldX = spImgDrawX + ORANGE_SPRAY_MOUTH_X * bodyScale;
+        const mouthWorldY = spImgDrawY + ORANGE_SPRAY_MOUTH_Y * bodyScale;
+
+        // 有效噴出距離 = ORANGE_OIL_HITBOX_SOURCE_W * bodyScale
+        const hitboxW = ORANGE_OIL_HITBOX_SOURCE_W * bodyScale;
+        const hitboxH = CONFIG.ORANGE_SPRAY_H; // 高度沿用原有值，略小於油圖視覺高度
+        // 目前橘子怪固定向左噴（sprayDir = -1）
+        const hitX = mouthWorldX - hitboxW;
+        const hitY = mouthWorldY - hitboxH / 2;
+        if (rectsOverlap(px, py, pw, ph, hitX, hitY, hitboxW, hitboxH)) {
+          damagePlayer();
+        }
+      } else {
+        // sprayImg 尚未載入：fallback 舊邏輯，避免判定消失
+        const sx = o.sprayDir < 0
+          ? o.x - CONFIG.ORANGE_SPRAY_W
+          : o.x + o.w;
+        const sy = o.y + (o.h - CONFIG.ORANGE_SPRAY_H) / 2;
+        if (rectsOverlap(px, py, pw, ph, sx, sy, CONFIG.ORANGE_SPRAY_W, CONFIG.ORANGE_SPRAY_H)) {
+          damagePlayer();
+        }
       }
     }
   });
@@ -4198,6 +4227,13 @@ function drawWorld() {
       drawBalloonDog(dogX, dogY);
     } catch(e) {}
   }
+
+  // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
+  orangeNemeses.forEach(o => {
+    const sx = o.x - cx;
+    if (sx > CANVAS_W + 60 || sx + o.w < -CONFIG.ORANGE_SPRAY_W) return;
+    drawOrangeOilOverlay(sx, o);
+  });
 }
 
 function drawPlayer(cx) {
@@ -4896,40 +4932,13 @@ function drawOrangeNemesis(sx, o) {
   ctx.save();
 
   // ─────────────────────────────────────────────
-  //  1. 噴油效果（先畫，在本體之下）
+  //  1. 噴油效果
+  //  v0.3.14-test-2：oil sprite 已移至 drawOrangeOilOverlay()，
+  //  在 drawPlayer() 之後呼叫，確保油圖畫在玩家上方。
+  //  此處只保留 fallback 幾何（skin 路徑的油圖不在這裡畫）。
   // ─────────────────────────────────────────────
-  if (o.phase === 'spraying' && o.sprayActive) {
-    if (useSkin) {
-      const ratio  = Math.min(o.phaseTimer / CONFIG.ORANGE_SPRAY_MS, 1.0);
-      const oilKey = ratio < 1/3 ? 'oil01' : ratio < 2/3 ? 'oil02' : 'oil03';
-      const oilImg   = getOrangeEnemyImg(oilKey);
-      const sprayImg = getOrangeEnemyImg('spray');
-
-      if (sprayImg && oilImg) {
-        const info = getHitboxDrawInfo(sprayImg);
-        if (info) {
-          // v0.3.13-test-2：使用 bodyScale（顯示寬度/圖片原始寬度）換算噴口世界座標
-          const bs = info.bodyScale;
-          const mouthWorldX = info.drawX + ORANGE_SPRAY_MOUTH_X * bs;
-          const mouthWorldY = info.drawY + ORANGE_SPRAY_MOUTH_Y * bs;
-
-          // oil sprite 與 spray 本體使用同一套 bodyScale
-          const oilScale = bs;
-          const oilW     = oilImg.naturalWidth  * oilScale;
-          const oilH     = oilImg.naturalHeight * oilScale;
-          const oilDrawX = mouthWorldX - ORANGE_OIL_ANCHOR_X * oilScale;
-          const oilDrawY = mouthWorldY - ORANGE_OIL_ANCHOR_Y * oilScale;
-
-          // v0.3.13-test-4：oil sprite 素材本身已是「向左噴」，不需依 sprayDir 翻轉；
-          // 翻轉反而導致油從橘子怪後方噴出，已停用。
-          ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
-        }
-      } else {
-        _drawOrangeSprayGeometry(sx, o);
-      }
-    } else {
-      _drawOrangeSprayGeometry(sx, o);
-    }
+  if (o.phase === 'spraying' && o.sprayActive && !orangeEnemyCoreReady) {
+    _drawOrangeSprayGeometry(sx, o);
   }
 
   // ─────────────────────────────────────────────
@@ -4986,17 +4995,16 @@ function drawOrangeNemesis(sx, o) {
       }
 
     } else if (o.phase === 'cooldown') {
-      // v0.3.14：喘氣恢復狀態 — cooldown01 / cooldown02 交替，輕微上下浮動
-      const useFirst = (Math.floor(frameCount / 12) % 2 === 0); // 每12幀換一張 ≈ 5fps
+      // v0.3.14-test-2：腳底錨點與 idle/warning/spray 完全一致（移除 bob offset 避免浮空）
+      // 喘氣感改用低幀率交替換圖呈現，不用 drawY 偏移
+      const useFirst = (Math.floor(frameCount / 12) % 2 === 0);
       const cdImg = getOrangeEnemyImg(useFirst ? 'cooldown01' : 'cooldown02')
                  || getOrangeEnemyImg('cooldown01')
-                 || getOrangeEnemyImg('idle'); // fallback
+                 || getOrangeEnemyImg('idle');
       if (cdImg) {
-        const breathe  = Math.sin(frameCount * 0.08) * 2.5; // 極輕微上下浮動
-        const info     = getHitboxDrawInfo(cdImg);
+        const info = getHitboxDrawInfo(cdImg);
         if (info) {
-          // 輕微下移（喘氣低頭感），不影響 hitbox
-          ctx.drawImage(cdImg, info.drawX, info.drawY + breathe, info.drawW, info.drawH);
+          ctx.drawImage(cdImg, info.drawX, info.drawY, info.drawW, info.drawH);
         }
       } else {
         _drawOrangeBodyGeometry(sx, o, false);
@@ -5017,6 +5025,41 @@ function drawOrangeNemesis(sx, o) {
   }
 
   ctx.restore();
+}
+
+// v0.3.14-test-2：oil sprite overlay — 畫在 drawPlayer() 之後，讓油圖覆蓋在玩家上方
+// 使用與 drawOrangeNemesis 完全相同的 mouth anchor / oil anchor / bodyScale 計算
+// sx = o.x - cameraX（呼叫端傳入）
+function drawOrangeOilOverlay(sx, o) {
+  if (o.phase !== 'spraying' || !o.sprayActive) return;
+  if (!orangeEnemyCoreReady) return; // fallback 幾何已在 drawOrangeNemesis 畫過
+
+  const ratio  = Math.min(o.phaseTimer / CONFIG.ORANGE_SPRAY_MS, 1.0);
+  const oilKey = ratio < 1/3 ? 'oil01' : ratio < 2/3 ? 'oil02' : 'oil03';
+  const oilImg   = getOrangeEnemyImg(oilKey);
+  const sprayImg = getOrangeEnemyImg('spray');
+  if (!sprayImg || !oilImg || !sprayImg.naturalWidth) return;
+
+  // 與 drawOrangeNemesis 的 getHitboxDrawInfo 完全相同的計算（此處 inline 以避免閉包相依）
+  const baseW     = o.w * ORANGE_BODY_DRAW_SCALE;
+  const baseH     = baseW * (sprayImg.naturalHeight / sprayImg.naturalWidth);
+  const bodyScale = baseW / sprayImg.naturalWidth;
+  const footY     = baseH * ORANGE_FOOT_ANCHOR_Y;
+  const drawX     = sx + o.w / 2 - baseW / 2;
+  const drawY     = (o.y + o.h) - footY;
+
+  const bs          = bodyScale;
+  const mouthWorldX = drawX + ORANGE_SPRAY_MOUTH_X * bs;
+  const mouthWorldY = drawY + ORANGE_SPRAY_MOUTH_Y * bs;
+
+  const oilScale = bs; // oilScale = bodyScale
+  const oilW     = oilImg.naturalWidth  * oilScale;
+  const oilH     = oilImg.naturalHeight * oilScale;
+  const oilDrawX = mouthWorldX - ORANGE_OIL_ANCHOR_X * oilScale;
+  const oilDrawY = mouthWorldY - ORANGE_OIL_ANCHOR_Y * oilScale;
+
+  // 不水平翻轉（v0.3.13-test-4 已停用翻轉，素材本身已是向左噴）
+  ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
 }
 
 // ── 幾何 fallback：橘色圓本體 ──
