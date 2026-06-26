@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-1';
-const BUILD_TIME   = '2026-06-24 12:00';
+const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-2';
+const BUILD_TIME   = '2026-06-25 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -860,9 +860,9 @@ const ORANGE_ENEMY_ASSETS = {
 };
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
-const ORANGE_DRAW_SCALE      = 1.6;   // 本體顯示比例（基於 hitbox 尺寸 44×44 放大）
+const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
+// ORANGE_DRAW_SCALE / ORANGE_SPRAY_SCALE 已廢棄（test-1 用 naturalWidth*scale 導致巨大化）
 const ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
-const ORANGE_SPRAY_SCALE     = 1.2;   // 噴射本體 (spray_01) 顯示比例（可獨立調整）
 
 // orange_spray_01 的噴口像素座標（素材原圖座標）
 const ORANGE_SPRAY_MOUTH_X   = 1156;
@@ -4841,27 +4841,20 @@ function drawOrangeNemesis(sx, o) {
   // ── 判斷素材是否就緒，決定走 skin 路徑還是 fallback 幾何路徑 ──
   const useSkin = orangeEnemyCoreReady;
 
-  // ── helper：依腳底錨點將圖片置於 hitbox 下緣，回傳是否成功 ──
-  function drawBodySprite(img, scale, extraShakeX) {
-    if (!img) return false;
-    const drawW = img.naturalWidth  * scale;
-    const drawH = img.naturalHeight * scale;
-    const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
-    const drawX = sx + (o.w - drawW) / 2 + (extraShakeX || 0);
-    const drawY = (o.y + o.h) - footY;
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    return true;
-  }
-
-  // ── helper：取得本體繪製座標（供油圖錨點計算用）──
-  function getBodyDrawInfo(img, scale) {
-    if (!img) return null;
-    const drawW = img.naturalWidth  * scale;
-    const drawH = img.naturalHeight * scale;
-    const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
-    const drawX = sx + (o.w - drawW) / 2;
-    const drawY = (o.y + o.h) - footY;
-    return { drawX, drawY, drawW, drawH, scale };
+  // ── v0.3.13-test-2：helper — 用 hitbox 寬度決定顯示尺寸，不再用 naturalWidth*scale ──
+  // baseDrawW = o.w * ORANGE_BODY_DRAW_SCALE ≈ 44 * 2.4 = 106px（小怪尺寸）
+  // baseDrawH = baseDrawW * (img.naturalHeight / img.naturalWidth)（保持圖片比例）
+  // bodyScale = baseDrawW / img.naturalWidth（用於素材座標 → 遊戲世界座標換算）
+  function getHitboxDrawInfo(img, pulse) {
+    if (!img || !img.naturalWidth) return null;
+    const p        = pulse || 1;
+    const baseW    = o.w * ORANGE_BODY_DRAW_SCALE * p;
+    const baseH    = baseW * (img.naturalHeight / img.naturalWidth);
+    const bodyScale = baseW / img.naturalWidth;
+    const footY    = baseH * ORANGE_FOOT_ANCHOR_Y;
+    const drawX    = sx + o.w / 2 - baseW / 2;
+    const drawY    = (o.y + o.h) - footY;
+    return { drawX, drawY, drawW: baseW, drawH: baseH, bodyScale };
   }
 
   ctx.save();
@@ -4871,31 +4864,27 @@ function drawOrangeNemesis(sx, o) {
   // ─────────────────────────────────────────────
   if (o.phase === 'spraying' && o.sprayActive) {
     if (useSkin) {
-      // ── Skin 路徑：橘皮油三段動畫 ──
       const ratio  = Math.min(o.phaseTimer / CONFIG.ORANGE_SPRAY_MS, 1.0);
       const oilKey = ratio < 1/3 ? 'oil01' : ratio < 2/3 ? 'oil02' : 'oil03';
       const oilImg   = getOrangeEnemyImg(oilKey);
       const sprayImg = getOrangeEnemyImg('spray');
 
       if (sprayImg && oilImg) {
-        // 計算 spray 本體的繪製位置
-        const info = getBodyDrawInfo(sprayImg, ORANGE_SPRAY_SCALE);
+        const info = getHitboxDrawInfo(sprayImg);
         if (info) {
-          // 噴口世界座標 = 圖片左上角 + 噴口像素座標 × 縮放比例
-          const mouthWorldX = info.drawX + ORANGE_SPRAY_MOUTH_X * info.scale;
-          const mouthWorldY = info.drawY + ORANGE_SPRAY_MOUTH_Y * info.scale;
+          // v0.3.13-test-2：使用 bodyScale（顯示寬度/圖片原始寬度）換算噴口世界座標
+          const bs = info.bodyScale;
+          const mouthWorldX = info.drawX + ORANGE_SPRAY_MOUTH_X * bs;
+          const mouthWorldY = info.drawY + ORANGE_SPRAY_MOUTH_Y * bs;
 
-          // 油圖使用相同 ORANGE_SPRAY_SCALE
-          const oilScale = ORANGE_SPRAY_SCALE;
+          // oil sprite 與 spray 本體使用同一套 bodyScale
+          const oilScale = bs;
           const oilW     = oilImg.naturalWidth  * oilScale;
           const oilH     = oilImg.naturalHeight * oilScale;
-
-          // 讓油圖 anchor 對準噴口
           const oilDrawX = mouthWorldX - ORANGE_OIL_ANCHOR_X * oilScale;
           const oilDrawY = mouthWorldY - ORANGE_OIL_ANCHOR_Y * oilScale;
 
           if (o.sprayDir < 0) {
-            // 面朝左：以噴口為軸水平翻轉
             ctx.save();
             ctx.translate(mouthWorldX * 2, 0);
             ctx.scale(-1, 1);
@@ -4906,7 +4895,6 @@ function drawOrangeNemesis(sx, o) {
           }
         }
       } else {
-        // 油圖尚未載入，fallback 幾何
         _drawOrangeSprayGeometry(sx, o);
       }
     } else {
@@ -4919,50 +4907,49 @@ function drawOrangeNemesis(sx, o) {
   // ─────────────────────────────────────────────
   if (useSkin) {
     if (o.phase === 'windup') {
-      // ── warning 圖 + pulse 縮放 + 輕微 glow ──
       const warnImg = getOrangeEnemyImg('warning');
-      const t       = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS; // 0→1
-      const pulse   = 1.0 + Math.sin(t * Math.PI * 4) * 0.06; // 0.96~1.08，約 2 次呼吸
+      const t     = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS;
+      const pulse = 1.0 + Math.sin(t * Math.PI * 4) * 0.06; // 吸氣蓄力 pulse，僅視覺
       const glowAlpha = (Math.sin(t * Math.PI * 6) * 0.5 + 0.5) * 0.35;
 
       if (warnImg) {
-        const drawW = warnImg.naturalWidth  * ORANGE_DRAW_SCALE * pulse;
-        const drawH = warnImg.naturalHeight * ORANGE_DRAW_SCALE * pulse;
-        const footY = drawH * ORANGE_FOOT_ANCHOR_Y;
-        const drawX = sx + (o.w - drawW) / 2;
-        const drawY = (o.y + o.h) - footY;
-
-        // 外框 glow（純視覺，不動 hitbox）
-        if (glowAlpha > 0.05) {
-          ctx.save();
-          ctx.globalAlpha = glowAlpha;
-          ctx.shadowColor = '#ff8800';
-          ctx.shadowBlur  = 18;
-          ctx.drawImage(warnImg, drawX, drawY, drawW, drawH);
-          ctx.restore();
+        // v0.3.13-test-2：pulse 套在 hitbox 尺寸上，不用 naturalWidth*scale
+        const info = getHitboxDrawInfo(warnImg, pulse);
+        if (info) {
+          if (glowAlpha > 0.05) {
+            ctx.save();
+            ctx.globalAlpha = glowAlpha;
+            ctx.shadowColor = '#ff8800';
+            ctx.shadowBlur  = 18;
+            ctx.drawImage(warnImg, info.drawX, info.drawY, info.drawW, info.drawH);
+            ctx.restore();
+          }
+          ctx.globalAlpha = 1;
+          ctx.drawImage(warnImg, info.drawX, info.drawY, info.drawW, info.drawH);
         }
-        ctx.globalAlpha = 1;
-        ctx.drawImage(warnImg, drawX, drawY, drawW, drawH);
       } else {
         _drawOrangeBodyGeometry(sx, o, true);
       }
 
     } else if (o.phase === 'spraying') {
-      // ── spray 本體圖 ──
       const sprayImg = getOrangeEnemyImg('spray');
-      if (!drawBodySprite(sprayImg, ORANGE_SPRAY_SCALE, 0)) {
+      const info = sprayImg ? getHitboxDrawInfo(sprayImg) : null;
+      if (info) {
+        ctx.drawImage(sprayImg, info.drawX, info.drawY, info.drawW, info.drawH);
+      } else {
         _drawOrangeBodyGeometry(sx, o, false);
       }
 
     } else {
-      // ── idle（含 cooldown）── 
       const idleImg = getOrangeEnemyImg('idle');
-      if (!drawBodySprite(idleImg, ORANGE_DRAW_SCALE, 0)) {
+      const info = idleImg ? getHitboxDrawInfo(idleImg) : null;
+      if (info) {
+        ctx.drawImage(idleImg, info.drawX, info.drawY, info.drawW, info.drawH);
+      } else {
         _drawOrangeBodyGeometry(sx, o, false);
       }
     }
   } else {
-    // ── 全幾何 fallback ──
     _drawOrangeBodyGeometry(sx, o, o.phase === 'windup');
   }
 
