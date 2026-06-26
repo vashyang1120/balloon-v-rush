@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-3';
-const BUILD_TIME   = '2026-06-25 11:00';
+const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-4';
+const BUILD_TIME   = '2026-06-25 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4884,15 +4884,9 @@ function drawOrangeNemesis(sx, o) {
           const oilDrawX = mouthWorldX - ORANGE_OIL_ANCHOR_X * oilScale;
           const oilDrawY = mouthWorldY - ORANGE_OIL_ANCHOR_Y * oilScale;
 
-          if (o.sprayDir < 0) {
-            ctx.save();
-            ctx.translate(mouthWorldX * 2, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
-            ctx.restore();
-          } else {
-            ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
-          }
+          // v0.3.13-test-4：oil sprite 素材本身已是「向左噴」，不需依 sprayDir 翻轉；
+          // 翻轉反而導致油從橘子怪後方噴出，已停用。
+          ctx.drawImage(oilImg, oilDrawX, oilDrawY, oilW, oilH);
         }
       } else {
         _drawOrangeSprayGeometry(sx, o);
