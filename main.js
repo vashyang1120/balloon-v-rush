@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.13';
-const BUILD_TIME   = '2026-06-25 14:00';
+const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-1';
+const BUILD_TIME   = '2026-06-26 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -138,9 +138,10 @@ const CONFIG = {
   ORANGE_H:           44,   // 橘子怪高度 (px)
   ORANGE_SPRAY_W:    140,   // 噴油範圍寬度 (px)
   ORANGE_SPRAY_H:     28,   // 噴油範圍高度 (px)
-  ORANGE_WINDUP_MS:  600,   // 預備動作時間 (ms)
-  ORANGE_SPRAY_MS:   500,   // 噴油持續時間 (ms)
-  ORANGE_COOLDOWN_MS:3000,  // 兩次噴油間隔 (ms)
+  ORANGE_WINDUP_MS:  800,   // 預備動作（warning）時間 (ms) — 給玩家足夠反應時間
+  ORANGE_SPRAY_MS:   700,   // 噴油持續時間 (ms) — 讓三段油圖都能看清楚
+  ORANGE_COOLDOWN_MS:1600,  // v0.3.14：明確 cooldown phase 時間 (ms) — 玩家通過空檔
+  ORANGE_IDLE_MS:    1300,  // v0.3.14：cooldown 後靜止等待時間 (ms)（原 ORANGE_COOLDOWN_MS 語意重命名）
 };
 // =============================================
 
@@ -851,12 +852,14 @@ function getHammerAttackImg(hammerAnimTimer) {
 
 // 橘子怪素材路徑
 const ORANGE_ENEMY_ASSETS = {
-  idle:    'assets/enemies/orange/orange_idle_01.png',
-  warning: 'assets/enemies/orange/orange_warning_01.png',
-  spray:   'assets/enemies/orange/orange_spray_01.png',
-  oil01:   'assets/enemies/orange/orange_oil_spray_01.png',
-  oil02:   'assets/enemies/orange/orange_oil_spray_02.png',
-  oil03:   'assets/enemies/orange/orange_oil_spray_03.png',
+  idle:        'assets/enemies/orange/orange_idle_01.png',
+  warning:     'assets/enemies/orange/orange_warning_01.png',
+  spray:       'assets/enemies/orange/orange_spray_01.png',
+  oil01:       'assets/enemies/orange/orange_oil_spray_01.png',
+  oil02:       'assets/enemies/orange/orange_oil_spray_02.png',
+  oil03:       'assets/enemies/orange/orange_oil_spray_03.png',
+  cooldown01:  'assets/enemies/orange/orange_cooldown_01.png', // v0.3.14
+  cooldown02:  'assets/enemies/orange/orange_cooldown_02.png', // v0.3.14
 };
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
@@ -957,6 +960,28 @@ function applyHammerAttackVisualTestLoadout() {
   equippedHammer.currentDur = 999;
   activeSlot = 'hammer';
   console.log('[HammerTest] runtime-only hammer equipped for visual test');
+}
+
+// v0.3.14：橘子怪測試關入口（LEVELS[1]，橘子果園）
+// 測試版限定按鈕觸發，讓玩家快速觀察 idle→warning→spray→cooldown 完整節奏
+function startOrangeTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  resetInventory();
+  currentLevelIndex = 1; // LEVELS[1] = 橘子果園（橘子怪所在關）
+  loadLevel(1);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('已進入橘子怪測試關！觀察 idle→warning→spray→cooldown 節奏', 260);
+  console.log('[TestTools] startOrangeTestLevel:', {
+    stageId: LEVELS[1] && LEVELS[1].stageId,
+  });
 }
 
 // 測試版：直接跳第 3 關（完整重設 runtime state，不清玩家身份/V幣/Firebase）
@@ -3311,14 +3336,14 @@ function updateOrangeNemeses(dtMs) {
     switch (o.phase) {
       case 'idle':
         o.sprayActive = false;
-        if (o.phaseTimer >= CONFIG.ORANGE_COOLDOWN_MS) {
+        // v0.3.14：idle 使用新的 ORANGE_IDLE_MS（取代舊版誤稱 ORANGE_COOLDOWN_MS）
+        if (o.phaseTimer >= CONFIG.ORANGE_IDLE_MS) {
           o.phase      = 'windup';
           o.phaseTimer = 0;
         }
         break;
 
       case 'windup':
-        // 預備：抖動視覺由 drawOrangeNemesis 處理
         o.sprayActive = false;
         if (o.phaseTimer >= CONFIG.ORANGE_WINDUP_MS) {
           o.phase      = 'spraying';
@@ -3330,14 +3355,25 @@ function updateOrangeNemeses(dtMs) {
       case 'spraying':
         o.sprayActive = true;
         if (o.phaseTimer >= CONFIG.ORANGE_SPRAY_MS) {
-          o.phase      = 'idle';
+          // v0.3.14：噴完後進入獨立 cooldown 狀態，不直接回 idle
+          o.phase      = 'cooldown';
           o.phaseTimer = 0;
           o.sprayActive = false;
+        }
+        break;
+
+      case 'cooldown':
+        // v0.3.14：橘子怪噴完後疲憊喘氣，這段時間玩家可以安全通過
+        o.sprayActive = false;
+        if (o.phaseTimer >= CONFIG.ORANGE_COOLDOWN_MS) {
+          o.phase      = 'idle';
+          o.phaseTimer = 0;
         }
         break;
     }
   });
 }
+
 
 
 // ── Spinning enemies（被槌子打飛的小怪）────────
@@ -4903,18 +4939,33 @@ function drawOrangeNemesis(sx, o) {
     if (o.phase === 'windup') {
       const warnImg = getOrangeEnemyImg('warning');
       const t     = o.phaseTimer / CONFIG.ORANGE_WINDUP_MS;
-      const pulse = 1.0 + Math.sin(t * Math.PI * 4) * 0.06; // 吸氣蓄力 pulse，僅視覺
-      const glowAlpha = (Math.sin(t * Math.PI * 6) * 0.5 + 0.5) * 0.35;
+      const pulse = 1.0 + Math.sin(t * Math.PI * 4) * 0.06; // 吸氣蓄力，0.94~1.06
 
       if (warnImg) {
-        // v0.3.13-test-2：pulse 套在 hitbox 尺寸上，不用 naturalWidth*scale
         const info = getHitboxDrawInfo(warnImg, pulse);
         if (info) {
+          // v0.3.14：強化警示 — 紅色外圈光環（較大、較亮，玩家一眼看到）
+          const ringAlpha = 0.4 + Math.sin(t * Math.PI * 6) * 0.3; // 0.1~0.7 閃動
+          ctx.save();
+          ctx.globalAlpha = Math.max(0.08, ringAlpha);
+          ctx.shadowColor = '#ff2200';
+          ctx.shadowBlur  = 22;
+          ctx.strokeStyle = '#ff4400';
+          ctx.lineWidth   = 3.5;
+          const cx = sx + o.w / 2;
+          const cy = o.y + o.h / 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, o.w * 0.72 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+
+          // 紅色底層光暈疊在圖片後方
+          const glowAlpha = (Math.sin(t * Math.PI * 6) * 0.5 + 0.5) * 0.45;
           if (glowAlpha > 0.05) {
             ctx.save();
             ctx.globalAlpha = glowAlpha;
-            ctx.shadowColor = '#ff8800';
-            ctx.shadowBlur  = 18;
+            ctx.shadowColor = '#ff2200';
+            ctx.shadowBlur  = 26;
             ctx.drawImage(warnImg, info.drawX, info.drawY, info.drawW, info.drawH);
             ctx.restore();
           }
@@ -4934,7 +4985,25 @@ function drawOrangeNemesis(sx, o) {
         _drawOrangeBodyGeometry(sx, o, false);
       }
 
+    } else if (o.phase === 'cooldown') {
+      // v0.3.14：喘氣恢復狀態 — cooldown01 / cooldown02 交替，輕微上下浮動
+      const useFirst = (Math.floor(frameCount / 12) % 2 === 0); // 每12幀換一張 ≈ 5fps
+      const cdImg = getOrangeEnemyImg(useFirst ? 'cooldown01' : 'cooldown02')
+                 || getOrangeEnemyImg('cooldown01')
+                 || getOrangeEnemyImg('idle'); // fallback
+      if (cdImg) {
+        const breathe  = Math.sin(frameCount * 0.08) * 2.5; // 極輕微上下浮動
+        const info     = getHitboxDrawInfo(cdImg);
+        if (info) {
+          // 輕微下移（喘氣低頭感），不影響 hitbox
+          ctx.drawImage(cdImg, info.drawX, info.drawY + breathe, info.drawW, info.drawH);
+        }
+      } else {
+        _drawOrangeBodyGeometry(sx, o, false);
+      }
+
     } else {
+      // idle
       const idleImg = getOrangeEnemyImg('idle');
       const info = idleImg ? getHitboxDrawInfo(idleImg) : null;
       if (info) {
@@ -7014,6 +7083,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestLevel3) {
     btnTestLevel3.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestLevel3.addEventListener('click', startAdventureTestLevel3);
+  }
+  // v0.3.14：橘子怪測試關按鈕
+  const btnTestOrange = document.getElementById('btn-pause-test-orange');
+  if (btnTestOrange) {
+    btnTestOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestOrange.addEventListener('click', startOrangeTestLevel);
   }
 })();
 
