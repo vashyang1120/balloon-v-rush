@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-4';
-const BUILD_TIME   = '2026-06-25 12:00';
+const GAME_VERSION = 'adventure-v0.3.13';
+const BUILD_TIME   = '2026-06-25 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
