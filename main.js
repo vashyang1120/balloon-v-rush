@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-2';
-const BUILD_TIME   = '2026-06-25 10:00';
+const GAME_VERSION = 'adventure-v0.3.13-orange-skin-foundation-test-3';
+const BUILD_TIME   = '2026-06-25 11:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -865,8 +865,8 @@ const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * �
 const ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
 
 // orange_spray_01 的噴口像素座標（素材原圖座標）
-const ORANGE_SPRAY_MOUTH_X   = 1156;
-const ORANGE_SPRAY_MOUTH_Y   = 237;
+const ORANGE_SPRAY_MOUTH_X   = 111;
+const ORANGE_SPRAY_MOUTH_Y   = 365;
 
 // orange_oil_spray_XX 的接點像素座標（素材原圖座標）
 const ORANGE_OIL_ANCHOR_X    = 1024;
