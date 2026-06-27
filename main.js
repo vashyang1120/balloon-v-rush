@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-2';
-const BUILD_TIME   = '2026-06-26 12:00';
+const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-3';
+const BUILD_TIME   = '2026-06-26 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -866,6 +866,10 @@ const ORANGE_ENEMY_ASSETS = {
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
 // ORANGE_DRAW_SCALE / ORANGE_SPRAY_SCALE 已廢棄（test-1 用 naturalWidth*scale 導致巨大化）
 const ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
+// v0.3.14-test-3：cooldown 圖檔底部留白與其他狀態稍有差異，用此 offset 讓腳底貼近地平線
+const ORANGE_COOLDOWN_DRAW_OFFSET_Y = 10; // px，只套用在 cooldown 狀態
+// v0.3.14-test-3：cooldown 圖片切換速度（frames），數值越大越慢，呈現喘氣而非閃爍
+const ORANGE_COOLDOWN_FRAME_DUR = 30; // 每 30 frames 換一張 ≈ 2fps @ 60fps
 
 // orange_spray_01 的噴口像素座標（素材原圖座標）
 const ORANGE_SPRAY_MOUTH_X   = 111;
@@ -4995,16 +4999,27 @@ function drawOrangeNemesis(sx, o) {
       }
 
     } else if (o.phase === 'cooldown') {
-      // v0.3.14-test-2：腳底錨點與 idle/warning/spray 完全一致（移除 bob offset 避免浮空）
-      // 喘氣感改用低幀率交替換圖呈現，不用 drawY 偏移
-      const useFirst = (Math.floor(frameCount / 12) % 2 === 0);
+      // v0.3.14-test-3：
+      // 1. ORANGE_COOLDOWN_FRAME_DUR=30 → 每 30 frames 換一張，避免閃爍
+      // 2. info.drawY + ORANGE_COOLDOWN_DRAW_OFFSET_Y → 讓腳底貼近地平線
+      // 3. 慢速透明度呼吸（0.82~1.00），呈現疲憊喘氣感，不是受傷閃爍
+      const useFirst = (Math.floor(frameCount / ORANGE_COOLDOWN_FRAME_DUR) % 2 === 0);
       const cdImg = getOrangeEnemyImg(useFirst ? 'cooldown01' : 'cooldown02')
                  || getOrangeEnemyImg('cooldown01')
                  || getOrangeEnemyImg('idle');
       if (cdImg) {
         const info = getHitboxDrawInfo(cdImg);
         if (info) {
-          ctx.drawImage(cdImg, info.drawX, info.drawY, info.drawW, info.drawH);
+          const breath       = 0.5 + 0.5 * Math.sin(frameCount * 0.06); // 慢速 0→1
+          const cooldownAlpha = 0.82 + breath * 0.18;                   // 0.82~1.00
+          ctx.save();
+          ctx.globalAlpha = cooldownAlpha;
+          ctx.drawImage(cdImg,
+            info.drawX,
+            info.drawY + ORANGE_COOLDOWN_DRAW_OFFSET_Y,
+            info.drawW,
+            info.drawH);
+          ctx.restore();
         }
       } else {
         _drawOrangeBodyGeometry(sx, o, false);
