@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.14-orange-gameplay-foundation-test-4" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.15-enemy-variant-tier-foundation-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -204,7 +204,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.14-orange-gameplay-foundation-test-4 · 2026-06-26
+        adventure-v0.3.15-enemy-variant-tier-foundation-test-1 · 2026-06-28
       </div>
 
     </div><!-- /#home-panel -->
@@ -233,6 +233,8 @@
           <button id="btn-pause-test-level3" class="pause-btn pause-btn--secondary" style="display:none">🦂 測試第 3 關</button>
           <!-- 測試版限定：橘子怪測試關（由 main.js 控制顯示）v0.3.14 -->
           <button id="btn-pause-test-orange" class="pause-btn pause-btn--secondary" style="display:none">🍊 測試橘子怪</button>
+          <!-- 測試版限定：Enemy Variant+Tier 測試（由 main.js 控制顯示）v0.3.15 -->
+          <button id="btn-pause-test-variant" class="pause-btn pause-btn--secondary" style="display:none">🧪 測試小怪變體</button>
         </div>
         <div id="pause-hint">桌機可按 ESC 繼續</div>
       </div>
@@ -316,7 +318,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.14-orange-gameplay-foundation-test-4"></script>
+  <script src="main.js?v=adventure-v0.3.15-enemy-variant-tier-foundation-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

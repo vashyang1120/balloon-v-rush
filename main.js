@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.14-orange-gameplay-foundation-test-4';
-const BUILD_TIME   = '2026-06-26 16:00';
+const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-1';
+const BUILD_TIME   = '2026-06-28 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -884,6 +884,158 @@ const ORANGE_OIL_ANCHOR_Y    = 132;
 // 整段 spraying 固定使用 oil_spray_03 最遠有效範圍作為傷害判定，不做三段式 hitbox
 const ORANGE_OIL_HITBOX_SOURCE_W = 630;
 
+// ═══════════════════════════════════════════════════════════════
+//  v0.3.15：Enemy Variant + Tier 系統
+//  ─────────────────────────────────────────────────────────────
+//  type     = 敵人大類（scorpion / balloonNemesis）
+//  variant  = 同類的真正種類 / 攻擊模式（關係到 AI 行為與未來美術 skin）
+//  tier     = 同一 variant 的強化程度（影響數值與程式色調）
+//
+//  設計原則：
+//  - variant 是種類（直線噴 / 雙向噴 / 扇形噴 / 普通蠍子 / 快腿蠍子…）
+//  - tier 是強化版（normal / fast / …）
+//  - fast 是 tier，不是 variant
+//  - cooldown 是橘子怪噴完後的狀態，不是一種新橘子怪
+// ═══════════════════════════════════════════════════════════════
+
+const ENEMY_VARIANTS = {
+  scorpion: {
+    normal: {
+      label:                '普通蠍子',
+      skinKey:              'scorpion_normal',
+      behaviorType:         'patrol',
+      baseSpeedMultiplier:  1.0,
+      drawScaleMultiplier:  1.0,
+      hp:                   2,
+      damage:               1,
+      abilityTags:          ['melee', 'patrol'],
+    },
+    fastBody: {
+      label:                '快腿蠍子',
+      skinKey:              'scorpion_fast',   // 尚無正式圖，fallback scorpion_normal
+      behaviorType:         'patrol',
+      baseSpeedMultiplier:  1.35,
+      drawScaleMultiplier:  0.92,
+      hp:                   2,
+      damage:               1,
+      abilityTags:          ['melee', 'patrol', 'fast-body'],
+    },
+    heavyBody: {
+      label:                '重甲蠍子',
+      skinKey:              'scorpion_heavy',  // 尚無正式圖，fallback scorpion_normal
+      behaviorType:         'patrol',
+      baseSpeedMultiplier:  0.72,
+      drawScaleMultiplier:  1.18,
+      hp:                   2,
+      damage:               1,
+      abilityTags:          ['melee', 'patrol', 'heavy-body'],
+    },
+  },
+
+  balloonNemesis: {
+    straight: {
+      label:              '直線噴油橘子怪',
+      skinKey:            'orange_straight',
+      attackPattern:      'straight',
+      baseWindupMs:       800,   // === CONFIG.ORANGE_WINDUP_MS at v0.3.14
+      baseSprayMs:        700,   // === CONFIG.ORANGE_SPRAY_MS
+      baseCooldownMs:     1600,  // === CONFIG.ORANGE_COOLDOWN_MS
+      baseIdleMs:         1300,  // === CONFIG.ORANGE_IDLE_MS
+      sprayRangeSourceW:  630,   // === ORANGE_OIL_HITBOX_SOURCE_W
+      damage:             1,
+      abilityTags:        ['spray', 'straight', 'warning', 'cooldown-window'],
+    },
+    dual: {
+      label:              '雙向噴油橘子怪',
+      skinKey:            'orange_dual',   // 尚無正式圖，fallback orange_straight skin
+      attackPattern:      'dual',          // TODO：前後同時噴油，本版只建資料架構
+      baseWindupMs:       800,
+      baseSprayMs:        700,
+      baseCooldownMs:     1800,
+      baseIdleMs:         1500,
+      sprayRangeSourceW:  630,
+      damage:             1,
+      abilityTags:        ['spray', 'dual-direction', 'warning', 'cooldown-window'],
+    },
+    fan: {
+      label:              '扇形噴油橘子怪',
+      skinKey:            'orange_fan',    // 尚無正式圖與 fan hitbox，本版只建資料
+      attackPattern:      'fan',           // TODO：需專用 fan oil sprite + fan hitbox
+      baseWindupMs:       700,
+      baseSprayMs:        800,
+      baseCooldownMs:     2000,
+      baseIdleMs:         1500,
+      sprayRangeSourceW:  630,
+      damage:             1,
+      abilityTags:        ['spray', 'fan-area', 'warning', 'cooldown-window'],
+    },
+  },
+};
+
+const ENEMY_TIERS = {
+  normal: {
+    label:                '普通',
+    speedMultiplier:      1.0,
+    drawScaleMultiplier:  1.0,
+    windupMultiplier:     1.0,
+    sprayMultiplier:      1.0,
+    cooldownMultiplier:   1.0,
+    idleMultiplier:       1.0,
+    tintMode:             'none',
+  },
+  fast: {
+    label:                '急速',
+    speedMultiplier:      1.15,
+    drawScaleMultiplier:  1.0,
+    windupMultiplier:     0.75,
+    sprayMultiplier:      1.0,
+    cooldownMultiplier:   0.82,
+    idleMultiplier:       0.72,
+    tintMode:             'red-orange',
+  },
+};
+
+function getDefaultVariantForEnemyType(type) {
+  if (type === 'scorpion') return 'normal';
+  if (type === 'balloonNemesis') return 'straight';
+  return 'normal';
+}
+
+function getEnemyVariantConfig(enemy) {
+  const type       = enemy.type || 'scorpion';
+  const variantKey = enemy.variant || getDefaultVariantForEnemyType(type);
+  const group      = ENEMY_VARIANTS[type];
+  if (!group) { console.warn('[EnemyVariant] unknown type:', type); return null; }
+  const cfg = group[variantKey];
+  if (!cfg) {
+    console.warn('[EnemyVariant] unknown variant:', variantKey, 'for type:', type);
+    return group[getDefaultVariantForEnemyType(type)] || null;
+  }
+  return cfg;
+}
+
+function getEnemyTierConfig(enemy) {
+  const tierKey = enemy.tier || 'normal';
+  const cfg     = ENEMY_TIERS[tierKey];
+  if (!cfg) {
+    console.warn('[EnemyTier] unknown tier:', tierKey);
+    return ENEMY_TIERS.normal;
+  }
+  return cfg;
+}
+
+// ── 橘子怪快捷 helper（套用 variant+tier 後的實際計時）──
+function getOrangeTimings(o) {
+  const v = getEnemyVariantConfig(o) || ENEMY_VARIANTS.balloonNemesis.straight;
+  const t = getEnemyTierConfig(o);
+  return {
+    windupMs:   v.baseWindupMs   * t.windupMultiplier,
+    sprayMs:    v.baseSprayMs    * t.sprayMultiplier,
+    cooldownMs: v.baseCooldownMs * t.cooldownMultiplier,
+    idleMs:     v.baseIdleMs     * t.idleMultiplier,
+  };
+}
+
 // 橘子怪圖片快取（key → Image）
 const orangeEnemyImgs = {};
 let orangeEnemyCoreReady = false;  // idle + warning + spray 至少全部就緒才設 true
@@ -991,6 +1143,58 @@ function startOrangeTestLevel() {
   console.log('[TestTools] startOrangeTestLevel:', {
     stageId: LEVELS[1] && LEVELS[1].stageId,
   });
+}
+
+// v0.3.15：Enemy Variant + Tier 測試入口
+// 進入一個 runtime-only 測試關，直接在畫面上產生各種 variant/tier 組合，
+// 讓開發者確認 variant+tier 有正確套用（速度、大小、tint）
+function startEnemyVariantTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  resetInventory();
+  // 用 LEVELS[0]（1-1）作為底板，然後 runtime 置換敵人
+  currentLevelIndex = 0;
+  loadLevel(0);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+
+  // 清除原有敵人，放入測試組合
+  enemies.length = 0;
+  const mkE = (x, variant, tier) => ({
+    x, y: GROUND_Y - CONFIG.ENEMY_H,
+    w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+    vx: -CONFIG.ENEMY_SPEED, hp: 2,
+    patrol: x, patrolRange: 80,
+    active: true, hitFlash: 0,
+    type: 'scorpion', variant, tier,
+    baseVx: CONFIG.ENEMY_SPEED,
+  });
+  enemies.push(mkE(500,  'normal',    'normal')); // 1. 普通/普通
+  enemies.push(mkE(750,  'fastBody',  'normal')); // 2. 快腿/普通
+  enemies.push(mkE(1000, 'normal',    'fast'));    // 3. 普通/急速 tier（有紅橘 tint）
+  enemies.push(mkE(1300, 'heavyBody', 'normal')); // 4. 重甲/普通
+
+  // 橘子怪測試
+  orangeNemeses.length = 0;
+  const mkO = (x, variant, tier) => ({
+    x, y: GROUND_Y - CONFIG.ORANGE_H,
+    w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false,
+    type: 'balloonNemesis', variant, tier,
+  });
+  orangeNemeses.push(mkO(1800, 'straight', 'normal')); // 5. 直線/普通
+  orangeNemeses.push(mkO(2300, 'straight', 'fast'));   // 6. 直線/急速（計時較快）
+  // dual/fan 只有資料，本版不做實體（TODO 標記）
+  // orangeNemeses.push(mkO(2800, 'dual', 'normal')); // TODO：dual attackPattern 待實作
+
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('Enemy Variant+Tier 測試關：觀察速度 / 大小 / tint 差異', 280);
+  console.log('[TestTools] startEnemyVariantTestLevel: 4 scorpions + 2 oranges');
 }
 
 // 測試版：直接跳第 3 關（完整重設 runtime state，不清玩家身份/V幣/Firebase）
@@ -2155,19 +2359,28 @@ const LEVELS = [
       // 段 4：平台間一組小尖刺
       { x: 4200, y: GROUND_Y - 24, w: 40, h: 24 },
     ],
-    buildEnemies: () => [
-      // 段 4：2 隻小怪在平台旁，可選擇跳躍或攻擊
-      { x: 3500, patrol: 3500, patrolRange: 110 },
-      { x: 4000, patrol: 4000, patrolRange: 120 },
-      // 段 5：1 隻小怪在終點前，增加一點挑戰
-      { x: 5500, patrol: 5500, patrolRange: 100 },
-    ].map(d => ({
-      x: d.x, y: GROUND_Y - CONFIG.ENEMY_H,
-      w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
-      vx: -CONFIG.ENEMY_SPEED, hp: 2,
-      patrol: d.patrol, patrolRange: d.patrolRange,
-      active: true, hitFlash: 0,
-    })),
+    buildEnemies: () => {
+      // v0.3.15：第一章第 3 節開始使用 scorpion variant + tier
+      // 前段：普通蠍子（normal/normal），熟悉基本節奏
+      // 中段：快腿蠍子（fastBody/normal），速度略快，體型略小
+      // 後段：重甲蠍子（heavyBody/normal），速度較慢，體型略大，像擋路型
+      const mkEnemy = (x, patrol, range, variant, tier) => ({
+        x, y: GROUND_Y - CONFIG.ENEMY_H,
+        w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+        vx: -CONFIG.ENEMY_SPEED, hp: 2,
+        patrol, patrolRange: range,
+        active: true, hitFlash: 0,
+        type: 'scorpion', variant, tier,
+        baseVx: CONFIG.ENEMY_SPEED,
+      });
+      return [
+        // 段 4 前段：普通蠍子
+        mkEnemy(3500, 3500, 110, 'normal',    'normal'),
+        mkEnemy(4000, 4000, 120, 'fastBody',  'normal'), // 快腿
+        // 段 5：重甲蠍子（擋路）
+        mkEnemy(5500, 5500, 100, 'heavyBody', 'normal'),
+      ];
+    },
     buildOranges: () => [
       { x: 4600, y: GROUND_Y - CONFIG.ORANGE_H,
         w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
@@ -2890,10 +3103,24 @@ function loadLevel(index) {
   lv.buildSpikes().forEach(s => spikes.push(s));
 
   enemies.length = 0;
-  lv.buildEnemies().forEach(e => enemies.push(e));
+  lv.buildEnemies().forEach(e => {
+    // v0.3.15：補 type/variant/tier/baseVx 供 variant+tier 系統使用
+    // 舊關卡資料未設定時 fallback scorpion/normal/normal
+    if (!e.type)    e.type    = 'scorpion';
+    if (!e.variant) e.variant = 'normal';
+    if (!e.tier)    e.tier    = 'normal';
+    if (!e.baseVx)  e.baseVx  = Math.abs(e.vx ?? CONFIG.ENEMY_SPEED);
+    enemies.push(e);
+  });
 
   orangeNemeses.length = 0;
-  lv.buildOranges().forEach(o => orangeNemeses.push(o));
+  lv.buildOranges().forEach(o => {
+    // v0.3.15：補 type/variant/tier
+    if (!o.type)    o.type    = 'balloonNemesis';
+    if (!o.variant) o.variant = 'straight';
+    if (!o.tier)    o.tier    = 'normal';
+    orangeNemeses.push(o);
+  });
 
   // 圓氣球
   roundBalloons.length = 0;
@@ -3341,12 +3568,13 @@ function updateMeleeAttack() {
 function updateOrangeNemeses(dtMs) {
   orangeNemeses.forEach(o => {
     o.phaseTimer += dtMs;
+    // v0.3.15：計時從 variant+tier 取得，normal/straight = v0.3.14 完全相同
+    const tm = getOrangeTimings(o);
 
     switch (o.phase) {
       case 'idle':
         o.sprayActive = false;
-        // v0.3.14：idle 使用新的 ORANGE_IDLE_MS（取代舊版誤稱 ORANGE_COOLDOWN_MS）
-        if (o.phaseTimer >= CONFIG.ORANGE_IDLE_MS) {
+        if (o.phaseTimer >= tm.idleMs) {
           o.phase      = 'windup';
           o.phaseTimer = 0;
         }
@@ -3354,7 +3582,7 @@ function updateOrangeNemeses(dtMs) {
 
       case 'windup':
         o.sprayActive = false;
-        if (o.phaseTimer >= CONFIG.ORANGE_WINDUP_MS) {
+        if (o.phaseTimer >= tm.windupMs) {
           o.phase      = 'spraying';
           o.phaseTimer = 0;
           o.sprayActive = true;
@@ -3363,8 +3591,7 @@ function updateOrangeNemeses(dtMs) {
 
       case 'spraying':
         o.sprayActive = true;
-        if (o.phaseTimer >= CONFIG.ORANGE_SPRAY_MS) {
-          // v0.3.14：噴完後進入獨立 cooldown 狀態，不直接回 idle
+        if (o.phaseTimer >= tm.sprayMs) {
           o.phase      = 'cooldown';
           o.phaseTimer = 0;
           o.sprayActive = false;
@@ -3372,9 +3599,8 @@ function updateOrangeNemeses(dtMs) {
         break;
 
       case 'cooldown':
-        // v0.3.14：橘子怪噴完後疲憊喘氣，這段時間玩家可以安全通過
         o.sprayActive = false;
-        if (o.phaseTimer >= CONFIG.ORANGE_COOLDOWN_MS) {
+        if (o.phaseTimer >= tm.cooldownMs) {
           o.phase      = 'idle';
           o.phaseTimer = 0;
         }
@@ -3640,15 +3866,25 @@ function updateEnemies() {
     if (!e.active) return;
     if (e.hitFlash > 0) e.hitFlash--;
 
-    // Patrol
+    // v0.3.15：從 variant+tier 讀取速度倍率；舊資料無 type 時 fallback scorpion/normal/normal
+    const variantCfg = getEnemyVariantConfig(e);
+    const tierCfg    = getEnemyTierConfig(e);
+    const speedMult  = (variantCfg?.baseSpeedMultiplier ?? 1.0) * (tierCfg?.speedMultiplier ?? 1.0);
+    // 基礎速度 = 原始 |vx| 大小（已在 buildEnemies 時設為 CONFIG.ENEMY_SPEED）
+    const baseSpeed = Math.abs(e.baseVx ?? CONFIG.ENEMY_SPEED);
+    const effectiveSpeed = baseSpeed * speedMult;
+
+    // Patrol（方向不變，速度大小依 variant+tier）
+    const dir = e.vx >= 0 ? 1 : -1;
+    e.vx = dir * effectiveSpeed;
     e.x += e.vx;
     if (e.x < e.patrol - e.patrolRange || e.x > e.patrol + e.patrolRange) {
       e.vx *= -1;
     }
 
-    // Keep on ground (simple: pin to GROUND_Y)
+    // Keep on ground
     if (e.y + e.h < GROUND_Y) {
-      e.y = GROUND_Y - e.h; // keep grounded for now
+      e.y = GROUND_Y - e.h;
     }
   });
 }
@@ -4128,7 +4364,7 @@ function drawWorld() {
     if (!e.active) return;
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
-    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx);
+    drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx, e); // v0.3.15：pass e for variant/tier
   });
 
   // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
@@ -4851,14 +5087,22 @@ function drawEnemyFallback(x, y, w, h, flashing) {
   }
 }
 
-function drawEnemy(x, y, w, h, flashing, enemyVx) {
+function drawEnemy(x, y, w, h, flashing, enemyVx, enemyObj) {
   // ── 蠍子圖片模式：hitFlash 時優先使用 hurt 圖（受擊回饋）──
   const img = flashing
     ? (getScorpionHurtImg() || getScorpionWalkImg()) // dying / 受擊時優先 hurt 圖
     : getScorpionWalkImg();
+
+  // v0.3.15：從 variant+tier 取得繪製縮放倍率；無 enemyObj 時 fallback 1.0
+  const variantCfg      = enemyObj ? getEnemyVariantConfig(enemyObj) : null;
+  const tierCfg         = enemyObj ? getEnemyTierConfig(enemyObj)    : null;
+  const scaleMult       = (variantCfg?.drawScaleMultiplier ?? 1.0)
+                        * (tierCfg?.drawScaleMultiplier    ?? 1.0);
+  const tintMode        = tierCfg?.tintMode ?? 'none';
+
   if (img) {
     // ── Foot anchor 對齊：讓圖片 88.3% 高度處對齊 hitbox 底部 ──
-    const drawW  = w * SCORPION_DRAW_SCALE;
+    const drawW  = w * SCORPION_DRAW_SCALE * scaleMult;
     const drawH  = drawW * (img.height / img.width); // 保持圖片比例（512×512 → 正方形）
     const groundY  = y + h;                          // hitbox 底部（地面）
     const centerX  = x + w / 2;
@@ -4866,17 +5110,13 @@ function drawEnemy(x, y, w, h, flashing, enemyVx) {
     const drawY    = groundY - drawH * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
 
     ctx.save();
-    // 圖片平滑：非像素風圖片需要開啟
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // 閃白效果（受傷）
     if (flashing) ctx.globalAlpha = 0.5;
 
-    // 依移動方向水平翻轉（素材面向右，往左走時翻轉）
     const goingLeft = (enemyVx !== undefined ? enemyVx : 0) < 0;
     if (goingLeft) {
-      // 以圖片中心為翻轉基準
       ctx.translate(drawX + drawW / 2, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(img, -drawW / 2, drawY, drawW, drawH);
@@ -4887,29 +5127,39 @@ function drawEnemy(x, y, w, h, flashing, enemyVx) {
     if (flashing) ctx.globalAlpha = 1;
     ctx.restore();
 
-    // 受擊白閃：hitFlash 時在 hurt 圖上疊一層半透明白色
+    // 受擊白閃
     if (flashing) {
       ctx.save();
       ctx.globalAlpha = 0.45;
       ctx.fillStyle = '#ffffff';
-      const drawW2 = w * SCORPION_DRAW_SCALE;
-      const drawH2 = drawW2 * (img.height / img.width);
-      const groundY2 = y + h;
-      const drawX2   = x + w / 2 - drawW2 / 2 + SCORPION_DRAW_OFFSET_X;
-      const drawY2   = groundY2 - drawH2 * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
-      ctx.fillRect(drawX2, drawY2, drawW2, drawH2);
+      ctx.fillRect(drawX, drawY, drawW, drawH);
       ctx.restore();
     }
-    // HP 指示條（不受翻轉影響）
-    for (let i = 0; i < 2; i++) {
-      ctx.fillStyle = '#e00';
-      ctx.fillRect(x + 8 + i * 18, y - 10, 14, 6);
-    }
-    return;
-  }
 
-  // ── Fallback：原本 placeholder 繪製 ──
-  drawEnemyFallback(x, y, w, h, flashing);
+    // v0.3.15：fast tier 紅橘 tint（程式色調，代表更急、更危險；不改圖片本身）
+    if (tintMode === 'red-orange') {
+      ctx.save();
+      ctx.globalAlpha    = 0.22;
+      ctx.globalCompositeOperation = 'source-atop';  // 只蓋在圖片非透明區域
+      ctx.fillStyle      = '#ff5500';
+      // 重新定位回地面錨點畫 tint 矩形
+      ctx.fillRect(drawX, drawY, drawW, drawH);
+      ctx.restore();
+
+      // 外框橘紅光暈（提升辨識度，不影響 hitbox）
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.15 * Math.sin(frameCount * 0.15);
+      ctx.shadowColor = '#ff4400';
+      ctx.shadowBlur  = 10;
+      ctx.strokeStyle = 'rgba(255,80,0,0.6)';
+      ctx.lineWidth   = 2;
+      ctx.strokeRect(drawX + 2, drawY + 2, drawW - 4, drawH - 4);
+      ctx.restore();
+    }
+  } else {
+    // ── 幾何 fallback ──
+    drawEnemyFallback(x, y, w, h, flashing);
+  }
 }
 
 
@@ -7147,6 +7397,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestOrange) {
     btnTestOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestOrange.addEventListener('click', startOrangeTestLevel);
+  }
+  // v0.3.15：Enemy Variant+Tier 測試按鈕
+  const btnTestVariant = document.getElementById('btn-pause-test-variant');
+  if (btnTestVariant) {
+    btnTestVariant.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestVariant.addEventListener('click', startEnemyVariantTestLevel);
   }
 })();
 
