@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.17-scorpion-defeat-feedback-test-3';
-const BUILD_TIME   = '2026-06-28 19:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-1';
+const BUILD_TIME   = '2026-06-28 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -987,7 +987,8 @@ const ENEMY_VARIANTS = {
       behaviorType:         'patrol',
       baseSpeedMultiplier:  1.0,
       drawScaleMultiplier:  1.0,
-      hp:                   2,
+      hp:                   1,    // v0.3.18：一劍即死
+      maxHp:                1,
       damage:               1,
       abilityTags:          ['melee', 'patrol'],
     },
@@ -997,17 +998,19 @@ const ENEMY_VARIANTS = {
       behaviorType:         'patrol',
       baseSpeedMultiplier:  1.35,
       drawScaleMultiplier:  0.92,
-      hp:                   2,
+      hp:                   1,    // fastBody 不在正式流程，hp 跟 normal 一樣
+      maxHp:                1,
       damage:               1,
       abilityTags:          ['melee', 'patrol', 'fast-body'],
     },
     heavyBody: {
       label:                '重甲蠍子',
-      skinKey:              'scorpion_heavy',  // 尚無正式圖，fallback scorpion_normal
+      skinKey:              'scorpion_heavy',
       behaviorType:         'patrol',
       baseSpeedMultiplier:  0.72,
       drawScaleMultiplier:  1.18,
-      hp:                   2,
+      hp:                   3,    // v0.3.18：Tank 型，需要 3 劍擊敗
+      maxHp:                3,
       damage:               1,
       abilityTags:          ['melee', 'patrol', 'heavy-body'],
     },
@@ -3191,11 +3194,15 @@ function loadLevel(index) {
   enemies.length = 0;
   lv.buildEnemies().forEach(e => {
     // v0.3.15：補 type/variant/tier/baseVx 供 variant+tier 系統使用
-    // 舊關卡資料未設定時 fallback scorpion/normal/normal
     if (!e.type)    e.type    = 'scorpion';
     if (!e.variant) e.variant = 'normal';
     if (!e.tier)    e.tier    = 'normal';
     if (!e.baseVx)  e.baseVx  = Math.abs(e.vx ?? CONFIG.ENEMY_SPEED);
+    // v0.3.18：從 ENEMY_VARIANTS 讀取 hp / maxHp，讓 heavyBody (3 HP) 與 normal (1 HP) 正確初始化
+    const vCfg  = getEnemyVariantConfig(e);
+    const initHp = vCfg?.hp ?? 1;
+    e.hp    = initHp;
+    e.maxHp = vCfg?.maxHp ?? initHp;
     enemies.push(e);
   });
 
@@ -3710,21 +3717,26 @@ const SCORPION_DEFEAT_TOTAL_FRAMES = 18;
 const SCORPION_DEFEAT_FLASH_FRAMES = 8;
 
 function spawnScorpionDefeatEffect(e) {
-  // v0.3.17：保留 skinKey 讓 defeat effect 能畫對的圖（heavyBody 用 heavy 圖）
   const variantCfg = getEnemyVariantConfig(e);
   const skinKey    = variantCfg?.skinKey || 'scorpion_normal';
+  // v0.3.18：鎖定方向快照（死亡瞬間 vx 還是巡邏方向，不受後續 knockback 影響）
+  const facingLeft = (e.vx || 0) <= 0;
+  // v0.3.18：保留 drawScaleMultiplier，heavyBody 死亡動畫維持 heavy 大小
+  const tierCfg    = getEnemyTierConfig(e);
+  const scaleMult  = (variantCfg?.drawScaleMultiplier ?? 1.0)
+                   * (tierCfg?.drawScaleMultiplier    ?? 1.0);
   scorpionDefeatEffects.push({
-    x:          e.x,
-    y:          e.y,
-    w:          e.w,
-    h:          e.h,
-    facingLeft: (e.vx || 0) < 0,
+    x:           e.x,
+    y:           e.y,
+    w:           e.w,
+    h:           e.h,
+    facingLeft,
     skinKey,
-    timer:      0,
+    scaleMult,
+    timer:       0,
     totalFrames: SCORPION_DEFEAT_TOTAL_FRAMES,
-    // 舊欄位保留相容性
-    life: SCORPION_DEFEAT_TOTAL_FRAMES,
-    maxLife: SCORPION_DEFEAT_TOTAL_FRAMES,
+    life:        SCORPION_DEFEAT_TOTAL_FRAMES,
+    maxLife:     SCORPION_DEFEAT_TOTAL_FRAMES,
     vx: 0, vy: -0.4,
   });
 }
@@ -3769,7 +3781,7 @@ function drawScorpionDefeatEffects(cx) {
       return;
     }
 
-    const drawW   = fx.w * SCORPION_DRAW_SCALE * scale;
+    const drawW   = fx.w * SCORPION_DRAW_SCALE * scale * (fx.scaleMult || 1.0);
     const drawH   = drawW * (img.height / img.width);
     const groundY = fx.y + fx.h + popY;
     const drawX   = sx + fx.w / 2 - drawW / 2 + SCORPION_DRAW_OFFSET_X;
@@ -3881,14 +3893,19 @@ function updateSpinningEnemies(dt) {
     s.angle += 0.3 * dt;
     s.life--;
     if (s.life <= 0) { spinningEnemies.splice(i, 1); continue; }
-    // 撞到其他活著的小怪 → 消滅
+    // 撞到其他活著的小怪 → 扣血（v0.3.18：heavyBody 有 3 HP，不再被秒殺）
     enemies.forEach(e => {
       if (!e.active) return;
       if (rectsOverlap(s.x, s.y, s.w, s.h, e.x, e.y, e.w, e.h)) {
-        spawnScorpionDefeatEffect(e); // v0.3.17：spinning kill 也產生 defeat effect
-        e.active = false;
-        player.enemiesDefeated++;
-        s.life = 0;
+        e.hp--;
+        if (e.hp <= 0) {
+          spawnScorpionDefeatEffect(e);
+          e.active = false;
+          player.enemiesDefeated++;
+        } else {
+          e.hitFlash = 6; // 未死：閃爍提示仍有 HP
+        }
+        s.life = 0; // spinning enemy 撞上後消失
       }
     });
   }
@@ -5301,6 +5318,36 @@ function drawEnemy(x, y, w, h, flashing, enemyVx, enemyObj) {
   } else {
     // ── 幾何 fallback ──
     drawEnemyFallback(x, y, w, h, flashing);
+  }
+
+  // v0.3.18：heavyBody HP 血條（只在 maxHp > 1 時顯示，normal 不顯示）
+  const maxHp = enemyObj?.maxHp ?? 1;
+  const curHp = enemyObj?.hp   ?? maxHp;
+  if (maxHp > 1) {
+    // 血條位置：蠍子頭上方 6px，寬度與 hitbox 同寬
+    const barW   = w * 1.1;        // 略寬於 hitbox 讓視覺更清楚
+    const barH   = 5;
+    const barX   = x + (w - barW) / 2;
+    const barY   = y - 9;
+    const cellW  = barW / maxHp;
+    const gap    = 2;
+
+    // 黑色底
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+
+    for (let i = 0; i < maxHp; i++) {
+      const filled = i < curHp;
+      const cx     = barX + i * cellW + (i > 0 ? gap : 0);
+      const cw     = cellW - (i > 0 ? gap : 0);
+      // 血量顏色：3=綠, 2=橘, 1=紅（依剩餘 HP 決定最後一格）
+      ctx.fillStyle = filled
+        ? (curHp === 1 ? '#ff3333' : curHp === 2 ? '#ff9900' : '#55ee44')
+        : 'rgba(80,80,80,0.7)';
+      ctx.fillRect(cx, barY, cw, barH);
+    }
+    ctx.restore();
   }
 }
 
@@ -7156,7 +7203,15 @@ function restart(opts) {
 
   coins.forEach(c => { c.collected = false; });
   balloons260.forEach(b => { b.collected = false; });
-  enemies.forEach(e => { e.active = true; e.hp = 2; e.x = e.patrol; e.hitFlash = 0; });
+  enemies.forEach(e => {
+    e.active = true;
+    // v0.3.18：重試時回到 variant 定義的初始 HP（heavyBody=3, normal=1）
+    const vCfg = getEnemyVariantConfig(e);
+    e.hp    = vCfg?.hp    ?? e.maxHp ?? 1;
+    e.maxHp = vCfg?.maxHp ?? e.maxHp ?? 1;
+    e.x = e.patrol;
+    e.hitFlash = 0;
+  });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
