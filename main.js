@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.17-scorpion-defeat-feedback-test-2';
-const BUILD_TIME   = '2026-06-28 18:00';
+const GAME_VERSION = 'adventure-v0.3.17-scorpion-defeat-feedback-test-3';
+const BUILD_TIME   = '2026-06-28 19:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3777,23 +3777,30 @@ function drawScorpionDefeatEffects(cx) {
 
     // v0.3.17-test-2：image draw + source-atop flash overlay 必須在同一個
     // save/restore 區塊內，否則 source-atop 看不到已 drawn 的像素，變成矩形
+    // v0.3.17-test-3：白閃 / 紅光暈交替，均依附在蠍子圖片本體上，不畫矩形
+    const flashPhase = Math.floor(fx.timer / 2) % 2; // 0=白閃, 1=紅光暈
+
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
-      // 白閃幀：shadow glow 表示受擊，不畫矩形
+    if (inFlash && flashPhase === 0) {
+      // 白閃幀：白色光暈
       ctx.shadowColor = 'rgba(255,255,255,0.9)';
       ctx.shadowBlur  = 10;
+    } else if (inFlash && flashPhase === 1) {
+      // 紅光暈幀：紅色 shadow glow（不畫矩形，依附在圖片本體上）
+      ctx.shadowColor = 'rgba(255,40,40,0.85)';
+      ctx.shadowBlur  = 14;
     }
 
     if (fx.facingLeft) {
       ctx.translate(sx + fx.w / 2, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(img, -drawW / 2, drawY, drawW, drawH);
-      // flash：source-atop 必須緊接在 drawImage 之後，在 ctx.restore() 之前
-      if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
+      // 白閃幀：source-atop 白色疊層，依附在剛才的圖片像素上
+      if (inFlash && flashPhase === 0) {
         ctx.globalCompositeOperation = 'source-atop';
         ctx.globalAlpha = 0.38 * alpha;
         ctx.fillStyle   = '#ffffff';
@@ -3801,7 +3808,7 @@ function drawScorpionDefeatEffects(cx) {
       }
     } else {
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
-      if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
+      if (inFlash && flashPhase === 0) {
         ctx.globalCompositeOperation = 'source-atop';
         ctx.globalAlpha = 0.38 * alpha;
         ctx.fillStyle   = '#ffffff';
@@ -5712,31 +5719,57 @@ function drawOverlay(text, color) {
 
 // drawResultBox：Canvas 只畫模糊遮罩，所有內容由 HTML overlay 負責
 
+// v0.3.17-test-3：手機版短版版本標籤，避免和右上暫停/離開全螢幕按鈕重疊
+// 例：adventure-v0.3.17-scorpion-defeat-feedback-test-3 → v0.3.17 test-3
+function getShortVersionLabel() {
+  if (!GAME_VERSION) return '';
+  // 取 v0.3.xx 部分
+  const vMatch  = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
+  // 取最後一段 test-N
+  const tMatch  = GAME_VERSION.match(/test-(\d+)/);
+  const vPart   = vMatch  ? 'v' + vMatch[1]  : '';
+  const tPart   = tMatch  ? 'test-' + tMatch[1] : '';
+  return [vPart, tPart].filter(Boolean).join(' ');
+}
+
 function drawVersionInfo() {
-  // 測試版：[TEST MODE] 顯示在版本號下方（正式版自動隱藏）
+  // 判斷是否為小螢幕 / 手機橫向（canvas clientWidth 或 window.innerWidth 較小）
+  const compactUi = (typeof canvas !== 'undefined' && canvas.clientWidth > 0 && canvas.clientWidth < 900)
+                  || window.innerWidth < 900;
+
   if (ADVENTURE_TEST_TOOLS_ENABLED) {
     ctx.save();
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.font = 'bold 11px sans-serif';
     ctx.fillStyle = 'rgba(255,230,120,0.95)';
-    ctx.fillText(
-      '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
-      CANVAS_W - 14,
-      32
-    );
+
+    if (compactUi) {
+      // 手機版：短版版本號放在左側，避開右側按鈕
+      ctx.fillText('[TEST] ' + getShortVersionLabel(), 8, 44);
+    } else {
+      ctx.textAlign = 'right';
+      ctx.fillText(
+        '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
+        CANVAS_W - 14,
+        32
+      );
+    }
     ctx.restore();
   }
-  // --- original drawVersionInfo below ---
-  // 測試階段：明顯版本條（右上角，黑底白字）
-  const vText = GAME_VERSION + '  Build: ' + BUILD_TIME;
-  ctx.font     = '10px monospace';
-  const tw     = ctx.measureText(vText).width;
-  const px = CANVAS_W - tw - 10;
-  const py = 4;
-  // 黑色半透明底
+
+  // 版本字串（右上角）
+  const vText = compactUi
+    ? getShortVersionLabel()            // 手機：短版
+    : GAME_VERSION + '  Build: ' + BUILD_TIME; // 桌機：完整版
+  ctx.font = '10px monospace';
+  const tw  = ctx.measureText(vText).width;
+
+  // 手機版：避開右側按鈕（約佔 120px），改放左側上方
+  const px = compactUi ? 8 : CANVAS_W - tw - 10;
+  const py = compactUi ? 4 : 4;
+
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(px - 4, py, tw + 8, 18);
-  // 白字
   ctx.fillStyle    = '#ffffff';
   ctx.textAlign    = 'left';
   ctx.textBaseline = 'top';
