@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-2';
-const BUILD_TIME   = '2026-06-28 12:00';
+const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-2-fix-1';
+const BUILD_TIME   = '2026-06-28 13:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -5171,18 +5171,17 @@ function drawEnemyFallback(x, y, w, h, flashing) {
 }
 
 function drawEnemy(x, y, w, h, flashing, enemyVx, enemyObj) {
-  // v0.3.15-test-2：用 skinKey 取圖；未知 skinKey fallback scorpion_normal
+  // v0.3.15-test-2-fix-1：宣告順序修正（variantCfg 必須在 skinKey 之前）
+  const variantCfg = enemyObj ? getEnemyVariantConfig(enemyObj) : null;
+  const tierCfg    = enemyObj ? getEnemyTierConfig(enemyObj)    : null;
+  const scaleMult  = (variantCfg?.drawScaleMultiplier ?? 1.0)
+                   * (tierCfg?.drawScaleMultiplier    ?? 1.0);
+  const tintMode   = tierCfg?.tintMode ?? 'none';
+
   const skinKey = variantCfg?.skinKey || 'scorpion_normal';
   const img = flashing
     ? (getScorpionHurtImgForSkin(skinKey) || getScorpionWalkImgForSkin(skinKey))
     : getScorpionWalkImgForSkin(skinKey);
-
-  // v0.3.15：從 variant+tier 取得繪製縮放倍率；無 enemyObj 時 fallback 1.0
-  const variantCfg      = enemyObj ? getEnemyVariantConfig(enemyObj) : null;
-  const tierCfg         = enemyObj ? getEnemyTierConfig(enemyObj)    : null;
-  const scaleMult       = (variantCfg?.drawScaleMultiplier ?? 1.0)
-                        * (tierCfg?.drawScaleMultiplier    ?? 1.0);
-  const tintMode        = tierCfg?.tintMode ?? 'none';
 
   if (img) {
     // ── Foot anchor 對齊：讓圖片 88.3% 高度處對齊 hitbox 底部 ──
