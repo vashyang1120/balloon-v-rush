@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-2-fix-1';
-const BUILD_TIME   = '2026-06-28 13:00';
+const GAME_VERSION = 'adventure-v0.3.16-chapter1-scorpion-variant-layout-test-1';
+const BUILD_TIME   = '2026-06-28 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2441,10 +2441,11 @@ const LEVELS = [
       { x: 4200, y: GROUND_Y - 24, w: 40, h: 24 },
     ],
     buildEnemies: () => {
-      // v0.3.15：第一章第 3 節開始使用 scorpion variant + tier
-      // 前段：普通蠍子（normal/normal），熟悉基本節奏
-      // 中段：快腿蠍子（fastBody/normal），速度略快，體型略小
-      // 後段：重甲蠍子（heavyBody/normal），速度較慢，體型略大，像擋路型
+      // v0.3.16：第一章第 3 節正式三段式蠍子配置
+      // 前段：normal scorpion × 2（熟悉槌子節奏）
+      // 中段：heavyBody × 1（第一次正式登場，讓玩家觀察並辨識）
+      // 後段：normal + heavyBody 混合（實際處理差異）
+      // 不使用 fastBody（尚無正式美術，不放進正式關卡流程）
       const mkEnemy = (x, patrol, range, variant, tier) => ({
         x, y: GROUND_Y - CONFIG.ENEMY_H,
         w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
@@ -2455,11 +2456,15 @@ const LEVELS = [
         baseVx: CONFIG.ENEMY_SPEED,
       });
       return [
-        // 段 4 前段：普通蠍子
-        mkEnemy(3500, 3500, 110, 'normal',    'normal'),
-        mkEnemy(4000, 4000, 120, 'fastBody',  'normal'), // 快腿
-        // 段 5：重甲蠍子（擋路）
-        mkEnemy(5500, 5500, 100, 'heavyBody', 'normal'),
+        // 前段：2 隻 normal，讓玩家先熟悉槌子節奏
+        mkEnemy(3200, 3200, 110, 'normal',    'normal'),
+        mkEnemy(3700, 3700, 120, 'normal',    'normal'),
+        // 中段：1 隻 heavyBody 首次登場，周圍留空讓玩家仔細觀察
+        // 放在 4400 平坦區域，遠離尖刺與橘子怪，降低第一次辨識難度
+        mkEnemy(4400, 4400, 100, 'heavyBody', 'normal'),
+        // 後段：normal + heavyBody 混合，讓玩家實際處理兩種差異
+        mkEnemy(5200, 5200, 110, 'normal',    'normal'),
+        mkEnemy(5700, 5700, 100, 'heavyBody', 'normal'),
       ];
     },
     buildOranges: () => [
