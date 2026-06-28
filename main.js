@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-1';
-const BUILD_TIME   = '2026-06-28 10:00';
+const GAME_VERSION = 'adventure-v0.3.15-enemy-variant-tier-foundation-test-2';
+const BUILD_TIME   = '2026-06-28 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -744,6 +744,87 @@ const SCORPION_ANIM_SPEED    = 7;     // 每幾 game frames 換一張
 // 預載圖片快取（key=0~3，載入失敗保留 undefined）
 const scorpionWalkImgs = [];
 let scorpionWalkReady = false;  // 至少一張載入完成才設 true
+
+// v0.3.15-test-2：per-skinKey 圖片資源表
+// fastBody 尚無正式圖，目前共用 scorpion_normal
+const SCORPION_SKIN_ASSETS = {
+  scorpion_normal: {
+    walk: [
+      'assets/enemies/scorpion/scorpion_walk_01.png',
+      'assets/enemies/scorpion/scorpion_walk_02.png',
+      'assets/enemies/scorpion/scorpion_walk_03.png',
+      'assets/enemies/scorpion/scorpion_walk_04.png',
+    ],
+    hurt: 'assets/enemies/scorpion/scorpion_hurt_01.png',
+  },
+  scorpion_heavy: {
+    walk: [
+      'assets/enemies/scorpion/scorpion_heavy_walk_01.png',
+      'assets/enemies/scorpion/scorpion_heavy_walk_02.png',
+      'assets/enemies/scorpion/scorpion_heavy_walk_03.png',
+      'assets/enemies/scorpion/scorpion_heavy_walk_04.png',
+    ],
+    hurt: 'assets/enemies/scorpion/scorpion_heavy_hurt_01.png',
+  },
+  // scorpion_fast 正式圖尚未提供，載入時自動 fallback scorpion_normal
+};
+
+// 每個 skinKey 的快取：{ walk: [img×4], hurt: img, walkReady: bool, hurtReady: bool }
+const scorpionSkinImgs = {};
+
+function initScorpionSkinArt() {
+  Object.entries(SCORPION_SKIN_ASSETS).forEach(([skinKey, assets]) => {
+    if (!scorpionSkinImgs[skinKey]) {
+      scorpionSkinImgs[skinKey] = { walk: [], walkReady: false, hurt: null, hurtReady: false };
+    }
+    const cache = scorpionSkinImgs[skinKey];
+    let loadedCount = 0;
+    assets.walk.forEach((src, i) => {
+      const img = new Image();
+      img.onload = function() {
+        cache.walk[i] = img;
+        loadedCount++;
+        if (loadedCount >= 1) cache.walkReady = true;
+      };
+      img.onerror = function() {
+        console.warn('[ScorpionSkin] walk not found:', src, '→ fallback scorpion_normal');
+      };
+      img.src = resolveAdventureAssetSrc(src);
+    });
+    if (assets.hurt) {
+      const hurtImg = new Image();
+      hurtImg.onload = function() { cache.hurt = hurtImg; cache.hurtReady = true; };
+      hurtImg.onerror = function() { console.warn('[ScorpionSkin] hurt not found:', assets.hurt); };
+      hurtImg.src = resolveAdventureAssetSrc(assets.hurt);
+    }
+  });
+}
+
+// 取得特定 skinKey 的 walk 圖；載入失敗 fallback scorpion_normal；skinKey 未知也 fallback
+function getScorpionWalkImgForSkin(skinKey) {
+  const cache = scorpionSkinImgs[skinKey];
+  if (cache && cache.walkReady) {
+    const idx = Math.floor(frameCount / SCORPION_ANIM_SPEED) % 4;
+    const img = cache.walk[idx] || cache.walk[0];
+    if (img) return img;
+  }
+  // fallback：scorpion_normal 快取，或舊全域快取
+  const nc = scorpionSkinImgs['scorpion_normal'];
+  if (nc && nc.walkReady) {
+    const idx = Math.floor(frameCount / SCORPION_ANIM_SPEED) % 4;
+    return nc.walk[idx] || nc.walk[0] || null;
+  }
+  return scorpionWalkImgs[Math.floor(frameCount / SCORPION_ANIM_SPEED) % 4] || null;
+}
+
+// 取得特定 skinKey 的 hurt 圖；載入失敗 fallback
+function getScorpionHurtImgForSkin(skinKey) {
+  const cache = scorpionSkinImgs[skinKey];
+  if (cache && cache.hurtReady && cache.hurt) return cache.hurt;
+  const nc = scorpionSkinImgs['scorpion_normal'];
+  if (nc && nc.hurtReady && nc.hurt) return nc.hurt;
+  return getScorpionHurtImg(); // global fallback
+}
 
 
 // ── 蠍子受傷圖（被槌子擊飛旋轉時使用）────────────────
@@ -3699,6 +3780,8 @@ function updateHammerMelee() {
         vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
         life: CONFIG.HAMMER_SPIN_LIFE,
         angle: 0,
+        // v0.3.15-test-2：保留來源 enemy 的 skinKey 供飛行時畫正確 hurt 圖
+        skinKey: (getEnemyVariantConfig(e)?.skinKey) || 'scorpion_normal',
       });
       if (!player.hammerHit) {
         player.hammerHit = true;
@@ -4409,12 +4492,12 @@ function drawWorld() {
   spinningEnemies.forEach(s => {
     const sx = s.x - cx;
     if (sx > CANVAS_W + 60 || sx + s.w < -60) return;
-    const hurtImg = getScorpionHurtImg();
+    // v0.3.15-test-2：使用 spinning enemy 保存的 skinKey 畫正確 hurt 圖
+    const hurtImg = getScorpionHurtImgForSkin(s.skinKey || 'scorpion_normal');
     ctx.save();
     ctx.translate(sx + s.w/2, s.y + s.h/2);
     ctx.rotate(s.angle);
     if (hurtImg) {
-      // 使用蠍子受傷圖，尺寸與 walk 一致（SCORPION_DRAW_SCALE）
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       const drawW = s.w * SCORPION_DRAW_SCALE;
@@ -5088,10 +5171,11 @@ function drawEnemyFallback(x, y, w, h, flashing) {
 }
 
 function drawEnemy(x, y, w, h, flashing, enemyVx, enemyObj) {
-  // ── 蠍子圖片模式：hitFlash 時優先使用 hurt 圖（受擊回饋）──
+  // v0.3.15-test-2：用 skinKey 取圖；未知 skinKey fallback scorpion_normal
+  const skinKey = variantCfg?.skinKey || 'scorpion_normal';
   const img = flashing
-    ? (getScorpionHurtImg() || getScorpionWalkImg()) // dying / 受擊時優先 hurt 圖
-    : getScorpionWalkImg();
+    ? (getScorpionHurtImgForSkin(skinKey) || getScorpionWalkImgForSkin(skinKey))
+    : getScorpionWalkImgForSkin(skinKey);
 
   // v0.3.15：從 variant+tier 取得繪製縮放倍率；無 enemyObj 時 fallback 1.0
   const variantCfg      = enemyObj ? getEnemyVariantConfig(enemyObj) : null;
@@ -5136,24 +5220,17 @@ function drawEnemy(x, y, w, h, flashing, enemyVx, enemyObj) {
       ctx.restore();
     }
 
-    // v0.3.15：fast tier 紅橘 tint（程式色調，代表更急、更危險；不改圖片本身）
+    // v0.3.15-test-2：fast tier 紅橘 tint（柔和光暈，不畫粗框，不遮蓋美術細節）
     if (tintMode === 'red-orange') {
+      // 僅加輕微外發光陰影，讓玩家感覺「更急、更危險」，不改圖片本身
       ctx.save();
-      ctx.globalAlpha    = 0.22;
-      ctx.globalCompositeOperation = 'source-atop';  // 只蓋在圖片非透明區域
-      ctx.fillStyle      = '#ff5500';
-      // 重新定位回地面錨點畫 tint 矩形
-      ctx.fillRect(drawX, drawY, drawW, drawH);
-      ctx.restore();
-
-      // 外框橘紅光暈（提升辨識度，不影響 hitbox）
-      ctx.save();
-      ctx.globalAlpha = 0.35 + 0.15 * Math.sin(frameCount * 0.15);
+      ctx.globalAlpha = 0.28 + 0.12 * Math.sin(frameCount * 0.15);
       ctx.shadowColor = '#ff4400';
-      ctx.shadowBlur  = 10;
-      ctx.strokeStyle = 'rgba(255,80,0,0.6)';
-      ctx.lineWidth   = 2;
-      ctx.strokeRect(drawX + 2, drawY + 2, drawW - 4, drawH - 4);
+      ctx.shadowBlur  = 14;
+      // 用 fillRect 塊配合 source-atop 讓 tint 只蓋在圖片非透明區域
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = 'rgba(255,70,0,0.22)';
+      ctx.fillRect(drawX, drawY, drawW, drawH);
       ctx.restore();
     }
   } else {
@@ -7372,6 +7449,7 @@ ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
 initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
 initScorpionHurtArt();                // 非阻塞地嘗試載入蠍子受傷圖
+initScorpionSkinArt();                // v0.3.15-test-2：預載各 skin variant 圖片
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
 initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
 loadLevel(0);        // 載入第 1 關
