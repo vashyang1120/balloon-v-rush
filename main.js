@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.17-scorpion-defeat-feedback-test-1';
-const BUILD_TIME   = '2026-06-28 17:00';
+const GAME_VERSION = 'adventure-v0.3.17-scorpion-defeat-feedback-test-2';
+const BUILD_TIME   = '2026-06-28 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3746,60 +3746,70 @@ function drawScorpionDefeatEffects(cx) {
 
     const t       = fx.timer / fx.totalFrames; // 0 → 1
     const inFlash = fx.timer < SCORPION_DEFEAT_FLASH_FRAMES;
+    const popY    = -Math.sin(t * Math.PI) * 8; // 上彈弧線，最多 8px
+    const scale   = 1 - t * 0.08; // v0.3.17-test-2：縮小幅度降至 8%，不讓蠍子突然縮掉
+    const alpha   = inFlash ? 1 : Math.max(0,
+      1 - (t - SCORPION_DEFEAT_FLASH_FRAMES / fx.totalFrames)
+        / (1 - SCORPION_DEFEAT_FLASH_FRAMES / fx.totalFrames));
 
-    // 上彈：前段彈起，後段落下（sin 曲線，最多 8px）
-    const popY  = -Math.sin(t * Math.PI) * 8;
-    // 縮小：結束時縮到 85%
-    const scale = 1 - t * 0.15;
-    // 淡出：閃爍段保持不透明，後段快速淡出
-    const alpha = inFlash ? 1 : Math.max(0, 1 - (t - SCORPION_DEFEAT_FLASH_FRAMES / fx.totalFrames) / (1 - SCORPION_DEFEAT_FLASH_FRAMES / fx.totalFrames));
-
-    // v0.3.17：用 skinKey 取正確圖（heavy 死亡用 heavy hurt 圖）
     const img = getScorpionHurtImgForSkin(fx.skinKey)
              || getScorpionWalkImgForSkin(fx.skinKey);
 
     if (!img) {
-      // 極簡 fallback
+      // 無圖 fallback：用紅橘 shadow glow，不畫矩形
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#e05050';
-      ctx.fillRect(sx, fx.y + popY, fx.w * scale, fx.h * scale);
+      ctx.shadowColor = 'rgba(255,60,60,0.8)';
+      ctx.shadowBlur  = 14;
+      ctx.fillStyle   = 'rgba(255,80,80,0.5)';
+      ctx.beginPath();
+      ctx.arc(sx + fx.w / 2, fx.y + fx.h / 2 + popY, fx.w * 0.45 * scale, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       return;
     }
 
-    const drawW  = fx.w * SCORPION_DRAW_SCALE * scale;
-    const drawH  = drawW * (img.height / img.width);
+    const drawW   = fx.w * SCORPION_DRAW_SCALE * scale;
+    const drawH   = drawW * (img.height / img.width);
     const groundY = fx.y + fx.h + popY;
     const drawX   = sx + fx.w / 2 - drawW / 2 + SCORPION_DRAW_OFFSET_X;
     const drawY   = groundY - drawH * SCORPION_FOOT_ANCHOR_Y + SCORPION_DRAW_OFFSET_Y;
 
+    // v0.3.17-test-2：image draw + source-atop flash overlay 必須在同一個
+    // save/restore 區塊內，否則 source-atop 看不到已 drawn 的像素，變成矩形
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
+    if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
+      // 白閃幀：shadow glow 表示受擊，不畫矩形
+      ctx.shadowColor = 'rgba(255,255,255,0.9)';
+      ctx.shadowBlur  = 10;
+    }
+
     if (fx.facingLeft) {
       ctx.translate(sx + fx.w / 2, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(img, -drawW / 2, drawY, drawW, drawH);
+      // flash：source-atop 必須緊接在 drawImage 之後，在 ctx.restore() 之前
+      if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.globalAlpha = 0.38 * alpha;
+        ctx.fillStyle   = '#ffffff';
+        ctx.fillRect(-drawW / 2, drawY, drawW, drawH);
+      }
     } else {
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      if (inFlash && Math.floor(fx.timer / 2) % 2 === 0) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.globalAlpha = 0.38 * alpha;
+        ctx.fillStyle   = '#ffffff';
+        ctx.fillRect(drawX, drawY, drawW, drawH);
+      }
     }
-    ctx.restore();
 
-    // 閃爍 overlay：前 FLASH_FRAMES 每 2 frames 交替紅/白
-    if (inFlash) {
-      const flashColor = (fx.timer % 4 < 2) ? 'rgba(255,80,80,0.55)' : 'rgba(255,255,255,0.5)';
-      ctx.save();
-      ctx.globalAlpha   = alpha * 0.85;
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.fillStyle     = flashColor;
-      // flash 覆蓋在圖片範圍內（用已算好的 drawX/drawY/drawW/drawH）
-      // 因為 source-atop 需要先 draw 圖再 fill，重新 draw 一次在 clip 外不影響
-      ctx.fillRect(drawX, drawY, drawW, drawH);
-      ctx.restore();
-    }
+    ctx.restore();
   });
 }
 
@@ -3824,8 +3834,10 @@ function updateHammerMelee() {
         vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
         life: CONFIG.HAMMER_SPIN_LIFE,
         angle: 0,
-        // v0.3.15-test-2：保留來源 enemy 的 skinKey 供飛行時畫正確 hurt 圖
         skinKey: (getEnemyVariantConfig(e)?.skinKey) || 'scorpion_normal',
+        // v0.3.17-test-2：保留視覺大小倍率，heavyBody (1.18×) 打飛後仍維持 heavy 尺寸
+        drawScaleMultiplier: ((getEnemyVariantConfig(e)?.drawScaleMultiplier ?? 1.0)
+                            * (getEnemyTierConfig(e)?.drawScaleMultiplier    ?? 1.0)),
       });
       if (!player.hammerHit) {
         player.hammerHit = true;
@@ -4545,7 +4557,9 @@ function drawWorld() {
     if (hurtImg) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      const drawW = s.w * SCORPION_DRAW_SCALE;
+      // v0.3.17-test-2：套用 drawScaleMultiplier，heavyBody (1.18×) 打飛後維持 heavy 尺寸
+      const spinScaleMult = s.drawScaleMultiplier || 1.0;
+      const drawW = s.w * SCORPION_DRAW_SCALE * spinScaleMult;
       const drawH = drawW * (hurtImg.height / hurtImg.width);
       ctx.drawImage(hurtImg, -drawW / 2, -drawH / 2, drawW, drawH);
     } else {
