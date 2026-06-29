@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-5';
-const BUILD_TIME   = '2026-06-29 19:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-6';
+const BUILD_TIME   = '2026-06-29 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2891,36 +2891,36 @@ function getChapter1NextStepInfo() {
   if (nextIdx === dogHammerStageIndex) {
     const flags  = ensureChapter1Flags();
     const dog    = playerInventory.balloonDog || {};
-    const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
-    const dogCraftIntroDone = flags.dogCraftIntroDone === true;
+    const hasDog = dog.present === true && (dog.turnsLeft || 0) > 0;
 
-    // 情境 A0：v0.3.18-fix-5：教學旗標未完成 → 顯示「製作小狗」引導
-    // 不論 dog.present 是否已是 true（防止舊存檔跳過教學）
-    if (!dogCraftIntroDone) {
+    // v0.3.18-fix-6：hasDog 絕對優先於 dogCraftIntroDone
+    // 畫面已有狗時，絕對不能顯示「請先製作氣球小狗」
+
+    // 情境 C：已安排帶狗 → 可前往第 2 節
+    if (nextBringDog === true) {
+      if (ADVENTURE_TEST_TOOLS_ENABLED) {
+        console.log('[DogFlow] goNext', { hasDog, dogCraftIntroDone: flags.dogCraftIntroDone, nextBringDog });
+      }
       return {
-        kind:          'makeDog',
-        title:         '下一步：製作氣球小狗',
-        body:          '第 2 節有隱藏寶藏，需要氣球小狗幫忙尋找。請先到「氣球秘笈」裡製作一隻氣球小狗！',
-        actionLabel:   '📖 打開氣球秘笈製作小狗',
-        actionFn:      'openGuidebook',
-        nextBtnText:   '請先製作氣球小狗',
-        nextBtnLocked: true,
+        kind:        'goNext',
+        title:       '下一步：前往第 2 節',
+        body:        '氣球小狗準備好了，牠會陪你一起尋找隱藏寶藏！',
+        actionLabel: '前往第 2 節',
+        actionFn:    'goToNextChapter1Level',
+        nextBtnText: '前往第 2 節',
+        nextBtnLocked: false,
       };
     }
 
-    // 情境 A：dogCraftIntroDone = true，但還沒安排帶狗
-    if (!hasDog || nextBringDog !== true) {
-      if (!hasDog) {
-        // 有教學但狗不見了（極少見，保護）
-        return {
-          kind:          'makeDog',
-          title:         '下一步：製作氣球小狗',
-          body:          '氣球小狗好像跑掉了！請再到「氣球秘笈」製作一隻。',
-          actionLabel:   '📖 打開氣球秘笈製作小狗',
-          actionFn:      'openGuidebook',
-          nextBtnText:   '請先製作氣球小狗',
-          nextBtnLocked: true,
-        };
+    // 情境 B：有狗，尚未帶狗
+    if (hasDog) {
+      // 有狗時自動補正 dogCraftIntroDone 旗標（防止舊存檔/教學跳過造成永久卡 makeDog）
+      if (!flags.dogCraftIntroDone) {
+        flags.dogCraftIntroDone = true;
+        saveInventory();
+      }
+      if (ADVENTURE_TEST_TOOLS_ENABLED) {
+        console.log('[DogFlow] bringDog', { hasDog, dogCraftIntroDone: flags.dogCraftIntroDone, nextBringDog });
       }
       return {
         kind:        'bringDog',
@@ -2933,15 +2933,18 @@ function getChapter1NextStepInfo() {
       };
     }
 
-    // 情境 B：已安排帶狗
+    // 情境 A：沒有狗 → 引導去氣球秘笈製作
+    if (ADVENTURE_TEST_TOOLS_ENABLED) {
+      console.log('[DogFlow] makeDog', { hasDog, dogCraftIntroDone: flags.dogCraftIntroDone, nextBringDog });
+    }
     return {
-      kind:        'goNext',
-      title:       '下一步：前往第 2 節',
-      body:        '氣球小狗準備好了，牠會陪你一起尋找隱藏寶藏！',
-      actionLabel: '前往第 2 節',
-      actionFn:    'goToNextChapter1Level',
-      nextBtnText: '前往第 2 節',
-      nextBtnLocked: false,
+      kind:          'makeDog',
+      title:         '下一步：製作氣球小狗',
+      body:          '第 2 節有隱藏寶藏，需要氣球小狗幫忙尋找。請先到「氣球秘笈」裡製作一隻氣球小狗！',
+      actionLabel:   '📖 打開氣球秘笈製作小狗',
+      actionFn:      'openGuidebook',
+      nextBtnText:   '請先製作氣球小狗',
+      nextBtnLocked: true,
     };
   }
 
@@ -4571,6 +4574,10 @@ function updateNextLevelButton() {
     const nextStepInfo = getChapter1NextStepInfo();
     const btnText = nextStepInfo ? nextStepInfo.nextBtnText : '下一關';
     const isLocked = nextStepInfo ? nextStepInfo.nextBtnLocked : false;
+    if (ADVENTURE_TEST_TOOLS_ENABLED && nextStepInfo) {
+      console.log('[DogFlow] updateNextLevelButton', { kind: nextStepInfo.kind, btnText, isLocked, nextBringDog,
+        hasDog: !!(playerInventory.balloonDog?.present), turnsLeft: playerInventory.balloonDog?.turnsLeft });
+    }
 
     btn.childNodes[0].textContent = btnText;
     const sub = btn.querySelector('.result-btn-sub');
