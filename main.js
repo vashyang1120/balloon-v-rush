@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-2';
-const BUILD_TIME   = '2026-06-29 14:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-3';
+const BUILD_TIME   = '2026-06-29 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2850,19 +2850,38 @@ function getChapter1NextStepInfo() {
     };
   }
 
-  // 情境 A / B：下一步是狗狗尋寶關，依是否已安排帶狗分流
+  // 情境 A / B / A0：下一步是狗狗尋寶關，依狀態三分流
   if (nextIdx === dogHammerStageIndex) {
+    const dog    = playerInventory.balloonDog || {};
+    const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
+
+    // 情境 A0：玩家還沒有氣球小狗 → 引導去氣球秘笈製作
+    if (!hasDog) {
+      return {
+        kind:          'makeDog',
+        title:         '下一步：製作氣球小狗',
+        body:          '第 2 節有隱藏寶藏，需要氣球小狗幫忙尋找。請先到「氣球秘笈」裡製作一隻氣球小狗！',
+        actionLabel:   '📖 打開氣球秘笈製作小狗',
+        actionFn:      'openGuidebook',
+        nextBtnText:   '請先製作氣球小狗',
+        nextBtnLocked: true,
+      };
+    }
+
+    // 情境 A：有狗，但還沒安排帶狗
     if (nextBringDog !== true) {
       return {
         kind:        'bringDog',
         title:       '下一步：帶氣球小狗出發',
-        body:        '第 2 節需要氣球小狗幫你找到隱藏寶藏！',
-        actionLabel: '帶狗出發',
+        body:        '氣球小狗準備好了！帶牠一起出發，牠會在第 2 節幫你找到隱藏寶藏。',
+        actionLabel: '🐶 帶狗出發',
         actionFn:    'bringDogNextLevel',
         nextBtnText: '請先帶狗出發',
         nextBtnLocked: true,
       };
     }
+
+    // 情境 B：已安排帶狗
     return {
       kind:        'goNext',
       title:       '下一步：前往第 2 節',
@@ -6871,11 +6890,17 @@ function homeMakeDog() {
     renderHomeDog();
     renderHomeInventory();
     renderHomeSupply();
+    // v0.3.18-fix-3：製作小狗後刷新下一步區塊，從「製作小狗」變成「帶狗出發」
+    renderHomeNextStage();
     refreshResultDog();
     refreshResultBag();
+    if (typeof updateNextLevelButton === 'function') updateNextLevelButton();
+    if (typeof populateResultPanel === 'function' && document.getElementById('result-panel-body')) {
+      populateResultPanel();
+    }
     const supplyHp = document.getElementById('supply-hp');
     if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
-    if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus(); // 結算主 HP
+    if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
   } else {
     showCraftMessage('260 氣球不足，無法製作氣球小狗');
   }
@@ -6916,6 +6941,38 @@ function renderHomeNextStage() {
   }
   const lv = LEVELS[nextIdx];
   const hasSecret = lv.hiddenTreasure && playerInventory.balloonDog?.present;
+
+  // v0.3.18-fix-3：下一關是狗狗尋寶關時，依狗狗狀態顯示正確引導
+  if (nextIdx === dogHammerStageIndex) {
+    const dog    = playerInventory.balloonDog || {};
+    const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
+    if (!hasDog) {
+      el.innerHTML =
+        '<div class="hns-badge hns-badge--warn">🐶 需要氣球小狗</div>'
+        + '<div class="hns-hint" style="margin-top:8px">第 2 節有隱藏寶藏，需要氣球小狗幫忙尋找。</div>'
+        + '<div class="hns-hint">請先到「氣球秘笈」裡製作一隻氣球小狗！</div>'
+        + '<button class="rp-next-step-btn" style="margin-top:10px" onclick="openGuidebook()">'
+        + '📖 打開氣球秘笈製作小狗</button>';
+      if (btn) { btn.textContent = '請先製作氣球小狗'; btn.disabled = true; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
+      return;
+    }
+    if (!nextBringDog) {
+      el.innerHTML =
+        '<div class="hns-badge hns-badge--clear">🐶 帶氣球小狗出發</div>'
+        + '<div class="hns-hint" style="margin-top:8px">氣球小狗準備好了！帶牠出發，牠會幫你找到隱藏寶藏。</div>'
+        + '<button class="rp-next-step-btn" style="margin-top:10px" onclick="homeBringDog()">'
+        + '🐾 帶狗出發 -1 🎈</button>';
+      if (btn) { btn.textContent = '請先帶狗出發'; btn.disabled = true; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
+      return;
+    }
+    // 已安排帶狗：正常顯示下一關資訊
+    el.innerHTML =
+      '<div class="hns-badge hns-badge--clear">✅ 氣球小狗已安排出發</div>'
+      + '<div class="hns-hint" style="margin-top:8px">準備好一起尋找隱藏寶藏了！</div>';
+    if (btn) { btn.disabled = false; btn.textContent = '前往第 2 節 🚀'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
+    return;
+  }
+
   // v0.3.11-test-3：改用 getChapterDisplayInfo，副標統一成「第 N 節｜...」，與結算畫面一致
   const nextDisplayInfo = getChapterDisplayInfo(nextIdx);
   el.innerHTML =
