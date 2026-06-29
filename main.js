@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-6';
-const BUILD_TIME   = '2026-06-29 20:00';
+const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1';
+const BUILD_TIME   = '2026-06-30 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1232,6 +1232,26 @@ function startOrangeTestLevel() {
 // v0.3.15：Enemy Variant + Tier 測試入口
 // 進入一個 runtime-only 測試關，直接在畫面上產生各種 variant/tier 組合，
 // 讓開發者確認 variant+tier 有正確套用（速度、大小、tint）
+// v0.3.19：第二章測試入口（跳到 2-1 煙囟橘子初遭遇）
+function startChapter2TestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-1');
+  if (idx < 0) { showHint('找不到 2-1 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('已進入第二章 2-1：煙囟橘子初遭遇', 260);
+}
+
 function startEnemyVariantTestLevel() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   resetInventory();
@@ -2727,6 +2747,148 @@ const LEVELS = [
     },
   },
 
+  // ════════════════════════════════════════════════════════════
+  //  Chapter 2 Foundation (v0.3.19)
+  //  煙囟橘子（Chimney Orange）三節關卡架構
+  //  美術：暫用幾何 placeholder，後續替換 sprite
+  // ════════════════════════════════════════════════════════════
+
+  // Stage 2-1：認識煙囟橘子
+  {
+    stageId:     '2-1',
+    displayName: '第 2-1 節｜煙囟橘子初遭遇',
+    name:        '煙囟橘子初遭遇',
+    shortName:   '煙囟橘子',
+    length:      4800,
+    scrollSpeed: 1,
+    bg:          'stage1',
+    platforms: [
+      { x: 800,  y: GROUND_Y-80,  w: 200, h: 20 },
+      { x: 1600, y: GROUND_Y-80,  w: 200, h: 20 },
+      { x: 2800, y: GROUND_Y-80,  w: 200, h: 20 },
+    ],
+    buildSpikes:       () => [],
+    buildCoins:        () => [],
+    buildBalloons:     () => [600,1400,2200,3000].map(x => ({
+      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
+    })),
+    buildRoundBalloons: () => [],
+    buildEnemies:      () => [],
+    buildOranges:      () => [],
+    // Chapter 2 chimney oranges (buildChimneyOranges)
+    buildChimneyOranges: () => [
+      { x: 1000, sprayPhase: 'idle', phaseTimer: 0, sprayActive: false },
+      { x: 2400, sprayPhase: 'idle', phaseTimer: 500, sprayActive: false },
+      { x: 3600, sprayPhase: 'idle', phaseTimer: 200, sprayActive: false },
+    ].map(d => ({
+      ...d,
+      y:    GROUND_Y - CONFIG.ORANGE_H,
+      w:    CONFIG.ORANGE_W,
+      h:    CONFIG.ORANGE_H,
+      type: 'chimneyOrange',
+    })),
+  },
+
+  // Stage 2-2：抓噴油時機通過
+  {
+    stageId:     '2-2',
+    displayName: '第 2-2 節｜油幕時機訓練',
+    name:        '油幕時機訓練',
+    shortName:   '油幕訓練',
+    length:      5600,
+    scrollSpeed: 1,
+    bg:          'stage1',
+    platforms: [
+      { x: 700,  y: GROUND_Y-80,  w: 180, h: 20 },
+      { x: 1500, y: GROUND_Y-100, w: 180, h: 20 },
+      { x: 2400, y: GROUND_Y-80,  w: 180, h: 20 },
+      { x: 3400, y: GROUND_Y-100, w: 180, h: 20 },
+      { x: 4400, y: GROUND_Y-80,  w: 180, h: 20 },
+    ],
+    buildSpikes:       () => [],
+    buildCoins:        () => [],
+    buildBalloons:     () => [500,1200,2000,2800,3600,4400].map(x => ({
+      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
+    })),
+    buildRoundBalloons: () => [],
+    buildEnemies:      () => [],
+    buildOranges:      () => [],
+    buildChimneyOranges: () => [
+      { x: 900,  phaseTimer: 0   },
+      { x: 1800, phaseTimer: 600 },
+      { x: 2700, phaseTimer: 300 },
+      { x: 3700, phaseTimer: 800 },
+      { x: 4600, phaseTimer: 100 },
+    ].map(d => ({
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'chimneyOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+    })),
+  },
+
+  // Stage 2-3：蠍子 + 煙囟橘子 複合挑戰
+  {
+    stageId:     '2-3',
+    displayName: '第 2-3 節｜地面與空中複合挑戰',
+    name:        '地面與空中複合挑戰',
+    shortName:   '複合挑戰',
+    length:      6000,
+    scrollSpeed: 1,
+    bg:          'stage1',
+    platforms: [
+      { x: 1000, y: GROUND_Y-80,  w: 160, h: 20 },
+      { x: 2200, y: GROUND_Y-100, w: 160, h: 20 },
+      { x: 3400, y: GROUND_Y-80,  w: 160, h: 20 },
+      { x: 4600, y: GROUND_Y-100, w: 160, h: 20 },
+    ],
+    buildSpikes: () => [
+      { x: 1600, y: GROUND_Y-24, w: 40, h: 24 },
+      { x: 3000, y: GROUND_Y-24, w: 40, h: 24 },
+    ],
+    buildCoins:        () => [],
+    buildBalloons:     () => [600,1300,2100,2900,3700,4500].map(x => ({
+      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
+    })),
+    buildRoundBalloons: () => [],
+    buildEnemies: () => {
+      const mkEnemy = (x, patrol, range, variant, tier) => ({
+        x, y: GROUND_Y - CONFIG.ENEMY_H,
+        w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+        vx: -CONFIG.ENEMY_SPEED, hp: 1,
+        patrol, patrolRange: range,
+        active: true, hitFlash: 0,
+        type: 'scorpion', variant: variant || 'normal', tier: tier || 'normal',
+        baseVx: CONFIG.ENEMY_SPEED,
+      });
+      return [
+        mkEnemy(800,  800,  100, 'normal', 'normal'),
+        mkEnemy(2000, 2000, 120, 'normal', 'normal'),
+        mkEnemy(3200, 3200, 100, 'normal', 'normal'),
+        mkEnemy(4800, 4800, 110, 'normal', 'normal'),
+      ];
+    },
+    buildOranges: () => [],
+    buildChimneyOranges: () => [
+      { x: 1300, phaseTimer: 0   },
+      { x: 2600, phaseTimer: 700 },
+      { x: 4000, phaseTimer: 300 },
+    ].map(d => ({
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'chimneyOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+    })),
+  },
+
 ];  // end LEVELS
 
 
@@ -3298,6 +3460,15 @@ function loadLevel(index) {
     orangeNemeses.push(o);
   });
 
+  // v0.3.19：Chapter 2 煙囟橘子
+  chimneyOranges.length = 0;
+  if (typeof lv.buildChimneyOranges === 'function') {
+    lv.buildChimneyOranges().forEach(co => {
+      if (!co.active) co.active = true;
+      chimneyOranges.push(co);
+    });
+  }
+
   // 圓氣球
   roundBalloons.length = 0;
   if (lv.buildRoundBalloons) lv.buildRoundBalloons().forEach(r => roundBalloons.push(r));
@@ -3514,6 +3685,7 @@ function update(dt, dtMs = 16.667) {
   updateTreasurePickupEffects(); // v0.3.12
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
+  updateChimneyOranges(dtMs);  // v0.3.19：Chapter 2 煙囟橘子
   checkCollectibles();
   checkHazards();
   checkHints();
@@ -3834,6 +4006,160 @@ function updateOrangeNemeses(dtMs) {
 }
 
 
+
+// ── Chimney Orange（煙囟橘子）─────────────────────────────
+//  v0.3.19 Chapter 2 Foundation
+//  攻擊方式：向正上方噴出油柱，威脅跳躍中的玩家
+//  美術：暫用幾何 placeholder（矩形本體 + 煙囟 + 油幕），後續替換 sprite
+// ──────────────────────────────────────────────────────────
+
+const CHIMNEY_ORANGE_IDLE_MS    = 1800; // 靜止等待 (ms)
+const CHIMNEY_ORANGE_WINDUP_MS  =  700; // 蓄力預警 (ms)
+const CHIMNEY_ORANGE_SPRAY_MS   =  900; // 噴油持續 (ms)
+const CHIMNEY_ORANGE_COOLDOWN_MS= 1400; // 冷卻喘氣 (ms)
+
+// 噴油油幕碰撞判定（相對於橘子本體，向上延伸）
+const CHIMNEY_OIL_W    = 44;   // 油幕寬度（略等於本體寬度）
+const CHIMNEY_OIL_H    = 220;  // 油幕高度（上方危險範圍）
+const CHIMNEY_CHIMNEY_H = 30;  // 煙囟繪製高度（placeholder）
+
+let chimneyOranges = []; // runtime array，由 loadLevel 填充
+
+function updateChimneyOranges(dtMs) {
+  chimneyOranges.forEach(co => {
+    if (!co.active) return;
+    co.phaseTimer += dtMs;
+
+    switch (co.sprayPhase) {
+      case 'idle':
+        co.sprayActive = false;
+        if (co.phaseTimer >= CHIMNEY_ORANGE_IDLE_MS) {
+          co.sprayPhase = 'windup';
+          co.phaseTimer = 0;
+        }
+        break;
+
+      case 'windup':
+        co.sprayActive = false;
+        if (co.phaseTimer >= CHIMNEY_ORANGE_WINDUP_MS) {
+          co.sprayPhase  = 'spraying';
+          co.phaseTimer  = 0;
+          co.sprayActive = true;
+        }
+        break;
+
+      case 'spraying':
+        co.sprayActive = true;
+        if (co.phaseTimer >= CHIMNEY_ORANGE_SPRAY_MS) {
+          co.sprayPhase  = 'cooldown';
+          co.phaseTimer  = 0;
+          co.sprayActive = false;
+        }
+        break;
+
+      case 'cooldown':
+        co.sprayActive = false;
+        if (co.phaseTimer >= CHIMNEY_ORANGE_COOLDOWN_MS) {
+          co.sprayPhase = 'idle';
+          co.phaseTimer = 0;
+        }
+        break;
+    }
+  });
+}
+
+function checkChimneyOrangeDamage() {
+  if (player.invincible > 0) return;
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+
+  chimneyOranges.forEach(co => {
+    if (!co.active || !co.sprayActive) return;
+    // 碰到本體也受傷
+    if (rectsOverlap(px, py, pw, ph, co.x, co.y, co.w, co.h)) {
+      damagePlayer(); return;
+    }
+    // 油幕：從本體頂部向上延伸 CHIMNEY_OIL_H
+    const oilX = co.x + co.w / 2 - CHIMNEY_OIL_W / 2;
+    const oilY = co.y - CHIMNEY_OIL_H;
+    if (rectsOverlap(px, py, pw, ph, oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H)) {
+      damagePlayer();
+    }
+  });
+}
+
+function drawChimneyOranges(cx) {
+  chimneyOranges.forEach(co => {
+    if (!co.active) return;
+    const sx = co.x - cx;
+    if (sx > CANVAS_W + 60 || sx + co.w < -60) return;
+
+    const isWindup  = co.sprayPhase === 'windup';
+    const isSpraying= co.sprayPhase === 'spraying';
+    const isCooldown= co.sprayPhase === 'cooldown';
+
+    ctx.save();
+
+    // ── 油幕（spraying 時畫在本體後方）──
+    if (isSpraying && co.sprayActive) {
+      const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
+      const oilY = co.y - CHIMNEY_OIL_H;
+      ctx.fillStyle = 'rgba(210,140,0,0.38)';
+      ctx.fillRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
+      // 油幕邊框
+      ctx.strokeStyle = 'rgba(180,100,0,0.55)';
+      ctx.lineWidth   = 1.5;
+      ctx.strokeRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
+    }
+
+    // ── 本體（橘色矩形）──
+    const bodyColor = isWindup
+      ? '#ff6600'      // 預警：更亮橘
+      : isCooldown
+        ? '#d47000'    // 冷卻：暗橘
+        : '#f57c00';   // idle/spray：標準橘
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(sx, co.y, co.w, co.h);
+
+    // Windup 紅色光暈
+    if (isWindup) {
+      const t = co.phaseTimer / CHIMNEY_ORANGE_WINDUP_MS;
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
+      ctx.shadowColor = '#ff2200';
+      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = '#ff4400';
+      ctx.fillRect(sx, co.y, co.w, co.h);
+      ctx.restore();
+    }
+
+    // ── 煙囟（placeholder：本體頂部中央的細長矩形）──
+    const chimneyW  = 10;
+    const chimneyX  = sx + co.w / 2 - chimneyW / 2;
+    const chimneyY  = co.y - CHIMNEY_CHIMNEY_H;
+    ctx.fillStyle   = '#555';
+    ctx.fillRect(chimneyX, chimneyY, chimneyW, CHIMNEY_CHIMNEY_H);
+    // 煙囟頂帽
+    ctx.fillStyle   = '#333';
+    ctx.fillRect(chimneyX - 4, chimneyY, chimneyW + 8, 6);
+
+    // ── 冒煙粒子（cooldown 狀態，簡單畫幾個淡灰圓點）──
+    if (isCooldown) {
+      const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
+      ctx.globalAlpha = (0.25 + breath * 0.2);
+      ctx.fillStyle   = '#aaa';
+      const puff = Math.floor(frameCount / 15) % 3;
+      for (let i = 0; i < 3; i++) {
+        const py2 = chimneyY - 8 - i * 12 - puff * 4;
+        const r   = 5 - i;
+        ctx.beginPath();
+        ctx.arc(chimneyX + chimneyW / 2, py2, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  });
+}
 
 // ── Spinning enemies（被槌子打飛的小怪）────────
 let spinningEnemies = [];
@@ -4327,6 +4653,9 @@ function checkHazards() {
       }
     }
   });
+
+  // v0.3.19：Chapter 2 煙囟橘子油幕碰撞判定
+  checkChimneyOrangeDamage();
 }
 
 function damagePlayer() {
@@ -4803,6 +5132,9 @@ function drawWorld() {
     if (sx > CANVAS_W + 60 || sx + o.w < -CONFIG.ORANGE_SPRAY_W) return;
     drawOrangeOilOverlay(sx, o);
   });
+
+  // v0.3.19：Chapter 2 煙囟橘子（本體畫在玩家之前，油幕也在同一 call 裡）
+  drawChimneyOranges(cx);
 }
 
 function drawPlayer(cx) {
@@ -7431,6 +7763,7 @@ function restart(opts) {
     // runtimeId 保持不變（loadLevel 時已分配）
   });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
+  chimneyOranges.forEach(co => { co.sprayPhase = 'idle'; co.phaseTimer = 0; co.sprayActive = false; co.active = true; });
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
@@ -7878,6 +8211,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestVariant) {
     btnTestVariant.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestVariant.addEventListener('click', startEnemyVariantTestLevel);
+  }
+  // v0.3.19：第二章 2-1 測試按鈕
+  const btnTestCh2 = document.getElementById('btn-pause-test-ch2');
+  if (btnTestCh2) {
+    btnTestCh2.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestCh2.addEventListener('click', startChapter2TestLevel);
   }
 })();
 
