@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1-fix-1';
-const BUILD_TIME   = '2026-06-30 11:00';
+const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1-fix-2';
+const BUILD_TIME   = '2026-06-30 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2756,6 +2756,7 @@ const LEVELS = [
   // Stage 2-1：認識煙囟橘子
   {
     stageId:     '2-1',
+    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
     displayName: '第 2-1 節｜煙囟橘子初遭遇',
     name:        '煙囟橘子初遭遇',
     shortName:   '煙囟橘子',
@@ -2795,6 +2796,7 @@ const LEVELS = [
   // Stage 2-2：抓噴油時機通過
   {
     stageId:     '2-2',
+    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
     displayName: '第 2-2 節｜油幕時機訓練',
     name:        '油幕時機訓練',
     shortName:   '油幕訓練',
@@ -2838,6 +2840,7 @@ const LEVELS = [
   // Stage 2-3：蠍子 + 煙囟橘子 複合挑戰
   {
     stageId:     '2-3',
+    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
     displayName: '第 2-3 節｜地面與空中複合挑戰',
     name:        '地面與空中複合挑戰',
     shortName:   '複合挑戰',
