@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2';
-const BUILD_TIME   = '2026-06-29 10:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-1';
+const BUILD_TIME   = '2026-06-29 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -5985,7 +5985,7 @@ function refreshResultDog() {
   const turns  = dog.turnsLeft || 0;
   const nextLvIndex       = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
-  const canBringDog       = hasDog && (playerInventory.balloon260 || 0) >= 1 && !nextBringDog;
+  const canBringDog       = canBringDogNextLevel(); // v0.3.18-fix-1：用共用 helper（含教學保底）
 
   let inner = '';
   if (hasDog) {
@@ -6108,7 +6108,7 @@ function populateResultPanel() {
   const nextLvIndex   = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length
     && !!LEVELS[nextLvIndex].hiddenTreasure;
-  const canBringDog   = hasDog && (playerInventory.balloon260 || 0) >= 1;
+  const canBringDog   = canBringDogNextLevel(); // v0.3.18-fix-1
 
   // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
   // v0.3.11-test-4：實際找到 vs 結算保底，文案分流（不要讓保底也說「你找到了」）
@@ -6443,7 +6443,20 @@ function updateBandageBtn() {
 
 
 // ── 帶氣球小狗出門（結算畫面按鈕）────────────
+// v0.3.18-test-2-fix-1：判斷是否可帶狗出發（含第一章教學保底）
+// 三個 UI 路徑（renderHomeDog / refreshResultDog / populateResultPanel）共用此函式
+function canBringDogNextLevel() {
+  const dog  = playerInventory.balloonDog || {};
+  if (!dog.present || (dog.turnsLeft || 0) <= 0 || nextBringDog) return false;
+  if ((playerInventory.balloon260 || 0) >= 1) return true;
+  // 260 不足：若是第一章必要狗狗關，且保底尚未使用，仍允許點擊（bringDogNextLevel 會補發）
+  const nextIdx = getNextLevelIndex(currentLevelIndex);
+  const flags   = ensureChapter1Flags();
+  return nextIdx === dogHammerStageIndex && !flags.forcedDogTripDone;
+}
+
 function bringDogNextLevel() {
+  // v0.3.18-test-2-fix-1：按鈕 disabled 判斷已移至 canBringDogNextLevel()；此處處理實際扣資源與保底補發
   const dog = playerInventory.balloonDog || {};
   console.log('prepare bring dog:', {
     present: dog.present,
@@ -6783,7 +6796,7 @@ function renderHomeDog() {
   const turns           = dog.turnsLeft || 0;
   const nextLvIdx       = getNextLevelIndex(currentLevelIndex);
   const nextHasTreasure = nextLvIdx < LEVELS.length && !!LEVELS[nextLvIdx]?.hiddenTreasure;
-  const canBringDog     = hasDog && (playerInventory.balloon260 || 0) >= 1;
+  const canBringDog     = canBringDogNextLevel(); // v0.3.18-fix-1：含教學保底
 
   if (!hasDog) {
     const canCraft = (playerInventory.balloon260 || 0) >= 1;
@@ -6822,7 +6835,7 @@ function renderHomeDog() {
     // 已安排帶狗，顯示確認，不可重複扣
     bringBtnHtml = '<div class="dog-arranged">✅ 已安排帶狗出發</div>';
   } else {
-    const canBring = hasDog && (playerInventory.balloon260 || 0) >= 1;
+    const canBring = canBringDogNextLevel(); // v0.3.18-fix-1
     const btnText  = canBring ? '帶狗出發 -1 🎈' : '260 氣球不足';
     bringBtnHtml = '<button id="btn-home-bring-dog" class="dog-bring-btn '
       + (canBring ? '' : 'dog-bring-btn--disabled') + '" '
