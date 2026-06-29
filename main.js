@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-1';
-const BUILD_TIME   = '2026-06-29 12:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-2';
+const BUILD_TIME   = '2026-06-29 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1255,6 +1255,8 @@ function startEnemyVariantTestLevel() {
     active: true, hitFlash: 0,
     type: 'scorpion', variant, tier,
     baseVx: CONFIG.ENEMY_SPEED,
+    runtimeId: nextEnemyRuntimeId++,
+    hurtCooldown: 0, lastSwordSwingId: 0, lastHammerSwingId: 0,
   });
   enemies.push(mkE(500,  'normal',    'normal')); // 1. 普通/普通
   enemies.push(mkE(750,  'fastBody',  'normal')); // 2. 快腿/普通
@@ -2019,6 +2021,7 @@ const player = {
   meleeHammerActive: 0, // hammer melee hitbox live frames
   hammerHit: false,
   swordSwingId: 0,      // v0.3.18-test-2：每次揮劍遞增，讓同一次揮劍對同一敵人只命中一次
+  hammerSwingId: 0,     // v0.3.18-fix-2：每次槌擊遞增，防同一次槌擊多幀重複命中 heavy
   swordAnimTimer: 0,   // 揮劍視覺動畫獨立計時（與 hitbox 分開）
   hammerAnimTimer: 0,  // 槌子視覺動畫獨立計時
   // Stats
@@ -3207,7 +3210,8 @@ function loadLevel(index) {
     // v0.3.18-test-2：runtime id 供 spinning hit lock 使用
     e.runtimeId    = nextEnemyRuntimeId++;
     e.hurtCooldown = 0;
-    e.lastSwordSwingId = 0;
+    e.lastSwordSwingId  = 0;
+    e.lastHammerSwingId = 0; // v0.3.18-fix-2：槌子命中鎖
     enemies.push(e);
   });
 
@@ -3558,7 +3562,8 @@ function updatePlayer(dt) {
     if (activeSlot === 'hammer' && equippedHammer && equippedHammer.id) {
       player.attackCooldown     = CONFIG.HAMMER_ATTACK_COOLDOWN;
       player.meleeHammerActive  = CONFIG.HAMMER_ATTACK_DURATION;
-      player.hammerAnimTimer    = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR; // 視覺動畫 24 幀
+      player.hammerAnimTimer    = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR;
+      player.hammerSwingId      = (player.hammerSwingId || 0) + 1; // v0.3.18-fix-2：新槌擊 ID
       player.hammerHit          = false;
     } else if (activeSlot === 'sword' && equippedSword && equippedSword.id === 'basicSword') {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
@@ -3916,6 +3921,10 @@ function updateHammerMelee() {
   enemies.forEach(e => {
     if (!e.active) return;
     if (!rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) return;
+
+    // v0.3.18-fix-2：同一次槌擊對同一 enemy 只命中一次（防 hitbox 多幀重疊連扣 heavy）
+    if (e.lastHammerSwingId === player.hammerSwingId) return;
+    e.lastHammerSwingId = player.hammerSwingId;
 
     stageFlowHints.hammerUsedOnScorpion = true;
 
@@ -7300,7 +7309,8 @@ function restart(opts) {
     e.x = e.patrol;
     e.hitFlash     = 0;
     e.hurtCooldown = 0;
-    e.lastSwordSwingId = 0;
+    e.lastSwordSwingId  = 0;
+    e.lastHammerSwingId = 0; // v0.3.18-fix-2
     // runtimeId 保持不變（loadLevel 時已分配）
   });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
