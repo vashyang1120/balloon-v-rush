@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-3';
-const BUILD_TIME   = '2026-06-29 16:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-4';
+const BUILD_TIME   = '2026-06-29 17:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1696,6 +1696,28 @@ const MATERIAL_NAMES = {
 function matName(key) { return MATERIAL_NAMES[key] || key; }
 
 // 製作道具
+// v0.3.18-fix-4：製作關鍵道具（氣球小狗等）後統一刷新冒險進度 UI
+// 從任何路徑（氣球秘笈、小V的家、結算頁）製作後都呼叫，確保 result panel 即時切換狀態
+function refreshAdventureProgressAfterCraft() {
+  // 結算面板（result overlay 顯示中才刷新）
+  const resultOverlay = document.getElementById('result-overlay');
+  if (resultOverlay && resultOverlay.style.display !== 'none') {
+    if (typeof refreshResultDog === 'function')       refreshResultDog();
+    if (typeof refreshResultBag === 'function')       refreshResultBag();
+    if (typeof updateNextLevelButton === 'function')  updateNextLevelButton();
+    if (typeof populateResultPanel === 'function' && document.getElementById('result-panel-body')) {
+      populateResultPanel('clear'); // 重新 render 整個結算面板（含下一步行動區塊）
+    }
+  }
+  // 小V的家（home overlay 顯示中才刷新）
+  const homeOverlay = document.getElementById('home-overlay');
+  if (homeOverlay && homeOverlay.style.display !== 'none') {
+    if (typeof renderHomeDog === 'function')          renderHomeDog();
+    if (typeof renderHomeInventory === 'function')    renderHomeInventory();
+    if (typeof renderHomeNextStage === 'function')    renderHomeNextStage();
+  }
+}
+
 function craftItem(recipeId) {
   // 特殊：氣球狗 → 存入 playerHome 結構而非 craftedItems
   if (recipeId === 'balloonDog') {
@@ -1711,10 +1733,13 @@ function craftItem(recipeId) {
     if (!playerInventory.balloonDog) playerInventory.balloonDog = {};
     playerInventory.balloonDog.present   = true;
     playerInventory.balloonDog.turnsLeft = CONFIG.DOG_INITIAL_TURNS || 3;
-    player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT); // 製作立即回血
+    player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT);
     saveInventory();
     if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
     if (typeof renderHomeSupply === 'function') renderHomeSupply();
+    // v0.3.18-fix-4：從任何路徑（氣球秘笈/結算頁/小V的家）製作完小狗後，
+    // 統一刷新冒險進度 UI，讓結算頁從「製作小狗」切換到「帶狗出發」
+    refreshAdventureProgressAfterCraft();
     return true;
   }
 // 製作道具（一般）
