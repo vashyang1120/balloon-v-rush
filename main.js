@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-1';
-const BUILD_TIME   = '2026-06-28 21:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2';
+const BUILD_TIME   = '2026-06-29 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2018,6 +2018,7 @@ const player = {
   meleeHit: false,
   meleeHammerActive: 0, // hammer melee hitbox live frames
   hammerHit: false,
+  swordSwingId: 0,      // v0.3.18-test-2：每次揮劍遞增，讓同一次揮劍對同一敵人只命中一次
   swordAnimTimer: 0,   // 揮劍視覺動畫獨立計時（與 hitbox 分開）
   hammerAnimTimer: 0,  // 槌子視覺動畫獨立計時
   // Stats
@@ -3203,6 +3204,10 @@ function loadLevel(index) {
     const initHp = vCfg?.hp ?? 1;
     e.hp    = initHp;
     e.maxHp = vCfg?.maxHp ?? initHp;
+    // v0.3.18-test-2：runtime id 供 spinning hit lock 使用
+    e.runtimeId    = nextEnemyRuntimeId++;
+    e.hurtCooldown = 0;
+    e.lastSwordSwingId = 0;
     enemies.push(e);
   });
 
@@ -3559,6 +3564,7 @@ function updatePlayer(dt) {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
       player.meleeHit       = false;
+      player.swordSwingId   = (player.swordSwingId || 0) + 1; // v0.3.18-test-2：新揮劍 ID
       player.swordAnimTimer = 30; // 視覺動畫獨立計時（30 幀）
     } else {
       player.attackCooldown = 30;
@@ -3623,35 +3629,81 @@ function updateProjectiles() {
 
 // ── Melee attack check (basicSword) ──────────
 // 每幀在 meleeActive > 0 時檢查命中；每次揮擊只扣一次耐久（meleeHit 旗標）
+// ── v0.3.18-test-2：Enemy runtime identity & damage helper ──
+let nextEnemyRuntimeId = 1;
+
+const SCORPION_HURT_COOLDOWN_FRAMES = 8; // 受擊後短暫無敵（防抖），不取代 swordSwingId 鎖
+
+// 統一傷害入口：sword / hammer / spinning 都走這裡
+// source: 'sword' | 'hammer' | 'spinning'
+// onKill(enemy): 可選 callback，hp 歸零後在呼叫端決定 spinning 或 defeat
+// 回傳 true = 造成傷害；'killed' = hp 歸零
+function damageScorpionEnemy(e, amount, source, onKillFn) {
+  if (!e || !e.active) return false;
+
+  // 補齊 hp/maxHp（萬一還沒設定的舊資料）
+  if (!e.maxHp) {
+    const vCfg = getEnemyVariantConfig(e);
+    e.maxHp = vCfg?.maxHp ?? 1;
+  }
+  if (e.hp === undefined || e.hp === null) e.hp = e.maxHp;
+
+  // hurtCooldown：防抖（hammer 忽略，讓重擊立刻反應）
+  if (source !== 'hammer' && (e.hurtCooldown || 0) > 0) return false;
+
+  e.hp -= amount;
+  e.hurtCooldown = SCORPION_HURT_COOLDOWN_FRAMES;
+
+  if (e.hp <= 0) {
+    e.hp = 0;
+    e.active = false;
+    player.enemiesDefeated++;
+    if (typeof onKillFn === 'function') {
+      onKillFn(e);
+    } else {
+      // 預設：sword / spinning 擊殺 → defeat effect
+      spawnScorpionDefeatEffect(e);
+    }
+    return 'killed';
+  }
+
+  // 受擊未死
+  e.hitFlash = 6;
+  return true;
+}
+
 function updateMeleeAttack() {
   if (player.meleeActive <= 0) return;
 
-  // 攻擊框世界座標
   const atkX = player.facingRight
-    ? player.x + player.w                          // 面右：從角色右緣往前
-    : player.x - CONFIG.BASIC_SWORD_ATTACK_RANGE;  // 面左：從角色左緣往前
+    ? player.x + player.w
+    : player.x - CONFIG.BASIC_SWORD_ATTACK_RANGE;
   const atkY = player.y + (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
   const atkW = CONFIG.BASIC_SWORD_ATTACK_RANGE;
   const atkH = CONFIG.BASIC_SWORD_ATTACK_HEIGHT;
 
   enemies.forEach(e => {
     if (!e.active) return;
-    if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
-      e.hp--;
-      if (e.hp <= 0) {
-        // 死亡：立刻失效 + 產生純視覺死亡演出
-        spawnScorpionDefeatEffect(e);
-        e.active = false;
-        player.enemiesDefeated++;
-      } else {
-        // 受擊未死：短暫閃爍 + knockback
-        e.hitFlash = 6;
-        e.vx = (player.facingRight ? 3.5 : -3.5);
-      }
-      if (!player.meleeHit) {
-        player.meleeHit = true;
-        consumeSwordDurability(); // 每次揮擊只扣一次耐久
-      }
+    if (!rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) return;
+
+    // v0.3.18-test-2：同一次揮劍對同一敵人只命中一次（swordSwingId per-enemy 鎖）
+    if (e.lastSwordSwingId === player.swordSwingId) return;
+    e.lastSwordSwingId = player.swordSwingId;
+
+    // 耐久：同一次揮劍只扣一次（無論命中幾隻）
+    if (!player.meleeHit) {
+      player.meleeHit = true;
+      consumeSwordDurability();
+    }
+
+    const result = damageScorpionEnemy(e, 1, 'sword', (killed) => {
+      // sword kill → defeat effect（不擊飛）
+      spawnScorpionDefeatEffect(killed);
+    });
+
+    // 受擊未死：knockback
+    if (result === true) {
+      e.vx = (player.facingRight ? 3.5 : -3.5);
     }
   });
 }
@@ -3842,26 +3894,43 @@ function updateHammerMelee() {
   const atkW = CONFIG.HAMMER_ATTACK_RANGE;
   const atkH = CONFIG.HAMMER_ATTACK_HEIGHT;
 
-  // 打一般小怪 → 旋轉飛出
+  // v0.3.18-test-2：hammer 傷害 = 2；HP 歸零才擊飛（heavyBody 3→1 不飛，1→0 才飛）
+  function makeSpinning(e) {
+    const variantCfg = getEnemyVariantConfig(e);
+    const tierCfg    = getEnemyTierConfig(e);
+    const skinKey    = variantCfg?.skinKey || 'scorpion_normal';
+    const spinDamage = (e.variant === 'heavyBody') ? 2 : 1;
+    spinningEnemies.push({
+      x: e.x, y: e.y, w: e.w, h: e.h,
+      vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
+      life: CONFIG.HAMMER_SPIN_LIFE,
+      angle: 0,
+      skinKey,
+      drawScaleMultiplier: ((variantCfg?.drawScaleMultiplier ?? 1.0)
+                          * (tierCfg?.drawScaleMultiplier    ?? 1.0)),
+      spinDamage,
+      hitTargetIds: new Set(),
+    });
+  }
+
   enemies.forEach(e => {
     if (!e.active) return;
-    if (rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) {
-      e.active = false; // 從場上移除
-      stageFlowHints.hammerUsedOnScorpion = true; // 記錄曾用槌子打過蠍子
-          spinningEnemies.push({
-        x: e.x, y: e.y, w: e.w, h: e.h,
-        vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
-        life: CONFIG.HAMMER_SPIN_LIFE,
-        angle: 0,
-        skinKey: (getEnemyVariantConfig(e)?.skinKey) || 'scorpion_normal',
-        // v0.3.17-test-2：保留視覺大小倍率，heavyBody (1.18×) 打飛後仍維持 heavy 尺寸
-        drawScaleMultiplier: ((getEnemyVariantConfig(e)?.drawScaleMultiplier ?? 1.0)
-                            * (getEnemyTierConfig(e)?.drawScaleMultiplier    ?? 1.0)),
-      });
-      if (!player.hammerHit) {
-        player.hammerHit = true;
-        consumeHammerDurability();
-      }
+    if (!rectsOverlap(atkX, atkY, atkW, atkH, e.x, e.y, e.w, e.h)) return;
+
+    stageFlowHints.hammerUsedOnScorpion = true;
+
+    const result = damageScorpionEnemy(e, 2, 'hammer', (killed) => {
+      makeSpinning(killed);
+    });
+
+    // hammer 命中未殺死（heavyBody HP > 0）：重擊 knockback
+    if (result === true) {
+      e.vx = (player.facingRight ? 2.5 : -2.5);
+    }
+
+    if (!player.hammerHit) {
+      player.hammerHit = true;
+      consumeHammerDurability();
     }
   });
 
@@ -3893,20 +3962,25 @@ function updateSpinningEnemies(dt) {
     s.angle += 0.3 * dt;
     s.life--;
     if (s.life <= 0) { spinningEnemies.splice(i, 1); continue; }
-    // 撞到其他活著的小怪 → 扣血（v0.3.18：heavyBody 有 3 HP，不再被秒殺）
+
+    // v0.3.18-test-2：使用 spinDamage + hitTargetIds 鎖，防止多幀重複扣同一目標
     enemies.forEach(e => {
       if (!e.active) return;
-      if (rectsOverlap(s.x, s.y, s.w, s.h, e.x, e.y, e.w, e.h)) {
-        e.hp--;
-        if (e.hp <= 0) {
-          spawnScorpionDefeatEffect(e);
-          e.active = false;
-          player.enemiesDefeated++;
-        } else {
-          e.hitFlash = 6; // 未死：閃爍提示仍有 HP
-        }
-        s.life = 0; // spinning enemy 撞上後消失
-      }
+      if (!rectsOverlap(s.x, s.y, s.w, s.h, e.x, e.y, e.w, e.h)) return;
+
+      // 每個 spinning 對同一目標只命中一次
+      if (!s.hitTargetIds) s.hitTargetIds = new Set();
+      const tid = e.runtimeId ?? -1;
+      if (tid !== -1 && s.hitTargetIds.has(tid)) return;
+      if (tid !== -1) s.hitTargetIds.add(tid);
+
+      const dmg = s.spinDamage || 1;
+      damageScorpionEnemy(e, dmg, 'spinning', (killed) => {
+        // spinning kill → defeat effect（不連鎖擊飛，避免混亂）
+        spawnScorpionDefeatEffect(killed);
+      });
+
+      s.life = 0; // spinning projectile 命中後消失
     });
   }
 }
@@ -4029,6 +4103,7 @@ function updateEnemies() {
   enemies.forEach(e => {
     if (!e.active) return;
     if (e.hitFlash > 0) e.hitFlash--;
+    if ((e.hurtCooldown || 0) > 0) e.hurtCooldown--; // v0.3.18-test-2：防抖計時
 
     // v0.3.15：從 variant+tier 讀取速度倍率；舊資料無 type 時 fallback scorpion/normal/normal
     const variantCfg = getEnemyVariantConfig(e);
@@ -7210,7 +7285,10 @@ function restart(opts) {
     e.hp    = vCfg?.hp    ?? e.maxHp ?? 1;
     e.maxHp = vCfg?.maxHp ?? e.maxHp ?? 1;
     e.x = e.patrol;
-    e.hitFlash = 0;
+    e.hitFlash     = 0;
+    e.hurtCooldown = 0;
+    e.lastSwordSwingId = 0;
+    // runtimeId 保持不變（loadLevel 時已分配）
   });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   roundBalloons.forEach(r => { r.collected = false; });
