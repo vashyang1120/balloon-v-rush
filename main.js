@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1';
-const BUILD_TIME   = '2026-06-30 10:00';
+const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1-fix-1';
+const BUILD_TIME   = '2026-06-30 11:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2762,30 +2762,33 @@ const LEVELS = [
     length:      4800,
     scrollSpeed: 1,
     bg:          'stage1',
-    platforms: [
+    buildPlatforms: () => [
       { x: 800,  y: GROUND_Y-80,  w: 200, h: 20 },
       { x: 1600, y: GROUND_Y-80,  w: 200, h: 20 },
       { x: 2800, y: GROUND_Y-80,  w: 200, h: 20 },
     ],
-    buildSpikes:       () => [],
-    buildCoins:        () => [],
-    buildBalloons:     () => [600,1400,2200,3000].map(x => ({
+    buildSpikes:        () => [],
+    buildCoins:         () => [],
+    buildBalloons:      () => [600,1400,2200,3000].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
-    buildEnemies:      () => [],
-    buildOranges:      () => [],
-    // Chapter 2 chimney oranges (buildChimneyOranges)
+    buildEnemies:       () => [],
+    buildOranges:       () => [],
     buildChimneyOranges: () => [
-      { x: 1000, sprayPhase: 'idle', phaseTimer: 0, sprayActive: false },
-      { x: 2400, sprayPhase: 'idle', phaseTimer: 500, sprayActive: false },
-      { x: 3600, sprayPhase: 'idle', phaseTimer: 200, sprayActive: false },
+      { x: 1000, phaseTimer: 0   },
+      { x: 2400, phaseTimer: 500 },
+      { x: 3600, phaseTimer: 200 },
     ].map(d => ({
-      ...d,
-      y:    GROUND_Y - CONFIG.ORANGE_H,
-      w:    CONFIG.ORANGE_W,
-      h:    CONFIG.ORANGE_H,
-      type: 'chimneyOrange',
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'chimneyOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+      active:      true,
     })),
   },
 
@@ -2798,21 +2801,21 @@ const LEVELS = [
     length:      5600,
     scrollSpeed: 1,
     bg:          'stage1',
-    platforms: [
+    buildPlatforms: () => [
       { x: 700,  y: GROUND_Y-80,  w: 180, h: 20 },
       { x: 1500, y: GROUND_Y-100, w: 180, h: 20 },
       { x: 2400, y: GROUND_Y-80,  w: 180, h: 20 },
       { x: 3400, y: GROUND_Y-100, w: 180, h: 20 },
       { x: 4400, y: GROUND_Y-80,  w: 180, h: 20 },
     ],
-    buildSpikes:       () => [],
-    buildCoins:        () => [],
-    buildBalloons:     () => [500,1200,2000,2800,3600,4400].map(x => ({
+    buildSpikes:        () => [],
+    buildCoins:         () => [],
+    buildBalloons:      () => [500,1200,2000,2800,3600,4400].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
-    buildEnemies:      () => [],
-    buildOranges:      () => [],
+    buildEnemies:       () => [],
+    buildOranges:       () => [],
     buildChimneyOranges: () => [
       { x: 900,  phaseTimer: 0   },
       { x: 1800, phaseTimer: 600 },
@@ -2828,6 +2831,7 @@ const LEVELS = [
       sprayPhase:  'idle',
       phaseTimer:  d.phaseTimer,
       sprayActive: false,
+      active:      true,
     })),
   },
 
@@ -2840,7 +2844,7 @@ const LEVELS = [
     length:      6000,
     scrollSpeed: 1,
     bg:          'stage1',
-    platforms: [
+    buildPlatforms: () => [
       { x: 1000, y: GROUND_Y-80,  w: 160, h: 20 },
       { x: 2200, y: GROUND_Y-100, w: 160, h: 20 },
       { x: 3400, y: GROUND_Y-80,  w: 160, h: 20 },
@@ -2850,11 +2854,12 @@ const LEVELS = [
       { x: 1600, y: GROUND_Y-24, w: 40, h: 24 },
       { x: 3000, y: GROUND_Y-24, w: 40, h: 24 },
     ],
-    buildCoins:        () => [],
-    buildBalloons:     () => [600,1300,2100,2900,3700,4500].map(x => ({
+    buildCoins:         () => [],
+    buildBalloons:      () => [600,1300,2100,2900,3700,4500].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
+    buildOranges:       () => [],
     buildEnemies: () => {
       const mkEnemy = (x, patrol, range, variant, tier) => ({
         x, y: GROUND_Y - CONFIG.ENEMY_H,
@@ -2872,7 +2877,6 @@ const LEVELS = [
         mkEnemy(4800, 4800, 110, 'normal', 'normal'),
       ];
     },
-    buildOranges: () => [],
     buildChimneyOranges: () => [
       { x: 1300, phaseTimer: 0   },
       { x: 2600, phaseTimer: 700 },
@@ -2886,6 +2890,7 @@ const LEVELS = [
       sprayPhase:  'idle',
       phaseTimer:  d.phaseTimer,
       sprayActive: false,
+      active:      true,
     })),
   },
 
