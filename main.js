@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-4';
-const BUILD_TIME   = '2026-06-29 17:00';
+const GAME_VERSION = 'adventure-v0.3.18-heavy-tank-health-ui-test-2-fix-5';
+const BUILD_TIME   = '2026-06-29 19:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1633,6 +1633,7 @@ const INVENTORY_DEFAULTS = {
   // v0.3.11 Chapter1 核心流程旗標（一次性教學 / 保底機制，隨背包存檔）
   chapter1Flow: {
     dogIntroDone:                  false,
+    dogCraftIntroDone:             false, // v0.3.18-fix-5：玩家是否已完成「製作氣球小狗」教學步驟
     forcedDogTripDone:             false,
     hammerRecipeGranted:           false,
     hammerMaterialGuaranteeDone:   false,
@@ -1706,12 +1707,12 @@ function refreshAdventureProgressAfterCraft() {
     if (typeof refreshResultBag === 'function')       refreshResultBag();
     if (typeof updateNextLevelButton === 'function')  updateNextLevelButton();
     if (typeof populateResultPanel === 'function' && document.getElementById('result-panel-body')) {
-      populateResultPanel('clear'); // 重新 render 整個結算面板（含下一步行動區塊）
+      populateResultPanel('clear');
     }
   }
-  // 小V的家（home overlay 顯示中才刷新）
-  const homeOverlay = document.getElementById('home-overlay');
-  if (homeOverlay && homeOverlay.style.display !== 'none') {
+  // v0.3.18-fix-5：小V的家用 home-screen（不是 home-overlay）
+  const homeScreen = document.getElementById('home-screen');
+  if (homeScreen && homeScreen.style.display !== 'none') {
     if (typeof renderHomeDog === 'function')          renderHomeDog();
     if (typeof renderHomeInventory === 'function')    renderHomeInventory();
     if (typeof renderHomeNextStage === 'function')    renderHomeNextStage();
@@ -1721,7 +1722,18 @@ function refreshAdventureProgressAfterCraft() {
 function craftItem(recipeId) {
   // 特殊：氣球狗 → 存入 playerHome 結構而非 craftedItems
   if (recipeId === 'balloonDog') {
-    if (playerInventory.balloonDog?.present) return false; // 已有一隻
+    const flags = ensureChapter1Flags();
+    if (playerInventory.balloonDog?.present) {
+      // v0.3.18-fix-5：已有狗時，若教學旗標尚未完成，設定旗標讓流程繼續
+      if (!flags.dogCraftIntroDone) {
+        flags.dogCraftIntroDone = true;
+        saveInventory();
+        showHint('氣球小狗已經準備好了！接下來帶牠一起出發吧。', 220);
+        refreshAdventureProgressAfterCraft();
+        return true;
+      }
+      return false; // 教學已完成且有狗，不需再做
+    }
     const recipe = RECIPES.find(r => r.id === 'balloonDog');
     if (!recipe) return false;
     for (const [mat, qty] of Object.entries(recipe.cost)) {
@@ -1734,11 +1746,11 @@ function craftItem(recipeId) {
     playerInventory.balloonDog.present   = true;
     playerInventory.balloonDog.turnsLeft = CONFIG.DOG_INITIAL_TURNS || 3;
     player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT);
+    // v0.3.18-fix-5：製作成功後設定教學完成旗標
+    flags.dogCraftIntroDone = true;
     saveInventory();
     if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
     if (typeof renderHomeSupply === 'function') renderHomeSupply();
-    // v0.3.18-fix-4：從任何路徑（氣球秘笈/結算頁/小V的家）製作完小狗後，
-    // 統一刷新冒險進度 UI，讓結算頁從「製作小狗」切換到「帶狗出發」
     refreshAdventureProgressAfterCraft();
     return true;
   }
@@ -2877,11 +2889,14 @@ function getChapter1NextStepInfo() {
 
   // 情境 A / B / A0：下一步是狗狗尋寶關，依狀態三分流
   if (nextIdx === dogHammerStageIndex) {
+    const flags  = ensureChapter1Flags();
     const dog    = playerInventory.balloonDog || {};
     const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
+    const dogCraftIntroDone = flags.dogCraftIntroDone === true;
 
-    // 情境 A0：玩家還沒有氣球小狗 → 引導去氣球秘笈製作
-    if (!hasDog) {
+    // 情境 A0：v0.3.18-fix-5：教學旗標未完成 → 顯示「製作小狗」引導
+    // 不論 dog.present 是否已是 true（防止舊存檔跳過教學）
+    if (!dogCraftIntroDone) {
       return {
         kind:          'makeDog',
         title:         '下一步：製作氣球小狗',
@@ -2893,8 +2908,20 @@ function getChapter1NextStepInfo() {
       };
     }
 
-    // 情境 A：有狗，但還沒安排帶狗
-    if (nextBringDog !== true) {
+    // 情境 A：dogCraftIntroDone = true，但還沒安排帶狗
+    if (!hasDog || nextBringDog !== true) {
+      if (!hasDog) {
+        // 有教學但狗不見了（極少見，保護）
+        return {
+          kind:          'makeDog',
+          title:         '下一步：製作氣球小狗',
+          body:          '氣球小狗好像跑掉了！請再到「氣球秘笈」製作一隻。',
+          actionLabel:   '📖 打開氣球秘笈製作小狗',
+          actionFn:      'openGuidebook',
+          nextBtnText:   '請先製作氣球小狗',
+          nextBtnLocked: true,
+        };
+      }
       return {
         kind:        'bringDog',
         title:       '下一步：帶氣球小狗出發',
@@ -4548,9 +4575,10 @@ function updateNextLevelButton() {
     btn.childNodes[0].textContent = btnText;
     const sub = btn.querySelector('.result-btn-sub');
     if (sub) sub.textContent = isLocked ? 'Locked' : 'Next Level';
-    btn._nextLevel = true;
+    // v0.3.18-fix-5：Locked 時明確設 _nextLevel=false，防止點擊真的進下一關
+    btn._nextLevel = !isLocked;
+    btn.dataset.lockedReason = isLocked ? (nextStepInfo?.kind || 'locked') : '';
 
-    // 可點擊：主色明亮（opacity 還原）；不可點擊：明顯變暗，且按鈕文字本身已說明原因
     btn.style.opacity = isLocked ? '0.45' : '';
   } else {
     btn.childNodes[0].textContent = '再玩一次';
@@ -7446,6 +7474,12 @@ function hideResultButtons() {
         if (gameState !== 'playing') {
           try {
             if (btnPlay._nextLevel && gameState === 'clear') { // 防呆：只有 clear 才能進下一關
+              // v0.3.18-fix-5：第二道防線，防止 Locked 按鈕仍進入下一關
+              const _guard = getChapter1NextStepInfo();
+              if (_guard && _guard.nextBtnLocked) {
+                showHint(_guard.nextBtnText || '請先完成下一步', 220);
+                return;
+              }
               // v0.3.11：第一章流程用 getNextLevelIndex 算下一關，
               // 而不是裸寫 currentLevelIndex + 1（避免誤跳橘子果園）
               const nextIdx = getNextLevelIndex(currentLevelIndex);
@@ -7700,27 +7734,43 @@ function showCraftMessage(msg) {
 const CORE_ART_KEYS = ['idle', 'run01', 'run02', 'run03', 'run04', 'run05', 'jump', 'fall'];
 let _artReadyConfirmed = false;
 let _artReadyStartMs   = 0;
-const ART_READY_TIMEOUT_MS = 5000; // 5 秒後強制 fallback，避免卡死
+const ART_READY_TIMEOUT_MS = 12000; // 延長到 12 秒，避免卡死，但 timeout 不再放行遊戲
+
+// v0.3.18-fix-5：蠍子核心素材就緒判斷（包含 normal + heavy 的 walk + hurt）
+function isScorpionCoreArtReady() {
+  const normal = scorpionSkinImgs['scorpion_normal'];
+  const heavy  = scorpionSkinImgs['scorpion_heavy'];
+  // 最低要求：normal walk 就緒（heavy 若尚未完成，允許繼續等）
+  // 若 heavy 一直載入失敗（404），也算就緒（靠 fallback normal）
+  const normalOk = normal && normal.walkReady;
+  // heavy：若 cache 中沒有 key（initScorpionSkinArt 尚未跑），用舊 scorpionWalkReady 兜底
+  const heavyOk  = !heavy ? scorpionWalkReady : (heavy.walkReady || heavy.hurtReady);
+  return normalOk && heavyOk;
+}
+
+// v0.3.18-fix-5：橘子怪核心素材就緒判斷（含 cooldown / oil sprites）
+function isOrangeCoreArtReady() {
+  const coreKeys = ['idle', 'warning', 'spray', 'cooldown01', 'cooldown02', 'oil01', 'oil02', 'oil03'];
+  return coreKeys.every(k => {
+    const img = orangeEnemyImgs[k];
+    return img && img.complete && img.naturalWidth > 0;
+  });
+}
 
 function isAdventureCoreArtReady() {
   if (_artReadyConfirmed) return true;
-  // 每幀檢查：所有 CORE_ART_KEYS 都已載入完成
   const heroOk = CORE_ART_KEYS.every(k => {
     const img = adventureImages[k];
     return img && img.complete && img.naturalWidth > 0;
   });
-  const scorpionOk = scorpionWalkReady; // 至少 1 張蠍子 walk 圖已就緒
-  const orangeOk   = orangeEnemyCoreReady; // idle + warning + spray 全部就緒
+  const scorpionOk = isScorpionCoreArtReady();
+  const orangeOk   = isOrangeCoreArtReady();
   if (heroOk && scorpionOk && orangeOk) {
     _artReadyConfirmed = true;
     return true;
   }
-  // timeout fallback：超過 5 秒就不再等了
-  if (_artReadyStartMs > 0 && (performance.now() - _artReadyStartMs) > ART_READY_TIMEOUT_MS) {
-    console.warn('[Art] Core art timeout after 5s, proceeding with fallback geometry.');
-    _artReadyConfirmed = true;
-    return true;
-  }
+  // v0.3.18-fix-5：timeout 不再放行遊戲（不再設 _artReadyConfirmed=true）
+  // 只更新 loading 文字，繼續等待素材
   return false;
 }
 
@@ -7743,7 +7793,18 @@ function loop(timestamp) {
     ctx.font = '13px sans-serif';
     ctx.fillStyle = 'rgba(180,160,220,0.6)';
     const elapsed = Math.floor((performance.now() - _artReadyStartMs) / 1000);
-    ctx.fillText('素材準備中 ' + elapsed + 's', CANVAS_W / 2, CANVAS_H / 2 + 28);
+    // v0.3.18-fix-5：顯示正在等待哪些素材
+    const waiting = [];
+    const heroOk = CORE_ART_KEYS.every(k => { const img = adventureImages[k]; return img && img.complete && img.naturalWidth > 0; });
+    if (!heroOk)                    waiting.push('小V');
+    if (!isScorpionCoreArtReady()) waiting.push('氣球蠍子');
+    if (!isOrangeCoreArtReady())   waiting.push('橘子怪');
+    const waitTxt = waiting.length ? '素材準備中：' + waiting.join('、') : '素材準備中…';
+    ctx.fillText(waitTxt + ' (' + elapsed + 's)', CANVAS_W / 2, CANVAS_H / 2 + 28);
+    if (elapsed >= 12) {
+      ctx.fillStyle = 'rgba(255,200,100,0.8)';
+      ctx.fillText('素材讀取比較久，請稍等…', CANVAS_W / 2, CANVAS_H / 2 + 52);
+    }
     requestAnimationFrame(loop);
     return;
   }
