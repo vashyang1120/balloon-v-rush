@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-2';
-const BUILD_TIME   = '2026-06-30 14:00';
+const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-2-fix-1';
+const BUILD_TIME   = '2026-06-30 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4085,16 +4085,23 @@ function checkChimneyOrangeDamage() {
   const px = player.x, py = player.y, pw = player.w, ph = player.h;
 
   chimneyOranges.forEach(co => {
-    if (!co.active || !co.sprayActive) return;
-    // 碰到本體也受傷
+    if (!co.active) return;
+
+    // v0.3.19-test-2-fix-1：本體碰撞傷害與 sprayActive 無關，
+    // 任何狀態（idle/windup/spraying/cooldown）碰到本體都會受傷，
+    // 和一般敵人一樣是持續存在的威脅
     if (rectsOverlap(px, py, pw, ph, co.x, co.y, co.w, co.h)) {
-      damagePlayer(); return;
-    }
-    // 油幕：從本體頂部向上延伸 CHIMNEY_OIL_H
-    const oilX = co.x + co.w / 2 - CHIMNEY_OIL_W / 2;
-    const oilY = co.y - CHIMNEY_OIL_H;
-    if (rectsOverlap(px, py, pw, ph, oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H)) {
       damagePlayer();
+      return; // 同幀只扣一次，invincible 啟動後 oil 判定自然被上方 guard 擋掉
+    }
+
+    // 油幕：只在 spraying 狀態才有威脅，從本體頂部向上延伸 CHIMNEY_OIL_H
+    if (co.sprayActive) {
+      const oilX = co.x + co.w / 2 - CHIMNEY_OIL_W / 2;
+      const oilY = co.y - CHIMNEY_OIL_H;
+      if (rectsOverlap(px, py, pw, ph, oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H)) {
+        damagePlayer();
+      }
     }
   });
 }
