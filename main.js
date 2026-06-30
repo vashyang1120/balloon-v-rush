@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-2-fix-1';
-const BUILD_TIME   = '2026-06-30 15:00';
+const GAME_VERSION = 'adventure-v0.3.20-chapter2-dual-nozzle-orange-foundation-test-1';
+const BUILD_TIME   = '2026-06-30 17:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2799,19 +2799,25 @@ const LEVELS = [
     displayName: '第 2-2 節｜油幕時機訓練',
     name:        '油幕時機訓練',
     shortName:   '油幕訓練',
-    length:      5600,
+    length:      8000,
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.19-test-2：地形單純（無平台，避免誤導玩家往上跳進油柱），
-    // 改用尖刺製造「不能隨意停留」的壓力，逼玩家精準計算通過時機
-    buildPlatforms: () => [],
+    // v0.3.20-test-1：節奏分段——
+    //   前段 (0~5600)：純煙囟橘子，沿用 test-2 的時機訓練配置
+    //   後段 (5600~8000)：首次登場雙噴嘴橘子，提供高處平台路線繞過
+    buildPlatforms: () => [
+      // 後段：雙噴嘴橘子上方的高處平台路線（繞過本體左右噴油範圍）
+      { x: 6100, y: GROUND_Y-140, w: 220, h: 20 },
+      { x: 6500, y: GROUND_Y-140, w: 220, h: 20 },
+      { x: 7300, y: GROUND_Y-140, w: 220, h: 20 },
+    ],
     buildSpikes: () => [
       { x: 1300, y: GROUND_Y-24, w: 36, h: 24 },
       { x: 3000, y: GROUND_Y-24, w: 36, h: 24 },
       { x: 4500, y: GROUND_Y-24, w: 36, h: 24 },
     ],
     buildCoins:         () => [],
-    buildBalloons:      () => [500,1700,2400,3500,4200,5000].map(x => ({
+    buildBalloons:      () => [500,1700,2400,3500,4200,5000,6300,7400].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
@@ -2836,6 +2842,22 @@ const LEVELS = [
       sprayActive: false,
       active:      true,
     })),
+    // v0.3.20-test-1：後段首次登場，單獨展示（不與煙囟橘子混在一起）
+    // 旁邊提供高處平台路線，讓玩家明確理解「走高處繞過」是正解
+    buildDualNozzleOranges: () => [
+      { x: 6300, phaseTimer: 0   },
+      { x: 7500, phaseTimer: 800 },
+    ].map(d => ({
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'dualNozzleOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+      active:      true,
+    })),
   },
 
   // Stage 2-3：蠍子 + 煙囟橘子 複合挑戰
@@ -2845,19 +2867,26 @@ const LEVELS = [
     displayName: '第 2-3 節｜地面與空中複合挑戰',
     name:        '地面與空中複合挑戰',
     shortName:   '複合挑戰',
-    length:      6400,
+    length:      8800,
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.19-test-2：節奏分段——
+    // v0.3.20-test-1：節奏分段——
     //   前段 (0~2000)：只有蠍子，複習第一章地面戰鬥
     //   中段 (2000~3800)：只有煙囟橘子，複習空中威脅判斷
-    //   後段 (3800~6400)：蠍子 + 煙囟橘子同時出現，真正複合挑戰
-    buildPlatforms: () => [],
+    //   段3 (3800~6400)：蠍子 + 煙囟橘子混合（既有複合挑戰）
+    //   段4 (6400~7400)：首次登場雙噴嘴橘子，單獨展示 + 高處平台繞過路線
+    //   後段 (7400~8800)：蠍子 + 煙囟橘子 + 雙噴嘴橘子三者混合，第二章總結挑戰
+    buildPlatforms: () => [
+      // 段4：雙噴嘴橘子上方的高處平台路線
+      { x: 6700, y: GROUND_Y-140, w: 200, h: 20 },
+      // 後段：混合區域也提供一段高處平台，讓玩家有繞過雙噴嘴橘子的選擇
+      { x: 8100, y: GROUND_Y-140, w: 220, h: 20 },
+    ],
     buildSpikes: () => [
       { x: 4400, y: GROUND_Y-24, w: 36, h: 24 },
     ],
     buildCoins:         () => [],
-    buildBalloons:      () => [500,1300,2600,3400,4600,5600].map(x => ({
+    buildBalloons:      () => [500,1300,2600,3400,4600,5600,6900,8200].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
@@ -2876,24 +2905,44 @@ const LEVELS = [
         // 前段：純蠍子複習（x: 600~1800）
         mkEnemy(700,  700,  100, 'normal', 'normal'),
         mkEnemy(1700, 1700, 110, 'normal', 'normal'),
-        // 後段：與煙囟橘子混合出現（x: 4200~5800）
+        // 段3：與煙囟橘子混合出現（x: 4200~5800）
         mkEnemy(4200, 4200, 100, 'normal', 'normal'),
         mkEnemy(5400, 5400, 110, 'normal', 'normal'),
+        // 後段：三者混合中的蠍子（x: 7900）
+        mkEnemy(7900, 7900, 100, 'normal', 'normal'),
       ];
     },
     buildChimneyOranges: () => [
       // 中段：純煙囟橘子複習（x: 2400~3600）
       { x: 2400, phaseTimer: 0   },
       { x: 3600, phaseTimer: 700 },
-      // 後段：與蠍子混合出現（x: 4800~6000）
+      // 段3：與蠍子混合出現（x: 4800~6000）
       { x: 4800, phaseTimer: 300 },
       { x: 6000, phaseTimer: 900 },
+      // 後段：三者混合中的煙囟橘子（x: 7600）
+      { x: 7600, phaseTimer: 200 },
     ].map(d => ({
       x:           d.x,
       y:           GROUND_Y - CONFIG.ORANGE_H,
       w:           CONFIG.ORANGE_W,
       h:           CONFIG.ORANGE_H,
       type:        'chimneyOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+      active:      true,
+    })),
+    // v0.3.20-test-1：段4 單獨展示一隻（搭配高處平台），
+    // 後段再加一隻與蠍子/煙囟橘子混合，作為第二章三種威脅的總結挑戰
+    buildDualNozzleOranges: () => [
+      { x: 6900, phaseTimer: 0   }, // 段4：單獨展示
+      { x: 8400, phaseTimer: 500 }, // 後段：三者混合
+    ].map(d => ({
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'dualNozzleOrange',
       sprayPhase:  'idle',
       phaseTimer:  d.phaseTimer,
       sprayActive: false,
@@ -3481,6 +3530,15 @@ function loadLevel(index) {
     });
   }
 
+  // v0.3.20：Chapter 2 雙噴嘴橘子
+  dualNozzleOranges.length = 0;
+  if (typeof lv.buildDualNozzleOranges === 'function') {
+    lv.buildDualNozzleOranges().forEach(dn => {
+      if (!dn.active) dn.active = true;
+      dualNozzleOranges.push(dn);
+    });
+  }
+
   // 圓氣球
   roundBalloons.length = 0;
   if (lv.buildRoundBalloons) lv.buildRoundBalloons().forEach(r => roundBalloons.push(r));
@@ -3697,7 +3755,8 @@ function update(dt, dtMs = 16.667) {
   updateTreasurePickupEffects(); // v0.3.12
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
-  updateChimneyOranges(dtMs);  // v0.3.19：Chapter 2 煙囟橘子
+  updateChimneyOranges(dtMs);     // v0.3.19：Chapter 2 煙囟橘子
+  updateDualNozzleOranges(dtMs);  // v0.3.20：Chapter 2 雙噴嘴橘子
   checkCollectibles();
   checkHazards();
   checkHints();
@@ -4172,6 +4231,174 @@ function drawChimneyOranges(cx) {
         const r   = 5 - i;
         ctx.beginPath();
         ctx.arc(chimneyX + chimneyW / 2, py2, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  });
+}
+
+// ── Dual Nozzle Orange（雙噴嘴橘子）────────────────────────
+//  v0.3.20 Chapter 2 Foundation
+//  攻擊方式：本體左右兩側噴嘴同時向左、右噴油，玩家跳到身後仍在範圍內
+//  解法：走高處 / 利用平台繞過，而不是直接跳過本體
+//  美術：暫用幾何 placeholder（矩形本體 + 左右噴嘴 + 雙向油幕），後續替換 sprite
+// ──────────────────────────────────────────────────────────
+
+const DUAL_NOZZLE_IDLE_MS     = 1800; // 靜止等待 (ms)
+const DUAL_NOZZLE_WINDUP_MS   =  700; // 蓄力預警 (ms)
+const DUAL_NOZZLE_SPRAY_MS    =  900; // 噴油持續 (ms)
+const DUAL_NOZZLE_COOLDOWN_MS = 1400; // 冷卻喘氣 (ms)
+
+// 噴油範圍判定（相對於橘子本體，向左右延伸）
+const DUAL_NOZZLE_OIL_W = 160; // 單側油幕寬度
+const DUAL_NOZZLE_OIL_H =  40; // 油幕高度（與本體同高附近）
+
+let dualNozzleOranges = []; // runtime array，由 loadLevel 填充
+
+function updateDualNozzleOranges(dtMs) {
+  dualNozzleOranges.forEach(dn => {
+    if (!dn.active) return;
+    dn.phaseTimer += dtMs;
+
+    switch (dn.sprayPhase) {
+      case 'idle':
+        dn.sprayActive = false;
+        if (dn.phaseTimer >= DUAL_NOZZLE_IDLE_MS) {
+          dn.sprayPhase = 'windup';
+          dn.phaseTimer = 0;
+        }
+        break;
+
+      case 'windup':
+        dn.sprayActive = false;
+        if (dn.phaseTimer >= DUAL_NOZZLE_WINDUP_MS) {
+          dn.sprayPhase  = 'spraying';
+          dn.phaseTimer  = 0;
+          dn.sprayActive = true;
+        }
+        break;
+
+      case 'spraying':
+        dn.sprayActive = true;
+        if (dn.phaseTimer >= DUAL_NOZZLE_SPRAY_MS) {
+          dn.sprayPhase  = 'cooldown';
+          dn.phaseTimer  = 0;
+          dn.sprayActive = false;
+        }
+        break;
+
+      case 'cooldown':
+        dn.sprayActive = false;
+        if (dn.phaseTimer >= DUAL_NOZZLE_COOLDOWN_MS) {
+          dn.sprayPhase = 'idle';
+          dn.phaseTimer = 0;
+        }
+        break;
+    }
+  });
+}
+
+function checkDualNozzleOrangeDamage() {
+  if (player.invincible > 0) return;
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+
+  dualNozzleOranges.forEach(dn => {
+    if (!dn.active) return;
+
+    // 本體碰撞：任何狀態都會受傷（與一般敵人 / 煙囟橘子一致，不依賴 sprayActive）
+    if (rectsOverlap(px, py, pw, ph, dn.x, dn.y, dn.w, dn.h)) {
+      damagePlayer();
+      return;
+    }
+
+    // 雙向油幕：只在 spraying 狀態才有威脅，左右兩側同時延伸
+    if (dn.sprayActive) {
+      const oilY = dn.y + (dn.h - DUAL_NOZZLE_OIL_H) / 2;
+      const leftOilX  = dn.x - DUAL_NOZZLE_OIL_W;
+      const rightOilX = dn.x + dn.w;
+      if (rectsOverlap(px, py, pw, ph, leftOilX, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H)) {
+        damagePlayer(); return;
+      }
+      if (rectsOverlap(px, py, pw, ph, rightOilX, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H)) {
+        damagePlayer();
+      }
+    }
+  });
+}
+
+function drawDualNozzleOranges(cx) {
+  dualNozzleOranges.forEach(dn => {
+    if (!dn.active) return;
+    const sx = dn.x - cx;
+    if (sx > CANVAS_W + 60 + DUAL_NOZZLE_OIL_W || sx + dn.w < -60 - DUAL_NOZZLE_OIL_W) return;
+
+    const isWindup   = dn.sprayPhase === 'windup';
+    const isSpraying = dn.sprayPhase === 'spraying';
+    const isCooldown = dn.sprayPhase === 'cooldown';
+
+    ctx.save();
+
+    // ── 雙向油幕（spraying 時畫在本體後方）──
+    if (isSpraying && dn.sprayActive) {
+      const oilY = dn.y + (dn.h - DUAL_NOZZLE_OIL_H) / 2;
+      ctx.fillStyle = 'rgba(210,140,0,0.38)';
+      ctx.strokeStyle = 'rgba(180,100,0,0.55)';
+      ctx.lineWidth = 1.5;
+      // 左側
+      ctx.fillRect(sx - DUAL_NOZZLE_OIL_W, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
+      ctx.strokeRect(sx - DUAL_NOZZLE_OIL_W, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
+      // 右側
+      ctx.fillRect(sx + dn.w, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
+      ctx.strokeRect(sx + dn.w, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
+    }
+
+    // ── 本體（橘色矩形）──
+    const bodyColor = isWindup
+      ? '#ff6600'
+      : isCooldown
+        ? '#d47000'
+        : '#f57c00';
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(sx, dn.y, dn.w, dn.h);
+
+    // Windup 紅色光暈
+    if (isWindup) {
+      const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
+      ctx.shadowColor = '#ff2200';
+      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = '#ff4400';
+      ctx.fillRect(sx, dn.y, dn.w, dn.h);
+      ctx.restore();
+    }
+
+    // ── 左右噴嘴（placeholder：本體左右兩側中央的小矩形）──
+    const nozzleW = 10, nozzleH = 14;
+    const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
+    ctx.fillStyle = '#555';
+    ctx.fillRect(sx - nozzleW, nozzleY, nozzleW, nozzleH);          // 左噴嘴
+    ctx.fillRect(sx + dn.w,    nozzleY, nozzleW, nozzleH);          // 右噴嘴
+    ctx.fillStyle = '#333';
+    ctx.fillRect(sx - nozzleW - 2, nozzleY - 2, nozzleW + 4, 4);    // 左噴嘴帽
+    ctx.fillRect(sx + dn.w   - 2, nozzleY - 2, nozzleW + 4, 4);     // 右噴嘴帽
+
+    // ── 冒煙粒子（cooldown 狀態，左右各畫一組淡灰圓點）──
+    if (isCooldown) {
+      const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
+      ctx.globalAlpha = (0.25 + breath * 0.2);
+      ctx.fillStyle   = '#aaa';
+      const puff = Math.floor(frameCount / 15) % 3;
+      for (let i = 0; i < 3; i++) {
+        const r = 4 - i * 0.8;
+        const px2 = puff * 3;
+        ctx.beginPath();
+        ctx.arc(sx - nozzleW - px2 - i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx + dn.w + nozzleW + px2 + i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -4675,6 +4902,8 @@ function checkHazards() {
 
   // v0.3.19：Chapter 2 煙囟橘子油幕碰撞判定
   checkChimneyOrangeDamage();
+  // v0.3.20：Chapter 2 雙噴嘴橘子碰撞判定
+  checkDualNozzleOrangeDamage();
 }
 
 function damagePlayer() {
@@ -5154,6 +5383,8 @@ function drawWorld() {
 
   // v0.3.19：Chapter 2 煙囟橘子（本體畫在玩家之前，油幕也在同一 call 裡）
   drawChimneyOranges(cx);
+  // v0.3.20：Chapter 2 雙噴嘴橘子
+  drawDualNozzleOranges(cx);
 }
 
 function drawPlayer(cx) {
@@ -7783,6 +8014,7 @@ function restart(opts) {
   });
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   chimneyOranges.forEach(co => { co.sprayPhase = 'idle'; co.phaseTimer = 0; co.sprayActive = false; co.active = true; });
+  dualNozzleOranges.forEach(dn => { dn.sprayPhase = 'idle'; dn.phaseTimer = 0; dn.sprayActive = false; dn.active = true; });
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
