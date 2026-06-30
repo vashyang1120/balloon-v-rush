@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-1-fix-2';
-const BUILD_TIME   = '2026-06-30 12:00';
+const GAME_VERSION = 'adventure-v0.3.19-chapter2-chimney-orange-foundation-test-2';
+const BUILD_TIME   = '2026-06-30 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2763,23 +2763,22 @@ const LEVELS = [
     length:      4800,
     scrollSpeed: 1,
     bg:          'stage1',
-    buildPlatforms: () => [
-      { x: 800,  y: GROUND_Y-80,  w: 200, h: 20 },
-      { x: 1600, y: GROUND_Y-80,  w: 200, h: 20 },
-      { x: 2800, y: GROUND_Y-80,  w: 200, h: 20 },
-    ],
+    // v0.3.19-test-2：移除平台，讓地形單純化 — 純地面通行，
+    // 強調「煙囟橘子威脅空中、地面附近安全」這個核心觀念
+    buildPlatforms: () => [],
     buildSpikes:        () => [],
     buildCoins:         () => [],
-    buildBalloons:      () => [600,1400,2200,3000].map(x => ({
+    buildBalloons:      () => [600,1400,2200,3000,3800].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
     buildEnemies:       () => [],
     buildOranges:       () => [],
+    // v0.3.19-test-2：3 隻，間距拉開到 1200px，計時器錯開讓玩家一次只觀察一隻
     buildChimneyOranges: () => [
-      { x: 1000, phaseTimer: 0   },
-      { x: 2400, phaseTimer: 500 },
-      { x: 3600, phaseTimer: 200 },
+      { x: 1000, phaseTimer: 0    },
+      { x: 2400, phaseTimer: 900  },
+      { x: 3700, phaseTimer: 1600 },
     ].map(d => ({
       x:           d.x,
       y:           GROUND_Y - CONFIG.ORANGE_H,
@@ -2803,27 +2802,29 @@ const LEVELS = [
     length:      5600,
     scrollSpeed: 1,
     bg:          'stage1',
-    buildPlatforms: () => [
-      { x: 700,  y: GROUND_Y-80,  w: 180, h: 20 },
-      { x: 1500, y: GROUND_Y-100, w: 180, h: 20 },
-      { x: 2400, y: GROUND_Y-80,  w: 180, h: 20 },
-      { x: 3400, y: GROUND_Y-100, w: 180, h: 20 },
-      { x: 4400, y: GROUND_Y-80,  w: 180, h: 20 },
+    // v0.3.19-test-2：地形單純（無平台，避免誤導玩家往上跳進油柱），
+    // 改用尖刺製造「不能隨意停留」的壓力，逼玩家精準計算通過時機
+    buildPlatforms: () => [],
+    buildSpikes: () => [
+      { x: 1300, y: GROUND_Y-24, w: 36, h: 24 },
+      { x: 3000, y: GROUND_Y-24, w: 36, h: 24 },
+      { x: 4500, y: GROUND_Y-24, w: 36, h: 24 },
     ],
-    buildSpikes:        () => [],
     buildCoins:         () => [],
-    buildBalloons:      () => [500,1200,2000,2800,3600,4400].map(x => ({
+    buildBalloons:      () => [500,1700,2400,3500,4200,5000].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
     buildEnemies:       () => [],
     buildOranges:       () => [],
+    // v0.3.19-test-2：5 隻，間距比 2-1 更密（800~900px），
+    // 計時器錯開讓不同煙囟橘子的噴油時機交錯，逼玩家抓空檔通過
     buildChimneyOranges: () => [
-      { x: 900,  phaseTimer: 0   },
-      { x: 1800, phaseTimer: 600 },
-      { x: 2700, phaseTimer: 300 },
-      { x: 3700, phaseTimer: 800 },
-      { x: 4600, phaseTimer: 100 },
+      { x: 900,  phaseTimer: 0    },
+      { x: 1800, phaseTimer: 700  },
+      { x: 2700, phaseTimer: 1400 },
+      { x: 3700, phaseTimer: 400  },
+      { x: 4700, phaseTimer: 1100 },
     ].map(d => ({
       x:           d.x,
       y:           GROUND_Y - CONFIG.ORANGE_H,
@@ -2844,21 +2845,19 @@ const LEVELS = [
     displayName: '第 2-3 節｜地面與空中複合挑戰',
     name:        '地面與空中複合挑戰',
     shortName:   '複合挑戰',
-    length:      6000,
+    length:      6400,
     scrollSpeed: 1,
     bg:          'stage1',
-    buildPlatforms: () => [
-      { x: 1000, y: GROUND_Y-80,  w: 160, h: 20 },
-      { x: 2200, y: GROUND_Y-100, w: 160, h: 20 },
-      { x: 3400, y: GROUND_Y-80,  w: 160, h: 20 },
-      { x: 4600, y: GROUND_Y-100, w: 160, h: 20 },
-    ],
+    // v0.3.19-test-2：節奏分段——
+    //   前段 (0~2000)：只有蠍子，複習第一章地面戰鬥
+    //   中段 (2000~3800)：只有煙囟橘子，複習空中威脅判斷
+    //   後段 (3800~6400)：蠍子 + 煙囟橘子同時出現，真正複合挑戰
+    buildPlatforms: () => [],
     buildSpikes: () => [
-      { x: 1600, y: GROUND_Y-24, w: 40, h: 24 },
-      { x: 3000, y: GROUND_Y-24, w: 40, h: 24 },
+      { x: 4400, y: GROUND_Y-24, w: 36, h: 24 },
     ],
     buildCoins:         () => [],
-    buildBalloons:      () => [600,1300,2100,2900,3700,4500].map(x => ({
+    buildBalloons:      () => [500,1300,2600,3400,4600,5600].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
@@ -2874,16 +2873,21 @@ const LEVELS = [
         baseVx: CONFIG.ENEMY_SPEED,
       });
       return [
-        mkEnemy(800,  800,  100, 'normal', 'normal'),
-        mkEnemy(2000, 2000, 120, 'normal', 'normal'),
-        mkEnemy(3200, 3200, 100, 'normal', 'normal'),
-        mkEnemy(4800, 4800, 110, 'normal', 'normal'),
+        // 前段：純蠍子複習（x: 600~1800）
+        mkEnemy(700,  700,  100, 'normal', 'normal'),
+        mkEnemy(1700, 1700, 110, 'normal', 'normal'),
+        // 後段：與煙囟橘子混合出現（x: 4200~5800）
+        mkEnemy(4200, 4200, 100, 'normal', 'normal'),
+        mkEnemy(5400, 5400, 110, 'normal', 'normal'),
       ];
     },
     buildChimneyOranges: () => [
-      { x: 1300, phaseTimer: 0   },
-      { x: 2600, phaseTimer: 700 },
-      { x: 4000, phaseTimer: 300 },
+      // 中段：純煙囟橘子複習（x: 2400~3600）
+      { x: 2400, phaseTimer: 0   },
+      { x: 3600, phaseTimer: 700 },
+      // 後段：與蠍子混合出現（x: 4800~6000）
+      { x: 4800, phaseTimer: 300 },
+      { x: 6000, phaseTimer: 900 },
     ].map(d => ({
       x:           d.x,
       y:           GROUND_Y - CONFIG.ORANGE_H,
