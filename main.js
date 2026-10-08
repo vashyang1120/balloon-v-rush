@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.20-chapter2-economy-balance-test-1';
-const BUILD_TIME   = '2026-06-30 19:00';
+const GAME_VERSION = 'adventure-v0.3.21-chapter2-upward-fan-orange-test-1';
+const BUILD_TIME   = '2026-10-09 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2900,20 +2900,25 @@ const LEVELS = [
     displayName: '第 2-3 節｜地面與空中複合挑戰',
     name:        '地面與空中複合挑戰',
     shortName:   '複合挑戰',
-    length:      8800,
+    length:      10500, // v0.3.21：延長以加入 fan orange 教學段（段5 8800~10200）及收尾
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.20-test-1：節奏分段——
+    // v0.3.21：節奏分段——
     //   前段 (0~2000)：只有蠍子，複習第一章地面戰鬥
     //   中段 (2000~3800)：只有煙囟橘子，複習空中威脅判斷
     //   段3 (3800~6400)：蠍子 + 煙囟橘子混合（既有複合挑戰）
     //   段4 (6400~7400)：首次登場雙噴嘴橘子，單獨展示 + 高處平台繞過路線
-    //   後段 (7400~8800)：蠍子 + 煙囟橘子 + 雙噴嘴橘子三者混合，第二章總結挑戰
+    //   後段A (7400~8800)：蠍子 + 煙囟橘子 + 雙噴嘴橘子三者混合
+    //   段5 (8800~10200)：fan 向上油幕橘子教學（先單獨，再與蠍子合流）
+    //   收尾 (10200~10500)：緩衝空間
     buildPlatforms: () => [
       // 段4：雙噴嘴橘子上方的高處平台路線
       { x: 6700, y: GROUND_Y-140, w: 200, h: 20 },
-      // 後段：混合區域也提供一段高處平台，讓玩家有繞過雙噴嘴橘子的選擇
+      // 後段A：混合區域也提供一段高處平台，讓玩家有繞過雙噴嘴橘子的選擇
       { x: 8100, y: GROUND_Y-140, w: 220, h: 20 },
+      // 段5：fan orange 教學段，提供跳躍逃離油幕的高處落腳點
+      { x: 9100, y: GROUND_Y-150, w: 180, h: 20 },
+      { x: 9700, y: GROUND_Y-150, w: 180, h: 20 },
     ],
     buildSpikes: () => [
       { x: 4400, y: GROUND_Y-24, w: 36, h: 24 },
@@ -2933,19 +2938,25 @@ const LEVELS = [
         // 段4：雙噴嘴橘子單獨展示（6400~7400），高處平台 + 地面風險並存
         [6650,150],[6700,150],[6750,150], // 高處平台上（安全路線獎勵）
         [6800,55],[6950,55],              // 地面靠近噴嘴範圍邊緣
-        // 後段：三者混合，最高密度與最高風險回報（7400~8800）
+        // 後段A：三者混合，最高密度與最高風險回報（7400~8800）
         [7550,55],[7600,55],[7650,55],    // 7600 煙囟橘子周圍
         [7850,55],[7950,55],
         [8050,150],[8100,150],[8150,150], // 高處平台上
         [8350,55],[8420,55],              // 8400 雙噴嘴橘子周圍，高風險
         [8550,55],[8650,55],
         [7900,55],[8000,55],[8250,55],[8480,55],[8600,55],
+        // 段5：fan orange 教學段，硬幣置於油幕旁側，鼓勵閃避後收取
+        [8900,55],[9000,55],             // fan orange (9050) 左側接近處
+        [9120,160],[9180,160],           // 高處平台上方（跳躍逃生路線獎勵）
+        [9400,55],[9500,55],             // fan orange (9450) 旁側
+        [9720,160],[9780,160],           // 高處平台上方
+        [10000,55],[10100,55],           // 段5收尾，蠍子+fan 混合後段
         // 額外補強，確保整體落在 40~60 目標區間中段
         [500,150],[1700,140],[3000,55],[3300,55],[5650,55],[6300,55],
       ];
       return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
     },
-    buildBalloons:      () => [500,1300,2600,3400,4600,5600,6900,8200].map(x => ({
+    buildBalloons:      () => [500,1300,2600,3400,4600,5600,6900,8200,9800].map(x => ({
       x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => [],
@@ -2967,8 +2978,10 @@ const LEVELS = [
         // 段3：與煙囟橘子混合出現（x: 4200~5800）
         mkEnemy(4200, 4200, 100, 'normal', 'normal'),
         mkEnemy(5400, 5400, 110, 'normal', 'normal'),
-        // 後段：三者混合中的蠍子（x: 7900）
+        // 後段A：三者混合中的蠍子（x: 7900）
         mkEnemy(7900, 7900, 100, 'normal', 'normal'),
+        // 段5：fan orange 教學後半段，蠍子與 fan orange 同框
+        mkEnemy(9900, 9900, 100, 'normal', 'normal'),
       ];
     },
     buildChimneyOranges: () => [
@@ -2978,7 +2991,7 @@ const LEVELS = [
       // 段3：與蠍子混合出現（x: 4800~6000）
       { x: 4800, phaseTimer: 300 },
       { x: 6000, phaseTimer: 900 },
-      // 後段：三者混合中的煙囟橘子（x: 7600）
+      // 後段A：三者混合中的煙囟橘子（x: 7600）
       { x: 7600, phaseTimer: 200 },
     ].map(d => ({
       x:           d.x,
@@ -2992,16 +3005,35 @@ const LEVELS = [
       active:      true,
     })),
     // v0.3.20-test-1：段4 單獨展示一隻（搭配高處平台），
-    // 後段再加一隻與蠍子/煙囟橘子混合，作為第二章三種威脅的總結挑戰
+    // 後段A 再加一隻與蠍子/煙囟橘子混合，作為第二章三種威脅的總結挑戰
     buildDualNozzleOranges: () => [
       { x: 6900, phaseTimer: 0   }, // 段4：單獨展示
-      { x: 8400, phaseTimer: 500 }, // 後段：三者混合
+      { x: 8400, phaseTimer: 500 }, // 後段A：三者混合
     ].map(d => ({
       x:           d.x,
       y:           GROUND_Y - CONFIG.ORANGE_H,
       w:           CONFIG.ORANGE_W,
       h:           CONFIG.ORANGE_H,
       type:        'dualNozzleOrange',
+      sprayPhase:  'idle',
+      phaseTimer:  d.phaseTimer,
+      sprayActive: false,
+      active:      true,
+    })),
+    // v0.3.21：段5 fan orange 教學段
+    //   9050：第一隻 fan orange，單獨展示，玩家需向左右閃避油幕
+    //   9450：第二隻 fan orange，偏移計時，練習連續應對節奏
+    //   9900 區段：fan orange + 蠍子同框（蠍子在 buildEnemies 已定義）
+    buildFanOranges: () => [
+      { x: 9050, phaseTimer: 0   }, // 第一隻：單獨亮相
+      { x: 9450, phaseTimer: 600 }, // 第二隻：偏移計時，節奏交錯
+      { x: 10050, phaseTimer: 300 }, // 第三隻：與蠍子同框的壓力測試
+    ].map(d => ({
+      x:           d.x,
+      y:           GROUND_Y - CONFIG.ORANGE_H,
+      w:           CONFIG.ORANGE_W,
+      h:           CONFIG.ORANGE_H,
+      type:        'fanOrange',
       sprayPhase:  'idle',
       phaseTimer:  d.phaseTimer,
       sprayActive: false,
@@ -3598,6 +3630,15 @@ function loadLevel(index) {
     });
   }
 
+  // v0.3.21：Chapter 2 向上油幕橘子
+  fanOranges.length = 0;
+  if (typeof lv.buildFanOranges === 'function') {
+    lv.buildFanOranges().forEach(fn => {
+      if (!fn.active) fn.active = true;
+      fanOranges.push(fn);
+    });
+  }
+
   // 圓氣球
   roundBalloons.length = 0;
   if (lv.buildRoundBalloons) lv.buildRoundBalloons().forEach(r => roundBalloons.push(r));
@@ -3816,6 +3857,7 @@ function update(dt, dtMs = 16.667) {
   updateOrangeNemeses(dtMs);
   updateChimneyOranges(dtMs);     // v0.3.19：Chapter 2 煙囟橘子
   updateDualNozzleOranges(dtMs);  // v0.3.20：Chapter 2 雙噴嘴橘子
+  updateFanOranges(dtMs);         // v0.3.21：Chapter 2 向上油幕橘子
   checkCollectibles();
   checkHazards();
   checkHints();
@@ -4466,6 +4508,209 @@ function drawDualNozzleOranges(cx) {
   });
 }
 
+// ──────────────────────────────────────────────────────────
+//  v0.3.21：Chapter 2 向上油幕橘子（fan orange）
+//  油幕方向：往上、左右對稱展開（梯形 hitbox），不依賴 facing。
+//  美術：canvas 繪製預警光環 + 油幕梯形，不新增任何圖片素材。
+// ──────────────────────────────────────────────────────────
+
+const FAN_ORANGE_IDLE_MS     = 1300; // 靜止等待 (ms)
+const FAN_ORANGE_WARNING_MS  =  800; // 預警閃爍 (ms)
+const FAN_ORANGE_SPRAY_MS    =  800; // 油幕噴發 (ms)
+const FAN_ORANGE_COOLDOWN_MS = 1800; // 冷卻 (ms)
+
+// 向上梯形油幕尺寸（世界座標，px）
+const ORANGE_FAN_HEIGHT           = 170; // 油幕從本體頂端往上延伸高度
+const ORANGE_FAN_BOTTOM_HALF_WIDTH =  40; // 梯形底端（緊貼橘子頂部）半寬
+const ORANGE_FAN_TOP_HALF_WIDTH   = 150; // 梯形頂端半寬
+const ORANGE_FAN_ORIGIN_OFFSET_Y  =   0; // 油幕起始點相對於本體 y（0 = 本體頂端）
+
+let fanOranges = []; // runtime array，由 loadLevel 填充
+
+function updateFanOranges(dtMs) {
+  fanOranges.forEach(fn => {
+    if (!fn.active) return;
+    fn.phaseTimer += dtMs;
+
+    switch (fn.sprayPhase) {
+      case 'idle':
+        fn.sprayActive = false;
+        if (fn.phaseTimer >= FAN_ORANGE_IDLE_MS) {
+          fn.sprayPhase = 'warning';
+          fn.phaseTimer = 0;
+        }
+        break;
+
+      case 'warning':
+        fn.sprayActive = false;
+        if (fn.phaseTimer >= FAN_ORANGE_WARNING_MS) {
+          fn.sprayPhase  = 'spraying';
+          fn.phaseTimer  = 0;
+          fn.sprayActive = true;
+        }
+        break;
+
+      case 'spraying':
+        fn.sprayActive = true;
+        if (fn.phaseTimer >= FAN_ORANGE_SPRAY_MS) {
+          fn.sprayPhase  = 'cooldown';
+          fn.phaseTimer  = 0;
+          fn.sprayActive = false;
+        }
+        break;
+
+      case 'cooldown':
+        fn.sprayActive = false;
+        if (fn.phaseTimer >= FAN_ORANGE_COOLDOWN_MS) {
+          fn.sprayPhase = 'idle';
+          fn.phaseTimer = 0;
+        }
+        break;
+    }
+  });
+}
+
+function checkFanOrangeDamage() {
+  if (player.invincible > 0) return;
+  const px = player.x + player.w / 2;
+  const py = player.y + player.h / 2;
+
+  fanOranges.forEach(fn => {
+    if (!fn.active) return;
+
+    // 本體碰撞：任何狀態都受傷（不依賴 sprayActive）
+    if (rectsOverlap(player.x, player.y, player.w, player.h, fn.x, fn.y, fn.w, fn.h)) {
+      damagePlayer(); return;
+    }
+
+    // 向上油幕（梯形碰撞，sprayActive 才啟動）
+    if (fn.sprayActive) {
+      const originX = fn.x + fn.w / 2;
+      const originY = fn.y + ORANGE_FAN_ORIGIN_OFFSET_Y; // 本體頂端
+      const dyUp = originY - py; // 玩家中心點距油幕起點往上的距離
+      if (dyUp > 0 && dyUp <= ORANGE_FAN_HEIGHT) {
+        // t=0 在底端（窄），t=1 在頂端（寬）
+        const t = dyUp / ORANGE_FAN_HEIGHT;
+        const halfWidth = ORANGE_FAN_BOTTOM_HALF_WIDTH
+                        + t * (ORANGE_FAN_TOP_HALF_WIDTH - ORANGE_FAN_BOTTOM_HALF_WIDTH);
+        if (Math.abs(px - originX) <= halfWidth) {
+          damagePlayer();
+        }
+      }
+    }
+  });
+}
+
+function drawFanOranges(cx) {
+  fanOranges.forEach(fn => {
+    if (!fn.active) return;
+    const sx = fn.x - cx;
+    if (sx > CANVAS_W + 60 + ORANGE_FAN_TOP_HALF_WIDTH * 2 || sx + fn.w < -60 - ORANGE_FAN_TOP_HALF_WIDTH * 2) return;
+
+    const isWarning  = fn.sprayPhase === 'warning';
+    const isSpraying = fn.sprayPhase === 'spraying';
+    const isCooldown = fn.sprayPhase === 'cooldown';
+
+    ctx.save();
+
+    // ── 向上油幕（梯形，畫在本體後方）──
+    if (isSpraying && fn.sprayActive) {
+      const originX  = sx + fn.w / 2;
+      const originY  = fn.y + ORANGE_FAN_ORIGIN_OFFSET_Y; // 本體頂端
+      const topY     = originY - ORANGE_FAN_HEIGHT;
+      const bHW      = ORANGE_FAN_BOTTOM_HALF_WIDTH;
+      const tHW      = ORANGE_FAN_TOP_HALF_WIDTH;
+
+      ctx.beginPath();
+      ctx.moveTo(originX - bHW, originY);
+      ctx.lineTo(originX + bHW, originY);
+      ctx.lineTo(originX + tHW, topY);
+      ctx.lineTo(originX - tHW, topY);
+      ctx.closePath();
+
+      // 橘色半透明漸層填充
+      const grad = ctx.createLinearGradient(0, originY, 0, topY);
+      grad.addColorStop(0, 'rgba(255,140,0,0.55)');
+      grad.addColorStop(1, 'rgba(255,200,50,0.10)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(220,100,0,0.60)';
+      ctx.lineWidth   = 1.5;
+      ctx.stroke();
+    }
+
+    // ── 預警光環（warning 狀態，本體頂端向上閃爍弧線）──
+    if (isWarning) {
+      const t       = fn.phaseTimer / FAN_ORANGE_WARNING_MS;
+      const pulse   = 0.3 + 0.35 * Math.sin(t * Math.PI * 5);
+      const originX = sx + fn.w / 2;
+      const originY = fn.y + ORANGE_FAN_ORIGIN_OFFSET_Y;
+
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = '#ff4400';
+      ctx.lineWidth   = 2.5;
+      // 三道扇弧，逐漸擴大
+      for (let i = 1; i <= 3; i++) {
+        const r = (ORANGE_FAN_BOTTOM_HALF_WIDTH + i * 25) * (0.6 + t * 0.4);
+        ctx.beginPath();
+        ctx.arc(originX, originY, r, Math.PI, 2 * Math.PI); // 上半圓
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── 本體（橘色矩形）──
+    const bodyColor = isWarning
+      ? '#ff6600'
+      : isCooldown
+        ? '#d47000'
+        : '#f57c00';
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(sx, fn.y, fn.w, fn.h);
+
+    // 預警紅色光暈
+    if (isWarning) {
+      const t = fn.phaseTimer / FAN_ORANGE_WARNING_MS;
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.2 * Math.sin(t * Math.PI * 6);
+      ctx.shadowColor = '#ff2200';
+      ctx.shadowBlur  = 14;
+      ctx.fillStyle   = '#ff4400';
+      ctx.fillRect(sx, fn.y, fn.w, fn.h);
+      ctx.restore();
+    }
+
+    // ── 頂部噴嘴（本體頂端中央，向上指的圓管）──
+    const nozzleW = 14, nozzleH = 12;
+    const nozzleX = sx + fn.w / 2 - nozzleW / 2;
+    const nozzleY = fn.y - nozzleH;
+    ctx.fillStyle = '#555';
+    ctx.fillRect(nozzleX, nozzleY, nozzleW, nozzleH);
+    // 噴嘴帽（頂端橫條）
+    ctx.fillStyle = '#333';
+    ctx.fillRect(nozzleX - 3, nozzleY - 3, nozzleW + 6, 4);
+
+    // ── 冷卻冒煙粒子（頂端向上漂浮）──
+    if (isCooldown) {
+      const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
+      ctx.globalAlpha = (0.20 + breath * 0.18);
+      ctx.fillStyle   = '#bbb';
+      const puff = Math.floor(frameCount / 15) % 3;
+      for (let i = 0; i < 3; i++) {
+        const r   = 4 - i * 0.8;
+        const py2 = puff * 4 + i * 5;
+        ctx.beginPath();
+        ctx.arc(nozzleX + nozzleW / 2, nozzleY - py2, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  });
+}
+
 // ── Spinning enemies（被槌子打飛的小怪）────────
 let spinningEnemies = [];
 let scorpionDefeatEffects = []; // 純視覺死亡演出（不參與碰撞/攻擊/扣血）
@@ -4963,6 +5208,8 @@ function checkHazards() {
   checkChimneyOrangeDamage();
   // v0.3.20：Chapter 2 雙噴嘴橘子碰撞判定
   checkDualNozzleOrangeDamage();
+  // v0.3.21：Chapter 2 向上油幕橘子碰撞判定
+  checkFanOrangeDamage();
 }
 
 function damagePlayer() {
@@ -5444,6 +5691,8 @@ function drawWorld() {
   drawChimneyOranges(cx);
   // v0.3.20：Chapter 2 雙噴嘴橘子
   drawDualNozzleOranges(cx);
+  // v0.3.21：Chapter 2 向上油幕橘子
+  drawFanOranges(cx);
 }
 
 function drawPlayer(cx) {
@@ -6576,10 +6825,12 @@ function getShortVersionLabel() {
   if (!GAME_VERSION) return '';
   // 取 v0.3.xx 部分
   const vMatch  = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
-  // 取最後一段 test-N
-  const tMatch  = GAME_VERSION.match(/test-(\d+)/);
+  // 取最後一段（含段落標記）如 fan-test-1、economy-balance-test-1 → 取 "-test-N" 前的一或兩個單詞
+  // 格式：adventure-vX.Y.Z-chapter2-upward-fan-orange-test-1 → 取 "fan-orange-test-1"
+  const tMatch  = GAME_VERSION.match(/([a-z]+-[a-z]+)-test-(\d+)$/) ||
+                  GAME_VERSION.match(/([a-z]+)-test-(\d+)$/);
   const vPart   = vMatch  ? 'v' + vMatch[1]  : '';
-  const tPart   = tMatch  ? 'test-' + tMatch[1] : '';
+  const tPart   = tMatch  ? tMatch[1] + '-test-' + tMatch[2] : '';
   return [vPart, tPart].filter(Boolean).join(' ');
 }
 
@@ -8074,6 +8325,7 @@ function restart(opts) {
   orangeNemeses.forEach(o => { o.phase = 'idle'; o.phaseTimer = 0; o.sprayActive = false; });
   chimneyOranges.forEach(co => { co.sprayPhase = 'idle'; co.phaseTimer = 0; co.sprayActive = false; co.active = true; });
   dualNozzleOranges.forEach(dn => { dn.sprayPhase = 'idle'; dn.phaseTimer = 0; dn.sprayActive = false; dn.active = true; });
+  fanOranges.forEach(fn => { fn.sprayPhase = 'idle'; fn.phaseTimer = 0; fn.sprayActive = false; fn.active = true; }); // v0.3.21
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
