@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-shop-and-chimney-oil-stable-test-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-idle-art-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1037,6 +1037,54 @@ const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X = -1;
 const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -111;
 // 舊版常數保留供參考，實際繪製改用 local coord 方式（見 drawChimneyOranges）
 const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
+
+// ── 雙噴嘴橘子 idle 美術（v0.3.25，非阻塞）────────────────────────────────
+// 只接 idle 5 張；warning/spray/cooldown/oil 圖本版不接
+const DUAL_ORANGE_IDLE_ASSETS = {
+  idle_01: 'assets/enemies/orange/orange_dual_idle_01.png',
+  idle_02: 'assets/enemies/orange/orange_dual_idle_02.png',
+  idle_03: 'assets/enemies/orange/orange_dual_idle_03.png',
+  idle_04: 'assets/enemies/orange/orange_dual_idle_04.png',
+  idle_05: 'assets/enemies/orange/orange_dual_idle_05.png',
+};
+
+const dualOrangeIdleImgs = {};
+let dualOrangeIdleReadyCount = 0;
+
+function initDualOrangeIdleArt() {
+  Object.entries(DUAL_ORANGE_IDLE_ASSETS).forEach(([key, src]) => {
+    if (dualOrangeIdleImgs[key]) return;
+    const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
+    img.onload = function () {
+      dualOrangeIdleImgs[key] = img;
+      dualOrangeIdleReadyCount++;
+      console.log('[DualOrangeIdleArt] loaded:', key, fullSrc);
+    };
+    img.onerror = function () {
+      console.warn('[DualOrangeIdleArt] not found:', key, fullSrc, '(canvas fallback active)');
+    };
+    img.src = fullSrc;
+  });
+}
+
+function getDualOrangeIdleImg(frameIdx) {
+  // frameIdx: 0–4 → keys idle_01–idle_05
+  const key = 'idle_0' + (frameIdx + 1);
+  const img = dualOrangeIdleImgs[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
+}
+
+// 雙噴嘴橘子繪製參數（只影響視覺，不動 hitbox）
+const DUAL_ORANGE_BODY_DRAW_SCALE = 2.4;   // 圖片顯示寬度 = dn.w * 此比例
+const DUAL_ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
+const DUAL_ORANGE_DRAW_OFFSET_Y   = 0;     // 垂直視覺微調（備用）
+
+// idle 動畫參數
+// 播放順序：01→02→03→04→05→04→03→02→loop（來回巡視）
+const DUAL_ORANGE_IDLE_FRAME_DUR = 12;     // 每 12 frames 換一張（約 5fps）
+const DUAL_ORANGE_IDLE_SEQ = [0, 1, 2, 3, 4, 3, 2, 1]; // 索引對應 idle_01~05
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -4809,52 +4857,82 @@ function drawDualNozzleOranges(cx) {
       ctx.strokeRect(sx + dn.w, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
     }
 
-    // ── 本體（橘色矩形）──
-    const bodyColor = isWindup
-      ? '#ff6600'
-      : isCooldown
-        ? '#d47000'
-        : '#f57c00';
-    ctx.fillStyle = bodyColor;
-    ctx.fillRect(sx, dn.y, dn.w, dn.h);
+    // ── 本體繪製 ──────────────────────────────────────────────────────────────
+    // idle 狀態使用正式美術；warning/spraying/cooldown 維持 placeholder 幾何
+    const isIdle = !isWindup && !isSpraying && !isCooldown;
 
-    // Windup 紅色光暈
-    if (isWindup) {
-      const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
-      ctx.save();
-      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
-      ctx.shadowColor = '#ff2200';
-      ctx.shadowBlur  = 12;
-      ctx.fillStyle   = '#ff4400';
+    if (isIdle) {
+      // ── idle：正式 5 張 ping-pong 動畫 ──
+      const seqIdx  = Math.floor(frameCount / DUAL_ORANGE_IDLE_FRAME_DUR) % DUAL_ORANGE_IDLE_SEQ.length;
+      const frameIdx = DUAL_ORANGE_IDLE_SEQ[seqIdx]; // 0–4
+      const idleSprite = getDualOrangeIdleImg(frameIdx);
+
+      if (idleSprite) {
+        // 以 hitbox 寬度為基準計算繪製尺寸，腳底貼地
+        const bodyDrawW = dn.w * DUAL_ORANGE_BODY_DRAW_SCALE;
+        const bodyDrawH = bodyDrawW; // 素材為正方形
+        const bodyDrawX = sx + dn.w / 2 - bodyDrawW / 2;
+        // 腳底錨點對齊 hitbox 底部（貼地）
+        const bodyDrawY = (dn.y + dn.h) - bodyDrawH * DUAL_ORANGE_FOOT_ANCHOR_Y + DUAL_ORANGE_DRAW_OFFSET_Y;
+        ctx.drawImage(idleSprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+      } else {
+        // fallback：幾何橘色矩形 + 噴嘴（圖片未載入時）
+        ctx.fillStyle = '#f57c00';
+        ctx.fillRect(sx, dn.y, dn.w, dn.h);
+        const nozzleW = 10, nozzleH = 14;
+        const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
+        ctx.fillStyle = '#555';
+        ctx.fillRect(sx - nozzleW, nozzleY, nozzleW, nozzleH);
+        ctx.fillRect(sx + dn.w,    nozzleY, nozzleW, nozzleH);
+      }
+    } else {
+      // ── warning / spraying / cooldown：維持 placeholder 幾何（本版不接正式圖）──
+      const bodyColor = isWindup
+        ? '#ff6600'
+        : isCooldown
+          ? '#d47000'
+          : '#f57c00';
+      ctx.fillStyle = bodyColor;
       ctx.fillRect(sx, dn.y, dn.w, dn.h);
-      ctx.restore();
-    }
 
-    // ── 左右噴嘴（placeholder：本體左右兩側中央的小矩形）──
-    const nozzleW = 10, nozzleH = 14;
-    const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
-    ctx.fillStyle = '#555';
-    ctx.fillRect(sx - nozzleW, nozzleY, nozzleW, nozzleH);          // 左噴嘴
-    ctx.fillRect(sx + dn.w,    nozzleY, nozzleW, nozzleH);          // 右噴嘴
-    ctx.fillStyle = '#333';
-    ctx.fillRect(sx - nozzleW - 2, nozzleY - 2, nozzleW + 4, 4);    // 左噴嘴帽
-    ctx.fillRect(sx + dn.w   - 2, nozzleY - 2, nozzleW + 4, 4);     // 右噴嘴帽
+      // Windup 紅色光暈
+      if (isWindup) {
+        const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
+        ctx.save();
+        ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
+        ctx.shadowColor = '#ff2200';
+        ctx.shadowBlur  = 12;
+        ctx.fillStyle   = '#ff4400';
+        ctx.fillRect(sx, dn.y, dn.w, dn.h);
+        ctx.restore();
+      }
 
-    // ── 冒煙粒子（cooldown 狀態，左右各畫一組淡灰圓點）──
-    if (isCooldown) {
-      const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
-      ctx.globalAlpha = (0.25 + breath * 0.2);
-      ctx.fillStyle   = '#aaa';
-      const puff = Math.floor(frameCount / 15) % 3;
-      for (let i = 0; i < 3; i++) {
-        const r = 4 - i * 0.8;
-        const px2 = puff * 3;
-        ctx.beginPath();
-        ctx.arc(sx - nozzleW - px2 - i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(sx + dn.w + nozzleW + px2 + i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
-        ctx.fill();
+      // 左右噴嘴
+      const nozzleW = 10, nozzleH = 14;
+      const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
+      ctx.fillStyle = '#555';
+      ctx.fillRect(sx - nozzleW, nozzleY, nozzleW, nozzleH);
+      ctx.fillRect(sx + dn.w,    nozzleY, nozzleW, nozzleH);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(sx - nozzleW - 2, nozzleY - 2, nozzleW + 4, 4);
+      ctx.fillRect(sx + dn.w   - 2, nozzleY - 2, nozzleW + 4, 4);
+
+      // 冒煙粒子（cooldown）
+      if (isCooldown) {
+        const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
+        ctx.globalAlpha = (0.25 + breath * 0.2);
+        ctx.fillStyle   = '#aaa';
+        const puff = Math.floor(frameCount / 15) % 3;
+        for (let i = 0; i < 3; i++) {
+          const r = 4 - i * 0.8;
+          const px2 = puff * 3;
+          ctx.beginPath();
+          ctx.arc(sx - nozzleW - px2 - i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(sx + dn.w + nozzleW + px2 + i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
@@ -7180,8 +7258,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-idle-art → dual-idle-art
+  if (GAME_VERSION.includes('dual-orange-idle-art')) {
+    tPart = 'dual-idle-art';
   // v0.3.24+：shop-and-chimney-oil-stable → shop+oil-stable
-  if (GAME_VERSION.includes('shop-and-chimney-oil-stable')) {
+  } else if (GAME_VERSION.includes('shop-and-chimney-oil-stable')) {
     tPart = 'shop+oil-stable';
   // v0.3.24+：chimney-oil-offset-final → oil-offset-final
   } else if (GAME_VERSION.includes('chimney-oil-offset-final')) {
@@ -9307,6 +9388,7 @@ initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 
 initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
 initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
 initChimneyOrangeOilArt();           // v0.3.24：煙囟橘子油柱正式圖（非阻塞，fallback canvas overlay）
+initDualOrangeIdleArt();             // v0.3.25：雙噴嘴橘子 idle 5 張（非阻塞，fallback 幾何）
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
