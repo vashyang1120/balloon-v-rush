@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-chimney-oil-offset-final-test-1';
+const GAME_VERSION = 'adventure-v0.3.24-shop-and-chimney-oil-stable-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -7180,8 +7180,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.24+：shop-and-chimney-oil-stable → shop+oil-stable
+  if (GAME_VERSION.includes('shop-and-chimney-oil-stable')) {
+    tPart = 'shop+oil-stable';
   // v0.3.24+：chimney-oil-offset-final → oil-offset-final
-  if (GAME_VERSION.includes('chimney-oil-offset-final')) {
+  } else if (GAME_VERSION.includes('chimney-oil-offset-final')) {
     tPart = 'oil-offset-final';
   // v0.3.24+：chimney-oil-calibration-tool → oil-align-tool
   } else if (GAME_VERSION.includes('chimney-oil-calibration-tool')) {
