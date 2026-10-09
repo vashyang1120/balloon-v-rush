@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1';
+const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1025,9 +1025,15 @@ function getChimneyOrangeOilImg(key) {
 
 // 油柱圖片繪製參數（只影響視覺，hitbox 不變）
 // 原始尺寸 256×512，與本體等比例設計，故沿用相同縮放基準
-const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例
-const CHIMNEY_ORANGE_OIL_DRAW_OFFSET_X = 0;   // 水平微調（px）
-const CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y = 129; // 垂直對位（px，讓油柱底部貼近煙囪口）
+// v0.3.24-fix-1：油圖使用 chimney body 原圖 local coordinate system
+// chimney body 原圖為 512×512，oil 圖為 256×512
+const CHIMNEY_ORANGE_SOURCE_SIZE    = 512; // chimney body 原圖邊長（px）
+const CHIMNEY_ORANGE_OIL_SOURCE_W   = 256; // oil 圖原始寬度（px）
+const CHIMNEY_ORANGE_OIL_SOURCE_H   = 512; // oil 圖原始高度（px）
+const CHIMNEY_ORANGE_OIL_LOCAL_X    = 256; // oil 水平中心對齊 body 原圖 local x（中心線）
+const CHIMNEY_ORANGE_OIL_LOCAL_Y    = 129; // oil 上緣對齊 body 原圖 local y（煙囪口附近）
+// 舊版常數保留供參考，實際繪製改用 local coord 方式（見 drawChimneyOranges）
+const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -4449,19 +4455,43 @@ function drawChimneyOranges(cx) {
 
     ctx.save();
 
+    // ── 先算出本體 draw rect（oil 和 body 共用這套座標）──
+    let imgKey = 'idle';
+    if (co.sprayPhase === 'windup') {
+      imgKey = Math.floor(frameCount / 14) % 2 === 0 ? 'warning01' : 'warning02';
+    } else if (co.sprayPhase === 'spraying') {
+      imgKey = 'spray';
+    } else if (co.sprayPhase === 'cooldown') {
+      imgKey = Math.floor(frameCount / 30) % 2 === 0 ? 'cooldown01' : 'cooldown02';
+    }
+    let img = getChimneyOrangeImg(imgKey);
+    if (!img) img = getChimneyOrangeImg('idle');
+
+    // 本體 draw rect（與原本相同計算方式，提取供 oil 共用）
+    let bodyDrawX = 0, bodyDrawY = 0, bodyDrawW = 0, bodyDrawH = 0;
+    if (img) {
+      bodyDrawW = co.w * CHIMNEY_ORANGE_BODY_DRAW_SCALE;
+      bodyDrawH = img.naturalHeight * (bodyDrawW / img.naturalWidth);
+      const footY = co.y + co.h;
+      bodyDrawX = sx + co.w / 2 - bodyDrawW / 2 + CHIMNEY_ORANGE_DRAW_OFFSET_X;
+      bodyDrawY = footY - bodyDrawH * CHIMNEY_ORANGE_FOOT_ANCHOR_Y + CHIMNEY_ORANGE_DRAW_OFFSET_Y;
+    }
+
     // ── 油柱（spraying 時畫在本體下方；先畫油柱，再畫本體）──
-    // v0.3.24：優先使用正式油柱圖片，fallback canvas overlay
+    // v0.3.24-fix-1：oil 使用 chimney body 原圖 local coordinate system (512×512)
     if (isSpraying && co.sprayActive) {
       const oilSprite = getChimneyOrangeOilImg('spray01');
-      if (oilSprite) {
-        // 正式油柱圖：256×512，與本體等比例縮放，底部以 CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y 對位
-        const oilDrawW = co.w * CHIMNEY_ORANGE_OIL_DRAW_SCALE;
-        const oilDrawH = oilSprite.naturalHeight * (oilDrawW / oilSprite.naturalWidth);
-        const footY    = co.y + co.h;
-        const oilImgX  = sx + co.w / 2 - oilDrawW / 2 + CHIMNEY_ORANGE_OIL_DRAW_OFFSET_X;
-        const oilImgY  = footY - oilDrawH + CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y;
-        ctx.drawImage(oilSprite, oilImgX, oilImgY, oilDrawW, oilDrawH);
-      } else {
+      if (oilSprite && img && bodyDrawW > 0) {
+        // localScale：body draw rect 寬度 / chimney 原圖寬度（512）
+        const localScale = bodyDrawW / CHIMNEY_ORANGE_SOURCE_SIZE;
+        const oilDrawW   = CHIMNEY_ORANGE_OIL_SOURCE_W * localScale;
+        const oilDrawH   = CHIMNEY_ORANGE_OIL_SOURCE_H * localScale;
+        // oil 水平中心對齊 chimney body 原圖 localX=256（即 body 原圖中心線）
+        // oil 上緣對齊 chimney body 原圖 localY=129
+        const oilDrawX   = bodyDrawX + CHIMNEY_ORANGE_OIL_LOCAL_X * localScale - oilDrawW / 2;
+        const oilDrawY   = bodyDrawY + CHIMNEY_ORANGE_OIL_LOCAL_Y * localScale;
+        ctx.drawImage(oilSprite, oilDrawX, oilDrawY, oilDrawW, oilDrawH);
+      } else if (!oilSprite) {
         // Fallback：幾何 canvas overlay（圖片未載入或失敗時）
         const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
         const oilY = co.y - CHIMNEY_OIL_H;
@@ -4474,28 +4504,8 @@ function drawChimneyOranges(cx) {
     }
 
     // ── 本體：優先使用正式圖片，fallback 幾何 placeholder（畫在油柱上方）──
-    // 狀態 → 圖片 key 對應
-    let imgKey = 'idle';
-    if (co.sprayPhase === 'windup') {
-      imgKey = Math.floor(frameCount / 14) % 2 === 0 ? 'warning01' : 'warning02';
-    } else if (co.sprayPhase === 'spraying') {
-      imgKey = 'spray';
-    } else if (co.sprayPhase === 'cooldown') {
-      imgKey = Math.floor(frameCount / 30) % 2 === 0 ? 'cooldown01' : 'cooldown02';
-    }
-
-    // fallback chain：指定狀態圖 → idle 圖 → 幾何 placeholder
-    let img = getChimneyOrangeImg(imgKey);
-    if (!img) img = getChimneyOrangeImg('idle');
-
     if (img) {
-      // 圖片繪製：腳底貼地，以本體 hitbox 底部為對齊基準
-      const drawW    = co.w * CHIMNEY_ORANGE_BODY_DRAW_SCALE;
-      const drawH    = img.naturalHeight * (drawW / img.naturalWidth);
-      const footY    = co.y + co.h;                             // hitbox 腳底世界座標
-      const imgDrawX = sx + co.w / 2 - drawW / 2 + CHIMNEY_ORANGE_DRAW_OFFSET_X;
-      const imgDrawY = footY - drawH * CHIMNEY_ORANGE_FOOT_ANCHOR_Y + CHIMNEY_ORANGE_DRAW_OFFSET_Y;
-      ctx.drawImage(img, imgDrawX, imgDrawY, drawW, drawH);
+      ctx.drawImage(img, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
     } else {
       // 完全 fallback：幾何 placeholder
       drawChimneyOrangePlaceholder(co, sx);
@@ -6991,10 +7001,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
-  // v0.3.24+：shop-hint-and-chimney-oil → shop+oil-test-N
+  // v0.3.24+：shop-hint-and-chimney-oil → shop+oil-test-N or shop+oil-fix-N
   if (GAME_VERSION.includes('shop-hint-and-chimney-oil')) {
-    const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
-    tPart = 'shop+oil-test-' + tN;
+    const fixN  = GAME_VERSION.match(/-fix-(\d+)$/)?.[1];
+    const testN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = fixN ? 'shop+oil-fix-' + fixN : 'shop+oil-test-' + testN;
   // v0.3.23：shop-healing-items-foundation → shop-heal-test-N
   } else if (GAME_VERSION.includes('shop-healing-items')) {
     const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
@@ -7725,9 +7736,9 @@ function buildResultShopHintHtml() {
 }
 
 function openHomeShopFromResult() {
-  // 1. 打開小V的家
-  if (typeof openHomeScreen === 'function') openHomeScreen();
-  // 2. 展開商店區塊（沿用 initHomeCards 的展開邏輯）
+  // v0.3.24-fix-1：用 'result-shop' 來源開啟，讓 homeGoBack() 能回到結算頁
+  if (typeof openHomeScreen === 'function') openHomeScreen('result-shop');
+  // 展開商店區塊（沿用 initHomeCards 的展開邏輯）
   setTimeout(() => {
     const shopSection = document.getElementById('home-shop-section');
     const shopCard    = document.getElementById('hcard-shop');
@@ -7739,7 +7750,7 @@ function openHomeShopFromResult() {
     shopSection.style.display = 'block';
     if (shopCard) shopCard.classList.add('hcard--open');
     renderHomeShop();
-    // 3. 捲動到商店區塊
+    // 捲動到商店區塊
     shopSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 80);
 }
@@ -7988,7 +7999,11 @@ function openHomeScreen(from) {
   // 更新返回按鈕
   const backBtn = document.getElementById('btn-home-back');
   if (backBtn) {
-    if (homeEntryMode === 'clear') {
+    if (homeEntryMode === 'result-shop') {
+      // v0.3.24-fix-1：從結算頁的 Shopping 提示進來，顯示「回到結算畫面」
+      backBtn.textContent = '← 回到結算畫面';
+      backBtn.style.display = 'inline-block';
+    } else if (homeEntryMode === 'clear') {
       backBtn.textContent = '← 返回結算畫面';
       backBtn.style.display = 'inline-block';
     } else if (homeEntryMode === 'failed') {
@@ -8422,12 +8437,18 @@ function retryCurrentLevelFromStart() {
 
 // ── 小V的家「返回」按鈕 ─────────────────────
 function homeGoBack() {
+  const prevMode = homeEntryMode;
   closeHomeScreen();
   if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-  if (homeEntryMode === 'clear') {
+  if (prevMode === 'result-shop') {
+    // v0.3.24-fix-1：從結算頁 Shopping 提示進來 → 回到結算頁，不開始下一關
     const resultEl = document.getElementById('result-overlay');
     if (resultEl) resultEl.style.display = 'flex';
-  } else if (homeEntryMode === 'failed') {
+    homeEntryMode = 'normal'; // 清除來源標記
+  } else if (prevMode === 'clear') {
+    const resultEl = document.getElementById('result-overlay');
+    if (resultEl) resultEl.style.display = 'flex';
+  } else if (prevMode === 'failed') {
     const failedEl = document.getElementById('failed-overlay');
     if (failedEl) failedEl.style.display = 'flex';
   }
