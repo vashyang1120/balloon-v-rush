@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-idle-art-test-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-art-integration-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1038,40 +1038,43 @@ const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -111;
 // 舊版常數保留供參考，實際繪製改用 local coord 方式（見 drawChimneyOranges）
 const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
 
-// ── 雙噴嘴橘子 idle 美術（v0.3.25，非阻塞）────────────────────────────────
-// 只接 idle 5 張；warning/spray/cooldown/oil 圖本版不接
-const DUAL_ORANGE_IDLE_ASSETS = {
-  idle_01: 'assets/enemies/orange/orange_dual_idle_01.png',
-  idle_02: 'assets/enemies/orange/orange_dual_idle_02.png',
-  idle_03: 'assets/enemies/orange/orange_dual_idle_03.png',
-  idle_04: 'assets/enemies/orange/orange_dual_idle_04.png',
-  idle_05: 'assets/enemies/orange/orange_dual_idle_05.png',
+// ── 雙噴嘴橘子美術（v0.3.25 art-integration，非阻塞）──────────────────────
+// idle×5 / warning×2 / spray×1 / cooldown×2；油圖本版不接
+const DUAL_ORANGE_ASSETS = {
+  idle_01:     'assets/enemies/orange/orange_dual_idle_01.png',
+  idle_02:     'assets/enemies/orange/orange_dual_idle_02.png',
+  idle_03:     'assets/enemies/orange/orange_dual_idle_03.png',
+  idle_04:     'assets/enemies/orange/orange_dual_idle_04.png',
+  idle_05:     'assets/enemies/orange/orange_dual_idle_05.png',
+  warning_01:  'assets/enemies/orange/orange_dual_warning_01.png',
+  warning_02:  'assets/enemies/orange/orange_dual_warning_02.png',
+  spray_01:    'assets/enemies/orange/orange_dual_spray_01.png',
+  cooldown_01: 'assets/enemies/orange/orange_dual_cooldown_01.png',
+  cooldown_02: 'assets/enemies/orange/orange_dual_cooldown_02.png',
 };
 
-const dualOrangeIdleImgs = {};
-let dualOrangeIdleReadyCount = 0;
+const dualOrangeImgs = {};
+let dualOrangeLoadedCount = 0;
 
-function initDualOrangeIdleArt() {
-  Object.entries(DUAL_ORANGE_IDLE_ASSETS).forEach(([key, src]) => {
-    if (dualOrangeIdleImgs[key]) return;
+function initDualOrangeArt() {
+  Object.entries(DUAL_ORANGE_ASSETS).forEach(([key, src]) => {
+    if (dualOrangeImgs[key]) return;
     const img = new Image();
     const fullSrc = resolveAdventureAssetSrc(src);
     img.onload = function () {
-      dualOrangeIdleImgs[key] = img;
-      dualOrangeIdleReadyCount++;
-      console.log('[DualOrangeIdleArt] loaded:', key, fullSrc);
+      dualOrangeImgs[key] = img;
+      dualOrangeLoadedCount++;
+      console.log('[DualOrangeArt] loaded:', key, fullSrc);
     };
     img.onerror = function () {
-      console.warn('[DualOrangeIdleArt] not found:', key, fullSrc, '(canvas fallback active)');
+      console.warn('[DualOrangeArt] not found:', key, fullSrc, '(canvas fallback active)');
     };
     img.src = fullSrc;
   });
 }
 
-function getDualOrangeIdleImg(frameIdx) {
-  // frameIdx: 0–4 → keys idle_01–idle_05
-  const key = 'idle_0' + (frameIdx + 1);
-  const img = dualOrangeIdleImgs[key];
+function getDualOrangeImg(key) {
+  const img = dualOrangeImgs[key];
   if (img && img.complete && img.naturalWidth > 0) return img;
   return null;
 }
@@ -1082,9 +1085,16 @@ const DUAL_ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例�
 const DUAL_ORANGE_DRAW_OFFSET_Y   = 0;     // 垂直視覺微調（備用）
 
 // idle 動畫參數
-// 播放順序：01→02→03→04→05→04→03→02→loop（來回巡視）
-const DUAL_ORANGE_IDLE_FRAME_DUR = 12;     // 每 12 frames 換一張（約 5fps）
-const DUAL_ORANGE_IDLE_SEQ = [0, 1, 2, 3, 4, 3, 2, 1]; // 索引對應 idle_01~05
+// 播放順序：01→02→03→02→01→04→05→04→01→loop（左右巡視，常回中）
+// idle_01=正中 / idle_02=左中 / idle_03=看左 / idle_04=右中 / idle_05=看右
+const DUAL_ORANGE_IDLE_FRAME_DUR = 14;     // 每 14 frames 換一張（約 4.3fps，不要太快）
+const DUAL_ORANGE_IDLE_SEQ = [0, 1, 2, 1, 0, 3, 4, 3, 0]; // 9 steps，索引對應 idle_01~05
+
+// warning 動畫參數（2 張交替，蓄力感）
+const DUAL_ORANGE_WARNING_FRAME_DUR = 8;   // 每 8 frames 換一張（較快，表現蓄力緊張）
+
+// cooldown 動畫參數（2 張慢速交替，喘氣感）
+const DUAL_ORANGE_COOLDOWN_FRAME_DUR = 30; // 每 30 frames 換一張（約 2fps，慢速疲憊）
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -1451,6 +1461,27 @@ function startChapter2TestLevel() {
   if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
   gameState = 'playing';
   showHint('已進入第二章 2-1：煙囟橘子初遭遇', 260);
+}
+
+// v0.3.25：雙噴嘴橘子美術觀察入口（TEST MODE 限定）
+// 跳到 2-2（雙噴嘴橘子所在關），讓開發者觀察 idle/warning/spray/cooldown 美術表現
+function startDualOrangeTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
+  if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('🍊 雙噴嘴橘子測試：觀察 idle/warning/spray/cooldown 美術', 280);
 }
 
 function startEnemyVariantTestLevel() {
@@ -4857,45 +4888,64 @@ function drawDualNozzleOranges(cx) {
       ctx.strokeRect(sx + dn.w, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
     }
 
-    // ── 本體繪製 ──────────────────────────────────────────────────────────────
-    // idle 狀態使用正式美術；warning/spraying/cooldown 維持 placeholder 幾何
+    // ── 本體繪製（v0.3.25 art-integration）──────────────────────────────────
+    // 共用繪製基準：以 hitbox 寬為基礎，腳底對齊 hitbox 底部，各狀態地平線一致
     const isIdle = !isWindup && !isSpraying && !isCooldown;
+    const bodyDrawW = dn.w * DUAL_ORANGE_BODY_DRAW_SCALE;
+    const bodyDrawH = bodyDrawW; // 素材為正方形
+    const bodyDrawX = sx + dn.w / 2 - bodyDrawW / 2;
+    const bodyDrawY = (dn.y + dn.h) - bodyDrawH * DUAL_ORANGE_FOOT_ANCHOR_Y + DUAL_ORANGE_DRAW_OFFSET_Y;
+
+    let bodySprite = null;
 
     if (isIdle) {
-      // ── idle：正式 5 張 ping-pong 動畫 ──
-      const seqIdx  = Math.floor(frameCount / DUAL_ORANGE_IDLE_FRAME_DUR) % DUAL_ORANGE_IDLE_SEQ.length;
+      // ── idle：5 張序列動畫（01=正中 02=左中 03=看左 04=右中 05=看右）──
+      const seqIdx   = Math.floor(frameCount / DUAL_ORANGE_IDLE_FRAME_DUR) % DUAL_ORANGE_IDLE_SEQ.length;
       const frameIdx = DUAL_ORANGE_IDLE_SEQ[seqIdx]; // 0–4
-      const idleSprite = getDualOrangeIdleImg(frameIdx);
+      bodySprite = getDualOrangeImg('idle_0' + (frameIdx + 1));
 
-      if (idleSprite) {
-        // 以 hitbox 寬度為基準計算繪製尺寸，腳底貼地
-        const bodyDrawW = dn.w * DUAL_ORANGE_BODY_DRAW_SCALE;
-        const bodyDrawH = bodyDrawW; // 素材為正方形
-        const bodyDrawX = sx + dn.w / 2 - bodyDrawW / 2;
-        // 腳底錨點對齊 hitbox 底部（貼地）
-        const bodyDrawY = (dn.y + dn.h) - bodyDrawH * DUAL_ORANGE_FOOT_ANCHOR_Y + DUAL_ORANGE_DRAW_OFFSET_Y;
-        ctx.drawImage(idleSprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+    } else if (isWindup) {
+      // ── warning：2 張快速交替（蓄力緊張感）──
+      const wIdx = Math.floor(frameCount / DUAL_ORANGE_WARNING_FRAME_DUR) % 2;
+      bodySprite = getDualOrangeImg(wIdx === 0 ? 'warning_01' : 'warning_02');
+
+    } else if (isSpraying) {
+      // ── spray：spray_01（本版只接本體，油圖下版再接）──
+      bodySprite = getDualOrangeImg('spray_01');
+
+    } else if (isCooldown) {
+      // ── cooldown：2 張慢速交替（疲憊喘氣感）──
+      const cIdx = Math.floor(frameCount / DUAL_ORANGE_COOLDOWN_FRAME_DUR) % 2;
+      bodySprite = getDualOrangeImg(cIdx === 0 ? 'cooldown_01' : 'cooldown_02');
+    }
+
+    if (bodySprite) {
+      // ── 正式美術繪製 ──
+      // warning 狀態額外加蓄力光暈
+      if (isWindup) {
+        const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
+        ctx.save();
+        ctx.shadowColor = '#ff6600';
+        ctx.shadowBlur  = 8 + 8 * Math.sin(t * Math.PI * 5);
+        ctx.globalAlpha = 0.85 + 0.15 * Math.sin(t * Math.PI * 5);
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+        ctx.restore();
+      } else if (isCooldown) {
+        // cooldown 加淡淡透明度呼吸感
+        const breath = 0.82 + 0.12 * Math.sin(frameCount * 0.04);
+        ctx.save();
+        ctx.globalAlpha = breath;
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+        ctx.restore();
       } else {
-        // fallback：幾何橘色矩形 + 噴嘴（圖片未載入時）
-        ctx.fillStyle = '#f57c00';
-        ctx.fillRect(sx, dn.y, dn.w, dn.h);
-        const nozzleW = 10, nozzleH = 14;
-        const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
-        ctx.fillStyle = '#555';
-        ctx.fillRect(sx - nozzleW, nozzleY, nozzleW, nozzleH);
-        ctx.fillRect(sx + dn.w,    nozzleY, nozzleW, nozzleH);
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
       }
     } else {
-      // ── warning / spraying / cooldown：維持 placeholder 幾何（本版不接正式圖）──
-      const bodyColor = isWindup
-        ? '#ff6600'
-        : isCooldown
-          ? '#d47000'
-          : '#f57c00';
+      // ── fallback：幾何 placeholder（圖片未載入時）──
+      const bodyColor = isWindup ? '#ff6600' : isCooldown ? '#d47000' : isSpraying ? '#f57c00' : '#f57c00';
       ctx.fillStyle = bodyColor;
       ctx.fillRect(sx, dn.y, dn.w, dn.h);
-
-      // Windup 紅色光暈
+      // warning 光暈
       if (isWindup) {
         const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
         ctx.save();
@@ -4906,8 +4956,7 @@ function drawDualNozzleOranges(cx) {
         ctx.fillRect(sx, dn.y, dn.w, dn.h);
         ctx.restore();
       }
-
-      // 左右噴嘴
+      // 左右噴嘴（fallback 時才畫）
       const nozzleW = 10, nozzleH = 14;
       const nozzleY = dn.y + dn.h / 2 - nozzleH / 2;
       ctx.fillStyle = '#555';
@@ -4916,24 +4965,6 @@ function drawDualNozzleOranges(cx) {
       ctx.fillStyle = '#333';
       ctx.fillRect(sx - nozzleW - 2, nozzleY - 2, nozzleW + 4, 4);
       ctx.fillRect(sx + dn.w   - 2, nozzleY - 2, nozzleW + 4, 4);
-
-      // 冒煙粒子（cooldown）
-      if (isCooldown) {
-        const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
-        ctx.globalAlpha = (0.25 + breath * 0.2);
-        ctx.fillStyle   = '#aaa';
-        const puff = Math.floor(frameCount / 15) % 3;
-        for (let i = 0; i < 3; i++) {
-          const r = 4 - i * 0.8;
-          const px2 = puff * 3;
-          ctx.beginPath();
-          ctx.arc(sx - nozzleW - px2 - i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(sx + dn.w + nozzleW + px2 + i*3, nozzleY + nozzleH/2, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
     }
 
     ctx.restore();
@@ -7258,8 +7289,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-art-integration → dual-art-test-N
+  if (GAME_VERSION.includes('dual-orange-art-integration')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-art-test-' + tN;
   // v0.3.25+：dual-orange-idle-art → dual-idle-art
-  if (GAME_VERSION.includes('dual-orange-idle-art')) {
+  } else if (GAME_VERSION.includes('dual-orange-idle-art')) {
     tPart = 'dual-idle-art';
   // v0.3.24+：shop-and-chimney-oil-stable → shop+oil-stable
   } else if (GAME_VERSION.includes('shop-and-chimney-oil-stable')) {
@@ -9388,7 +9423,7 @@ initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 
 initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
 initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
 initChimneyOrangeOilArt();           // v0.3.24：煙囟橘子油柱正式圖（非阻塞，fallback canvas overlay）
-initDualOrangeIdleArt();             // v0.3.25：雙噴嘴橘子 idle 5 張（非阻塞，fallback 幾何）
+initDualOrangeArt();                 // v0.3.25：雙噴嘴橘子全套美術（非阻塞，fallback 幾何）
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
@@ -9424,6 +9459,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestCh2) {
     btnTestCh2.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestCh2.addEventListener('click', startChapter2TestLevel);
+  }
+  // v0.3.25：雙噴嘴橘子美術測試按鈕
+  const btnTestDualOrange = document.getElementById('btn-pause-test-dual-orange');
+  if (btnTestDualOrange) {
+    btnTestDualOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestDualOrange.addEventListener('click', startDualOrangeTestLevel);
   }
 })();
 
