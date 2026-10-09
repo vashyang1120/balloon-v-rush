@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-2';
+const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -4445,23 +4445,6 @@ function drawChimneyOrangePlaceholder(co, sx) {
   }
 }
 
-// v0.3.24-fix-2：chimney orange body draw rect helper
-// bodyDrawX / bodyDrawY = chimney body 圖片在 canvas 上的左上角（oil 的 local (0,0)）
-// bodyScale = bodyDrawW / CHIMNEY_ORANGE_SOURCE_SIZE（讓 oil 使用同一套 512x512 local coord）
-function getChimneyOrangeBodyDrawRect(co, sx, img) {
-  if (!img) return null;
-  const bodyDrawW  = co.w * CHIMNEY_ORANGE_BODY_DRAW_SCALE;
-  const bodyDrawH  = img.naturalHeight * (bodyDrawW / img.naturalWidth);
-  const footY      = co.y + co.h; // co.y 為 canvas Y（Y 軸無 camera offset）
-  const bodyDrawX  = sx + co.w / 2 - bodyDrawW / 2 + CHIMNEY_ORANGE_DRAW_OFFSET_X;
-  const bodyDrawY  = footY - bodyDrawH * CHIMNEY_ORANGE_FOOT_ANCHOR_Y + CHIMNEY_ORANGE_DRAW_OFFSET_Y;
-  const bodyScale  = bodyDrawW / CHIMNEY_ORANGE_SOURCE_SIZE;
-  return { bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH, bodyScale };
-}
-
-// 一次性 debug log 旗標（v0.3.24-fix-2 test only）
-let chimneyOilAlignLogged = false;
-
 function drawChimneyOranges(cx) {
   chimneyOranges.forEach(co => {
     if (!co.active) return;
@@ -4472,7 +4455,7 @@ function drawChimneyOranges(cx) {
 
     ctx.save();
 
-    // ── 本體圖片 key 決定 ──
+    // ── 先算出本體 draw rect（oil 和 body 共用這套座標）──
     let imgKey = 'idle';
     if (co.sprayPhase === 'windup') {
       imgKey = Math.floor(frameCount / 14) % 2 === 0 ? 'warning01' : 'warning02';
@@ -4484,35 +4467,29 @@ function drawChimneyOranges(cx) {
     let img = getChimneyOrangeImg(imgKey);
     if (!img) img = getChimneyOrangeImg('idle');
 
-    // ── 本體 draw rect（供 oil 和 body 共用，以本體圖片左上角為 local (0,0)）──
-    const rect = getChimneyOrangeBodyDrawRect(co, sx, img);
+    // 本體 draw rect（與原本相同計算方式，提取供 oil 共用）
+    let bodyDrawX = 0, bodyDrawY = 0, bodyDrawW = 0, bodyDrawH = 0;
+    if (img) {
+      bodyDrawW = co.w * CHIMNEY_ORANGE_BODY_DRAW_SCALE;
+      bodyDrawH = img.naturalHeight * (bodyDrawW / img.naturalWidth);
+      const footY = co.y + co.h;
+      bodyDrawX = sx + co.w / 2 - bodyDrawW / 2 + CHIMNEY_ORANGE_DRAW_OFFSET_X;
+      bodyDrawY = footY - bodyDrawH * CHIMNEY_ORANGE_FOOT_ANCHOR_Y + CHIMNEY_ORANGE_DRAW_OFFSET_Y;
+    }
 
-    // ── 油柱（spraying 時先畫油柱再畫本體，讓油柱在本體下方）──
-    // v0.3.24-fix-2：oilDrawY 以 bodyDrawY 為基準（body 圖片左上角 = local (0,0)）
-    // 絕對禁止使用 co.y / footY / co.y+co.h 作為 oil Y 基準
+    // ── 油柱（spraying 時畫在本體下方；先畫油柱，再畫本體）──
+    // v0.3.24-fix-1：oil 使用 chimney body 原圖 local coordinate system (512×512)
     if (isSpraying && co.sprayActive) {
       const oilSprite = getChimneyOrangeOilImg('spray01');
-      if (oilSprite && rect) {
-        const { bodyDrawX, bodyDrawY, bodyDrawW, bodyScale } = rect;
-        // oil 原圖 256×512，bodyScale = bodyDrawW/512
-        const oilDrawW = CHIMNEY_ORANGE_OIL_SOURCE_W * bodyScale;
-        const oilDrawH = CHIMNEY_ORANGE_OIL_SOURCE_H * bodyScale;
-        // oil 水平中心 = body 原圖 x=256（body 中心線）
-        // oil 上緣 = body 原圖 y=129
-        const oilDrawX = bodyDrawX + CHIMNEY_ORANGE_OIL_LOCAL_X * bodyScale - oilDrawW / 2;
-        const oilDrawY = bodyDrawY + CHIMNEY_ORANGE_OIL_LOCAL_Y * bodyScale;
-
-        // 一次性 debug log
-        if (!chimneyOilAlignLogged) {
-          chimneyOilAlignLogged = true;
-          console.log('[ChimneyOilAlign]', {
-            bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH: rect.bodyDrawH, bodyScale,
-            oilDrawX, oilDrawY, oilDrawW, oilDrawH,
-            localX: CHIMNEY_ORANGE_OIL_LOCAL_X,
-            localY: CHIMNEY_ORANGE_OIL_LOCAL_Y
-          });
-        }
-
+      if (oilSprite && img && bodyDrawW > 0) {
+        // localScale：body draw rect 寬度 / chimney 原圖寬度（512）
+        const localScale = bodyDrawW / CHIMNEY_ORANGE_SOURCE_SIZE;
+        const oilDrawW   = CHIMNEY_ORANGE_OIL_SOURCE_W * localScale;
+        const oilDrawH   = CHIMNEY_ORANGE_OIL_SOURCE_H * localScale;
+        // oil 水平中心對齊 chimney body 原圖 localX=256（即 body 原圖中心線）
+        // oil 上緣對齊 chimney body 原圖 localY=129
+        const oilDrawX   = bodyDrawX + CHIMNEY_ORANGE_OIL_LOCAL_X * localScale - oilDrawW / 2;
+        const oilDrawY   = bodyDrawY + CHIMNEY_ORANGE_OIL_LOCAL_Y * localScale;
         ctx.drawImage(oilSprite, oilDrawX, oilDrawY, oilDrawW, oilDrawH);
       } else if (!oilSprite) {
         // Fallback：幾何 canvas overlay（圖片未載入或失敗時）
@@ -4526,9 +4503,9 @@ function drawChimneyOranges(cx) {
       }
     }
 
-    // ── 本體：油柱之後繪製（本體在油柱上方）──
-    if (rect) {
-      ctx.drawImage(img, rect.bodyDrawX, rect.bodyDrawY, rect.bodyDrawW, rect.bodyDrawH);
+    // ── 本體：優先使用正式圖片，fallback 幾何 placeholder（畫在油柱上方）──
+    if (img) {
+      ctx.drawImage(img, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
     } else {
       // 完全 fallback：幾何 placeholder
       drawChimneyOrangePlaceholder(co, sx);
@@ -7026,9 +7003,9 @@ function getShortVersionLabel() {
   let tPart = '';
   // v0.3.24+：shop-hint-and-chimney-oil → shop+oil-test-N or shop+oil-fix-N
   if (GAME_VERSION.includes('shop-hint-and-chimney-oil')) {
-    const fixM  = GAME_VERSION.match(/-fix-(\d+)$/)?.[1];
+    const fixN  = GAME_VERSION.match(/-fix-(\d+)$/)?.[1];
     const testN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
-    tPart = fixM ? 'shop+oil-fix-' + fixM : 'shop+oil-test-' + testN;
+    tPart = fixN ? 'shop+oil-fix-' + fixN : 'shop+oil-test-' + testN;
   // v0.3.23：shop-healing-items-foundation → shop-heal-test-N
   } else if (GAME_VERSION.includes('shop-healing-items')) {
     const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
@@ -8023,25 +8000,17 @@ function openHomeScreen(from) {
   const backBtn = document.getElementById('btn-home-back');
   if (backBtn) {
     if (homeEntryMode === 'result-shop') {
-      // v0.3.24-fix-2：從結算頁 Shopping 來 → 清楚可點擊的次要導航按鈕（深紫色，非 disabled 感）
+      // v0.3.24-fix-1：從結算頁的 Shopping 提示進來，顯示「回到結算畫面」
       backBtn.textContent = '← 回到結算畫面';
       backBtn.style.display = 'inline-block';
-      backBtn.classList.remove('home-btn--dim');
-      backBtn.classList.add('home-btn--purple', 'home-back-btn--result');
     } else if (homeEntryMode === 'clear') {
       backBtn.textContent = '← 返回結算畫面';
       backBtn.style.display = 'inline-block';
-      backBtn.classList.remove('home-btn--purple', 'home-back-btn--result');
-      backBtn.classList.add('home-btn--dim');
     } else if (homeEntryMode === 'failed') {
       backBtn.textContent = '← 返回失敗畫面';
       backBtn.style.display = 'inline-block';
-      backBtn.classList.remove('home-btn--purple', 'home-back-btn--result');
-      backBtn.classList.add('home-btn--dim');
     } else {
       backBtn.style.display = 'none';
-      backBtn.classList.remove('home-btn--purple', 'home-back-btn--result');
-      backBtn.classList.add('home-btn--dim');
     }
   }
 
