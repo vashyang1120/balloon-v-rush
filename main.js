@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-5';
+const GAME_VERSION = 'adventure-v0.3.24-chimney-oil-calibration-tool-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1032,7 +1032,8 @@ const CHIMNEY_ORANGE_OIL_SOURCE_W   = 256; // oil 圖原始寬度（px）
 const CHIMNEY_ORANGE_OIL_SOURCE_H   = 512; // oil 圖原始高度（px）
 const CHIMNEY_ORANGE_OIL_LOCAL_X    = 256; // oil 水平中心對齊 body 原圖 local x（中心線）
 const CHIMNEY_ORANGE_OIL_LOCAL_Y    = 129; // oil 上緣對齊 body 原圖 local y（煙囪口附近）
-// v0.3.24-fix-3：實測視覺修正 — 整體上移 502px
+// v0.3.24 oil sprite 視覺 offset（正式版預設值，calibration tool 可即時覆蓋）
+const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X = 0;
 const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -95;
 // 舊版常數保留供參考，實際繪製改用 local coord 方式（見 drawChimneyOranges）
 const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
@@ -1264,6 +1265,64 @@ function getOrangeEnemyImg(key) {
 const IS_ADVENTURE_TEST_VERSION      = GAME_VERSION.includes('-test-');
 const HAMMER_ATTACK_VISUAL_TEST_LOADOUT = IS_ADVENTURE_TEST_VERSION;
 const ADVENTURE_TEST_TOOLS_ENABLED      = IS_ADVENTURE_TEST_VERSION;
+
+// ── Chimney Oil Calibration Tool（測試版限定）─────────────────────────
+const CHIMNEY_OIL_CALIB_LS_KEY = 'balloonVAdventure_chimneyOilCalibration';
+let chimneyOilCalibrationMode    = false;
+let chimneyOilCalibrationOffsetX = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X;
+let chimneyOilCalibrationOffsetY = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y;
+
+function loadChimneyOilCalibrationSettings() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  try {
+    const raw = localStorage.getItem(CHIMNEY_OIL_CALIB_LS_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (typeof data.offsetX === 'number') chimneyOilCalibrationOffsetX = data.offsetX;
+      if (typeof data.offsetY === 'number') chimneyOilCalibrationOffsetY = data.offsetY;
+      console.log('[ChimneyOilCalib] loaded from localStorage:', data);
+    }
+  } catch (e) {
+    chimneyOilCalibrationOffsetX = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X;
+    chimneyOilCalibrationOffsetY = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y;
+  }
+}
+
+function saveChimneyOilCalibrationSettings() {
+  try {
+    const data = { offsetX: chimneyOilCalibrationOffsetX, offsetY: chimneyOilCalibrationOffsetY };
+    localStorage.setItem(CHIMNEY_OIL_CALIB_LS_KEY, JSON.stringify(data));
+    showHint('💾 oil offset 已存入 localStorage', 150);
+    console.log('[ChimneyOilCalib] saved:', data);
+  } catch (e) {
+    showHint('localStorage 儲存失敗', 150);
+  }
+}
+
+function resetChimneyOilCalibrationSettings() {
+  chimneyOilCalibrationOffsetX = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X;
+  chimneyOilCalibrationOffsetY = CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y;
+  try { localStorage.setItem(CHIMNEY_OIL_CALIB_LS_KEY, JSON.stringify({ offsetX: chimneyOilCalibrationOffsetX, offsetY: chimneyOilCalibrationOffsetY })); } catch (e) {}
+  showHint('🔄 oil offset 已重置', 150);
+}
+
+function copyChimneyOilCalibrationSettings() {
+  const text = `const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X = ${chimneyOilCalibrationOffsetX};\nconst CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = ${chimneyOilCalibrationOffsetY};`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showHint('📋 建議常數已複製到剪貼簿', 150);
+    }).catch(() => {
+      console.log('[ChimneyOilCalib] copy result:\n' + text);
+      showHint('已輸出到 console（剪貼簿失敗）', 150);
+    });
+  } else {
+    console.log('[ChimneyOilCalib] copy result:\n' + text);
+    showHint('已輸出到 console', 150);
+  }
+}
+
+// 啟動時讀取 calibration 設定
+loadChimneyOilCalibrationSettings();
 
 // 安全化 activeSlot：若指向不存在的武器，自動切到有效武器
 function normalizeActiveWeaponSlot() {
@@ -1670,6 +1729,28 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
+  // 測試版：F9 開關 chimney oil calibration mode
+  if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F9') {
+    chimneyOilCalibrationMode = !chimneyOilCalibrationMode;
+    showHint(chimneyOilCalibrationMode
+      ? '🎯 Oil Align Mode ON（F9 關閉）\n請使用 暫停→測試第二章 進入 2-1'
+      : '🎯 Oil Align Mode OFF', 180);
+    e.preventDefault();
+    return;
+  }
+
+  // Calibration mode 方向鍵調整
+  if (ADVENTURE_TEST_TOOLS_ENABLED && chimneyOilCalibrationMode) {
+    const step = e.shiftKey ? 10 : 1;
+    if (e.code === 'ArrowUp')    { chimneyOilCalibrationOffsetY -= step; e.preventDefault(); return; }
+    if (e.code === 'ArrowDown')  { chimneyOilCalibrationOffsetY += step; e.preventDefault(); return; }
+    if (e.code === 'ArrowLeft')  { chimneyOilCalibrationOffsetX -= step; e.preventDefault(); return; }
+    if (e.code === 'ArrowRight') { chimneyOilCalibrationOffsetX += step; e.preventDefault(); return; }
+    if (e.code === 'KeyS') { saveChimneyOilCalibrationSettings(); e.preventDefault(); return; }
+    if (e.code === 'KeyR') { resetChimneyOilCalibrationSettings(); e.preventDefault(); return; }
+    if (e.code === 'KeyC') { copyChimneyOilCalibrationSettings(); e.preventDefault(); return; }
+  }
+
   keys[e.code] = true;
   if (['Space','ArrowLeft','ArrowRight','ArrowUp','KeyZ'].includes(e.code)) e.preventDefault();
   // 測試版：F8 凍結 / 解凍畫面（不觸發 pause overlay）
@@ -4495,7 +4576,7 @@ function drawChimneyOranges(cx) {
     if (isSpraying && co.sprayActive) {
       const oilSprite = getChimneyOrangeOilImg('spray01');
       if (oilSprite && rect) {
-        const { bodyDrawX, bodyDrawY, bodyDrawW, bodyScale } = rect;
+        const { bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH, bodyScale } = rect;
         // oil 原圖 256×512，bodyScale = bodyDrawW/512
         const oilDrawW = CHIMNEY_ORANGE_OIL_SOURCE_W * bodyScale;
         const oilDrawH = CHIMNEY_ORANGE_OIL_SOURCE_H * bodyScale;
@@ -4503,21 +4584,92 @@ function drawChimneyOranges(cx) {
         // oil 上緣 = body 原圖 y=129
         const oilDrawX = bodyDrawX + CHIMNEY_ORANGE_OIL_LOCAL_X * bodyScale - oilDrawW / 2;
         const oilDrawY = bodyDrawY + CHIMNEY_ORANGE_OIL_LOCAL_Y * bodyScale;
-        const finalOilDrawY = oilDrawY + CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y;
+
+        // calibration tool：選擇有效 offset
+        const effectiveOilOffsetX = chimneyOilCalibrationMode
+          ? chimneyOilCalibrationOffsetX
+          : CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X;
+        const effectiveOilOffsetY = chimneyOilCalibrationMode
+          ? chimneyOilCalibrationOffsetY
+          : CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y;
+
+        const finalOilDrawX = oilDrawX + effectiveOilOffsetX;
+        const finalOilDrawY = oilDrawY + effectiveOilOffsetY;
 
         // 一次性 debug log
         if (!chimneyOilAlignLogged) {
           chimneyOilAlignLogged = true;
           console.log('[ChimneyOilAlign]', {
-            bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH: rect.bodyDrawH, bodyScale,
-            oilDrawX, oilDrawY, finalOilDrawY, oilDrawW, oilDrawH,
+            bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH, bodyScale,
+            oilDrawX, oilDrawY, finalOilDrawX, finalOilDrawY, oilDrawW, oilDrawH,
             localX: CHIMNEY_ORANGE_OIL_LOCAL_X,
             localY: CHIMNEY_ORANGE_OIL_LOCAL_Y,
+            extraOffsetX: CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X,
             extraOffsetY: CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y
           });
         }
 
-        ctx.drawImage(oilSprite, oilDrawX, finalOilDrawY, oilDrawW, oilDrawH);
+        ctx.drawImage(oilSprite, finalOilDrawX, finalOilDrawY, oilDrawW, oilDrawH);
+
+        // calibration mode：輔助線 + HUD
+        if (chimneyOilCalibrationMode) {
+          ctx.save();
+          // 1. oil sprite 外框
+          ctx.strokeStyle = 'rgba(255,200,0,0.8)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(finalOilDrawX, finalOilDrawY, oilDrawW, oilDrawH);
+          // 2. oil sprite 中心垂直線
+          ctx.strokeStyle = 'rgba(255,200,0,0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(finalOilDrawX + oilDrawW / 2, finalOilDrawY);
+          ctx.lineTo(finalOilDrawX + oilDrawW / 2, finalOilDrawY + oilDrawH);
+          ctx.stroke();
+          // 3. oil sprite top 水平輔助線
+          ctx.strokeStyle = 'rgba(255,100,100,0.7)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(finalOilDrawX - 20, finalOilDrawY);
+          ctx.lineTo(finalOilDrawX + oilDrawW + 20, finalOilDrawY);
+          ctx.stroke();
+          // 4. chimney body 外框
+          ctx.strokeStyle = 'rgba(100,200,255,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+          // 5. chimney body local x=256 中心線
+          const bodyCenterX = bodyDrawX + CHIMNEY_ORANGE_OIL_LOCAL_X * bodyScale;
+          ctx.strokeStyle = 'rgba(100,200,255,0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(bodyCenterX, bodyDrawY);
+          ctx.lineTo(bodyCenterX, bodyDrawY + bodyDrawH);
+          ctx.stroke();
+          ctx.restore();
+
+          // HUD
+          const hudX = 16;
+          const hudY = 90;
+          const lineH = 18;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0,0,0,0.65)';
+          ctx.fillRect(hudX - 6, hudY - 16, 270, 175);
+          ctx.font = 'bold 13px monospace';
+          ctx.fillStyle = '#ffe066';
+          ctx.fillText('[Chimney Oil Align Mode]', hudX, hudY);
+          ctx.font = '12px monospace';
+          ctx.fillStyle = '#cccccc';
+          ctx.fillText('F9: 關閉  S: save  R: reset  C: copy', hudX, hudY + lineH);
+          ctx.fillText('←/→: X ±1   ↑/↓: Y ±1', hudX, hudY + lineH * 2);
+          ctx.fillText('Shift+arrows: ±10', hudX, hudY + lineH * 3);
+          ctx.fillStyle = '#80ffcc';
+          ctx.fillText(`offsetX: ${chimneyOilCalibrationOffsetX}`, hudX, hudY + lineH * 4);
+          ctx.fillText(`offsetY: ${chimneyOilCalibrationOffsetY}`, hudX, hudY + lineH * 5);
+          ctx.fillStyle = '#aaaaaa';
+          ctx.fillText(`defaultX: ${CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_X}  defaultY: ${CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y}`, hudX, hudY + lineH * 6);
+          ctx.fillStyle = '#88aaff';
+          ctx.fillText(`finalX: ${Math.round(finalOilDrawX)}  finalY: ${Math.round(finalOilDrawY)}`, hudX, hudY + lineH * 7);
+          ctx.restore();
+        }
       } else if (!oilSprite) {
         // Fallback：幾何 canvas overlay（圖片未載入或失敗時）
         const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
@@ -7028,8 +7180,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.24+：chimney-oil-calibration-tool → oil-align-tool
+  if (GAME_VERSION.includes('chimney-oil-calibration-tool')) {
+    tPart = 'oil-align-tool';
   // v0.3.24+：shop-hint-and-chimney-oil → shop+oil-test-N or shop+oil-fix-N
-  if (GAME_VERSION.includes('shop-hint-and-chimney-oil')) {
+  } else if (GAME_VERSION.includes('shop-hint-and-chimney-oil')) {
     const fixM  = GAME_VERSION.match(/-fix-(\d+)$/)?.[1];
     const testN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = fixM ? 'shop+oil-fix-' + fixM : 'shop+oil-test-' + testN;
