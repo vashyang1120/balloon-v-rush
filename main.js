@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-4';
+const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1-fix-5';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1033,7 +1033,7 @@ const CHIMNEY_ORANGE_OIL_SOURCE_H   = 512; // oil 圖原始高度（px）
 const CHIMNEY_ORANGE_OIL_LOCAL_X    = 256; // oil 水平中心對齊 body 原圖 local x（中心線）
 const CHIMNEY_ORANGE_OIL_LOCAL_Y    = 129; // oil 上緣對齊 body 原圖 local y（煙囪口附近）
 // v0.3.24-fix-3：實測視覺修正 — 整體上移 502px
-const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -120;
+const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -95;
 // 舊版常數保留供參考，實際繪製改用 local coord 方式（見 drawChimneyOranges）
 const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
 
