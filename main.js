@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-calibration-test-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-calibration-test-1-fix-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1052,8 +1052,8 @@ const DUAL_ORANGE_ASSETS = {
   cooldown_01: 'assets/enemies/orange/orange_dual_cooldown_01.png',
   cooldown_02: 'assets/enemies/orange/orange_dual_cooldown_02.png',
   // v0.3.25-oil-calibration: 左右油圖
-  oil_left_01:  'assets/enemies/orange/oil_left_01.png',
-  oil_right_01: 'assets/enemies/orange/oil_right_01.png',
+  oil_left_01:  'assets/enemies/orange/orange_dual_oil_left_01.png',
+  oil_right_01: 'assets/enemies/orange/orange_dual_oil_right_01.png',
 };
 
 const dualOrangeImgs = {};
