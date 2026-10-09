@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.21-chapter2-upward-fan-orange-test-1';
-const BUILD_TIME   = '2026-10-09 12:00';
+const GAME_VERSION = 'adventure-v0.3.22-chimney-orange-art-integration-test-1';
+const BUILD_TIME   = '2026-10-09 16:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -942,6 +942,54 @@ const ORANGE_ENEMY_ASSETS = {
   cooldown01:  'assets/enemies/orange/orange_cooldown_01.png', // v0.3.14
   cooldown02:  'assets/enemies/orange/orange_cooldown_02.png', // v0.3.14
 };
+
+// ── v0.3.22：煙囟橘子（chimney orange）正式素材 ──────────────
+const CHIMNEY_ORANGE_ASSETS = {
+  idle:       'assets/enemies/orange/orange_chimney_idle_01.png',
+  warning01:  'assets/enemies/orange/orange_chimney_warning_01.png',
+  warning02:  'assets/enemies/orange/orange_chimney_warning_02.png',
+  spray:      'assets/enemies/orange/orange_chimney_spray_01.png',
+  cooldown01: 'assets/enemies/orange/orange_chimney_cooldown_01.png',
+  cooldown02: 'assets/enemies/orange/orange_chimney_cooldown_02.png',
+};
+
+const chimneyOrangeImgs = {};
+let chimneyOrangeCoreReady = false;
+
+function initChimneyOrangeArt() {
+  let loadedCount = 0;
+  const total = Object.keys(CHIMNEY_ORANGE_ASSETS).length;
+  Object.entries(CHIMNEY_ORANGE_ASSETS).forEach(([key, src]) => {
+    if (chimneyOrangeImgs[key]) return;
+    const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
+    img.onload = function () {
+      chimneyOrangeImgs[key] = img;
+      loadedCount++;
+      if (loadedCount >= total) {
+        chimneyOrangeCoreReady = true;
+        console.log('[ChimneyOrangeArt] all assets ready');
+      }
+      console.log('[ChimneyOrangeArt] loaded:', key, fullSrc);
+    };
+    img.onerror = function () {
+      console.warn('[ChimneyOrangeArt] not found:', key, fullSrc, '(fallback active)');
+    };
+    img.src = fullSrc;
+  });
+}
+
+function getChimneyOrangeImg(key) {
+  const img = chimneyOrangeImgs[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
+}
+
+// 煙囟橘子圖片繪製對齊參數（只影響視覺，不動 hitbox）
+const CHIMNEY_ORANGE_BODY_DRAW_SCALE = 2.4;  // 圖片顯示寬度 = co.w * 此比例
+const CHIMNEY_ORANGE_FOOT_ANCHOR_Y   = 0.88; // 腳底錨點（圖片高度比例）
+const CHIMNEY_ORANGE_DRAW_OFFSET_X   = 0;    // 水平視覺微調（px，正值往右）
+const CHIMNEY_ORANGE_DRAW_OFFSET_Y   = 0;    // 垂直視覺微調（px，正值往下）
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -4266,74 +4314,100 @@ function checkChimneyOrangeDamage() {
   });
 }
 
+// v0.3.22：舊幾何 placeholder — 圖片未載入時 fallback 用
+function drawChimneyOrangePlaceholder(co, sx) {
+  const isWindup  = co.sprayPhase === 'windup';
+  const isCooldown= co.sprayPhase === 'cooldown';
+
+  // ── 本體（橘色矩形）──
+  const bodyColor = isWindup ? '#ff6600' : isCooldown ? '#d47000' : '#f57c00';
+  ctx.fillStyle = bodyColor;
+  ctx.fillRect(sx, co.y, co.w, co.h);
+
+  // Windup 紅色光暈
+  if (isWindup) {
+    const t = co.phaseTimer / CHIMNEY_ORANGE_WINDUP_MS;
+    ctx.save();
+    ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
+    ctx.shadowColor = '#ff2200';
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = '#ff4400';
+    ctx.fillRect(sx, co.y, co.w, co.h);
+    ctx.restore();
+  }
+
+  // ── 煙囟（placeholder）──
+  const chimneyW = 10;
+  const chimneyX = sx + co.w / 2 - chimneyW / 2;
+  const chimneyY = co.y - CHIMNEY_CHIMNEY_H;
+  ctx.fillStyle  = '#555';
+  ctx.fillRect(chimneyX, chimneyY, chimneyW, CHIMNEY_CHIMNEY_H);
+  ctx.fillStyle  = '#333';
+  ctx.fillRect(chimneyX - 4, chimneyY, chimneyW + 8, 6);
+
+  // ── 冒煙粒子（cooldown）──
+  if (isCooldown) {
+    const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
+    ctx.globalAlpha = (0.25 + breath * 0.2);
+    ctx.fillStyle   = '#aaa';
+    const puff = Math.floor(frameCount / 15) % 3;
+    for (let i = 0; i < 3; i++) {
+      const py2 = chimneyY - 8 - i * 12 - puff * 4;
+      const r   = 5 - i;
+      ctx.beginPath();
+      ctx.arc(chimneyX + chimneyW / 2, py2, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function drawChimneyOranges(cx) {
   chimneyOranges.forEach(co => {
     if (!co.active) return;
     const sx = co.x - cx;
     if (sx > CANVAS_W + 60 || sx + co.w < -60) return;
 
-    const isWindup  = co.sprayPhase === 'windup';
-    const isSpraying= co.sprayPhase === 'spraying';
-    const isCooldown= co.sprayPhase === 'cooldown';
+    const isSpraying = co.sprayPhase === 'spraying';
 
     ctx.save();
 
-    // ── 油幕（spraying 時畫在本體後方）──
+    // ── 油幕 overlay（spraying 時畫在本體後方；保留 hitbox 視覺提示）──
     if (isSpraying && co.sprayActive) {
       const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
       const oilY = co.y - CHIMNEY_OIL_H;
-      ctx.fillStyle = 'rgba(210,140,0,0.38)';
+      ctx.fillStyle   = 'rgba(210,140,0,0.25)'; // v0.3.22：圖片版略降透明度（原 0.38）
       ctx.fillRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
-      // 油幕邊框
-      ctx.strokeStyle = 'rgba(180,100,0,0.55)';
+      ctx.strokeStyle = 'rgba(180,100,0,0.40)';
       ctx.lineWidth   = 1.5;
       ctx.strokeRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
     }
 
-    // ── 本體（橘色矩形）──
-    const bodyColor = isWindup
-      ? '#ff6600'      // 預警：更亮橘
-      : isCooldown
-        ? '#d47000'    // 冷卻：暗橘
-        : '#f57c00';   // idle/spray：標準橘
-    ctx.fillStyle = bodyColor;
-    ctx.fillRect(sx, co.y, co.w, co.h);
-
-    // Windup 紅色光暈
-    if (isWindup) {
-      const t = co.phaseTimer / CHIMNEY_ORANGE_WINDUP_MS;
-      ctx.save();
-      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(t * Math.PI * 6);
-      ctx.shadowColor = '#ff2200';
-      ctx.shadowBlur  = 12;
-      ctx.fillStyle   = '#ff4400';
-      ctx.fillRect(sx, co.y, co.w, co.h);
-      ctx.restore();
+    // ── 本體：優先使用正式圖片，fallback 幾何 placeholder ──
+    // 狀態 → 圖片 key 對應
+    let imgKey = 'idle';
+    if (co.sprayPhase === 'windup') {
+      imgKey = Math.floor(frameCount / 14) % 2 === 0 ? 'warning01' : 'warning02';
+    } else if (co.sprayPhase === 'spraying') {
+      imgKey = 'spray';
+    } else if (co.sprayPhase === 'cooldown') {
+      imgKey = Math.floor(frameCount / 30) % 2 === 0 ? 'cooldown01' : 'cooldown02';
     }
 
-    // ── 煙囟（placeholder：本體頂部中央的細長矩形）──
-    const chimneyW  = 10;
-    const chimneyX  = sx + co.w / 2 - chimneyW / 2;
-    const chimneyY  = co.y - CHIMNEY_CHIMNEY_H;
-    ctx.fillStyle   = '#555';
-    ctx.fillRect(chimneyX, chimneyY, chimneyW, CHIMNEY_CHIMNEY_H);
-    // 煙囟頂帽
-    ctx.fillStyle   = '#333';
-    ctx.fillRect(chimneyX - 4, chimneyY, chimneyW + 8, 6);
+    // fallback chain：指定狀態圖 → idle 圖 → 幾何 placeholder
+    let img = getChimneyOrangeImg(imgKey);
+    if (!img) img = getChimneyOrangeImg('idle');
 
-    // ── 冒煙粒子（cooldown 狀態，簡單畫幾個淡灰圓點）──
-    if (isCooldown) {
-      const breath = 0.5 + 0.5 * Math.sin(frameCount * 0.045);
-      ctx.globalAlpha = (0.25 + breath * 0.2);
-      ctx.fillStyle   = '#aaa';
-      const puff = Math.floor(frameCount / 15) % 3;
-      for (let i = 0; i < 3; i++) {
-        const py2 = chimneyY - 8 - i * 12 - puff * 4;
-        const r   = 5 - i;
-        ctx.beginPath();
-        ctx.arc(chimneyX + chimneyW / 2, py2, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    if (img) {
+      // 圖片繪製：腳底貼地，以本體 hitbox 底部為對齊基準
+      const drawW    = co.w * CHIMNEY_ORANGE_BODY_DRAW_SCALE;
+      const drawH    = img.naturalHeight * (drawW / img.naturalWidth);
+      const footY    = co.y + co.h;                             // hitbox 腳底世界座標
+      const imgDrawX = sx + co.w / 2 - drawW / 2 + CHIMNEY_ORANGE_DRAW_OFFSET_X;
+      const imgDrawY = footY - drawH * CHIMNEY_ORANGE_FOOT_ANCHOR_Y + CHIMNEY_ORANGE_DRAW_OFFSET_Y;
+      ctx.drawImage(img, imgDrawX, imgDrawY, drawW, drawH);
+    } else {
+      // 完全 fallback：幾何 placeholder
+      drawChimneyOrangePlaceholder(co, sx);
     }
 
     ctx.restore();
@@ -6823,14 +6897,18 @@ function drawOverlay(text, color) {
 // 例：adventure-v0.3.17-scorpion-defeat-feedback-test-3 → v0.3.17 test-3
 function getShortVersionLabel() {
   if (!GAME_VERSION) return '';
-  // 取 v0.3.xx 部分
-  const vMatch  = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
-  // 取最後一段（含段落標記）如 fan-test-1、economy-balance-test-1 → 取 "-test-N" 前的一或兩個單詞
-  // 格式：adventure-vX.Y.Z-chapter2-upward-fan-orange-test-1 → 取 "fan-orange-test-1"
-  const tMatch  = GAME_VERSION.match(/([a-z]+-[a-z]+)-test-(\d+)$/) ||
-                  GAME_VERSION.match(/([a-z]+)-test-(\d+)$/);
-  const vPart   = vMatch  ? 'v' + vMatch[1]  : '';
-  const tPart   = tMatch  ? tMatch[1] + '-test-' + tMatch[2] : '';
+  const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
+  const vPart  = vMatch ? 'v' + vMatch[1] : '';
+  let tPart = '';
+  // v0.3.22+：chimney-orange-art-integration → chimney-art-test-N
+  if (GAME_VERSION.includes('chimney-orange-art')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
+    tPart = 'chimney-art-test-' + tN;
+  } else {
+    const tMatch = GAME_VERSION.match(/([a-z]+-[a-z]+)-test-(\d+)$/) ||
+                   GAME_VERSION.match(/([a-z]+)-test-(\d+)$/);
+    tPart = tMatch ? tMatch[1] + '-test-' + tMatch[2] : '';
+  }
   return [vPart, tPart].filter(Boolean).join(' ');
 }
 
@@ -8744,6 +8822,7 @@ initScorpionHurtArt();                // 非阻塞地嘗試載入蠍子受傷圖
 initScorpionSkinArt();                // v0.3.15-test-2：預載各 skin variant 圖片
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
 initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
+initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
