@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.22-chimney-orange-art-integration-test-1';
-const BUILD_TIME   = '2026-10-09 16:00';
+const GAME_VERSION = 'adventure-v0.3.23-shop-healing-items-foundation-test-1';
+const BUILD_TIME   = '2026-10-09 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1698,6 +1698,12 @@ const INVENTORY_DEFAULTS = {
     level3RoundBalloon: false,  // 第 3 關圓氣球是否已成功帶回（通關）
     // 未來可在此擴充更多一次性收集物
   },
+  // v0.3.23 商店購買補血道具（繃帶 / 急救包），存於背包
+  // 未來氣球秘笈製作補血道具可另行擴充此結構
+  items: {
+    bandage:     0,
+    firstAidKit: 0,
+  },
   // v0.3.11 Chapter1 核心流程旗標（一次性教學 / 保底機制，隨背包存檔）
   chapter1Flow: {
     dogIntroDone:                  false,
@@ -1707,6 +1713,34 @@ const INVENTORY_DEFAULTS = {
     hammerMaterialGuaranteeDone:   false,
     hammerCraftIntroShown:         false,
     chapter1LowHpSupplyRescueDone: false,
+  },
+};
+
+// ── 商店版本號（未來有新商品時遞增）─────────────
+const SHOP_CATALOG_VERSION = 1;
+
+// ── 商店商品資料表 ────────────────────────────
+// 注意：繃帶 / 急救包不是氣球道具，不要放進氣球秘笈
+const SHOP_ITEMS = {
+  bandage: {
+    id:          'bandage',
+    name:        '繃帶',
+    icon:        '🩹',
+    priceCoins:  10,
+    description: '回復 0.5 顆心，可放在背包裡備用。',
+    maxCarry:    5,
+    type:        'healing',
+    healAmount:  0.5,
+  },
+  firstAidKit: {
+    id:          'firstAidKit',
+    name:        '急救包',
+    icon:        '🚑',
+    priceCoins:  25,
+    description: '使用後直接補滿生命。最多攜帶 1 箱。',
+    maxCarry:    1,
+    type:        'healing',
+    healFull:    true,
   },
 };
 
@@ -1889,6 +1923,10 @@ function loadInventory() {
       merged.chapter1Flow = Object.assign(
         {}, INVENTORY_DEFAULTS.chapter1Flow, parsed.chapter1Flow || {}
       );
+      // v0.3.23 migration：確保 items 欄位存在（舊存檔沒有此欄位）
+      merged.items = Object.assign(
+        {}, INVENTORY_DEFAULTS.items, parsed.items || {}
+      );
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
@@ -1896,6 +1934,7 @@ function loadInventory() {
   const d = Object.assign({}, INVENTORY_DEFAULTS);
   d.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
   d.chapter1Flow = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
+  d.items        = Object.assign({}, INVENTORY_DEFAULTS.items);
   return d;
 }
 
@@ -1910,6 +1949,7 @@ function resetInventory() {
   playerInventory.uniqueCollectibles = Object.assign({}, INVENTORY_DEFAULTS.uniqueCollectibles);
   playerInventory.balloonDog         = Object.assign({}, INVENTORY_DEFAULTS.balloonDog);
   playerInventory.chapter1Flow       = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
+  playerInventory.items              = Object.assign({}, INVENTORY_DEFAULTS.items);
   playerInventory.equippedSwordDur     = 0;
   playerInventory.tutorialSwordGranted = false;
   saveInventory();
@@ -6900,8 +6940,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
-  // v0.3.22+：chimney-orange-art-integration → chimney-art-test-N
-  if (GAME_VERSION.includes('chimney-orange-art')) {
+  // v0.3.23+：shop-healing-items-foundation → shop-heal-test-N
+  if (GAME_VERSION.includes('shop-healing-items')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
+    tPart = 'shop-heal-test-' + tN;
+  // v0.3.22：chimney-orange-art-integration → chimney-art-test-N
+  } else if (GAME_VERSION.includes('chimney-orange-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
     tPart = 'chimney-art-test-' + tN;
   } else {
@@ -7414,6 +7458,12 @@ function populateResultPanel() {
   html += bagHtml;
   html += detailHtml;
   html += supplyHtml;
+  // v0.3.23：商店 Shopping 提示（固定顯示，出發前 Shopping 提示）
+  html += '<div class="rp-shop-hint" id="rp-shop-hint">'
+    + '<div class="rp-guidebook-hint__title">🛒 出發前可以 Shopping！</div>'
+    + '<div class="rp-guidebook-hint__body">看看小V的家裡有什麼好買的吧！出發前準備一下，冒險會更安心。</div>'
+    + '<button class="rp-next-step-btn" onclick="openHomeShopFromResult()">🛒 去 Shopping</button>'
+    + '</div>';
   // 氣球小知識
   html += '<div class="rp-trivia-card"><span class="rp-trivia-icon">💡</span><span>' + trivia + '</span></div>';
 
@@ -7499,6 +7549,139 @@ function updateBandageBtn() {
   }
 }
 
+
+// =============================================
+//  商店補給系統（v0.3.23）
+//  buyShopItem(itemId)   — 在小V的家商店購買道具
+//  useHealingItem(itemId) — 暫停背包中使用補血道具
+//  renderHomeShop()       — 渲染商店 UI
+//  openHomeShopFromResult() — 從結算頁直接跳到商店
+//
+//  未來擴充：氣球秘笈製作補血道具（棒棒糖、氣球食物）可另行加入
+//  本版只做商店購買路徑，不做秘笈補血
+// =============================================
+
+function ensureInventoryItems() {
+  if (!playerInventory.items) {
+    playerInventory.items = Object.assign({}, INVENTORY_DEFAULTS.items);
+  }
+}
+
+function buyShopItem(itemId) {
+  const item = SHOP_ITEMS[itemId];
+  if (!item) return;
+  ensureInventoryItems();
+  const coins   = playerInventory.coins || 0;
+  const have    = playerInventory.items[itemId] || 0;
+  const max     = item.maxCarry;
+
+  if (coins < item.priceCoins) {
+    showHint('金幣不夠，先去冒險收集更多金幣吧！', 200);
+    renderHomeShop();
+    return;
+  }
+  if (have >= max) {
+    if (itemId === 'bandage')     showHint('繃帶已經帶滿了！', 160);
+    else if (itemId === 'firstAidKit') showHint('急救包最多只能帶 1 箱！', 160);
+    else showHint('已達攜帶上限！', 160);
+    return;
+  }
+
+  playerInventory.coins       -= item.priceCoins;
+  playerInventory.items[itemId] = have + 1;
+  saveInventory();
+
+  renderHomeShop();
+  if (typeof renderHomeInventory === 'function') renderHomeInventory();
+  if (typeof renderHomeSupply    === 'function') renderHomeSupply();
+  showHint(item.icon + ' ' + item.name + ' 購買成功！', 180);
+}
+
+function useHealingItem(itemId) {
+  const item = SHOP_ITEMS[itemId];
+  if (!item) return;
+  ensureInventoryItems();
+  const have = playerInventory.items[itemId] || 0;
+  if (have <= 0) return;
+
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  if (player.hp >= maxHp) {
+    showHint('生命已經滿了！', 140);
+    // 不消耗道具
+    return;
+  }
+
+  if (item.healFull) {
+    player.hp = maxHp;
+  } else if (item.healAmount) {
+    player.hp = Math.min(maxHp, player.hp + item.healAmount);
+  }
+  playerInventory.items[itemId] = have - 1;
+  saveInventory();
+
+  // 刷新暫停背包 UI
+  openPauseBag();
+
+  if (item.healFull) {
+    showHint('🚑 使用急救包，生命補滿！', 200);
+  } else {
+    showHint('🩹 使用繃帶，回復 0.5 顆心！', 200);
+  }
+}
+
+function renderHomeShop() {
+  const body = document.getElementById('home-shop-body');
+  if (!body) return;
+  ensureInventoryItems();
+  const coins = playerInventory.coins || 0;
+
+  let html = '<div class="home-shop-desc" style="color:#ffe080;margin-bottom:10px">出發前可以 Shopping！看看有什麼好買的吧！</div>';
+  html += '<div class="home-shop-grid" style="display:flex;flex-direction:column;gap:12px">';
+
+  Object.values(SHOP_ITEMS).forEach(item => {
+    const have     = (playerInventory.items || {})[item.id] || 0;
+    const canBuy   = coins >= item.priceCoins && have < item.maxCarry;
+    const btnCls   = canBuy ? 'home-btn home-btn--blue' : 'home-btn home-btn--blue home-btn--disabled';
+    const btnDisbl = canBuy ? '' : 'disabled';
+    html += '<div class="home-shop-card" style="background:rgba(255,255,255,0.06);border-radius:10px;padding:10px 12px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+    html += '<span style="font-size:1.5em">' + item.icon + '</span>';
+    html += '<span style="font-weight:bold;font-size:1.05em">' + item.name + '</span>';
+    html += '<span style="margin-left:auto;color:#ffe080;font-size:0.95em">🪙 ' + item.priceCoins + ' 金幣</span>';
+    html += '</div>';
+    html += '<div style="color:#aaa;font-size:0.88em;margin-bottom:6px">' + item.description + '</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+    html += '<span style="font-size:0.9em;color:#ccc">持有：<b>' + have + ' / ' + item.maxCarry + '</b></span>';
+    html += '<button class="' + btnCls + '" ' + btnDisbl + ' style="padding:5px 14px;font-size:0.92em" '
+          + 'onclick="buyShopItem(\'' + item.id + '\')">購買</button>';
+    html += '</div>';
+    html += '</div>';
+  });
+
+  html += '</div>';
+  html += '<div style="margin-top:8px;color:#888;font-size:0.82em">目前金幣：🪙 ' + coins + '</div>';
+  body.innerHTML = html;
+}
+
+function openHomeShopFromResult() {
+  // 1. 打開小V的家
+  if (typeof openHomeScreen === 'function') openHomeScreen();
+  // 2. 展開商店區塊（沿用 initHomeCards 的展開邏輯）
+  setTimeout(() => {
+    const shopSection = document.getElementById('home-shop-section');
+    const shopCard    = document.getElementById('hcard-shop');
+    if (!shopSection) return;
+    // 收合所有區塊
+    document.querySelectorAll('#home-body .home-section').forEach(s => { s.style.display = 'none'; });
+    document.querySelectorAll('.hcard').forEach(c => c.classList.remove('hcard--open'));
+    // 展開商店
+    shopSection.style.display = 'block';
+    if (shopCard) shopCard.classList.add('hcard--open');
+    renderHomeShop();
+    // 3. 捲動到商店區塊
+    shopSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 80);
+}
 
 // ── 帶氣球小狗出門（結算畫面按鈕）────────────
 // v0.3.18-test-2-fix-1：判斷是否可帶狗出發（含第一章教學保底）
@@ -7587,6 +7770,7 @@ function initHomeCards() {
       else if (targetId === 'home-dog-section')   renderHomeDog();
       else if (targetId === 'home-supply-section') renderHomeSupply();
       else if (targetId === 'home-challenge-section') renderHomeChallenge();
+      else if (targetId === 'home-shop-section')  renderHomeShop();
     });
   });
 }
@@ -7760,6 +7944,7 @@ function openHomeScreen(from) {
   renderHomeDog();
   renderHomeNextStage();
   renderHomeChallenge();
+  renderHomeShop();     // v0.3.23
   renderHomePlayer(); // 先顯示現有狀態（未裝備）
   renderHomeWallet();
   renderHomePreviewCard();
@@ -8254,6 +8439,25 @@ function openPauseBag() {
     dogHtml = '<div class="pause-bag-dog">' + ds.status + '　' + ds.turns + '</div>';
   }
 
+  // v0.3.23：補血道具顯示
+  ensureInventoryItems();
+  const invItems = playerInventory.items || {};
+  let healHtml = '';
+  Object.values(SHOP_ITEMS).forEach(item => {
+    const have = invItems[item.id] || 0;
+    if (have <= 0) return;
+    const effect = item.healFull ? '補滿生命' : ('回復 ' + (item.healAmount || 0) + ' 心');
+    healHtml += '<div class="pause-bag-heal-item" style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:7px 10px;background:rgba(255,255,255,0.06);border-radius:8px">'
+      + '<span style="font-size:1.3em">' + item.icon + '</span>'
+      + '<span style="flex:1">'
+      + '<b>' + item.name + '</b> x' + have
+      + '<span style="color:#aaa;font-size:0.85em;display:block">效果：' + effect + '</span>'
+      + '</span>'
+      + '<button style="padding:4px 12px;border-radius:6px;background:#4caf7d;color:#fff;border:none;cursor:pointer;font-size:0.9em" '
+      + 'onclick="useHealingItem(\'' + item.id + '\')">使用</button>'
+      + '</div>';
+  });
+
   const body = document.getElementById('pause-bag-body');
   body.innerHTML = (items.length
     ? '<div class="inv-grid">' + items.map(i =>
@@ -8265,6 +8469,7 @@ function openPauseBag() {
         + '</div>'
       ).join('') + '</div>'
     : '<div class="inv-empty">背包空空如也 🎈</div>')
+    + (healHtml ? '<div style="margin-top:8px"><div style="color:#ffe080;font-size:0.85em;margin-bottom:4px">🩹 補血道具</div>' + healHtml + '</div>' : '')
     + dogHtml;
   panel.style.display = 'flex';
 }
