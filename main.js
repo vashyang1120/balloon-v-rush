@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-calibration-test-1-fix-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-layer-fix-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -5032,7 +5032,52 @@ function drawDualNozzleOranges(cx) {
     const bodyDrawY = (dn.y + dn.h) - bodyDrawH * DUAL_ORANGE_FOOT_ANCHOR_Y + DUAL_ORANGE_DRAW_OFFSET_Y;
     const bodyScale = bodyDrawW / DUAL_ORANGE_SOURCE_SIZE;
 
-    // ── 左右油圖（spraying 時先畫，本體蓋在上方）──────────────────────────
+    let bodySprite = null;
+
+    if (isIdle) {
+      // ── idle：5 張序列動畫（01=正中 02=左中 03=看左 04=右中 05=看右）──
+      const seqIdx   = Math.floor(frameCount / DUAL_ORANGE_IDLE_FRAME_DUR) % DUAL_ORANGE_IDLE_SEQ.length;
+      const frameIdx = DUAL_ORANGE_IDLE_SEQ[seqIdx]; // 0–4
+      bodySprite = getDualOrangeImg('idle_0' + (frameIdx + 1));
+
+    } else if (isWindup) {
+      // ── warning：2 張快速交替（蓄力緊張感）──
+      const wIdx = Math.floor(frameCount / DUAL_ORANGE_WARNING_FRAME_DUR) % 2;
+      bodySprite = getDualOrangeImg(wIdx === 0 ? 'warning_01' : 'warning_02');
+
+    } else if (isSpraying) {
+      // ── spray：spray_01（本體先畫，油圖在本體之後蓋上）──
+      bodySprite = getDualOrangeImg('spray_01');
+
+    } else if (isCooldown) {
+      // ── cooldown：2 張慢速交替（疲憊喘氣感）──
+      const cIdx = Math.floor(frameCount / DUAL_ORANGE_COOLDOWN_FRAME_DUR) % 2;
+      bodySprite = getDualOrangeImg(cIdx === 0 ? 'cooldown_01' : 'cooldown_02');
+    }
+
+    if (bodySprite) {
+      // ── 正式美術繪製 ──
+      // warning 狀態額外加蓄力光暈
+      if (isWindup) {
+        const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
+        ctx.save();
+        ctx.shadowColor = '#ff6600';
+        ctx.shadowBlur  = 8 + 8 * Math.sin(t * Math.PI * 5);
+        ctx.globalAlpha = 0.85 + 0.15 * Math.sin(t * Math.PI * 5);
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+        ctx.restore();
+      } else if (isCooldown) {
+        // cooldown 加淡淡透明度呼吸感
+        const breath = 0.82 + 0.12 * Math.sin(frameCount * 0.04);
+        ctx.save();
+        ctx.globalAlpha = breath;
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+        ctx.restore();
+      } else {
+        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+      }
+
+    // ── 左右油圖（spraying 時在本體之後畫，油圖蓋在 spray 本體上方）──────
     if (isSpraying && dn.sprayActive) {
       const leftOilImg  = getDualOrangeImg('oil_left_01');
       const rightOilImg = getDualOrangeImg('oil_right_01');
@@ -5072,53 +5117,8 @@ function drawDualNozzleOranges(cx) {
         ctx.fillRect(sx + dn.w, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H);
       }
     }
-
-    let bodySprite = null;
-
-    if (isIdle) {
-      // ── idle：5 張序列動畫（01=正中 02=左中 03=看左 04=右中 05=看右）──
-      const seqIdx   = Math.floor(frameCount / DUAL_ORANGE_IDLE_FRAME_DUR) % DUAL_ORANGE_IDLE_SEQ.length;
-      const frameIdx = DUAL_ORANGE_IDLE_SEQ[seqIdx]; // 0–4
-      bodySprite = getDualOrangeImg('idle_0' + (frameIdx + 1));
-
-    } else if (isWindup) {
-      // ── warning：2 張快速交替（蓄力緊張感）──
-      const wIdx = Math.floor(frameCount / DUAL_ORANGE_WARNING_FRAME_DUR) % 2;
-      bodySprite = getDualOrangeImg(wIdx === 0 ? 'warning_01' : 'warning_02');
-
-    } else if (isSpraying) {
-      // ── spray：spray_01（本體，油圖已於上方先行繪製）──
-      bodySprite = getDualOrangeImg('spray_01');
-
-    } else if (isCooldown) {
-      // ── cooldown：2 張慢速交替（疲憊喘氣感）──
-      const cIdx = Math.floor(frameCount / DUAL_ORANGE_COOLDOWN_FRAME_DUR) % 2;
-      bodySprite = getDualOrangeImg(cIdx === 0 ? 'cooldown_01' : 'cooldown_02');
-    }
-
-    if (bodySprite) {
-      // ── 正式美術繪製 ──
-      // warning 狀態額外加蓄力光暈
-      if (isWindup) {
-        const t = dn.phaseTimer / DUAL_NOZZLE_WINDUP_MS;
-        ctx.save();
-        ctx.shadowColor = '#ff6600';
-        ctx.shadowBlur  = 8 + 8 * Math.sin(t * Math.PI * 5);
-        ctx.globalAlpha = 0.85 + 0.15 * Math.sin(t * Math.PI * 5);
-        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
-        ctx.restore();
-      } else if (isCooldown) {
-        // cooldown 加淡淡透明度呼吸感
-        const breath = 0.82 + 0.12 * Math.sin(frameCount * 0.04);
-        ctx.save();
-        ctx.globalAlpha = breath;
-        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
-        ctx.restore();
-      } else {
-        ctx.drawImage(bodySprite, bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
-      }
     } else {
-      // ── fallback：幾何 placeholder（圖片未載入時）──
+      // ── fallback：幾何 placeholder（bodySprite 圖片未載入時）──
       const bodyColor = isWindup ? '#ff6600' : isCooldown ? '#d47000' : isSpraying ? '#f57c00' : '#f57c00';
       ctx.fillStyle = bodyColor;
       ctx.fillRect(sx, dn.y, dn.w, dn.h);
@@ -7556,8 +7556,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-oil-layer-fix → dual-oil-layer-fix-N
+  if (GAME_VERSION.includes('dual-orange-oil-layer-fix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-oil-layer-fix-' + tN;
   // v0.3.25+：dual-orange-oil-calibration → dual-oil-align
-  if (GAME_VERSION.includes('dual-orange-oil-calibration')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-calibration')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-align-' + tN;
   // v0.3.25+：dual-orange-art-integration → dual-art-test-N
