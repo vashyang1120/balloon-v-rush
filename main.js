@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.23-shop-healing-items-foundation-test-1';
-const BUILD_TIME   = '2026-10-09 18:00';
+const GAME_VERSION = 'adventure-v0.3.24-shop-hint-and-chimney-oil-test-1';
+const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -990,6 +990,44 @@ const CHIMNEY_ORANGE_BODY_DRAW_SCALE = 2.4;  // 圖片顯示寬度 = co.w * 此�
 const CHIMNEY_ORANGE_FOOT_ANCHOR_Y   = 0.88; // 腳底錨點（圖片高度比例）
 const CHIMNEY_ORANGE_DRAW_OFFSET_X   = 0;    // 水平視覺微調（px，正值往右）
 const CHIMNEY_ORANGE_DRAW_OFFSET_Y   = 0;    // 垂直視覺微調（px，正值往下）
+
+// ── 煙囟橘子油柱素材（v0.3.24，非阻塞）────────────────
+// 只接 spray01 一張；02/03 不存在，不要猜其他檔名
+const CHIMNEY_ORANGE_OIL_ASSETS = {
+  spray01: 'assets/enemies/orange/orange_chimney_oil_spray_01.png',
+};
+
+const chimneyOrangeOilImgs = {};
+let chimneyOrangeOilReady = false;
+
+function initChimneyOrangeOilArt() {
+  Object.entries(CHIMNEY_ORANGE_OIL_ASSETS).forEach(([key, src]) => {
+    if (chimneyOrangeOilImgs[key]) return;
+    const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
+    img.onload = function () {
+      chimneyOrangeOilImgs[key] = img;
+      chimneyOrangeOilReady = true;
+      console.log('[ChimneyOilArt] loaded:', key, fullSrc);
+    };
+    img.onerror = function () {
+      console.warn('[ChimneyOilArt] not found:', key, fullSrc, '(canvas fallback active)');
+    };
+    img.src = fullSrc;
+  });
+}
+
+function getChimneyOrangeOilImg(key) {
+  const img = chimneyOrangeOilImgs[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
+}
+
+// 油柱圖片繪製參數（只影響視覺，hitbox 不變）
+// 原始尺寸 256×512，與本體等比例設計，故沿用相同縮放基準
+const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例
+const CHIMNEY_ORANGE_OIL_DRAW_OFFSET_X = 0;   // 水平微調（px）
+const CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y = 129; // 垂直對位（px，讓油柱底部貼近煙囪口）
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -4411,18 +4449,31 @@ function drawChimneyOranges(cx) {
 
     ctx.save();
 
-    // ── 油幕 overlay（spraying 時畫在本體後方；保留 hitbox 視覺提示）──
+    // ── 油柱（spraying 時畫在本體下方；先畫油柱，再畫本體）──
+    // v0.3.24：優先使用正式油柱圖片，fallback canvas overlay
     if (isSpraying && co.sprayActive) {
-      const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
-      const oilY = co.y - CHIMNEY_OIL_H;
-      ctx.fillStyle   = 'rgba(210,140,0,0.25)'; // v0.3.22：圖片版略降透明度（原 0.38）
-      ctx.fillRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
-      ctx.strokeStyle = 'rgba(180,100,0,0.40)';
-      ctx.lineWidth   = 1.5;
-      ctx.strokeRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
+      const oilSprite = getChimneyOrangeOilImg('spray01');
+      if (oilSprite) {
+        // 正式油柱圖：256×512，與本體等比例縮放，底部以 CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y 對位
+        const oilDrawW = co.w * CHIMNEY_ORANGE_OIL_DRAW_SCALE;
+        const oilDrawH = oilSprite.naturalHeight * (oilDrawW / oilSprite.naturalWidth);
+        const footY    = co.y + co.h;
+        const oilImgX  = sx + co.w / 2 - oilDrawW / 2 + CHIMNEY_ORANGE_OIL_DRAW_OFFSET_X;
+        const oilImgY  = footY - oilDrawH + CHIMNEY_ORANGE_OIL_DRAW_OFFSET_Y;
+        ctx.drawImage(oilSprite, oilImgX, oilImgY, oilDrawW, oilDrawH);
+      } else {
+        // Fallback：幾何 canvas overlay（圖片未載入或失敗時）
+        const oilX = sx + co.w / 2 - CHIMNEY_OIL_W / 2;
+        const oilY = co.y - CHIMNEY_OIL_H;
+        ctx.fillStyle   = 'rgba(210,140,0,0.25)';
+        ctx.fillRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
+        ctx.strokeStyle = 'rgba(180,100,0,0.40)';
+        ctx.lineWidth   = 1.5;
+        ctx.strokeRect(oilX, oilY, CHIMNEY_OIL_W, CHIMNEY_OIL_H);
+      }
     }
 
-    // ── 本體：優先使用正式圖片，fallback 幾何 placeholder ──
+    // ── 本體：優先使用正式圖片，fallback 幾何 placeholder（畫在油柱上方）──
     // 狀態 → 圖片 key 對應
     let imgKey = 'idle';
     if (co.sprayPhase === 'windup') {
@@ -6940,8 +6991,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
-  // v0.3.23+：shop-healing-items-foundation → shop-heal-test-N
-  if (GAME_VERSION.includes('shop-healing-items')) {
+  // v0.3.24+：shop-hint-and-chimney-oil → shop+oil-test-N
+  if (GAME_VERSION.includes('shop-hint-and-chimney-oil')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
+    tPart = 'shop+oil-test-' + tN;
+  // v0.3.23：shop-healing-items-foundation → shop-heal-test-N
+  } else if (GAME_VERSION.includes('shop-healing-items')) {
     const tN = GAME_VERSION.match(/-test-(\d+)$/)?.[1] || '1';
     tPart = 'shop-heal-test-' + tN;
   // v0.3.22：chimney-orange-art-integration → chimney-art-test-N
@@ -7439,6 +7494,9 @@ function populateResultPanel() {
       + '</div>';
   }
 
+  // v0.3.24：Shopping 提示（移到本關獎勵之前，讓玩家在手機上更容易看到）
+  html += buildResultShopHintHtml();
+
   // 第一層：重點收穫
   html += '<div class="rp-hero-section" id="rp-hero-section">'
     + '<div class="rp-reward-grid">' + mainTiles + '</div>'
@@ -7458,12 +7516,6 @@ function populateResultPanel() {
   html += bagHtml;
   html += detailHtml;
   html += supplyHtml;
-  // v0.3.23：商店 Shopping 提示（固定顯示，出發前 Shopping 提示）
-  html += '<div class="rp-shop-hint" id="rp-shop-hint">'
-    + '<div class="rp-guidebook-hint__title">🛒 出發前可以 Shopping！</div>'
-    + '<div class="rp-guidebook-hint__body">看看小V的家裡有什麼好買的吧！出發前準備一下，冒險會更安心。</div>'
-    + '<button class="rp-next-step-btn" onclick="openHomeShopFromResult()">🛒 去 Shopping</button>'
-    + '</div>';
   // 氣球小知識
   html += '<div class="rp-trivia-card"><span class="rp-trivia-icon">💡</span><span>' + trivia + '</span></div>';
 
@@ -7661,6 +7713,15 @@ function renderHomeShop() {
   html += '</div>';
   html += '<div style="margin-top:8px;color:#888;font-size:0.82em">目前金幣：🪙 ' + coins + '</div>';
   body.innerHTML = html;
+}
+
+// v0.3.24：Shopping 提示 HTML helper（明顯外框，與下一步提示同視覺層級）
+function buildResultShopHintHtml() {
+  return '<div class="rp-guidebook-hint rp-shop-hint" id="rp-shop-hint">'
+    + '<div class="rp-guidebook-hint__title">🛒 出發前可以 Shopping！</div>'
+    + '<div class="rp-guidebook-hint__body">看看小V的家裡有什麼好買的吧！出發前準備一下，冒險會更安心。</div>'
+    + '<button class="rp-next-step-btn" onclick="openHomeShopFromResult()">🛒 去 Shopping</button>'
+    + '</div>';
 }
 
 function openHomeShopFromResult() {
@@ -9028,6 +9089,7 @@ initScorpionSkinArt();                // v0.3.15-test-2：預載各 skin variant
 initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
 initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
 initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
+initChimneyOrangeOilArt();           // v0.3.24：煙囟橘子油柱正式圖（非阻塞，fallback canvas overlay）
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
