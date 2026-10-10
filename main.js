@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-shot-calibration-test-1';
-const BUILD_TIME   = '2026-10-10 20:05';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-test-1';
+const BUILD_TIME   = '2026-10-10 21:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -6107,6 +6107,97 @@ function spawnProjectileOrangeShot(po) {
   });
 }
 
+// ── v0.3.26-hitbox：projectile orange 傷害判定 ──────────────────────────
+// 油彈 damage hitbox = 油彈 draw rect 往內縮
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X = 10;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y = 8;
+// 測試版顯示紅色 damage hitbox（red box = damage hitbox）
+const PROJECTILE_ORANGE_HITBOX_DEBUG = ADVENTURE_TEST_TOOLS_ENABLED;
+
+// 油彈 draw rect（world coordinate，不扣 cameraX）
+function getProjectileOilShotWorldRect(shot) {
+  const { drawW, drawH } = getProjectileOilShotDrawSize(shot.bodyScale);
+  return { x: shot.x - drawW / 2, y: shot.y - drawH / 2, w: drawW, h: drawH };
+}
+
+// 油彈 damage hitbox（world coordinate）
+function getProjectileOilShotHitbox(shot) {
+  const r = getProjectileOilShotWorldRect(shot);
+  return {
+    x: r.x + PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X,
+    y: r.y + PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y,
+    w: Math.max(1, r.w - PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X * 2),
+    h: Math.max(1, r.h - PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y * 2),
+  };
+}
+
+// 本體 damage hitbox（world coordinate，與一般橘子怪本體判定相同的 4px 內縮）
+function getProjectileOrangeBodyHitbox(po) {
+  return { x: po.x + 4, y: po.y + 4, w: po.w - 8, h: po.h - 8 };
+}
+
+function checkProjectileOrangeDamage() {
+  if (player.invincible > 0) return; // 無敵期間不重複扣血
+  // 與 checkHazards() 相同的玩家判定框
+  const px = player.x + 6, py = player.y + 6, pw = player.w - 12, ph = player.h - 6;
+
+  // 1. 本體接觸傷害（任何狀態都有效）
+  for (const po of projectileOranges) {
+    if (!po.active) continue;
+    const b = getProjectileOrangeBodyHitbox(po);
+    if (rectsOverlap(px, py, pw, ph, b.x, b.y, b.w, b.h)) {
+      damagePlayer();
+      return; // 同幀只扣一次
+    }
+  }
+
+  // 2. 飛行油彈傷害：命中後油彈消失
+  for (const s of projectileOrangeShots) {
+    if (!s.active) continue;
+    const h = getProjectileOilShotHitbox(s);
+    if (rectsOverlap(px, py, pw, ph, h.x, h.y, h.w, h.h)) {
+      damagePlayer();
+      s.active = false; // 下一次 updateProjectileOrangeShots 會從陣列移除
+      return;
+    }
+  }
+}
+
+// 測試版：畫實際 damage hitbox 紅框（本體 + 飛行油彈）
+function drawProjectileOrangeHitboxDebug(cx) {
+  if (!PROJECTILE_ORANGE_HITBOX_DEBUG) return;
+  if (projectileOranges.length === 0 && projectileOrangeShots.length === 0) return;
+  ctx.save();
+  ctx.lineWidth   = 1.5;
+  ctx.strokeStyle = 'rgba(255,40,40,0.95)';
+  ctx.fillStyle   = 'rgba(255,40,40,0.12)';
+  projectileOranges.forEach(po => {
+    if (!po.active) return;
+    const b = getProjectileOrangeBodyHitbox(po);
+    const sx = b.x - cx;
+    if (sx > CANVAS_W + 50 || sx + b.w < -50) return;
+    ctx.fillRect(sx, b.y, b.w, b.h);
+    ctx.strokeRect(sx, b.y, b.w, b.h);
+  });
+  projectileOrangeShots.forEach(s => {
+    if (!s.active) return;
+    const h = getProjectileOilShotHitbox(s);
+    const sx = h.x - cx;
+    if (sx > CANVAS_W + 50 || sx + h.w < -50) return;
+    ctx.fillRect(sx, h.y, h.w, h.h);
+    ctx.strokeRect(sx, h.y, h.w, h.h);
+  });
+  // 圖例（畫面左下）
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(8, CANVAS_H - 150, 230, 18);
+  ctx.fillStyle = '#ff6060';
+  ctx.fillText('red box = damage hitbox', 14, CANVAS_H - 137);
+  ctx.restore();
+}
+
 function updateProjectileOrangeShots(dtMs) {
   const frameMul = dtMs / 16.667;
   for (let i = projectileOrangeShots.length - 1; i >= 0; i--) {
@@ -6172,9 +6263,9 @@ function drawProjectileOilShotCalibrationOverlay(cx) {
     const box = drawProjectileOilShotAt(shotSX, sp.y, sp.bodyScale, 0.9);
     lastSize = box;
 
-    // 3. 預覽油彈 draw rect（紅框）
+    // 3. 預覽油彈 draw rect（橘框；紅框保留給 damage hitbox）
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,50,50,0.95)';
+    ctx.strokeStyle = 'rgba(255,170,0,0.95)';
     ctx.lineWidth = 2;
     ctx.strokeRect(box.x, box.y, box.drawW, box.drawH);
 
@@ -6206,7 +6297,7 @@ function drawProjectileOilShotCalibrationOverlay(cx) {
     ['drawH: ' + (lastSize ? lastSize.drawH.toFixed(1) : '—'), '#88aaff'],
     ['oil_shot_01: ' + (oilImg ? 'OK ' + oilImg.naturalWidth + 'x' + oilImg.naturalHeight : 'missing'),
       oilImg ? '#7dff9a' : '#ff8080'],
-    ['red box = oil shot draw rect, not damage hitbox', '#ff8080'],
+    ['orange box = oil shot draw rect (not hitbox)', '#ffb84d'],
   ];
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -6720,6 +6811,8 @@ function checkHazards() {
   checkDualNozzleOrangeDamage();
   // v0.3.21：Chapter 2 向上油幕橘子碰撞判定
   checkFanOrangeDamage();
+  // v0.3.26：飛行油彈橘子（本體 + 飛行油彈）碰撞判定
+  checkProjectileOrangeDamage();
 }
 
 function damagePlayer() {
@@ -7207,6 +7300,7 @@ function drawWorld() {
   // v0.3.26：飛行油彈橘子（美術測試）
   drawProjectileOranges(cx);
   drawProjectileOrangeShots(cx); // v0.3.26：油彈畫在本體之上
+  drawProjectileOrangeHitboxDebug(cx);         // v0.3.26：damage hitbox 紅框（測試版）
   drawProjectileOilShotCalibrationOverlay(cx); // v0.3.26：F7 定位模式（測試版）
 }
 
@@ -8341,8 +8435,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-hitbox → proj-hitbox-N
+  if (GAME_VERSION.includes('projectile-orange-hitbox')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-hitbox-' + tN;
   // v0.3.26+：projectile-orange-shot-calibration → proj-shot-calib-N
-  if (GAME_VERSION.includes('projectile-orange-shot-calibration')) {
+  } else if (GAME_VERSION.includes('projectile-orange-shot-calibration')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-shot-calib-' + tN;
   // v0.3.26+：projectile-orange-complete-art → proj-complete-art-N
