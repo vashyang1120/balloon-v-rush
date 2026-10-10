@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-final-test-2';
-const BUILD_TIME   = '2026-10-10 23:15';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-stable-test-1';
+const BUILD_TIME   = '2026-10-10 23:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1127,7 +1127,7 @@ const projectileOrangeDrawFallbackLogged = {};
 const projectileOrangeLoadStatus         = {}; // key → 'loading' | 'LOADED' | 'ERROR'
 const projectileOrangeResolvedSrc        = {}; // key → 實際請求的完整網址
 
-// v0.3.26-hitbox-final：圖片載入失敗時最多重試 3 次（300 / 800 / 1500ms），
+// v0.3.26 stable：圖片載入失敗時最多重試 3 次（300 / 800 / 1500ms），
 // 每次重試都換新的網址參數避開快取；全部失敗才標記 ERROR。
 // 每次重試都建立新的 Image 物件，成功的那張寫入 projectileOrangeImgs[key]，
 // getProjectileOrangeImg() 每幀都會重新查 cache，所以載入成功後會自動從幾何 fallback 切回正式圖。
@@ -1248,14 +1248,14 @@ const PROJECTILE_ORANGE_COOLDOWN_FRAME_DUR = 24;
 
 // ── v0.3.26-shot-calibration：飛行油彈定位 / 尺寸常數（F7 工具可即時調整）──
 // LOCAL_X / LOCAL_Y = 以本體 512×512 原圖為基準的手部發射點（油彈中心對齊這個點）
-// v0.3.26-hitbox-final：F7 實測完成的 visual final 值
+// v0.3.26 stable：F7 實測完成的 visual final 值
 const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X    = 56;
 const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y    = 255;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X   = 0;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y   = 0;
 const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = 1;
 
-// ── v0.3.26-hitbox-final：damage hitbox final 值（F7 + H 手動校準完成）──
+// ── v0.3.26 stable：damage hitbox final 值（F7 + H 手動校準完成）──
 // 油彈 hitbox：以油彈視覺中心為基準（W/H = 實際傷害框大小，OFFSET = 相對中心偏移）
 const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W        = 70;
 const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H        = 49;
@@ -6202,6 +6202,8 @@ function getProjectileOilShotSpawnPoint(po) {
 }
 
 // 油彈繪製尺寸：naturalWidth / naturalHeight × bodyScale × scaleMult
+// 規則（v0.3.26 stable）：與角色本體同一比例系統的素材／特效，一律用原圖 natural 尺寸 × bodyScale，
+// 再用 scaleMult 微調；不要寫死固定像素寬度（例如舊版 72px 會讓圖被縮得太小）。
 function getProjectileOilShotDrawSize(bodyScale) {
   const img = getProjectileOrangeImg('oil_shot_01');
   return {
@@ -8605,8 +8607,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-stable → proj-stable-N
+  if (GAME_VERSION.includes('projectile-orange-stable')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-stable-' + tN;
   // v0.3.26+：projectile-orange-hitbox-final → proj-hitbox-final-N
-  if (GAME_VERSION.includes('projectile-orange-hitbox-final')) {
+  } else if (GAME_VERSION.includes('projectile-orange-hitbox-final')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-hitbox-final-' + tN;
   // v0.3.26+：projectile-orange-hitbox-calibration → proj-hitbox-calib-N
