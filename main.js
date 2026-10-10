@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-calibration-test-1';
-const BUILD_TIME   = '2026-10-10 22:15';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-final-test-1';
+const BUILD_TIME   = '2026-10-10 22:25';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1222,24 +1222,24 @@ const PROJECTILE_ORANGE_COOLDOWN_FRAME_DUR = 24;
 
 // ── v0.3.26-shot-calibration：飛行油彈定位 / 尺寸常數（F7 工具可即時調整）──
 // LOCAL_X / LOCAL_Y = 以本體 512×512 原圖為基準的手部發射點（油彈中心對齊這個點）
-// v0.3.26-hitbox-calibration：F7 實測後的 visual 預設值
+// v0.3.26-hitbox-final：F7 實測完成的 visual final 值
 const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X    = 56;
 const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y    = 255;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X   = 0;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y   = 0;
 const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = 1;
 
-// ── v0.3.26-hitbox-calibration：damage hitbox 預設值（F7 + H 可即時調整）──
+// ── v0.3.26-hitbox-final：damage hitbox final 值（F7 + H 手動校準完成）──
 // 油彈 hitbox：以油彈視覺中心為基準（W/H = 實際傷害框大小，OFFSET = 相對中心偏移）
-const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W        = 105;
-const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H        = 34;
-const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X = 0;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W        = 70;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H        = 49;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X = 71;
 const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y = 0;
 // 本體 hitbox：以碰撞框底部中心（腳底）為基準，往上長高
-const PROJECTILE_ORANGE_BODY_HITBOX_W        = 70;
-const PROJECTILE_ORANGE_BODY_HITBOX_H        = 78;
+const PROJECTILE_ORANGE_BODY_HITBOX_W        = 85;
+const PROJECTILE_ORANGE_BODY_HITBOX_H        = 83;
 const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X = 0;
-const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = -14;
+const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = 2;
 
 // 本體 draw rect（world coordinate，不扣 cameraX）；本體與油彈共用同一套 bodyScale
 function getProjectileOrangeBodyDrawRect(po, img) {
@@ -8579,8 +8579,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-hitbox-final → proj-hitbox-final-N
+  if (GAME_VERSION.includes('projectile-orange-hitbox-final')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-hitbox-final-' + tN;
   // v0.3.26+：projectile-orange-hitbox-calibration → proj-hitbox-calib-N
-  if (GAME_VERSION.includes('projectile-orange-hitbox-calibration')) {
+  } else if (GAME_VERSION.includes('projectile-orange-hitbox-calibration')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-hitbox-calib-' + tN;
   // v0.3.26+：projectile-orange-hitbox → proj-hitbox-N
