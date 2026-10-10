@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-art-debug-test-1';
-const BUILD_TIME   = '2026-10-10 19:10';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-image-cache-fix-test-1';
+const BUILD_TIME   = '2026-10-10 19:15';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1127,19 +1127,21 @@ function initProjectileOrangeArt() {
     if (projectileOrangeImgs[key]) return;
     const img = new Image();
     const fullSrc = resolveAdventureAssetSrc(src);
-    projectileOrangeResolvedSrc[key] = fullSrc;
+    // v0.3.26-image-cache-fix：圖片網址加上版本參數，避開瀏覽器 / CDN 快取到的舊 404
+    const bustedSrc = fullSrc + (fullSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(GAME_VERSION);
+    projectileOrangeResolvedSrc[key] = bustedSrc;
     projectileOrangeLoadStatus[key]  = 'loading';
     img.onload = function () {
       projectileOrangeImgs[key] = img;
       projectileOrangeLoadStatus[key] = 'LOADED';
-      console.log('[ProjectileOrangeArt] LOADED:', key, fullSrc, img.naturalWidth, img.naturalHeight);
+      console.log('[ProjectileOrangeArt] LOADED:', key, bustedSrc, img.naturalWidth, img.naturalHeight);
     };
     img.onerror = function () {
       projectileOrangeLoadStatus[key] = 'ERROR';
-      console.warn('[ProjectileOrangeArt] ERROR:', key, fullSrc, img.currentSrc);
+      console.warn('[ProjectileOrangeArt] ERROR:', key, bustedSrc, img.currentSrc);
     };
-    console.log('[ProjectileOrangeArt] loading:', key, fullSrc);
-    img.src = fullSrc;
+    console.log('[ProjectileOrangeArt] loading:', key, bustedSrc);
+    img.src = bustedSrc;
   });
 }
 
@@ -7989,8 +7991,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-image-cache-fix → proj-img-cache-fix-N
+  if (GAME_VERSION.includes('projectile-orange-image-cache-fix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-img-cache-fix-' + tN;
   // v0.3.26+：projectile-orange-art-debug → proj-art-debug-N
-  if (GAME_VERSION.includes('projectile-orange-art-debug')) {
+  } else if (GAME_VERSION.includes('projectile-orange-art-debug')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-art-debug-' + tN;
   // v0.3.26+：projectile-orange-art → proj-art-N
