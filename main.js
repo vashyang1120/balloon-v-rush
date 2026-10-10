@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-art-test-1';
-const BUILD_TIME   = '2026-10-10 18:35';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-art-debug-test-1';
+const BUILD_TIME   = '2026-10-10 19:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1112,18 +1112,33 @@ const PROJECTILE_ORANGE_ASSETS = {
 
 const projectileOrangeImgs = {};
 
+// v0.3.26-debug：診斷用狀態（每個 key 只 log 一次，避免每幀刷 console）
+const projectileOrangeGetFailLogged      = {};
+const projectileOrangeDrawFallbackLogged = {};
+const projectileOrangeLoadStatus         = {}; // key → 'loading' | 'LOADED' | 'ERROR'
+const projectileOrangeResolvedSrc        = {}; // key → 實際請求的完整網址
+
 function initProjectileOrangeArt() {
+  console.log('[ProjectileOrangeArt] init start, version:', GAME_VERSION);
+  console.log('[ProjectileOrangeArt] assets:', PROJECTILE_ORANGE_ASSETS);
+  console.log('[ProjectileOrangeArt] ADVENTURE_BASE_URL:', ADVENTURE_BASE_URL,
+    '| page location:', (typeof location !== 'undefined' ? location.href : '(n/a)'));
   Object.entries(PROJECTILE_ORANGE_ASSETS).forEach(([key, src]) => {
     if (projectileOrangeImgs[key]) return;
     const img = new Image();
     const fullSrc = resolveAdventureAssetSrc(src);
+    projectileOrangeResolvedSrc[key] = fullSrc;
+    projectileOrangeLoadStatus[key]  = 'loading';
     img.onload = function () {
       projectileOrangeImgs[key] = img;
-      console.log('[ProjectileOrangeArt] loaded:', key, fullSrc, img.naturalWidth, img.naturalHeight);
+      projectileOrangeLoadStatus[key] = 'LOADED';
+      console.log('[ProjectileOrangeArt] LOADED:', key, fullSrc, img.naturalWidth, img.naturalHeight);
     };
     img.onerror = function () {
-      console.warn('[ProjectileOrangeArt] NOT FOUND:', key, fullSrc);
+      projectileOrangeLoadStatus[key] = 'ERROR';
+      console.warn('[ProjectileOrangeArt] ERROR:', key, fullSrc, img.currentSrc);
     };
+    console.log('[ProjectileOrangeArt] loading:', key, fullSrc);
     img.src = fullSrc;
   });
 }
@@ -1131,7 +1146,50 @@ function initProjectileOrangeArt() {
 function getProjectileOrangeImg(key) {
   const img = projectileOrangeImgs[key];
   if (img && img.complete && img.naturalWidth > 0) return img;
+  // v0.3.26-debug：取圖失敗時每個 key 只 log 一次
+  if (!projectileOrangeGetFailLogged[key]) {
+    projectileOrangeGetFailLogged[key] = true;
+    console.warn('[ProjectileOrangeArt] get failed:', key, {
+      exists:        !!img,
+      complete:      img && img.complete,
+      naturalWidth:  img && img.naturalWidth,
+      naturalHeight: img && img.naturalHeight,
+      src:           img && img.src,
+      loadStatus:    projectileOrangeLoadStatus[key] || '(not started)',
+      requestedSrc:  projectileOrangeResolvedSrc[key] || '(none)',
+    });
+  }
   return null;
+}
+
+// v0.3.26-debug：畫面左上角 asset status HUD（只在測試版、場上有 projectile orange 時顯示）
+function drawProjectileOrangeAssetStatusHud() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  if (!projectileOranges || projectileOranges.length === 0) return;
+  const keys = Object.keys(PROJECTILE_ORANGE_ASSETS);
+  const x = 12, y = 64, lineH = 15;
+  const sampleSrc = projectileOrangeResolvedSrc['idle_01'] || '';
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(x - 6, y - 14, 470, lineH * (keys.length + 3) + 10);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 12px monospace';
+  ctx.fillStyle = '#ffe066';
+  ctx.fillText('ProjectileOrangeArt:', x, y);
+  ctx.font = '11px monospace';
+  keys.forEach((key, i) => {
+    const img = projectileOrangeImgs[key];
+    const ok  = !!(img && img.complete && img.naturalWidth > 0);
+    const st  = projectileOrangeLoadStatus[key] || 'not started';
+    ctx.fillStyle = ok ? '#7dff9a' : '#ff8080';
+    ctx.fillText(key + ': ' + (ok ? 'OK ' + img.naturalWidth + 'x' + img.naturalHeight : 'missing (' + st + ')'),
+      x, y + lineH * (i + 1));
+  });
+  ctx.fillStyle = '#aaccff';
+  ctx.fillText('src: ' + (sampleSrc.length > 66 ? '…' + sampleSrc.slice(-65) : sampleSrc), x, y + lineH * (keys.length + 1));
+  ctx.fillText('base: ' + ADVENTURE_BASE_URL, x, y + lineH * (keys.length + 2));
+  ctx.restore();
 }
 
 // 繪製參數（只影響視覺，不動 hitbox）
@@ -5769,6 +5827,20 @@ function drawProjectileOranges(cx) {
     }
     const img = getProjectileOrangeImg(key) || getProjectileOrangeImg('idle_01');
 
+    // v0.3.26-debug：畫 fallback 時，每個 phase + key 只 log 一次
+    if (!img) {
+      const logKey = po.phase + '|' + key;
+      if (!projectileOrangeDrawFallbackLogged[logKey]) {
+        projectileOrangeDrawFallbackLogged[logKey] = true;
+        console.warn('[ProjectileOrangeArt] draw fallback:', {
+          phase: po.phase,
+          key,
+          fallbackIdleExists: !!getProjectileOrangeImg('idle_01'),
+          projectileOrangeImgsKeys: Object.keys(projectileOrangeImgs),
+        });
+      }
+    }
+
     ctx.save();
 
     if (img) {
@@ -6576,6 +6648,7 @@ function draw() {
     drawHUD();
     drawHintBox();
     drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
+    drawProjectileOrangeAssetStatusHud(); // v0.3.26-debug：projectile orange 載入狀態（測試版）
   } else if (gameState === 'paused') {
     drawWorld();
     drawHUD();
@@ -7916,8 +7989,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-art-debug → proj-art-debug-N
+  if (GAME_VERSION.includes('projectile-orange-art-debug')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-art-debug-' + tN;
   // v0.3.26+：projectile-orange-art → proj-art-N
-  if (GAME_VERSION.includes('projectile-orange-art')) {
+  } else if (GAME_VERSION.includes('projectile-orange-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-art-' + tN;
   // v0.3.25+：dual-orange-stable → dual-stable-N
