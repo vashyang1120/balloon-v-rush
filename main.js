@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-localstorage-fix-test-1';
-const BUILD_TIME   = '2026-10-10 16:55';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-stable-test-1';
+const BUILD_TIME   = '2026-10-10 17:05';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1039,7 +1039,7 @@ const CHIMNEY_ORANGE_OIL_EXTRA_OFFSET_Y = -111;
 const CHIMNEY_ORANGE_OIL_DRAW_SCALE   = CHIMNEY_ORANGE_BODY_DRAW_SCALE; // 同本體比例（備用）
 
 // ── 雙噴嘴橘子美術（v0.3.25 art-integration，非阻塞）──────────────────────
-// idle×5 / warning×2 / spray×1 / cooldown×2；油圖本版不接
+// idle×5 / warning×2 / spray×1 / cooldown×2 + 左右油圖 oil_left_01 / oil_right_01（v0.3.25 stable）
 const DUAL_ORANGE_ASSETS = {
   idle_01:     'assets/enemies/orange/orange_dual_idle_01.png',
   idle_02:     'assets/enemies/orange/orange_dual_idle_02.png',
@@ -1111,13 +1111,13 @@ const DUAL_ORANGE_OIL_LEFT_LOCAL_Y = 240;
 const DUAL_ORANGE_OIL_RIGHT_LOCAL_X = 392;
 const DUAL_ORANGE_OIL_RIGHT_LOCAL_Y = 240;
 
-// 左右油圖 extra offset 預設值（v0.3.25-dual-orange-oil-position-final-test-1 手動校準值）
+// 左右油圖 extra offset 預設值（v0.3.25 stable final 值，F10 手動校準）
 const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X  = -8;
 const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = 11;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = -139;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 10;
 
-// ── v0.3.25-oil-hitbox-final：左右油圖 damage hitbox 預設值（F10 手動校準完成值）──
+// ── v0.3.25 stable：左右油圖 damage hitbox final 預設值（F10 手動校準完成值）──
 // 判定集中在主要水平油流，不吃整張油圖外框
 const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 65;
 const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 40;
@@ -7722,8 +7722,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-stable → dual-stable-N
+  if (GAME_VERSION.includes('dual-orange-stable')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-stable-' + tN;
   // v0.3.25+：dual-orange-oil-localstorage-fix → dual-oil-ls-fix-N
-  if (GAME_VERSION.includes('dual-orange-oil-localstorage-fix')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-localstorage-fix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-ls-fix-' + tN;
   // v0.3.25+：dual-orange-oil-hitbox-final → dual-oil-hitbox-final-N
