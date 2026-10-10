@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-hitbox-final-test-1';
-const BUILD_TIME   = '2026-10-10 16:40';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-localstorage-fix-test-1';
+const BUILD_TIME   = '2026-10-10 16:55';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1119,13 +1119,13 @@ const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 10;
 
 // ── v0.3.25-oil-hitbox-final：左右油圖 damage hitbox 預設值（F10 手動校準完成值）──
 // 判定集中在主要水平油流，不吃整張油圖外框
-const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 70;
-const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 35;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 65;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 40;
 const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X  = 0;
 const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y  = 0;
 const DUAL_ORANGE_OIL_RIGHT_HITBOX_W = 70;
 const DUAL_ORANGE_OIL_RIGHT_HITBOX_H = 40;
-const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = 143;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = 144;
 const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y = 0;
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
@@ -1436,83 +1436,106 @@ let dualOilRightHitboxH       = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
 let dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
 let dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
 
+// v0.3.25-localstorage-fix：把 runtime 變數全部重置為本版 final 常數
+// save=true 時同時寫入 localStorage（R reset 使用）
+function resetDualOilCalibrationToDefaults({ save = false } = {}) {
+  dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
+  dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
+  dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
+  dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
+
+  dualOilLeftHitboxW        = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
+  dualOilLeftHitboxH        = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
+  dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
+  dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
+
+  dualOilRightHitboxW       = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
+  dualOilRightHitboxH       = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
+  dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
+  dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
+
+  if (save) saveDualOilCalibrationSettings();
+}
+
+// 目前 runtime 數值 → localStorage 資料格式（含 version 防呆）
+function buildDualOilCalibrationData() {
+  return {
+    version: GAME_VERSION,
+    left:  { offsetX: dualOilLeftOffsetX,  offsetY: dualOilLeftOffsetY,
+             hitboxW: dualOilLeftHitboxW,   hitboxH: dualOilLeftHitboxH,
+             hitboxOX: dualOilLeftHitboxOffsetX, hitboxOY: dualOilLeftHitboxOffsetY },
+    right: { offsetX: dualOilRightOffsetX, offsetY: dualOilRightOffsetY,
+             hitboxW: dualOilRightHitboxW,  hitboxH: dualOilRightHitboxH,
+             hitboxOX: dualOilRightHitboxOffsetX, hitboxOY: dualOilRightHitboxOffsetY }
+  };
+}
+
+// 靜默寫入（不顯示 hint，供頁面載入時覆寫舊資料使用）
+function writeDualOilCalibrationToStorage() {
+  try {
+    const data = buildDualOilCalibrationData();
+    localStorage.setItem(DUAL_OIL_CALIB_LS_KEY, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 function loadDualOilCalibrationSettings() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   try {
     const raw = localStorage.getItem(DUAL_OIL_CALIB_LS_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      // Visual offsets（兼容舊格式）
-      if (data.left) {
-        if (typeof data.left.offsetX === 'number')  dualOilLeftOffsetX  = data.left.offsetX;
-        if (typeof data.left.offsetY === 'number')  dualOilLeftOffsetY  = data.left.offsetY;
-        // Hitbox（新格式）
-        if (typeof data.left.hitboxW  === 'number') dualOilLeftHitboxW        = data.left.hitboxW;
-        if (typeof data.left.hitboxH  === 'number') dualOilLeftHitboxH        = data.left.hitboxH;
-        if (typeof data.left.hitboxOX === 'number') dualOilLeftHitboxOffsetX  = data.left.hitboxOX;
-        if (typeof data.left.hitboxOY === 'number') dualOilLeftHitboxOffsetY  = data.left.hitboxOY;
-      }
-      if (data.right) {
-        if (typeof data.right.offsetX === 'number') dualOilRightOffsetX = data.right.offsetX;
-        if (typeof data.right.offsetY === 'number') dualOilRightOffsetY = data.right.offsetY;
-        if (typeof data.right.hitboxW  === 'number') dualOilRightHitboxW       = data.right.hitboxW;
-        if (typeof data.right.hitboxH  === 'number') dualOilRightHitboxH       = data.right.hitboxH;
-        if (typeof data.right.hitboxOX === 'number') dualOilRightHitboxOffsetX = data.right.hitboxOX;
-        if (typeof data.right.hitboxOY === 'number') dualOilRightHitboxOffsetY = data.right.hitboxOY;
-      }
-      console.log('[DualOilCalib] loaded from localStorage:', data);
+    if (!raw) return; // 沒有存檔：直接使用常數預設值
+
+    const data = JSON.parse(raw);
+
+    // v0.3.25-localstorage-fix：版本防呆
+    // 沒有 version、或 version 不是目前 GAME_VERSION → 不套用舊資料，
+    // 使用本版 final 常數，並把 localStorage 覆寫成本版預設值
+    if (!data || data.version !== GAME_VERSION) {
+      resetDualOilCalibrationToDefaults();
+      writeDualOilCalibrationToStorage();
+      console.log('[DualOilCalib] ignored stale localStorage (version:',
+        (data && data.version) || '(none)', '→ current:', GAME_VERSION, '), using defaults');
+      return;
     }
+
+    // 只有 version === GAME_VERSION 才套用
+    if (data.left) {
+      if (typeof data.left.offsetX  === 'number') dualOilLeftOffsetX        = data.left.offsetX;
+      if (typeof data.left.offsetY  === 'number') dualOilLeftOffsetY        = data.left.offsetY;
+      if (typeof data.left.hitboxW  === 'number') dualOilLeftHitboxW        = data.left.hitboxW;
+      if (typeof data.left.hitboxH  === 'number') dualOilLeftHitboxH        = data.left.hitboxH;
+      if (typeof data.left.hitboxOX === 'number') dualOilLeftHitboxOffsetX  = data.left.hitboxOX;
+      if (typeof data.left.hitboxOY === 'number') dualOilLeftHitboxOffsetY  = data.left.hitboxOY;
+    }
+    if (data.right) {
+      if (typeof data.right.offsetX  === 'number') dualOilRightOffsetX       = data.right.offsetX;
+      if (typeof data.right.offsetY  === 'number') dualOilRightOffsetY       = data.right.offsetY;
+      if (typeof data.right.hitboxW  === 'number') dualOilRightHitboxW       = data.right.hitboxW;
+      if (typeof data.right.hitboxH  === 'number') dualOilRightHitboxH       = data.right.hitboxH;
+      if (typeof data.right.hitboxOX === 'number') dualOilRightHitboxOffsetX = data.right.hitboxOX;
+      if (typeof data.right.hitboxOY === 'number') dualOilRightHitboxOffsetY = data.right.hitboxOY;
+    }
+    console.log('[DualOilCalib] loaded from localStorage:', data);
   } catch (e) {
     // 讀取失敗時回到預設值
-    dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
-    dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
-    dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
-    dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
-    dualOilLeftHitboxW  = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
-    dualOilLeftHitboxH  = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
-    dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
-    dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
-    dualOilRightHitboxW = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
-    dualOilRightHitboxH = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
-    dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
-    dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
+    resetDualOilCalibrationToDefaults();
   }
 }
 
 function saveDualOilCalibrationSettings() {
-  try {
-    const data = {
-      left:  { offsetX: dualOilLeftOffsetX,  offsetY: dualOilLeftOffsetY,
-               hitboxW: dualOilLeftHitboxW,   hitboxH: dualOilLeftHitboxH,
-               hitboxOX: dualOilLeftHitboxOffsetX, hitboxOY: dualOilLeftHitboxOffsetY },
-      right: { offsetX: dualOilRightOffsetX, offsetY: dualOilRightOffsetY,
-               hitboxW: dualOilRightHitboxW,  hitboxH: dualOilRightHitboxH,
-               hitboxOX: dualOilRightHitboxOffsetX, hitboxOY: dualOilRightHitboxOffsetY }
-    };
-    localStorage.setItem(DUAL_OIL_CALIB_LS_KEY, JSON.stringify(data));
+  const data = writeDualOilCalibrationToStorage();
+  if (data) {
     showHint('💾 dual oil visual + hitbox 已存入 localStorage', 150);
     console.log('[DualOilCalib] saved:', data);
-  } catch (e) {
+  } else {
     showHint('localStorage 儲存失敗', 150);
   }
 }
 
 function resetDualOilCalibrationSettings() {
-  // Visual offsets
-  dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
-  dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
-  dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
-  dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
-  // Hitbox
-  dualOilLeftHitboxW        = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
-  dualOilLeftHitboxH        = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
-  dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
-  dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
-  dualOilRightHitboxW       = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
-  dualOilRightHitboxH       = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
-  dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
-  dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
-  saveDualOilCalibrationSettings();
+  resetDualOilCalibrationToDefaults({ save: true });
   showHint('🔄 dual oil visual + hitbox 已重置為預設值', 150);
 }
 
@@ -7699,8 +7722,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-oil-localstorage-fix → dual-oil-ls-fix-N
+  if (GAME_VERSION.includes('dual-orange-oil-localstorage-fix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-oil-ls-fix-' + tN;
   // v0.3.25+：dual-orange-oil-hitbox-final → dual-oil-hitbox-final-N
-  if (GAME_VERSION.includes('dual-orange-oil-hitbox-final')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-hitbox-final')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-hitbox-final-' + tN;
   // v0.3.25+：dual-orange-oil-size-formula-fix → dual-oil-size-fix-N
