@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.27-chapter2-orange-family-mix-test-1';
-const BUILD_TIME   = '2026-10-11 00:35';
+const GAME_VERSION = 'adventure-v0.3.27-chapter2-orange-family-mix-test-2';
+const BUILD_TIME   = '2026-10-11 01:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1059,20 +1059,49 @@ const DUAL_ORANGE_ASSETS = {
 const dualOrangeImgs = {};
 let dualOrangeLoadedCount = 0;
 
+// v0.3.27-test-2：dual orange 圖片載入加入版本 cache busting + 失敗重試（同 projectile orange）
+// 最多重試 3 次（300 / 800 / 1500ms），每次換新網址參數；成功寫入 dualOrangeImgs[key]，
+// getDualOrangeImg() 每幀重新查 cache，所以載入成功後會自動從幾何 fallback 切回正式圖。
+const DUAL_ORANGE_IMG_RETRY_DELAYS_MS = [300, 800, 1500];
+const dualOrangeLoadStatus = {}; // key → 'loading' | 'retry N' | 'LOADED' | 'ERROR'
+
+function loadDualOrangeImage(key, bustedSrc, retryCount) {
+  const img = new Image();
+  const src = retryCount === 0
+    ? bustedSrc
+    : bustedSrc + '&retry=' + retryCount + '&ts=' + Date.now();
+  dualOrangeLoadStatus[key] = retryCount === 0 ? 'loading' : 'retry ' + retryCount;
+  if (retryCount === 0) console.log('[DualOrangeArt] loading:', key, src);
+  else                  console.log('[DualOrangeArt] retry ' + retryCount + ':', key, src);
+
+  img.onload = function () {
+    if (!dualOrangeImgs[key]) dualOrangeLoadedCount++;
+    dualOrangeImgs[key] = img;
+    dualOrangeLoadStatus[key] = 'LOADED';
+    console.log('[DualOrangeArt] LOADED:', key, src, img.naturalWidth, img.naturalHeight);
+  };
+  img.onerror = function () {
+    if (retryCount < DUAL_ORANGE_IMG_RETRY_DELAYS_MS.length) {
+      const delay = DUAL_ORANGE_IMG_RETRY_DELAYS_MS[retryCount];
+      dualOrangeLoadStatus[key] = 'retry ' + (retryCount + 1);
+      setTimeout(function () {
+        if (dualOrangeImgs[key]) return; // 期間已成功就不再重試
+        loadDualOrangeImage(key, bustedSrc, retryCount + 1);
+      }, delay);
+    } else {
+      dualOrangeLoadStatus[key] = 'ERROR';
+      console.warn('[DualOrangeArt] ERROR:', key, src, '(canvas fallback active)');
+    }
+  };
+  img.src = src;
+}
+
 function initDualOrangeArt() {
   Object.entries(DUAL_ORANGE_ASSETS).forEach(([key, src]) => {
     if (dualOrangeImgs[key]) return;
-    const img = new Image();
-    const fullSrc = resolveAdventureAssetSrc(src);
-    img.onload = function () {
-      dualOrangeImgs[key] = img;
-      dualOrangeLoadedCount++;
-      console.log('[DualOrangeArt] loaded:', key, fullSrc);
-    };
-    img.onerror = function () {
-      console.warn('[DualOrangeArt] not found:', key, fullSrc, '(canvas fallback active)');
-    };
-    img.src = fullSrc;
+    const fullSrc   = resolveAdventureAssetSrc(src);
+    const bustedSrc = fullSrc + (fullSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(GAME_VERSION);
+    loadDualOrangeImage(key, bustedSrc, 0);
   });
 }
 
@@ -1200,8 +1229,12 @@ function getProjectileOrangeImg(key) {
 }
 
 // v0.3.26-debug：畫面左上角 asset status HUD（只在測試版、場上有 projectile orange 時顯示）
+// v0.3.27-test-2：asset status HUD 預設關閉，按 F6 開 / 關（未來其他 asset HUD 也受此控制）
+let assetStatusHudVisible = false;
+
 function drawProjectileOrangeAssetStatusHud() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  if (!assetStatusHudVisible) return;
   if (!projectileOranges || projectileOranges.length === 0) return;
   const keys = Object.keys(PROJECTILE_ORANGE_ASSETS);
   const x = 12, y = 64, lineH = 15;
@@ -2031,9 +2064,25 @@ function startOrangeFamilyMixTestLevel() {
   fanOranges.length = 0;
   spikes.length = 0;
 
+  // v0.3.27-test-2：本關只測敵人，清空所有收集物（避免終點後 / 與橘子重疊的金幣與氣球）
+  coins.length = 0;
+  balloons260.length = 0;
+  roundBalloons.length = 0;
+  currentHiddenTreasure = null;
+
   // 關卡長度與終點（只影響本次 runtime；loadLevel 時會依 LEVELS 重設）
   LEVEL_LENGTH = 6200;
   FINISH_X     = 6000;
+
+  // v0.3.27-test-2：測試容錯 — HP 6 顆、補血道具（runtime-only，不呼叫 saveInventory）
+  player.maxHp = 6;
+  player.hp    = 6;
+  levelStartHp = 6;
+  if (levelStartSnapshot) levelStartSnapshot.hp = 6;
+  ensureInventoryItems();
+  testSupplyOriginalItems = Object.assign({}, playerInventory.items); // 存檔時改用這份
+  playerInventory.items.bandage     = Math.max(playerInventory.items.bandage     || 0, 5);
+  playerInventory.items.firstAidKit = Math.max(playerInventory.items.firstAidKit || 0, 1);
 
   const oy = GROUND_Y - CONFIG.ORANGE_H;
   const mkNormal = (x) => ({
@@ -2073,13 +2122,16 @@ function startOrangeFamilyMixTestLevel() {
   if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
   gameState = 'playing';
   showHint('🍊 橘子家族測試：普通 / 煙囪 / 雙噴嘴 / 飛行油彈', 300);
-  // 第一則提示結束後，再顯示一則短提示（若玩家已離開本測試關則不顯示）
+  // 依序顯示補給提示與短提示（若玩家已離開本測試關則不顯示）
   const familyLevelIdx = idx;
+  const stillInFamilyLevel = () =>
+    gameState === 'playing' && currentLevelIndex === familyLevelIdx && LEVEL_LENGTH === 6200;
   setTimeout(() => {
-    if (gameState === 'playing' && currentLevelIndex === familyLevelIdx && LEVEL_LENGTH === 6200) {
-      showHint('不同橘子怪的出油方式不同，看清楚動作再通過！', 240);
-    }
+    if (stillInFamilyLevel()) showHint('測試關補給：HP 6，繃帶 ×5，急救包 ×1', 220);
   }, 5200);
+  setTimeout(() => {
+    if (stillInFamilyLevel()) showHint('不同橘子怪的出油方式不同，看清楚動作再通過！', 240);
+  }, 9200);
 }
 
 function startProjectileOrangeTestLevel() {
@@ -2451,6 +2503,15 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
+  // 測試版：F6 開 / 關 asset status HUD（不與 F7 / F9 / F10 互斥）
+  // F2 為備用鍵：部分瀏覽器的 F6 會把焦點跳到網址列
+  if (ADVENTURE_TEST_TOOLS_ENABLED && (e.code === 'F6' || e.code === 'F2')) {
+    assetStatusHudVisible = !assetStatusHudVisible;
+    showHint(assetStatusHudVisible ? 'Asset Status HUD: ON' : 'Asset Status HUD: OFF', 120);
+    e.preventDefault();
+    return;
+  }
+
   // 測試版：F7 開關 projectile oil shot calibration mode（與 F9 / F10 互斥）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F7') {
     projectileOilShotCalibrationMode = !projectileOilShotCalibrationMode;
@@ -2919,8 +2980,18 @@ function loadInventory() {
   return d;
 }
 
+// v0.3.27-test-2：橘子家族測試關期間，補給道具是 runtime-only；
+// 若期間有任何流程呼叫 saveInventory()，存檔中的 items 會使用進入測試關前的數量。
+let testSupplyOriginalItems = null;
+
 function saveInventory() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(playerInventory)); } catch(e) {}
+  try {
+    let data = playerInventory;
+    if (testSupplyOriginalItems) {
+      data = Object.assign({}, playerInventory, { items: Object.assign({}, testSupplyOriginalItems) });
+    }
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch(e) {}
 }
 
 function resetInventory() {
@@ -4698,6 +4769,15 @@ function loadLevel(index) {
       dualNozzleOranges.push(dn);
     });
   }
+
+  // v0.3.27-test-2：橘子家族測試關會暫時把 maxHp 設為 6；任何 loadLevel 都恢復正常上限
+  if (player.maxHp !== CONFIG.MAX_HP) {
+    player.maxHp = CONFIG.MAX_HP;
+    player.hp    = Math.min(player.hp, player.maxHp);
+  }
+
+  // v0.3.27-test-2：離開橘子家族測試關（任何 loadLevel）時，結束測試補給的存檔保護
+  testSupplyOriginalItems = null;
 
   // v0.3.26：projectile orange 只存在測試關，任何 loadLevel 都先清空
   projectileOranges.length = 0;
@@ -8685,7 +8765,7 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
-  // v0.3.27+：chapter2-orange-family-mix → orange-family-N
+  // v0.3.27+：chapter2-orange-family-mix → orange-family-N（test-N 自動帶入）
   if (GAME_VERSION.includes('chapter2-orange-family-mix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-family-' + tN;
