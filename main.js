@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-stable-test-1';
-const BUILD_TIME   = '2026-10-10 23:30';
+const GAME_VERSION = 'adventure-v0.3.27-chapter2-orange-family-mix-test-1';
+const BUILD_TIME   = '2026-10-11 00:35';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2004,6 +2004,84 @@ function startDualOrangeTestLevel() {
 // v0.3.26：飛行油彈橘子美術觀察入口（TEST MODE 限定，runtime-only）
 // 用 2-2 地圖當底板，清掉其他威脅，放 projectile orange 觀察 idle/warning/release 循環。
 // v0.3.26-complete-art：每隻 release 都會生油彈，改成只放 3 隻避免畫面太亂。
+// v0.3.27：第二章「橘子怪家族」綜合測試關（TEST MODE 限定，runtime-only）
+// 用 2-2 地圖當底板，清掉原有威脅，依序展示四種橘子怪；不修改 LEVELS 原始資料。
+// 注意：煙囪 / 雙噴嘴橘子的狀態欄位是 sprayPhase（不是 phase），與正式 2-x 關卡的建構方式一致。
+function startOrangeFamilyMixTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
+  if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+
+  // 清掉底板原有威脅（只影響本次 runtime）
+  enemies.length = 0;
+  orangeNemeses.length = 0;
+  chimneyOranges.length = 0;
+  dualNozzleOranges.length = 0;
+  projectileOranges.length = 0;
+  projectileOrangeShots.length = 0;
+  fanOranges.length = 0;
+  spikes.length = 0;
+
+  // 關卡長度與終點（只影響本次 runtime；loadLevel 時會依 LEVELS 重設）
+  LEVEL_LENGTH = 6200;
+  FINISH_X     = 6000;
+
+  const oy = GROUND_Y - CONFIG.ORANGE_H;
+  const mkNormal = (x) => ({
+    x, y: oy, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false,
+    type: 'balloonNemesis', variant: 'straight', tier: 'normal',
+  });
+  const mkChimney = (x) => ({
+    x, y: oy, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'chimneyOrange', sprayPhase: 'idle', phaseTimer: 0, sprayActive: false, active: true,
+  });
+  const mkDual = (x) => ({
+    x, y: oy, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'dualNozzleOrange', sprayPhase: 'idle', phaseTimer: 0, sprayActive: false, active: true,
+  });
+  const mkProjectile = (x) => ({
+    x, y: oy, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    active: true, phase: 'idle', phaseTimer: 0, shotSpawned: false,
+  });
+
+  // A. 前段：普通橘子（水平近距離噴油）
+  orangeNemeses.push(mkNormal(700));
+  // B. 前中段：煙囪橘子（向上油柱）
+  chimneyOranges.push(mkChimney(1300));
+  // C. 中段：雙噴嘴橘子（左右噴油）
+  dualNozzleOranges.push(mkDual(2000));
+  // D. 中後段：飛行油彈橘子（遠距離油彈）
+  projectileOranges.push(mkProjectile(2700));
+  // E. 後段：普通 + 飛行油彈（拉開 400px）
+  orangeNemeses.push(mkNormal(3500));
+  projectileOranges.push(mkProjectile(3900));
+  // F. 結尾前：煙囪 + 雙噴嘴（拉開 550px）
+  chimneyOranges.push(mkChimney(4700));
+  dualNozzleOranges.push(mkDual(5250));
+
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('🍊 橘子家族測試：普通 / 煙囪 / 雙噴嘴 / 飛行油彈', 300);
+  // 第一則提示結束後，再顯示一則短提示（若玩家已離開本測試關則不顯示）
+  const familyLevelIdx = idx;
+  setTimeout(() => {
+    if (gameState === 'playing' && currentLevelIndex === familyLevelIdx && LEVEL_LENGTH === 6200) {
+      showHint('不同橘子怪的出油方式不同，看清楚動作再通過！', 240);
+    }
+  }, 5200);
+}
+
 function startProjectileOrangeTestLevel() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
@@ -8607,8 +8685,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.27+：chapter2-orange-family-mix → orange-family-N
+  if (GAME_VERSION.includes('chapter2-orange-family-mix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-family-' + tN;
   // v0.3.26+：projectile-orange-stable → proj-stable-N
-  if (GAME_VERSION.includes('projectile-orange-stable')) {
+  } else if (GAME_VERSION.includes('projectile-orange-stable')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-stable-' + tN;
   // v0.3.26+：projectile-orange-hitbox-final → proj-hitbox-final-N
@@ -10860,6 +10942,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestProjOrange) {
     btnTestProjOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestProjOrange.addEventListener('click', startProjectileOrangeTestLevel);
+  }
+  // v0.3.27：第二章橘子家族綜合測試按鈕
+  const btnTestOrangeFamily = document.getElementById('btn-pause-test-orange-family');
+  if (btnTestOrangeFamily) {
+    btnTestOrangeFamily.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestOrangeFamily.addEventListener('click', startOrangeFamilyMixTestLevel);
   }
 })();
 
