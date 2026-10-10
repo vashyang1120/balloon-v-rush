@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-final-test-1';
-const BUILD_TIME   = '2026-10-10 22:25';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-final-test-2';
+const BUILD_TIME   = '2026-10-10 23:15';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1127,6 +1127,45 @@ const projectileOrangeDrawFallbackLogged = {};
 const projectileOrangeLoadStatus         = {}; // key → 'loading' | 'LOADED' | 'ERROR'
 const projectileOrangeResolvedSrc        = {}; // key → 實際請求的完整網址
 
+// v0.3.26-hitbox-final：圖片載入失敗時最多重試 3 次（300 / 800 / 1500ms），
+// 每次重試都換新的網址參數避開快取；全部失敗才標記 ERROR。
+// 每次重試都建立新的 Image 物件，成功的那張寫入 projectileOrangeImgs[key]，
+// getProjectileOrangeImg() 每幀都會重新查 cache，所以載入成功後會自動從幾何 fallback 切回正式圖。
+const PROJECTILE_ORANGE_IMG_RETRY_DELAYS_MS = [300, 800, 1500];
+
+function loadProjectileOrangeImage(key, bustedSrc, retryCount) {
+  const img = new Image();
+  const src = retryCount === 0
+    ? bustedSrc
+    : bustedSrc + '&retry=' + retryCount + '&ts=' + Date.now();
+  projectileOrangeResolvedSrc[key] = src;
+  projectileOrangeLoadStatus[key]  = retryCount === 0 ? 'loading' : 'retry ' + retryCount;
+
+  img.onload = function () {
+    projectileOrangeImgs[key] = img;
+    projectileOrangeLoadStatus[key] = 'LOADED';
+    projectileOrangeGetFailLogged[key] = false; // 之後若又失敗可再 log
+    console.log('[ProjectileOrangeArt] LOADED:', key, src, img.naturalWidth, img.naturalHeight,
+      retryCount > 0 ? '(after retry ' + retryCount + ')' : '');
+  };
+  img.onerror = function () {
+    if (retryCount < PROJECTILE_ORANGE_IMG_RETRY_DELAYS_MS.length) {
+      const delay = PROJECTILE_ORANGE_IMG_RETRY_DELAYS_MS[retryCount];
+      projectileOrangeLoadStatus[key] = 'retry ' + (retryCount + 1);
+      console.warn('[ProjectileOrangeArt] load failed, retry', retryCount + 1, 'in', delay + 'ms:', key, src);
+      setTimeout(function () {
+        if (projectileOrangeImgs[key]) return; // 期間已成功就不再重試
+        loadProjectileOrangeImage(key, bustedSrc, retryCount + 1);
+      }, delay);
+    } else {
+      projectileOrangeLoadStatus[key] = 'ERROR';
+      console.warn('[ProjectileOrangeArt] ERROR (gave up after ' + retryCount + ' retries):', key, src, img.currentSrc);
+    }
+  };
+  console.log('[ProjectileOrangeArt] loading:', key, src);
+  img.src = src;
+}
+
 function initProjectileOrangeArt() {
   console.log('[ProjectileOrangeArt] init start, version:', GAME_VERSION);
   console.log('[ProjectileOrangeArt] assets:', PROJECTILE_ORANGE_ASSETS);
@@ -1134,23 +1173,10 @@ function initProjectileOrangeArt() {
     '| page location:', (typeof location !== 'undefined' ? location.href : '(n/a)'));
   Object.entries(PROJECTILE_ORANGE_ASSETS).forEach(([key, src]) => {
     if (projectileOrangeImgs[key]) return;
-    const img = new Image();
     const fullSrc = resolveAdventureAssetSrc(src);
-    // v0.3.26-image-cache-fix：圖片網址加上版本參數，避開瀏覽器 / CDN 快取到的舊 404
+    // 圖片網址加上版本參數，避開瀏覽器 / CDN 快取到的舊 404
     const bustedSrc = fullSrc + (fullSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(GAME_VERSION);
-    projectileOrangeResolvedSrc[key] = bustedSrc;
-    projectileOrangeLoadStatus[key]  = 'loading';
-    img.onload = function () {
-      projectileOrangeImgs[key] = img;
-      projectileOrangeLoadStatus[key] = 'LOADED';
-      console.log('[ProjectileOrangeArt] LOADED:', key, bustedSrc, img.naturalWidth, img.naturalHeight);
-    };
-    img.onerror = function () {
-      projectileOrangeLoadStatus[key] = 'ERROR';
-      console.warn('[ProjectileOrangeArt] ERROR:', key, bustedSrc, img.currentSrc);
-    };
-    console.log('[ProjectileOrangeArt] loading:', key, bustedSrc);
-    img.src = bustedSrc;
+    loadProjectileOrangeImage(key, bustedSrc, 0);
   });
 }
 
@@ -1236,10 +1262,10 @@ const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H        = 49;
 const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X = 71;
 const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y = 0;
 // 本體 hitbox：以碰撞框底部中心（腳底）為基準，往上長高
-const PROJECTILE_ORANGE_BODY_HITBOX_W        = 85;
-const PROJECTILE_ORANGE_BODY_HITBOX_H        = 83;
-const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X = 0;
-const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = 2;
+const PROJECTILE_ORANGE_BODY_HITBOX_W        = 65;
+const PROJECTILE_ORANGE_BODY_HITBOX_H        = 73;
+const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X = 2;
+const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = 4;
 
 // 本體 draw rect（world coordinate，不扣 cameraX）；本體與油彈共用同一套 bodyScale
 function getProjectileOrangeBodyDrawRect(po, img) {
