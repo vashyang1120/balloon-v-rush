@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-stable-test-1';
-const BUILD_TIME   = '2026-10-10 17:05';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-art-test-1';
+const BUILD_TIME   = '2026-10-10 18:35';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1099,6 +1099,55 @@ const DUAL_ORANGE_WARNING_FRAME_DUR = 8;   // 每 8 frames 換一張（較快，
 // cooldown 動畫參數（2 張慢速交替，喘氣感）
 const DUAL_ORANGE_COOLDOWN_FRAME_DUR = 30; // 每 30 frames 換一張（約 2fps，慢速疲憊）
 
+// ── v0.3.26：飛行油彈橘子（projectile orange）美術測試（非阻塞）──────────────
+// 本版只接角色本體 idle×3 / warning×2 / release×1；尚無 cooldown 圖、尚無油彈 shot 圖
+const PROJECTILE_ORANGE_ASSETS = {
+  idle_01:    'assets/enemies/orange/orange_projectile_idle_01.png',
+  idle_02:    'assets/enemies/orange/orange_projectile_idle_02.png',
+  idle_03:    'assets/enemies/orange/orange_projectile_idle_03.png',
+  warning_01: 'assets/enemies/orange/orange_projectile_warning_01.png',
+  warning_02: 'assets/enemies/orange/orange_projectile_warning_02.png',
+  release_01: 'assets/enemies/orange/orange_projectile_release_01.png',
+};
+
+const projectileOrangeImgs = {};
+
+function initProjectileOrangeArt() {
+  Object.entries(PROJECTILE_ORANGE_ASSETS).forEach(([key, src]) => {
+    if (projectileOrangeImgs[key]) return;
+    const img = new Image();
+    const fullSrc = resolveAdventureAssetSrc(src);
+    img.onload = function () {
+      projectileOrangeImgs[key] = img;
+      console.log('[ProjectileOrangeArt] loaded:', key, fullSrc, img.naturalWidth, img.naturalHeight);
+    };
+    img.onerror = function () {
+      console.warn('[ProjectileOrangeArt] NOT FOUND:', key, fullSrc);
+    };
+    img.src = fullSrc;
+  });
+}
+
+function getProjectileOrangeImg(key) {
+  const img = projectileOrangeImgs[key];
+  if (img && img.complete && img.naturalWidth > 0) return img;
+  return null;
+}
+
+// 繪製參數（只影響視覺，不動 hitbox）
+const PROJECTILE_ORANGE_SOURCE_SIZE     = 512;
+const PROJECTILE_ORANGE_BODY_DRAW_SCALE = 2.4;   // 顯示寬度 = po.w * 此比例
+const PROJECTILE_ORANGE_FOOT_ANCHOR_Y   = 0.88;  // 腳底錨點（圖片高度比例）
+const PROJECTILE_ORANGE_DRAW_OFFSET_Y   = 0;     // 垂直視覺微調
+
+// idle：01 → 02 → 03 → 02 → loop，每 12 frames 換一張
+const PROJECTILE_ORANGE_IDLE_FRAME_DUR = 12;
+const PROJECTILE_ORANGE_IDLE_SEQ       = [0, 1, 2, 1];
+const PROJECTILE_ORANGE_IDLE_BOB_Y     = 2;      // idle 上下呼吸位移（px）
+
+// warning：warning_01 / warning_02 快速交替（集氣）
+const PROJECTILE_ORANGE_WARNING_FRAME_DUR = 8;
+
 // ── v0.3.25-oil-calibration：左右油圖定位常數 ─────────────────────────
 // 素材原圖座標基準（假設 512x512）
 const DUAL_ORANGE_SOURCE_SIZE = 512;
@@ -1669,6 +1718,52 @@ function startDualOrangeTestLevel() {
   if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
   gameState = 'playing';
   showHint('🍊 雙噴嘴橘子測試：觀察 idle/warning/spray/cooldown 美術', 280);
+}
+
+// v0.3.26：飛行油彈橘子美術觀察入口（TEST MODE 限定，runtime-only）
+// 用 2-2 地圖當底板，清掉其他威脅，放 projectile orange 觀察 idle/warning/release 循環。
+// 畫面會自動往前捲，所以沿路每隔一段再放一隻（計時錯開），隨時都看得到一隻。
+function startProjectileOrangeTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
+  if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+
+  // 清除測試底板中的其他威脅（只影響本次 runtime，不改 LEVELS 資料）
+  enemies.length = 0;
+  orangeNemeses.length = 0;
+  chimneyOranges.length = 0;
+  dualNozzleOranges.length = 0;
+  fanOranges.length = 0;
+  spikes.length = 0;
+
+  // 放 projectile orange：第一隻 x=700（一進場就看得到），之後每 1100px 一隻
+  projectileOranges.length = 0;
+  const xs = [700, 1800, 2900, 4000, 5100, 6200, 7300];
+  xs.forEach((x, i) => {
+    projectileOranges.push({
+      x,
+      y: GROUND_Y - CONFIG.ORANGE_H,
+      w: CONFIG.ORANGE_W,
+      h: CONFIG.ORANGE_H,
+      active: true,
+      phase: 'idle',
+      phaseTimer: (i * 700) % PROJECTILE_ORANGE_IDLE_MS, // 錯開，方便同時比較不同狀態
+    });
+  });
+
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('🥋 Projectile Orange 美術測試：觀察 idle → warning → release 循環', 280);
 }
 
 function startEnemyVariantTestLevel() {
@@ -4181,6 +4276,9 @@ function loadLevel(index) {
     });
   }
 
+  // v0.3.26：projectile orange 只存在測試關，任何 loadLevel 都先清空
+  projectileOranges.length = 0;
+
   // v0.3.21：Chapter 2 向上油幕橘子
   fanOranges.length = 0;
   if (typeof lv.buildFanOranges === 'function') {
@@ -4409,6 +4507,7 @@ function update(dt, dtMs = 16.667) {
   updateChimneyOranges(dtMs);     // v0.3.19：Chapter 2 煙囟橘子
   updateDualNozzleOranges(dtMs);  // v0.3.20：Chapter 2 雙噴嘴橘子
   updateFanOranges(dtMs);         // v0.3.21：Chapter 2 向上油幕橘子
+  updateProjectileOranges(dtMs);  // v0.3.26：飛行油彈橘子（美術測試，無傷害）
   checkCollectibles();
   checkHazards();
   checkHints();
@@ -5607,6 +5706,99 @@ function drawFanOranges(cx) {
   });
 }
 
+// ──────────────────────────────────────────────────────────
+//  v0.3.26：飛行油彈橘子（projectile orange）— 美術測試版
+//  狀態機：idle → warning → release → cooldown → idle
+//  本版只顯示角色本體美術：不發射油彈、沒有 hitbox、不會讓玩家受傷、
+//  不加入正式關卡（只由暫停選單測試入口產生）
+// ──────────────────────────────────────────────────────────
+
+const PROJECTILE_ORANGE_IDLE_MS     = 1600;
+const PROJECTILE_ORANGE_WARNING_MS  =  900;
+const PROJECTILE_ORANGE_RELEASE_MS  =  450;
+const PROJECTILE_ORANGE_COOLDOWN_MS =  900;
+
+let projectileOranges = []; // runtime array，只由 startProjectileOrangeTestLevel 填充
+
+function updateProjectileOranges(dtMs) {
+  projectileOranges.forEach(po => {
+    if (!po.active) return;
+    po.phaseTimer += dtMs;
+
+    switch (po.phase) {
+      case 'idle':
+        if (po.phaseTimer >= PROJECTILE_ORANGE_IDLE_MS) { po.phase = 'warning'; po.phaseTimer = 0; }
+        break;
+      case 'warning':
+        if (po.phaseTimer >= PROJECTILE_ORANGE_WARNING_MS) { po.phase = 'release'; po.phaseTimer = 0; }
+        break;
+      case 'release':
+        // TODO（後續版本）：在這裡產生 orange_projectile_shot_01 飛行油彈
+        if (po.phaseTimer >= PROJECTILE_ORANGE_RELEASE_MS) { po.phase = 'cooldown'; po.phaseTimer = 0; }
+        break;
+      case 'cooldown':
+        if (po.phaseTimer >= PROJECTILE_ORANGE_COOLDOWN_MS) { po.phase = 'idle'; po.phaseTimer = 0; }
+        break;
+      default:
+        po.phase = 'idle'; po.phaseTimer = 0;
+    }
+  });
+}
+
+function drawProjectileOranges(cx) {
+  projectileOranges.forEach(po => {
+    if (!po.active) return;
+    const sx = po.x - cx;
+    if (sx > CANVAS_W + 120 || sx + po.w < -120) return;
+
+    const isIdle     = po.phase === 'idle';
+    const isWarning  = po.phase === 'warning';
+    const isRelease  = po.phase === 'release';
+
+    // ── 依狀態選圖 ──
+    let key;
+    if (isIdle) {
+      const seqIdx = Math.floor(frameCount / PROJECTILE_ORANGE_IDLE_FRAME_DUR) % PROJECTILE_ORANGE_IDLE_SEQ.length;
+      key = 'idle_0' + (PROJECTILE_ORANGE_IDLE_SEQ[seqIdx] + 1);
+    } else if (isWarning) {
+      key = (Math.floor(frameCount / PROJECTILE_ORANGE_WARNING_FRAME_DUR) % 2 === 0) ? 'warning_01' : 'warning_02';
+    } else if (isRelease) {
+      key = 'release_01';
+    } else {
+      key = 'idle_01'; // cooldown：本版尚無 cooldown 圖，暫用 idle_01
+    }
+    const img = getProjectileOrangeImg(key) || getProjectileOrangeImg('idle_01');
+
+    ctx.save();
+
+    if (img) {
+      // 保持圖片原始比例，腳底錨點貼地
+      const drawW  = po.w * PROJECTILE_ORANGE_BODY_DRAW_SCALE;
+      const drawH  = drawW * (img.naturalHeight / img.naturalWidth);
+      const idleBobY = isIdle ? Math.sin(frameCount * 0.12) * PROJECTILE_ORANGE_IDLE_BOB_Y : 0;
+      const drawX  = sx + po.w / 2 - drawW / 2;
+      const drawY  = (po.y + po.h) - drawH * PROJECTILE_ORANGE_FOOT_ANCHOR_Y
+                   + PROJECTILE_ORANGE_DRAW_OFFSET_Y + idleBobY;
+
+      if (isWarning) {
+        // 輕微橘色集氣光暈（不要太誇張）
+        const t = po.phaseTimer / PROJECTILE_ORANGE_WARNING_MS;
+        ctx.shadowColor = 'rgba(255,140,0,0.85)';
+        ctx.shadowBlur  = 6 + 4 * Math.sin(t * Math.PI * 6);
+      }
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    } else {
+      // fallback：圖片未載入時畫簡單橘色圓（不 crash）
+      ctx.fillStyle = isWarning ? '#ff6600' : isRelease ? '#ffaa33' : '#f57c00';
+      ctx.beginPath();
+      ctx.arc(sx + po.w / 2, po.y + po.h / 2, po.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  });
+}
+
 // ── Spinning enemies（被槌子打飛的小怪）────────
 let spinningEnemies = [];
 let scorpionDefeatEffects = []; // 純視覺死亡演出（不參與碰撞/攻擊/扣血）
@@ -6589,6 +6781,8 @@ function drawWorld() {
   drawDualNozzleOranges(cx);
   // v0.3.21：Chapter 2 向上油幕橘子
   drawFanOranges(cx);
+  // v0.3.26：飛行油彈橘子（美術測試）
+  drawProjectileOranges(cx);
 }
 
 function drawPlayer(cx) {
@@ -7722,8 +7916,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-art → proj-art-N
+  if (GAME_VERSION.includes('projectile-orange-art')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-art-' + tN;
   // v0.3.25+：dual-orange-stable → dual-stable-N
-  if (GAME_VERSION.includes('dual-orange-stable')) {
+  } else if (GAME_VERSION.includes('dual-orange-stable')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-stable-' + tN;
   // v0.3.25+：dual-orange-oil-localstorage-fix → dual-oil-ls-fix-N
@@ -9468,6 +9666,7 @@ function restart(opts) {
   chimneyOranges.forEach(co => { co.sprayPhase = 'idle'; co.phaseTimer = 0; co.sprayActive = false; co.active = true; });
   dualNozzleOranges.forEach(dn => { dn.sprayPhase = 'idle'; dn.phaseTimer = 0; dn.sprayActive = false; dn.active = true; });
   fanOranges.forEach(fn => { fn.sprayPhase = 'idle'; fn.phaseTimer = 0; fn.sprayActive = false; fn.active = true; }); // v0.3.21
+  projectileOranges.forEach(po => { po.phase = 'idle'; po.phaseTimer = 0; po.active = true; }); // v0.3.26
   roundBalloons.forEach(r => { r.collected = false; });
   spinningEnemies.length = 0;
   scorpionDefeatEffects.length = 0;
@@ -9889,6 +10088,7 @@ initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 
 initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
 initChimneyOrangeOilArt();           // v0.3.24：煙囟橘子油柱正式圖（非阻塞，fallback canvas overlay）
 initDualOrangeArt();                 // v0.3.25：雙噴嘴橘子全套美術（非阻塞，fallback 幾何）
+initProjectileOrangeArt();           // v0.3.26：飛行油彈橘子美術測試（非阻塞，fallback 幾何）
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
@@ -9930,6 +10130,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestDualOrange) {
     btnTestDualOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestDualOrange.addEventListener('click', startDualOrangeTestLevel);
+  }
+  // v0.3.26：飛行油彈橘子美術測試按鈕
+  const btnTestProjOrange = document.getElementById('btn-pause-test-projectile-orange');
+  if (btnTestProjOrange) {
+    btnTestProjOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestProjOrange.addEventListener('click', startProjectileOrangeTestLevel);
   }
 })();
 
