@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-test-1';
-const BUILD_TIME   = '2026-10-10 21:40';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-hitbox-calibration-test-1';
+const BUILD_TIME   = '2026-10-10 22:15';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1222,11 +1222,24 @@ const PROJECTILE_ORANGE_COOLDOWN_FRAME_DUR = 24;
 
 // ── v0.3.26-shot-calibration：飛行油彈定位 / 尺寸常數（F7 工具可即時調整）──
 // LOCAL_X / LOCAL_Y = 以本體 512×512 原圖為基準的手部發射點（油彈中心對齊這個點）
-const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X    = 115;
+// v0.3.26-hitbox-calibration：F7 實測後的 visual 預設值
+const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X    = 56;
 const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y    = 255;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X   = 0;
 const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y   = 0;
-const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = 1.0;
+const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = 1;
+
+// ── v0.3.26-hitbox-calibration：damage hitbox 預設值（F7 + H 可即時調整）──
+// 油彈 hitbox：以油彈視覺中心為基準（W/H = 實際傷害框大小，OFFSET = 相對中心偏移）
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W        = 105;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H        = 34;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X = 0;
+const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y = 0;
+// 本體 hitbox：以碰撞框底部中心（腳底）為基準，往上長高
+const PROJECTILE_ORANGE_BODY_HITBOX_W        = 70;
+const PROJECTILE_ORANGE_BODY_HITBOX_H        = 78;
+const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X = 0;
+const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = -14;
 
 // 本體 draw rect（world coordinate，不扣 cameraX）；本體與油彈共用同一套 bodyScale
 function getProjectileOrangeBodyDrawRect(po, img) {
@@ -1718,23 +1731,58 @@ let projectileOilShotOffsetX   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X;
 let projectileOilShotOffsetY   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y;
 let projectileOilShotScaleMult = PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT;
 
+// v0.3.26-hitbox-calibration：F7 編輯模式 'visual' | 'oilHitbox' | 'bodyHitbox'
+let projectileOilShotEditMode = 'visual';
+
+let projectileOilShotHitboxW       = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W;
+let projectileOilShotHitboxH       = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H;
+let projectileOilShotHitboxOffsetX = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X;
+let projectileOilShotHitboxOffsetY = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y;
+
+let projectileOrangeBodyHitboxW       = PROJECTILE_ORANGE_BODY_HITBOX_W;
+let projectileOrangeBodyHitboxH       = PROJECTILE_ORANGE_BODY_HITBOX_H;
+let projectileOrangeBodyHitboxOffsetX = PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X;
+let projectileOrangeBodyHitboxOffsetY = PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y;
+
 function resetProjectileOilShotCalibrationToDefaults({ save = false } = {}) {
   projectileOilShotLocalX    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X;
   projectileOilShotLocalY    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y;
   projectileOilShotOffsetX   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X;
   projectileOilShotOffsetY   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y;
   projectileOilShotScaleMult = PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT;
+
+  projectileOilShotHitboxW       = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W;
+  projectileOilShotHitboxH       = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H;
+  projectileOilShotHitboxOffsetX = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X;
+  projectileOilShotHitboxOffsetY = PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y;
+
+  projectileOrangeBodyHitboxW       = PROJECTILE_ORANGE_BODY_HITBOX_W;
+  projectileOrangeBodyHitboxH       = PROJECTILE_ORANGE_BODY_HITBOX_H;
+  projectileOrangeBodyHitboxOffsetX = PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X;
+  projectileOrangeBodyHitboxOffsetY = PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y;
+
   if (save) saveProjectileOilShotCalibrationSettings();
 }
 
 function buildProjectileOilShotCalibrationData() {
   return {
     version:   GAME_VERSION,
+
     localX:    projectileOilShotLocalX,
     localY:    projectileOilShotLocalY,
     offsetX:   projectileOilShotOffsetX,
     offsetY:   projectileOilShotOffsetY,
     scaleMult: projectileOilShotScaleMult,
+
+    oilHitboxW:       projectileOilShotHitboxW,
+    oilHitboxH:       projectileOilShotHitboxH,
+    oilHitboxOffsetX: projectileOilShotHitboxOffsetX,
+    oilHitboxOffsetY: projectileOilShotHitboxOffsetY,
+
+    bodyHitboxW:       projectileOrangeBodyHitboxW,
+    bodyHitboxH:       projectileOrangeBodyHitboxH,
+    bodyHitboxOffsetX: projectileOrangeBodyHitboxOffsetX,
+    bodyHitboxOffsetY: projectileOrangeBodyHitboxOffsetY,
   };
 }
 
@@ -1765,6 +1813,14 @@ function loadProjectileOilShotCalibrationSettings() {
     if (typeof data.offsetX   === 'number') projectileOilShotOffsetX   = data.offsetX;
     if (typeof data.offsetY   === 'number') projectileOilShotOffsetY   = data.offsetY;
     if (typeof data.scaleMult === 'number') projectileOilShotScaleMult = data.scaleMult;
+    if (typeof data.oilHitboxW        === 'number') projectileOilShotHitboxW          = data.oilHitboxW;
+    if (typeof data.oilHitboxH        === 'number') projectileOilShotHitboxH          = data.oilHitboxH;
+    if (typeof data.oilHitboxOffsetX  === 'number') projectileOilShotHitboxOffsetX    = data.oilHitboxOffsetX;
+    if (typeof data.oilHitboxOffsetY  === 'number') projectileOilShotHitboxOffsetY    = data.oilHitboxOffsetY;
+    if (typeof data.bodyHitboxW       === 'number') projectileOrangeBodyHitboxW       = data.bodyHitboxW;
+    if (typeof data.bodyHitboxH       === 'number') projectileOrangeBodyHitboxH       = data.bodyHitboxH;
+    if (typeof data.bodyHitboxOffsetX === 'number') projectileOrangeBodyHitboxOffsetX = data.bodyHitboxOffsetX;
+    if (typeof data.bodyHitboxOffsetY === 'number') projectileOrangeBodyHitboxOffsetY = data.bodyHitboxOffsetY;
     console.log('[ProjOilShotCalib] loaded from localStorage:', data);
   } catch (e) {
     resetProjectileOilShotCalibrationToDefaults();
@@ -1774,7 +1830,7 @@ function loadProjectileOilShotCalibrationSettings() {
 function saveProjectileOilShotCalibrationSettings() {
   const data = writeProjectileOilShotCalibrationToStorage();
   if (data) {
-    showHint('💾 oil shot 定位已存入 localStorage', 150);
+    showHint('💾 projectile visual + hitbox 已存入 localStorage', 150);
     console.log('[ProjOilShotCalib] saved:', data);
   } else {
     showHint('localStorage 儲存失敗', 150);
@@ -1783,7 +1839,7 @@ function saveProjectileOilShotCalibrationSettings() {
 
 function resetProjectileOilShotCalibrationSettings() {
   resetProjectileOilShotCalibrationToDefaults({ save: true });
-  showHint('🔄 oil shot 定位已重置為預設值', 150);
+  showHint('🔄 projectile visual + hitbox 已重置為預設值', 150);
 }
 
 function copyProjectileOilShotCalibrationSettings() {
@@ -1792,10 +1848,18 @@ function copyProjectileOilShotCalibrationSettings() {
     `const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y = ${projectileOilShotLocalY};\n` +
     `const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X = ${projectileOilShotOffsetX};\n` +
     `const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y = ${projectileOilShotOffsetY};\n` +
-    `const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = ${projectileOilShotScaleMult};`;
+    `const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = ${projectileOilShotScaleMult};\n\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_W = ${projectileOilShotHitboxW};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_H = ${projectileOilShotHitboxH};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_X = ${projectileOilShotHitboxOffsetX};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_OFFSET_Y = ${projectileOilShotHitboxOffsetY};\n\n` +
+    `const PROJECTILE_ORANGE_BODY_HITBOX_W = ${projectileOrangeBodyHitboxW};\n` +
+    `const PROJECTILE_ORANGE_BODY_HITBOX_H = ${projectileOrangeBodyHitboxH};\n` +
+    `const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_X = ${projectileOrangeBodyHitboxOffsetX};\n` +
+    `const PROJECTILE_ORANGE_BODY_HITBOX_OFFSET_Y = ${projectileOrangeBodyHitboxOffsetY};`;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      showHint('📋 oil shot 常數已複製到剪貼簿', 150);
+      showHint('📋 projectile visual + hitbox 常數已複製到剪貼簿', 150);
     }).catch(() => {
       console.log('[ProjOilShotCalib] copy result:\n' + text);
       showHint('已輸出到 console（剪貼簿失敗）', 150);
@@ -2297,20 +2361,48 @@ window.addEventListener('keydown', e => {
     return;
   }
 
-  // F7 mode：方向鍵調 localX / localY，[ ] 調 scaleMult，S / R / C
+  // F7 mode：H 切換 visual / oilHitbox / bodyHitbox；方向鍵、[ ]、; ' 依模式調整；S / R / C
   if (ADVENTURE_TEST_TOOLS_ENABLED && projectileOilShotCalibrationMode) {
-    const step = e.shiftKey ? 10 : 1;
-    if (e.code === 'ArrowUp')    { projectileOilShotLocalY -= step; e.preventDefault(); return; }
-    if (e.code === 'ArrowDown')  { projectileOilShotLocalY += step; e.preventDefault(); return; }
-    if (e.code === 'ArrowLeft')  { projectileOilShotLocalX -= step; e.preventDefault(); return; }
-    if (e.code === 'ArrowRight') { projectileOilShotLocalX += step; e.preventDefault(); return; }
-    if (e.code === 'BracketLeft') {
-      projectileOilShotScaleMult = Math.max(0.1, Math.round((projectileOilShotScaleMult - 0.05) * 100) / 100);
+    if (e.code === 'KeyH') {
+      projectileOilShotEditMode =
+        projectileOilShotEditMode === 'visual'    ? 'oilHitbox'  :
+        projectileOilShotEditMode === 'oilHitbox' ? 'bodyHitbox' : 'visual';
+      const label = { visual: 'VISUAL', oilHitbox: 'OIL HITBOX', bodyHitbox: 'BODY HITBOX' }[projectileOilShotEditMode];
+      showHint('Projectile Edit Mode: ' + label, 100);
       e.preventDefault(); return;
     }
-    if (e.code === 'BracketRight') {
-      projectileOilShotScaleMult = Math.round((projectileOilShotScaleMult + 0.05) * 100) / 100;
-      e.preventDefault(); return;
+    const step = e.shiftKey ? 10 : 1;
+    if (projectileOilShotEditMode === 'visual') {
+      if (e.code === 'ArrowUp')    { projectileOilShotLocalY -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowDown')  { projectileOilShotLocalY += step; e.preventDefault(); return; }
+      if (e.code === 'ArrowLeft')  { projectileOilShotLocalX -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowRight') { projectileOilShotLocalX += step; e.preventDefault(); return; }
+      if (e.code === 'BracketLeft') {
+        projectileOilShotScaleMult = Math.max(0.1, Math.round((projectileOilShotScaleMult - 0.05) * 100) / 100);
+        e.preventDefault(); return;
+      }
+      if (e.code === 'BracketRight') {
+        projectileOilShotScaleMult = Math.round((projectileOilShotScaleMult + 0.05) * 100) / 100;
+        e.preventDefault(); return;
+      }
+    } else if (projectileOilShotEditMode === 'oilHitbox') {
+      if (e.code === 'ArrowUp')    { projectileOilShotHitboxOffsetY -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowDown')  { projectileOilShotHitboxOffsetY += step; e.preventDefault(); return; }
+      if (e.code === 'ArrowLeft')  { projectileOilShotHitboxOffsetX -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowRight') { projectileOilShotHitboxOffsetX += step; e.preventDefault(); return; }
+      if (e.code === 'BracketLeft')  { projectileOilShotHitboxW = Math.max(10, projectileOilShotHitboxW - 5); e.preventDefault(); return; }
+      if (e.code === 'BracketRight') { projectileOilShotHitboxW += 5; e.preventDefault(); return; }
+      if (e.code === 'Semicolon')    { projectileOilShotHitboxH = Math.max(10, projectileOilShotHitboxH - 5); e.preventDefault(); return; }
+      if (e.code === 'Quote')        { projectileOilShotHitboxH += 5; e.preventDefault(); return; }
+    } else if (projectileOilShotEditMode === 'bodyHitbox') {
+      if (e.code === 'ArrowUp')    { projectileOrangeBodyHitboxOffsetY -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowDown')  { projectileOrangeBodyHitboxOffsetY += step; e.preventDefault(); return; }
+      if (e.code === 'ArrowLeft')  { projectileOrangeBodyHitboxOffsetX -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowRight') { projectileOrangeBodyHitboxOffsetX += step; e.preventDefault(); return; }
+      if (e.code === 'BracketLeft')  { projectileOrangeBodyHitboxW = Math.max(10, projectileOrangeBodyHitboxW - 5); e.preventDefault(); return; }
+      if (e.code === 'BracketRight') { projectileOrangeBodyHitboxW += 5; e.preventDefault(); return; }
+      if (e.code === 'Semicolon')    { projectileOrangeBodyHitboxH = Math.max(10, projectileOrangeBodyHitboxH - 5); e.preventDefault(); return; }
+      if (e.code === 'Quote')        { projectileOrangeBodyHitboxH += 5; e.preventDefault(); return; }
     }
     if (e.code === 'KeyS') { saveProjectileOilShotCalibrationSettings();  e.preventDefault(); return; }
     if (e.code === 'KeyR') { resetProjectileOilShotCalibrationSettings(); e.preventDefault(); return; }
@@ -6108,9 +6200,7 @@ function spawnProjectileOrangeShot(po) {
 }
 
 // ── v0.3.26-hitbox：projectile orange 傷害判定 ──────────────────────────
-// 油彈 damage hitbox = 油彈 draw rect 往內縮
-const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X = 10;
-const PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y = 8;
+// v0.3.26-hitbox-calibration：油彈 / 本體 hitbox 改用獨立 W / H / offset（不再用 draw rect 內縮）
 // 測試版顯示紅色 damage hitbox（red box = damage hitbox）
 const PROJECTILE_ORANGE_HITBOX_DEBUG = ADVENTURE_TEST_TOOLS_ENABLED;
 
@@ -6120,20 +6210,27 @@ function getProjectileOilShotWorldRect(shot) {
   return { x: shot.x - drawW / 2, y: shot.y - drawH / 2, w: drawW, h: drawH };
 }
 
-// 油彈 damage hitbox（world coordinate）
+// 油彈 damage hitbox（world coordinate）：以油彈視覺中心 (shot.x, shot.y) 為基準
+// 接受任何帶 x / y 的物件（真正油彈或 F7 預覽點）
 function getProjectileOilShotHitbox(shot) {
-  const r = getProjectileOilShotWorldRect(shot);
   return {
-    x: r.x + PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X,
-    y: r.y + PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y,
-    w: Math.max(1, r.w - PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_X * 2),
-    h: Math.max(1, r.h - PROJECTILE_ORANGE_OIL_SHOT_HITBOX_INSET_Y * 2),
+    x: shot.x + projectileOilShotHitboxOffsetX - projectileOilShotHitboxW / 2,
+    y: shot.y + projectileOilShotHitboxOffsetY - projectileOilShotHitboxH / 2,
+    w: projectileOilShotHitboxW,
+    h: projectileOilShotHitboxH,
   };
 }
 
-// 本體 damage hitbox（world coordinate，與一般橘子怪本體判定相同的 4px 內縮）
+// 本體 damage hitbox（world coordinate）：以碰撞框底部中心（腳底）為基準往上
 function getProjectileOrangeBodyHitbox(po) {
-  return { x: po.x + 4, y: po.y + 4, w: po.w - 8, h: po.h - 8 };
+  const centerX = po.x + po.w / 2;
+  const footY   = po.y + po.h;
+  return {
+    x: centerX + projectileOrangeBodyHitboxOffsetX - projectileOrangeBodyHitboxW / 2,
+    y: footY   + projectileOrangeBodyHitboxOffsetY - projectileOrangeBodyHitboxH,
+    w: projectileOrangeBodyHitboxW,
+    h: projectileOrangeBodyHitboxH,
+  };
 }
 
 function checkProjectileOrangeDamage() {
@@ -6191,10 +6288,17 @@ function drawProjectileOrangeHitboxDebug(cx) {
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
+  const legend = [['red box = damage hitbox', '#ff6060']];
+  if (projectileOilShotCalibrationMode) {
+    legend.push(['orange box = oil shot draw rect', '#ffb84d']);
+    legend.push(['blue box = body draw rect', '#78c8ff']);
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(8, CANVAS_H - 150, 230, 18);
-  ctx.fillStyle = '#ff6060';
-  ctx.fillText('red box = damage hitbox', 14, CANVAS_H - 137);
+  ctx.fillRect(8, CANVAS_H - 150, 250, 16 * legend.length + 4);
+  legend.forEach(([txt, col], i) => {
+    ctx.fillStyle = col;
+    ctx.fillText(txt, 14, CANVAS_H - 137 + i * 16);
+  });
   ctx.restore();
 }
 
@@ -6269,6 +6373,20 @@ function drawProjectileOilShotCalibrationOverlay(cx) {
     ctx.lineWidth = 2;
     ctx.strokeRect(box.x, box.y, box.drawW, box.drawH);
 
+    // 3b. 預覽油彈的 damage hitbox（紅框；真正油彈飛走前可在這裡對位）
+    const ph = getProjectileOilShotHitbox({ x: sp.x, y: sp.y });
+    ctx.strokeStyle = 'rgba(255,40,40,0.95)';
+    ctx.fillStyle   = 'rgba(255,40,40,0.12)';
+    ctx.lineWidth   = projectileOilShotEditMode === 'oilHitbox' ? 3 : 1.5;
+    ctx.fillRect  (ph.x - cx, ph.y, ph.w, ph.h);
+    ctx.strokeRect(ph.x - cx, ph.y, ph.w, ph.h);
+    // bodyHitbox mode：本體紅框加粗強調（本體紅框本身由 drawProjectileOrangeHitboxDebug 畫）
+    if (projectileOilShotEditMode === 'bodyHitbox') {
+      const bh = getProjectileOrangeBodyHitbox(po);
+      ctx.lineWidth = 3;
+      ctx.strokeRect(bh.x - cx, bh.y, bh.w, bh.h);
+    }
+
     // 4. local anchor 十字線（黃色）
     ctx.strokeStyle = '#ffe066';
     ctx.lineWidth = 1.5;
@@ -6281,24 +6399,50 @@ function drawProjectileOilShotCalibrationOverlay(cx) {
 
   // HUD（右上，避開左上的 asset status）
   const oilImg = getProjectileOrangeImg('oil_shot_01');
-  const hudW = 320, hudX = CANVAS_W - hudW - 10, hudY = 72, lineH = 16;
+  const hudW = 340, hudX = CANVAS_W - hudW - 10, hudY = 72, lineH = 16;
+  const mode = projectileOilShotEditMode;
   const lines = [
     ['[Projectile Oil Shot Align Mode]', '#ffe066'],
     ['F7: off', '#cccccc'],
-    ['↑↓←→: localX/localY   Shift: ×10', '#cccccc'],
-    ['[ / ]: scale   S: save  R: reset  C: copy', '#cccccc'],
+    ['H: mode = ' + mode, '#ffe066'],
     ['', '#cccccc'],
-    ['localX: ' + projectileOilShotLocalX, '#80ffcc'],
-    ['localY: ' + projectileOilShotLocalY, '#80ffcc'],
-    ['offsetX: ' + projectileOilShotOffsetX, '#80ffcc'],
-    ['offsetY: ' + projectileOilShotOffsetY, '#80ffcc'],
-    ['scaleMult: ' + projectileOilShotScaleMult.toFixed(2), '#80ffcc'],
-    ['drawW: ' + (lastSize ? lastSize.drawW.toFixed(1) : '—'), '#88aaff'],
-    ['drawH: ' + (lastSize ? lastSize.drawH.toFixed(1) : '—'), '#88aaff'],
+  ];
+  if (mode === 'visual') {
+    lines.push(
+      ['localX: ' + projectileOilShotLocalX, '#80ffcc'],
+      ['localY: ' + projectileOilShotLocalY, '#80ffcc'],
+      ['offsetX: ' + projectileOilShotOffsetX, '#80ffcc'],
+      ['offsetY: ' + projectileOilShotOffsetY, '#80ffcc'],
+      ['scaleMult: ' + projectileOilShotScaleMult.toFixed(2), '#80ffcc'],
+      ['drawW: ' + (lastSize ? lastSize.drawW.toFixed(1) : '—'), '#88aaff'],
+      ['drawH: ' + (lastSize ? lastSize.drawH.toFixed(1) : '—'), '#88aaff'],
+    );
+  } else if (mode === 'oilHitbox') {
+    lines.push(
+      ['oilHitboxW: ' + projectileOilShotHitboxW, '#ff9090'],
+      ['oilHitboxH: ' + projectileOilShotHitboxH, '#ff9090'],
+      ['oilHitboxOffsetX: ' + projectileOilShotHitboxOffsetX, '#ff9090'],
+      ['oilHitboxOffsetY: ' + projectileOilShotHitboxOffsetY, '#ff9090'],
+    );
+  } else {
+    lines.push(
+      ['bodyHitboxW: ' + projectileOrangeBodyHitboxW, '#ff9090'],
+      ['bodyHitboxH: ' + projectileOrangeBodyHitboxH, '#ff9090'],
+      ['bodyHitboxOffsetX: ' + projectileOrangeBodyHitboxOffsetX, '#ff9090'],
+      ['bodyHitboxOffsetY: ' + projectileOrangeBodyHitboxOffsetY, '#ff9090'],
+    );
+  }
+  lines.push(
     ['oil_shot_01: ' + (oilImg ? 'OK ' + oilImg.naturalWidth + 'x' + oilImg.naturalHeight : 'missing'),
       oilImg ? '#7dff9a' : '#ff8080'],
-    ['orange box = oil shot draw rect (not hitbox)', '#ffb84d'],
-  ];
+    ['', '#cccccc'],
+    [mode === 'visual'
+      ? 'visual: ↑↓←→ localX/localY, [/] scale'
+      : mode + ": ↑↓←→ offset, [/] width, ;/' height", '#cccccc'],
+    ['Shift: ×10   S save / R reset / C copy', '#cccccc'],
+    ['red = damage hitbox, orange = shot draw rect', '#ffb84d'],
+    ['blue = body draw rect', '#78c8ff'],
+  );
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(hudX - 6, hudY - 14, hudW, lineH * lines.length + 8);
@@ -8435,8 +8579,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-hitbox-calibration → proj-hitbox-calib-N
+  if (GAME_VERSION.includes('projectile-orange-hitbox-calibration')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-hitbox-calib-' + tN;
   // v0.3.26+：projectile-orange-hitbox → proj-hitbox-N
-  if (GAME_VERSION.includes('projectile-orange-hitbox')) {
+  } else if (GAME_VERSION.includes('projectile-orange-hitbox')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-hitbox-' + tN;
   // v0.3.26+：projectile-orange-shot-calibration → proj-shot-calib-N
