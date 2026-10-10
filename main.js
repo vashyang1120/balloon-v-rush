@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-complete-art-test-1';
-const BUILD_TIME   = '2026-10-10 19:50';
+const GAME_VERSION = 'adventure-v0.3.26-projectile-orange-shot-calibration-test-1';
+const BUILD_TIME   = '2026-10-10 20:05';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1220,6 +1220,24 @@ const PROJECTILE_ORANGE_WARNING_FRAME_DUR = 8;
 // cooldown：cooldown_01 / cooldown_02 交替（喘氣感）
 const PROJECTILE_ORANGE_COOLDOWN_FRAME_DUR = 24;
 
+// ── v0.3.26-shot-calibration：飛行油彈定位 / 尺寸常數（F7 工具可即時調整）──
+// LOCAL_X / LOCAL_Y = 以本體 512×512 原圖為基準的手部發射點（油彈中心對齊這個點）
+const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X    = 115;
+const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y    = 255;
+const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X   = 0;
+const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y   = 0;
+const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = 1.0;
+
+// 本體 draw rect（world coordinate，不扣 cameraX）；本體與油彈共用同一套 bodyScale
+function getProjectileOrangeBodyDrawRect(po, img) {
+  const bodyScale = (po.w * PROJECTILE_ORANGE_BODY_DRAW_SCALE) / PROJECTILE_ORANGE_SOURCE_SIZE;
+  const drawW = img ? img.naturalWidth  * bodyScale : po.w * PROJECTILE_ORANGE_BODY_DRAW_SCALE;
+  const drawH = img ? img.naturalHeight * bodyScale : drawW;
+  const drawX = (po.x + po.w / 2) - drawW / 2;
+  const drawY = (po.y + po.h) - drawH * PROJECTILE_ORANGE_FOOT_ANCHOR_Y + PROJECTILE_ORANGE_DRAW_OFFSET_Y;
+  return { drawX, drawY, drawW, drawH, bodyScale };
+}
+
 // ── v0.3.25-oil-calibration：左右油圖定位常數 ─────────────────────────
 // 素材原圖座標基準（假設 512x512）
 const DUAL_ORANGE_SOURCE_SIZE = 512;
@@ -1689,6 +1707,107 @@ function copyDualOilCalibrationSettings() {
 
 // 啟動時讀取 dual oil calibration 設定
 loadDualOilCalibrationSettings();
+
+// ── Projectile Oil Shot Calibration Tool（測試版限定，F7）─────────────────
+const PROJECTILE_OIL_SHOT_CALIB_LS_KEY = 'balloonVAdventure_projectileOilShotCalibration';
+let projectileOilShotCalibrationMode = false;
+
+let projectileOilShotLocalX    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X;
+let projectileOilShotLocalY    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y;
+let projectileOilShotOffsetX   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X;
+let projectileOilShotOffsetY   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y;
+let projectileOilShotScaleMult = PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT;
+
+function resetProjectileOilShotCalibrationToDefaults({ save = false } = {}) {
+  projectileOilShotLocalX    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X;
+  projectileOilShotLocalY    = PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y;
+  projectileOilShotOffsetX   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X;
+  projectileOilShotOffsetY   = PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y;
+  projectileOilShotScaleMult = PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT;
+  if (save) saveProjectileOilShotCalibrationSettings();
+}
+
+function buildProjectileOilShotCalibrationData() {
+  return {
+    version:   GAME_VERSION,
+    localX:    projectileOilShotLocalX,
+    localY:    projectileOilShotLocalY,
+    offsetX:   projectileOilShotOffsetX,
+    offsetY:   projectileOilShotOffsetY,
+    scaleMult: projectileOilShotScaleMult,
+  };
+}
+
+function writeProjectileOilShotCalibrationToStorage() {
+  try {
+    const data = buildProjectileOilShotCalibrationData();
+    localStorage.setItem(PROJECTILE_OIL_SHOT_CALIB_LS_KEY, JSON.stringify(data));
+    return data;
+  } catch (e) { return null; }
+}
+
+function loadProjectileOilShotCalibrationSettings() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  try {
+    const raw = localStorage.getItem(PROJECTILE_OIL_SHOT_CALIB_LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    // 版本防呆：沒有 version 或 version 不同 → 不套用，使用本版常數並覆寫存檔
+    if (!data || data.version !== GAME_VERSION) {
+      resetProjectileOilShotCalibrationToDefaults();
+      writeProjectileOilShotCalibrationToStorage();
+      console.log('[ProjOilShotCalib] ignored stale localStorage (version:',
+        (data && data.version) || '(none)', '), using defaults');
+      return;
+    }
+    if (typeof data.localX    === 'number') projectileOilShotLocalX    = data.localX;
+    if (typeof data.localY    === 'number') projectileOilShotLocalY    = data.localY;
+    if (typeof data.offsetX   === 'number') projectileOilShotOffsetX   = data.offsetX;
+    if (typeof data.offsetY   === 'number') projectileOilShotOffsetY   = data.offsetY;
+    if (typeof data.scaleMult === 'number') projectileOilShotScaleMult = data.scaleMult;
+    console.log('[ProjOilShotCalib] loaded from localStorage:', data);
+  } catch (e) {
+    resetProjectileOilShotCalibrationToDefaults();
+  }
+}
+
+function saveProjectileOilShotCalibrationSettings() {
+  const data = writeProjectileOilShotCalibrationToStorage();
+  if (data) {
+    showHint('💾 oil shot 定位已存入 localStorage', 150);
+    console.log('[ProjOilShotCalib] saved:', data);
+  } else {
+    showHint('localStorage 儲存失敗', 150);
+  }
+}
+
+function resetProjectileOilShotCalibrationSettings() {
+  resetProjectileOilShotCalibrationToDefaults({ save: true });
+  showHint('🔄 oil shot 定位已重置為預設值', 150);
+}
+
+function copyProjectileOilShotCalibrationSettings() {
+  const text =
+    `const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_X = ${projectileOilShotLocalX};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_LOCAL_Y = ${projectileOilShotLocalY};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_X = ${projectileOilShotOffsetX};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_OFFSET_Y = ${projectileOilShotOffsetY};\n` +
+    `const PROJECTILE_ORANGE_OIL_SHOT_SCALE_MULT = ${projectileOilShotScaleMult};`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showHint('📋 oil shot 常數已複製到剪貼簿', 150);
+    }).catch(() => {
+      console.log('[ProjOilShotCalib] copy result:\n' + text);
+      showHint('已輸出到 console（剪貼簿失敗）', 150);
+    });
+  } else {
+    console.log('[ProjOilShotCalib] copy result:\n' + text);
+    showHint('已輸出到 console', 150);
+  }
+}
+
+// 啟動時讀取 oil shot calibration 設定
+loadProjectileOilShotCalibrationSettings();
 
 // 安全化 activeSlot：若指向不存在的武器，自動切到有效武器
 function normalizeActiveWeaponSlot() {
@@ -2164,10 +2283,44 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
+  // 測試版：F7 開關 projectile oil shot calibration mode（與 F9 / F10 互斥）
+  if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F7') {
+    projectileOilShotCalibrationMode = !projectileOilShotCalibrationMode;
+    if (projectileOilShotCalibrationMode) {
+      chimneyOilCalibrationMode = false;
+      dualOilCalibrationMode    = false;
+    }
+    showHint(projectileOilShotCalibrationMode
+      ? '🎯 Projectile Oil Shot Align Mode ON（F7 關閉）\n請用 暫停→🥋 測試 Projectile Orange'
+      : '🎯 Projectile Oil Shot Align Mode OFF', 180);
+    e.preventDefault();
+    return;
+  }
+
+  // F7 mode：方向鍵調 localX / localY，[ ] 調 scaleMult，S / R / C
+  if (ADVENTURE_TEST_TOOLS_ENABLED && projectileOilShotCalibrationMode) {
+    const step = e.shiftKey ? 10 : 1;
+    if (e.code === 'ArrowUp')    { projectileOilShotLocalY -= step; e.preventDefault(); return; }
+    if (e.code === 'ArrowDown')  { projectileOilShotLocalY += step; e.preventDefault(); return; }
+    if (e.code === 'ArrowLeft')  { projectileOilShotLocalX -= step; e.preventDefault(); return; }
+    if (e.code === 'ArrowRight') { projectileOilShotLocalX += step; e.preventDefault(); return; }
+    if (e.code === 'BracketLeft') {
+      projectileOilShotScaleMult = Math.max(0.1, Math.round((projectileOilShotScaleMult - 0.05) * 100) / 100);
+      e.preventDefault(); return;
+    }
+    if (e.code === 'BracketRight') {
+      projectileOilShotScaleMult = Math.round((projectileOilShotScaleMult + 0.05) * 100) / 100;
+      e.preventDefault(); return;
+    }
+    if (e.code === 'KeyS') { saveProjectileOilShotCalibrationSettings();  e.preventDefault(); return; }
+    if (e.code === 'KeyR') { resetProjectileOilShotCalibrationSettings(); e.preventDefault(); return; }
+    if (e.code === 'KeyC') { copyProjectileOilShotCalibrationSettings();  e.preventDefault(); return; }
+  }
+
   // 測試版：F9 開關 chimney oil calibration mode（開啟時自動關閉 dual oil mode）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F9') {
     chimneyOilCalibrationMode = !chimneyOilCalibrationMode;
-    if (chimneyOilCalibrationMode) dualOilCalibrationMode = false; // 互斥
+    if (chimneyOilCalibrationMode) { dualOilCalibrationMode = false; projectileOilShotCalibrationMode = false; } // 互斥
     showHint(chimneyOilCalibrationMode
       ? '🎯 Oil Align Mode ON（F9 關閉）\n請使用 暫停→測試第二章 進入 2-1'
       : '🎯 Oil Align Mode OFF', 180);
@@ -2190,7 +2343,7 @@ window.addEventListener('keydown', e => {
   // 測試版：F10 開關 dual oil calibration mode（開啟時自動關閉 chimney oil mode）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F10') {
     dualOilCalibrationMode = !dualOilCalibrationMode;
-    if (dualOilCalibrationMode) chimneyOilCalibrationMode = false; // 互斥
+    if (dualOilCalibrationMode) { chimneyOilCalibrationMode = false; projectileOilShotCalibrationMode = false; } // 互斥
     showHint(dualOilCalibrationMode
       ? '🎯 Dual Oil Align Mode ON（F10 關閉）\n請用 暫停→🍊 測試 Dual Orange 進入 2-2'
       : '🎯 Dual Oil Align Mode OFF', 180);
@@ -5901,22 +6054,56 @@ function drawProjectileOranges(cx) {
 }
 
 // ── v0.3.26-complete-art：飛行油彈（視覺測試，無傷害、無 hitbox）────────────
-const PROJECTILE_ORANGE_SHOT_W       = 72;
-const PROJECTILE_ORANGE_SHOT_H       = 42;
+// v0.3.26-shot-calibration：尺寸改用 oil_shot_01 原圖 × bodyScale × scaleMult（不再寫死 72px）
+// shot.x / shot.y = 油彈「中心點」的 world coordinate
 const PROJECTILE_ORANGE_SHOT_SPEED   = -4.5;  // px / frame（@60fps），負值 = 往左飛
 const PROJECTILE_ORANGE_SHOT_LIFE_MS = 2500;
+const PROJECTILE_ORANGE_SHOT_FALLBACK_W = 120; // oil_shot_01 未載入時的備用尺寸
+const PROJECTILE_ORANGE_SHOT_FALLBACK_H = 70;
 
 let projectileOrangeShots = [];
 
+// 發射姿勢本體圖：shot_01 → release_01 → idle_01
+function getProjectileOrangeReleaseBodyImg() {
+  return getProjectileOrangeImg('shot_01')
+      || getProjectileOrangeImg('release_01')
+      || getProjectileOrangeImg('idle_01');
+}
+
+// 依目前定位參數，算出某隻 projectile orange 的油彈中心點（world）與 bodyScale
+function getProjectileOilShotSpawnPoint(po) {
+  const rect  = getProjectileOrangeBodyDrawRect(po, getProjectileOrangeReleaseBodyImg());
+  const baseX = rect.drawX + projectileOilShotLocalX * rect.bodyScale;
+  const baseY = rect.drawY + projectileOilShotLocalY * rect.bodyScale;
+  return {
+    x: baseX + projectileOilShotOffsetX,
+    y: baseY + projectileOilShotOffsetY,
+    bodyScale: rect.bodyScale,
+    rect,
+  };
+}
+
+// 油彈繪製尺寸：naturalWidth / naturalHeight × bodyScale × scaleMult
+function getProjectileOilShotDrawSize(bodyScale) {
+  const img = getProjectileOrangeImg('oil_shot_01');
+  return {
+    img,
+    drawW: img ? img.naturalWidth  * bodyScale * projectileOilShotScaleMult
+               : PROJECTILE_ORANGE_SHOT_FALLBACK_W * projectileOilShotScaleMult,
+    drawH: img ? img.naturalHeight * bodyScale * projectileOilShotScaleMult
+               : PROJECTILE_ORANGE_SHOT_FALLBACK_H * projectileOilShotScaleMult,
+  };
+}
+
 function spawnProjectileOrangeShot(po) {
+  const sp = getProjectileOilShotSpawnPoint(po);
   projectileOrangeShots.push({
-    x: po.x - 40,
-    y: po.y + po.h * 0.30,
+    x: sp.x,
+    y: sp.y,
     vx: PROJECTILE_ORANGE_SHOT_SPEED,
-    w: PROJECTILE_ORANGE_SHOT_W,
-    h: PROJECTILE_ORANGE_SHOT_H,
     active: true,
     lifeMs: PROJECTILE_ORANGE_SHOT_LIFE_MS,
+    bodyScale: sp.bodyScale,
   });
 }
 
@@ -5927,33 +6114,111 @@ function updateProjectileOrangeShots(dtMs) {
     s.x      += s.vx * frameMul;
     s.lifeMs -= dtMs;
     if (s.lifeMs <= 0) s.active = false;
-    // 飛出畫面太遠（左側鏡頭外 200px 以上）也結束
-    if (s.x + s.w < cameraX - 200 || s.x > cameraX + CANVAS_W + 400) s.active = false;
+    // 飛出畫面太遠（左側鏡頭外 300px 以上）也結束
+    if (s.x < cameraX - 300 || s.x > cameraX + CANVAS_W + 400) s.active = false;
     if (!s.active) projectileOrangeShots.splice(i, 1); // 從陣列移除，不會永久累積
   }
 }
 
+// 以中心點畫一顆油彈（真正油彈與 F7 預覽共用）
+function drawProjectileOilShotAt(screenCX, worldCY, bodyScale, alpha) {
+  const { img, drawW, drawH } = getProjectileOilShotDrawSize(bodyScale);
+  const x = screenCX - drawW / 2;
+  const y = worldCY  - drawH / 2;
+  ctx.save();
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  if (img) {
+    ctx.drawImage(img, x, y, drawW, drawH);
+  } else {
+    ctx.fillStyle = 'rgba(255,150,20,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(screenCX, worldCY, drawW / 2, drawH / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  return { x, y, drawW, drawH };
+}
+
 function drawProjectileOrangeShots(cx) {
-  const img = getProjectileOrangeImg('oil_shot_01');
   projectileOrangeShots.forEach(s => {
     if (!s.active) return;
     const sx = s.x - cx;
-    if (sx > CANVAS_W + 80 || sx + s.w < -80) return;
+    if (sx > CANVAS_W + 300 || sx < -300) return;
+    drawProjectileOilShotAt(sx, s.y, s.bodyScale);
+  });
+}
+
+// v0.3.26-shot-calibration：F7 定位模式 — 不會飛走的預覽油彈 + 輔助框 + HUD
+function drawProjectileOilShotCalibrationOverlay(cx) {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED || !projectileOilShotCalibrationMode) return;
+
+  let lastSize = null;
+  projectileOranges.forEach(po => {
+    if (!po.active) return;
+    const sp = getProjectileOilShotSpawnPoint(po);
+    const r  = sp.rect;
+    const bodySX = r.drawX - cx;
+    if (bodySX > CANVAS_W + 200 || bodySX + r.drawW < -200) return;
+
+    // 1. 本體 draw rect（藍框）
     ctx.save();
-    if (img) {
-      // 保持 oil_shot 圖片原始比例，垂直置中在油彈資料的高度範圍
-      const drawW = PROJECTILE_ORANGE_SHOT_W;
-      const drawH = drawW * (img.naturalHeight / img.naturalWidth);
-      ctx.drawImage(img, sx, s.y + s.h / 2 - drawH / 2, drawW, drawH);
-    } else {
-      // fallback：簡單橘色油球
-      ctx.fillStyle = 'rgba(255,150,20,0.9)';
-      ctx.beginPath();
-      ctx.ellipse(sx + s.w / 2, s.y + s.h / 2, s.w / 2, s.h / 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.strokeStyle = 'rgba(100,200,255,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bodySX, r.drawY, r.drawW, r.drawH);
+    ctx.restore();
+
+    // 2. 預覽油彈（不移動、不進 runtime、不造成傷害）
+    const shotSX = sp.x - cx;
+    const box = drawProjectileOilShotAt(shotSX, sp.y, sp.bodyScale, 0.9);
+    lastSize = box;
+
+    // 3. 預覽油彈 draw rect（紅框）
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,50,50,0.95)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(box.x, box.y, box.drawW, box.drawH);
+
+    // 4. local anchor 十字線（黃色）
+    ctx.strokeStyle = '#ffe066';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(shotSX - 10, sp.y); ctx.lineTo(shotSX + 10, sp.y);
+    ctx.moveTo(shotSX, sp.y - 10); ctx.lineTo(shotSX, sp.y + 10);
+    ctx.stroke();
     ctx.restore();
   });
+
+  // HUD（右上，避開左上的 asset status）
+  const oilImg = getProjectileOrangeImg('oil_shot_01');
+  const hudW = 320, hudX = CANVAS_W - hudW - 10, hudY = 72, lineH = 16;
+  const lines = [
+    ['[Projectile Oil Shot Align Mode]', '#ffe066'],
+    ['F7: off', '#cccccc'],
+    ['↑↓←→: localX/localY   Shift: ×10', '#cccccc'],
+    ['[ / ]: scale   S: save  R: reset  C: copy', '#cccccc'],
+    ['', '#cccccc'],
+    ['localX: ' + projectileOilShotLocalX, '#80ffcc'],
+    ['localY: ' + projectileOilShotLocalY, '#80ffcc'],
+    ['offsetX: ' + projectileOilShotOffsetX, '#80ffcc'],
+    ['offsetY: ' + projectileOilShotOffsetY, '#80ffcc'],
+    ['scaleMult: ' + projectileOilShotScaleMult.toFixed(2), '#80ffcc'],
+    ['drawW: ' + (lastSize ? lastSize.drawW.toFixed(1) : '—'), '#88aaff'],
+    ['drawH: ' + (lastSize ? lastSize.drawH.toFixed(1) : '—'), '#88aaff'],
+    ['oil_shot_01: ' + (oilImg ? 'OK ' + oilImg.naturalWidth + 'x' + oilImg.naturalHeight : 'missing'),
+      oilImg ? '#7dff9a' : '#ff8080'],
+    ['red box = oil shot draw rect, not damage hitbox', '#ff8080'],
+  ];
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(hudX - 6, hudY - 14, hudW, lineH * lines.length + 8);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  lines.forEach(([txt, col], i) => {
+    ctx.font = i === 0 ? 'bold 12px monospace' : '11px monospace';
+    ctx.fillStyle = col;
+    ctx.fillText(txt, hudX, hudY + lineH * i);
+  });
+  ctx.restore();
 }
 
 // ── Spinning enemies（被槌子打飛的小怪）────────
@@ -6942,6 +7207,7 @@ function drawWorld() {
   // v0.3.26：飛行油彈橘子（美術測試）
   drawProjectileOranges(cx);
   drawProjectileOrangeShots(cx); // v0.3.26：油彈畫在本體之上
+  drawProjectileOilShotCalibrationOverlay(cx); // v0.3.26：F7 定位模式（測試版）
 }
 
 function drawPlayer(cx) {
@@ -8075,8 +8341,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.26+：projectile-orange-shot-calibration → proj-shot-calib-N
+  if (GAME_VERSION.includes('projectile-orange-shot-calibration')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'proj-shot-calib-' + tN;
   // v0.3.26+：projectile-orange-complete-art → proj-complete-art-N
-  if (GAME_VERSION.includes('projectile-orange-complete-art')) {
+  } else if (GAME_VERSION.includes('projectile-orange-complete-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'proj-complete-art-' + tN;
   // v0.3.26+：projectile-orange-image-cache-fix → proj-img-cache-fix-N
