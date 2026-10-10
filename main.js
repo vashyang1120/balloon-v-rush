@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-position-final-test-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-hitbox-calibration-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1117,6 +1117,17 @@ const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = 11;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = -139;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 10;
 
+// ── v0.3.25-oil-hitbox-calibration：左右油圖 damage hitbox 預設值 ────────────
+// 判定集中在主要水平油流，不吃整張油圖外框
+const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 300;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 90;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X  = 0;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y  = 0;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_W = 300;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_H = 90;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = 0;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y = 0;
+
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
 // ORANGE_DRAW_SCALE / ORANGE_SPRAY_SCALE 已廢棄（test-1 用 naturalWidth*scale 導致巨大化）
@@ -1406,12 +1417,24 @@ loadChimneyOilCalibrationSettings();
 // ── Dual Oil Calibration Tool（測試版限定）──────────────────────────────
 const DUAL_OIL_CALIB_LS_KEY = 'balloonVAdventure_dualOilCalibration';
 let dualOilCalibrationMode   = false;
-let dualOilCalibrationTarget = 'left'; // 'left' | 'right'
+let dualOilCalibrationTarget = 'left';    // 'left' | 'right'
+let dualOilEditMode          = 'visual';  // 'visual' | 'hitbox'
 
+// ── Visual offset 運行時變數 ──
 let dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
 let dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
 let dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
 let dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
+
+// ── Hitbox 運行時變數 ──
+let dualOilLeftHitboxW        = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
+let dualOilLeftHitboxH        = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
+let dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
+let dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
+let dualOilRightHitboxW       = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
+let dualOilRightHitboxH       = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
+let dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
+let dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
 
 function loadDualOilCalibrationSettings() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
@@ -1419,32 +1442,55 @@ function loadDualOilCalibrationSettings() {
     const raw = localStorage.getItem(DUAL_OIL_CALIB_LS_KEY);
     if (raw) {
       const data = JSON.parse(raw);
+      // Visual offsets（兼容舊格式）
       if (data.left) {
         if (typeof data.left.offsetX === 'number')  dualOilLeftOffsetX  = data.left.offsetX;
         if (typeof data.left.offsetY === 'number')  dualOilLeftOffsetY  = data.left.offsetY;
+        // Hitbox（新格式）
+        if (typeof data.left.hitboxW  === 'number') dualOilLeftHitboxW        = data.left.hitboxW;
+        if (typeof data.left.hitboxH  === 'number') dualOilLeftHitboxH        = data.left.hitboxH;
+        if (typeof data.left.hitboxOX === 'number') dualOilLeftHitboxOffsetX  = data.left.hitboxOX;
+        if (typeof data.left.hitboxOY === 'number') dualOilLeftHitboxOffsetY  = data.left.hitboxOY;
       }
       if (data.right) {
         if (typeof data.right.offsetX === 'number') dualOilRightOffsetX = data.right.offsetX;
         if (typeof data.right.offsetY === 'number') dualOilRightOffsetY = data.right.offsetY;
+        if (typeof data.right.hitboxW  === 'number') dualOilRightHitboxW       = data.right.hitboxW;
+        if (typeof data.right.hitboxH  === 'number') dualOilRightHitboxH       = data.right.hitboxH;
+        if (typeof data.right.hitboxOX === 'number') dualOilRightHitboxOffsetX = data.right.hitboxOX;
+        if (typeof data.right.hitboxOY === 'number') dualOilRightHitboxOffsetY = data.right.hitboxOY;
       }
       console.log('[DualOilCalib] loaded from localStorage:', data);
     }
   } catch (e) {
+    // 讀取失敗時回到預設值
     dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
     dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
     dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
     dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
+    dualOilLeftHitboxW  = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
+    dualOilLeftHitboxH  = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
+    dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
+    dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
+    dualOilRightHitboxW = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
+    dualOilRightHitboxH = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
+    dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
+    dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
   }
 }
 
 function saveDualOilCalibrationSettings() {
   try {
     const data = {
-      left:  { offsetX: dualOilLeftOffsetX,  offsetY: dualOilLeftOffsetY  },
-      right: { offsetX: dualOilRightOffsetX, offsetY: dualOilRightOffsetY }
+      left:  { offsetX: dualOilLeftOffsetX,  offsetY: dualOilLeftOffsetY,
+               hitboxW: dualOilLeftHitboxW,   hitboxH: dualOilLeftHitboxH,
+               hitboxOX: dualOilLeftHitboxOffsetX, hitboxOY: dualOilLeftHitboxOffsetY },
+      right: { offsetX: dualOilRightOffsetX, offsetY: dualOilRightOffsetY,
+               hitboxW: dualOilRightHitboxW,  hitboxH: dualOilRightHitboxH,
+               hitboxOX: dualOilRightHitboxOffsetX, hitboxOY: dualOilRightHitboxOffsetY }
     };
     localStorage.setItem(DUAL_OIL_CALIB_LS_KEY, JSON.stringify(data));
-    showHint('💾 dual oil offset 已存入 localStorage', 150);
+    showHint('💾 dual oil visual + hitbox 已存入 localStorage', 150);
     console.log('[DualOilCalib] saved:', data);
   } catch (e) {
     showHint('localStorage 儲存失敗', 150);
@@ -1452,17 +1498,22 @@ function saveDualOilCalibrationSettings() {
 }
 
 function resetDualOilCalibrationSettings() {
+  // Visual offsets
   dualOilLeftOffsetX  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X;
   dualOilLeftOffsetY  = DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y;
   dualOilRightOffsetX = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X;
   dualOilRightOffsetY = DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y;
-  try {
-    localStorage.setItem(DUAL_OIL_CALIB_LS_KEY, JSON.stringify({
-      left:  { offsetX: dualOilLeftOffsetX,  offsetY: dualOilLeftOffsetY  },
-      right: { offsetX: dualOilRightOffsetX, offsetY: dualOilRightOffsetY }
-    }));
-  } catch (e) {}
-  showHint('🔄 dual oil offset 已重置', 150);
+  // Hitbox
+  dualOilLeftHitboxW        = DUAL_ORANGE_OIL_LEFT_HITBOX_W;
+  dualOilLeftHitboxH        = DUAL_ORANGE_OIL_LEFT_HITBOX_H;
+  dualOilLeftHitboxOffsetX  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X;
+  dualOilLeftHitboxOffsetY  = DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y;
+  dualOilRightHitboxW       = DUAL_ORANGE_OIL_RIGHT_HITBOX_W;
+  dualOilRightHitboxH       = DUAL_ORANGE_OIL_RIGHT_HITBOX_H;
+  dualOilRightHitboxOffsetX = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X;
+  dualOilRightHitboxOffsetY = DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y;
+  saveDualOilCalibrationSettings();
+  showHint('🔄 dual oil visual + hitbox 已重置為預設值', 150);
 }
 
 function copyDualOilCalibrationSettings() {
@@ -1470,10 +1521,18 @@ function copyDualOilCalibrationSettings() {
     `const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X  = ${dualOilLeftOffsetX};\n` +
     `const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = ${dualOilLeftOffsetY};\n` +
     `const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = ${dualOilRightOffsetX};\n` +
-    `const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = ${dualOilRightOffsetY};`;
+    `const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = ${dualOilRightOffsetY};\n\n` +
+    `const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = ${dualOilLeftHitboxW};\n` +
+    `const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = ${dualOilLeftHitboxH};\n` +
+    `const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X  = ${dualOilLeftHitboxOffsetX};\n` +
+    `const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y  = ${dualOilLeftHitboxOffsetY};\n\n` +
+    `const DUAL_ORANGE_OIL_RIGHT_HITBOX_W = ${dualOilRightHitboxW};\n` +
+    `const DUAL_ORANGE_OIL_RIGHT_HITBOX_H = ${dualOilRightHitboxH};\n` +
+    `const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = ${dualOilRightHitboxOffsetX};\n` +
+    `const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y = ${dualOilRightHitboxOffsetY};`;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      showHint('📋 dual oil 建議常數已複製到剪貼簿', 150);
+      showHint('📋 dual oil visual + hitbox 常數已複製到剪貼簿', 150);
     }).catch(() => {
       console.log('[DualOilCalib] copy result:\n' + text);
       showHint('已輸出到 console（剪貼簿失敗）', 150);
@@ -1947,36 +2006,59 @@ window.addEventListener('keydown', e => {
     return;
   }
 
-  // Dual oil calibration mode：Tab 切換 target，方向鍵調整 offset
+  // Dual oil calibration mode：Tab 切換 target，H 切換 editMode，方向鍵調整
   if (ADVENTURE_TEST_TOOLS_ENABLED && dualOilCalibrationMode) {
+    const isLeft = dualOilCalibrationTarget === 'left';
+
     // Tab：切換 left ↔ right
     if (e.code === 'Tab') {
-      dualOilCalibrationTarget = dualOilCalibrationTarget === 'left' ? 'right' : 'left';
+      dualOilCalibrationTarget = isLeft ? 'right' : 'left';
       showHint('🎯 target: ' + dualOilCalibrationTarget, 80);
-      e.preventDefault();
-      return;
+      e.preventDefault(); return;
     }
+    // H：切換 visual ↔ hitbox 編輯模式
+    if (e.code === 'KeyH') {
+      dualOilEditMode = dualOilEditMode === 'visual' ? 'hitbox' : 'visual';
+      showHint('🎯 editMode: ' + dualOilEditMode.toUpperCase(), 80);
+      e.preventDefault(); return;
+    }
+
     const step = e.shiftKey ? 10 : 1;
-    if (e.code === 'ArrowUp') {
-      if (dualOilCalibrationTarget === 'left') dualOilLeftOffsetY  -= step;
-      else                                      dualOilRightOffsetY -= step;
-      e.preventDefault(); return;
+
+    if (dualOilEditMode === 'visual') {
+      // ── Visual mode：調整油圖位置 ──
+      if (e.code === 'ArrowUp')    { if (isLeft) dualOilLeftOffsetY  -= step; else dualOilRightOffsetY -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowDown')  { if (isLeft) dualOilLeftOffsetY  += step; else dualOilRightOffsetY += step; e.preventDefault(); return; }
+      if (e.code === 'ArrowLeft')  { if (isLeft) dualOilLeftOffsetX  -= step; else dualOilRightOffsetX -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowRight') { if (isLeft) dualOilLeftOffsetX  += step; else dualOilRightOffsetX += step; e.preventDefault(); return; }
+    } else {
+      // ── Hitbox mode：調整 hitbox offset + 寬高 ──
+      if (e.code === 'ArrowUp')    { if (isLeft) dualOilLeftHitboxOffsetY  -= step; else dualOilRightHitboxOffsetY -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowDown')  { if (isLeft) dualOilLeftHitboxOffsetY  += step; else dualOilRightHitboxOffsetY += step; e.preventDefault(); return; }
+      if (e.code === 'ArrowLeft')  { if (isLeft) dualOilLeftHitboxOffsetX  -= step; else dualOilRightHitboxOffsetX -= step; e.preventDefault(); return; }
+      if (e.code === 'ArrowRight') { if (isLeft) dualOilLeftHitboxOffsetX  += step; else dualOilRightHitboxOffsetX += step; e.preventDefault(); return; }
+      // [ ] 調整寬度（最小 10）
+      if (e.code === 'BracketLeft')  {
+        if (isLeft) dualOilLeftHitboxW  = Math.max(10, dualOilLeftHitboxW  - 5);
+        else        dualOilRightHitboxW = Math.max(10, dualOilRightHitboxW - 5);
+        e.preventDefault(); return;
+      }
+      if (e.code === 'BracketRight') {
+        if (isLeft) dualOilLeftHitboxW  += 5; else dualOilRightHitboxW += 5;
+        e.preventDefault(); return;
+      }
+      // ; ' 調整高度（最小 10）
+      if (e.code === 'Semicolon') {
+        if (isLeft) dualOilLeftHitboxH  = Math.max(10, dualOilLeftHitboxH  - 5);
+        else        dualOilRightHitboxH = Math.max(10, dualOilRightHitboxH - 5);
+        e.preventDefault(); return;
+      }
+      if (e.code === 'Quote') {
+        if (isLeft) dualOilLeftHitboxH  += 5; else dualOilRightHitboxH += 5;
+        e.preventDefault(); return;
+      }
     }
-    if (e.code === 'ArrowDown') {
-      if (dualOilCalibrationTarget === 'left') dualOilLeftOffsetY  += step;
-      else                                      dualOilRightOffsetY += step;
-      e.preventDefault(); return;
-    }
-    if (e.code === 'ArrowLeft') {
-      if (dualOilCalibrationTarget === 'left') dualOilLeftOffsetX  -= step;
-      else                                      dualOilRightOffsetX -= step;
-      e.preventDefault(); return;
-    }
-    if (e.code === 'ArrowRight') {
-      if (dualOilCalibrationTarget === 'left') dualOilLeftOffsetX  += step;
-      else                                      dualOilRightOffsetX += step;
-      e.preventDefault(); return;
-    }
+
     if (e.code === 'KeyS') { saveDualOilCalibrationSettings();  e.preventDefault(); return; }
     if (e.code === 'KeyR') { resetDualOilCalibrationSettings(); e.preventDefault(); return; }
     if (e.code === 'KeyC') { copyDualOilCalibrationSettings();  e.preventDefault(); return; }
@@ -4986,6 +5068,66 @@ function updateDualNozzleOranges(dtMs) {
   });
 }
 
+// ── getDualOrangeOilGeometry：共用 helper，draw 與 damage 用同一套計算 ──────
+// 回傳 world coordinate（未減 cameraX），draw 時再減 cx 轉 screen coordinate
+function getDualOrangeOilGeometry(dn) {
+  // Body draw rect（與 drawDualNozzleOranges 相同計算）
+  const bodyDrawW = dn.w * DUAL_ORANGE_BODY_DRAW_SCALE;
+  const bodyDrawH = bodyDrawW;
+  const bodyDrawX = dn.x + dn.w / 2 - bodyDrawW / 2;
+  const bodyDrawY = (dn.y + dn.h) - bodyDrawH * DUAL_ORANGE_FOOT_ANCHOR_Y + DUAL_ORANGE_DRAW_OFFSET_Y;
+  const bodyScale = bodyDrawW / DUAL_ORANGE_SOURCE_SIZE;
+
+  // Oil image size（假設 oil 圖與 body 同比例正方形）
+  const leftOilDrawW  = bodyDrawW;
+  const leftOilDrawH  = bodyDrawH;
+  const rightOilDrawW = bodyDrawW;
+  const rightOilDrawH = bodyDrawH;
+
+  // Effective visual offsets（calibration tool 可即時覆蓋）
+  const effLeftX  = dualOilLeftOffsetX;
+  const effLeftY  = dualOilLeftOffsetY;
+  const effRightX = dualOilRightOffsetX;
+  const effRightY = dualOilRightOffsetY;
+
+  // Oil image draw positions（world coordinate）
+  const leftOilX  = bodyDrawX + DUAL_ORANGE_OIL_LEFT_LOCAL_X  * bodyScale - leftOilDrawW  + effLeftX;
+  const leftOilY  = bodyDrawY + DUAL_ORANGE_OIL_LEFT_LOCAL_Y  * bodyScale - leftOilDrawH  / 2 + effLeftY;
+  const rightOilX = bodyDrawX + DUAL_ORANGE_OIL_RIGHT_LOCAL_X * bodyScale + effRightX;
+  const rightOilY = bodyDrawY + DUAL_ORANGE_OIL_RIGHT_LOCAL_Y * bodyScale - rightOilDrawH / 2 + effRightY;
+
+  // Hitbox（跟著 oil 圖走，可用 calibration tool 調整）
+  const lhW = dualOilLeftHitboxW;
+  const lhH = dualOilLeftHitboxH;
+  const lhOX = dualOilLeftHitboxOffsetX;
+  const lhOY = dualOilLeftHitboxOffsetY;
+  const rhW = dualOilRightHitboxW;
+  const rhH = dualOilRightHitboxH;
+  const rhOX = dualOilRightHitboxOffsetX;
+  const rhOY = dualOilRightHitboxOffsetY;
+
+  // Left hitbox：從左油圖右側往左推
+  const leftHitbox = {
+    x: leftOilX  + leftOilDrawW  - lhW + lhOX,
+    y: leftOilY  + leftOilDrawH  / 2  - lhH / 2 + lhOY,
+    w: lhW, h: lhH
+  };
+  // Right hitbox：從右油圖左側往右推
+  const rightHitbox = {
+    x: rightOilX + rhOX,
+    y: rightOilY + rightOilDrawH / 2  - rhH / 2 + rhOY,
+    w: rhW, h: rhH
+  };
+
+  return {
+    body:       { x: bodyDrawX, y: bodyDrawY, w: bodyDrawW, h: bodyDrawH, scale: bodyScale },
+    leftOil:    { x: leftOilX,  y: leftOilY,  w: leftOilDrawW,  h: leftOilDrawH  },
+    rightOil:   { x: rightOilX, y: rightOilY, w: rightOilDrawW, h: rightOilDrawH },
+    leftHitbox,
+    rightHitbox
+  };
+}
+
 function checkDualNozzleOrangeDamage() {
   if (player.invincible > 0) return;
   const px = player.x, py = player.y, pw = player.w, ph = player.h;
@@ -4993,25 +5135,26 @@ function checkDualNozzleOrangeDamage() {
   dualNozzleOranges.forEach(dn => {
     if (!dn.active) return;
 
-    // 本體碰撞：任何狀態都會受傷（與一般敵人 / 煙囟橘子一致，不依賴 sprayActive）
+    // 本體碰撞：任何狀態都會受傷
     if (rectsOverlap(px, py, pw, ph, dn.x, dn.y, dn.w, dn.h)) {
       damagePlayer();
       return;
     }
 
-    // 雙向油幕：只在 spraying 狀態才有威脅，左右兩側同時延伸
+    // 雙向油幕：只在 spraying 狀態才有威脅，用新的 geometry hitbox 判定
     if (dn.sprayActive) {
-      const oilY = dn.y + (dn.h - DUAL_NOZZLE_OIL_H) / 2;
-      const leftOilX  = dn.x - DUAL_NOZZLE_OIL_W;
-      const rightOilX = dn.x + dn.w;
-      if (rectsOverlap(px, py, pw, ph, leftOilX, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H)) {
+      const geo = getDualOrangeOilGeometry(dn);
+      if (rectsOverlap(px, py, pw, ph,
+          geo.leftHitbox.x, geo.leftHitbox.y, geo.leftHitbox.w, geo.leftHitbox.h)) {
         damagePlayer(); return;
       }
-      if (rectsOverlap(px, py, pw, ph, rightOilX, oilY, DUAL_NOZZLE_OIL_W, DUAL_NOZZLE_OIL_H)) {
+      if (rectsOverlap(px, py, pw, ph,
+          geo.rightHitbox.x, geo.rightHitbox.y, geo.rightHitbox.w, geo.rightHitbox.h)) {
         damagePlayer();
       }
     }
   });
+  // 舊常數 DUAL_NOZZLE_OIL_W / DUAL_NOZZLE_OIL_H 保留為歷史參考，不再用於判定
 }
 
 function drawDualNozzleOranges(cx) {
@@ -5081,22 +5224,15 @@ function drawDualNozzleOranges(cx) {
 
     // ── 左右油圖（spraying 時在本體之後畫，油圖蓋在 spray 本體上方）──────
     if (isSpraying && dn.sprayActive) {
+      const geo = getDualOrangeOilGeometry(dn);
       const leftOilImg  = getDualOrangeImg('oil_left_01');
       const rightOilImg = getDualOrangeImg('oil_right_01');
-
-      const effectiveLeftOffsetX  = dualOilLeftOffsetX;
-      const effectiveLeftOffsetY  = dualOilLeftOffsetY;
-      const effectiveRightOffsetX = dualOilRightOffsetX;
-      const effectiveRightOffsetY = dualOilRightOffsetY;
+      // screen offset = world - cx（helper 回傳 world coordinate）
+      const lOil = geo.leftOil;
+      const rOil = geo.rightOil;
 
       if (leftOilImg && leftOilImg.complete && leftOilImg.naturalWidth > 0) {
-        const leftOilDrawW = leftOilImg.naturalWidth  * bodyScale;
-        const leftOilDrawH = leftOilImg.naturalHeight * bodyScale;
-        const leftOilDrawX = bodyDrawX + DUAL_ORANGE_OIL_LEFT_LOCAL_X * bodyScale
-                             - leftOilDrawW + effectiveLeftOffsetX;
-        const leftOilDrawY = bodyDrawY + DUAL_ORANGE_OIL_LEFT_LOCAL_Y * bodyScale
-                             - leftOilDrawH / 2 + effectiveLeftOffsetY;
-        ctx.drawImage(leftOilImg, leftOilDrawX, leftOilDrawY, leftOilDrawW, leftOilDrawH);
+        ctx.drawImage(leftOilImg, lOil.x - cx, lOil.y, lOil.w, lOil.h);
       } else {
         // fallback: 幾何左油幕
         const oilY = dn.y + (dn.h - DUAL_NOZZLE_OIL_H) / 2;
@@ -5105,13 +5241,7 @@ function drawDualNozzleOranges(cx) {
       }
 
       if (rightOilImg && rightOilImg.complete && rightOilImg.naturalWidth > 0) {
-        const rightOilDrawW = rightOilImg.naturalWidth  * bodyScale;
-        const rightOilDrawH = rightOilImg.naturalHeight * bodyScale;
-        const rightOilDrawX = bodyDrawX + DUAL_ORANGE_OIL_RIGHT_LOCAL_X * bodyScale
-                              + effectiveRightOffsetX;
-        const rightOilDrawY = bodyDrawY + DUAL_ORANGE_OIL_RIGHT_LOCAL_Y * bodyScale
-                              - rightOilDrawH / 2 + effectiveRightOffsetY;
-        ctx.drawImage(rightOilImg, rightOilDrawX, rightOilDrawY, rightOilDrawW, rightOilDrawH);
+        ctx.drawImage(rightOilImg, rOil.x - cx, rOil.y, rOil.w, rOil.h);
       } else {
         // fallback: 幾何右油幕
         const oilY = dn.y + (dn.h - DUAL_NOZZLE_OIL_H) / 2;
@@ -5148,60 +5278,52 @@ function drawDualNozzleOranges(cx) {
 
     // ── dual oil calibration debug wireframes（只在 calibration mode 顯示）──
     if (ADVENTURE_TEST_TOOLS_ENABLED && dualOilCalibrationMode && isSpraying && dn.sprayActive) {
-      const leftOilImg  = getDualOrangeImg('oil_left_01');
-      const rightOilImg = getDualOrangeImg('oil_right_01');
+      const geo = getDualOrangeOilGeometry(dn);
+      const bdy  = geo.body;
+      const lOil = geo.leftOil;
+      const rOil = geo.rightOil;
+      const lHB  = geo.leftHitbox;
+      const rHB  = geo.rightHitbox;
+      // screen 座標（world - cx）
+      const scr = (wx) => wx - cx;
 
       ctx.save();
 
       // body draw rect（藍框）
-      ctx.strokeStyle = dualOilCalibrationTarget === 'left'
-        ? 'rgba(100,200,255,0.7)' : 'rgba(100,200,255,0.5)';
+      ctx.strokeStyle = 'rgba(100,200,255,0.6)';
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(bodyDrawX, bodyDrawY, bodyDrawW, bodyDrawH);
+      ctx.strokeRect(scr(bdy.x), bdy.y, bdy.w, bdy.h);
 
-      // left oil
-      if (leftOilImg && leftOilImg.naturalWidth > 0) {
-        const leftOilDrawW = leftOilImg.naturalWidth  * bodyScale;
-        const leftOilDrawH = leftOilImg.naturalHeight * bodyScale;
-        const leftOilDrawX = bodyDrawX + DUAL_ORANGE_OIL_LEFT_LOCAL_X * bodyScale
-                             - leftOilDrawW + dualOilLeftOffsetX;
-        const leftOilDrawY = bodyDrawY + DUAL_ORANGE_OIL_LEFT_LOCAL_Y * bodyScale
-                             - leftOilDrawH / 2 + dualOilLeftOffsetY;
-        // left oil 外框
-        ctx.strokeStyle = dualOilCalibrationTarget === 'left'
-          ? 'rgba(255,220,0,1)' : 'rgba(255,220,0,0.5)';
-        ctx.lineWidth = dualOilCalibrationTarget === 'left' ? 2 : 1;
-        ctx.strokeRect(leftOilDrawX, leftOilDrawY, leftOilDrawW, leftOilDrawH);
-        // left oil 接點標記（anchor dot）
-        const leftAnchorX = bodyDrawX + DUAL_ORANGE_OIL_LEFT_LOCAL_X * bodyScale + dualOilLeftOffsetX;
-        const leftAnchorY = bodyDrawY + DUAL_ORANGE_OIL_LEFT_LOCAL_Y * bodyScale + dualOilLeftOffsetY;
-        ctx.fillStyle = dualOilCalibrationTarget === 'left' ? '#ffdd00' : 'rgba(255,220,0,0.5)';
-        ctx.beginPath();
-        ctx.arc(leftAnchorX, leftAnchorY, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // left oil 外框（黃色）
+      ctx.strokeStyle = dualOilCalibrationTarget === 'left'
+        ? 'rgba(255,220,0,1)' : 'rgba(255,220,0,0.5)';
+      ctx.lineWidth = dualOilCalibrationTarget === 'left' ? 2 : 1;
+      ctx.strokeRect(scr(lOil.x), lOil.y, lOil.w, lOil.h);
+      // left anchor dot
+      const leftAnchorX = scr(bdy.x + DUAL_ORANGE_OIL_LEFT_LOCAL_X * bdy.scale + dualOilLeftOffsetX);
+      const leftAnchorY = bdy.y + DUAL_ORANGE_OIL_LEFT_LOCAL_Y * bdy.scale + dualOilLeftOffsetY;
+      ctx.fillStyle = dualOilCalibrationTarget === 'left' ? '#ffdd00' : 'rgba(255,220,0,0.5)';
+      ctx.beginPath(); ctx.arc(leftAnchorX, leftAnchorY, 4, 0, Math.PI * 2); ctx.fill();
 
-      // right oil
-      if (rightOilImg && rightOilImg.naturalWidth > 0) {
-        const rightOilDrawW = rightOilImg.naturalWidth  * bodyScale;
-        const rightOilDrawH = rightOilImg.naturalHeight * bodyScale;
-        const rightOilDrawX = bodyDrawX + DUAL_ORANGE_OIL_RIGHT_LOCAL_X * bodyScale
-                              + dualOilRightOffsetX;
-        const rightOilDrawY = bodyDrawY + DUAL_ORANGE_OIL_RIGHT_LOCAL_Y * bodyScale
-                              - rightOilDrawH / 2 + dualOilRightOffsetY;
-        // right oil 外框
-        ctx.strokeStyle = dualOilCalibrationTarget === 'right'
-          ? 'rgba(80,255,120,1)' : 'rgba(80,255,120,0.5)';
-        ctx.lineWidth = dualOilCalibrationTarget === 'right' ? 2 : 1;
-        ctx.strokeRect(rightOilDrawX, rightOilDrawY, rightOilDrawW, rightOilDrawH);
-        // right oil 接點標記
-        const rightAnchorX = bodyDrawX + DUAL_ORANGE_OIL_RIGHT_LOCAL_X * bodyScale + dualOilRightOffsetX;
-        const rightAnchorY = bodyDrawY + DUAL_ORANGE_OIL_RIGHT_LOCAL_Y * bodyScale + dualOilRightOffsetY;
-        ctx.fillStyle = dualOilCalibrationTarget === 'right' ? '#50ff78' : 'rgba(80,255,120,0.5)';
-        ctx.beginPath();
-        ctx.arc(rightAnchorX, rightAnchorY, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // right oil 外框（綠色）
+      ctx.strokeStyle = dualOilCalibrationTarget === 'right'
+        ? 'rgba(80,255,120,1)' : 'rgba(80,255,120,0.5)';
+      ctx.lineWidth = dualOilCalibrationTarget === 'right' ? 2 : 1;
+      ctx.strokeRect(scr(rOil.x), rOil.y, rOil.w, rOil.h);
+      // right anchor dot
+      const rightAnchorX = scr(bdy.x + DUAL_ORANGE_OIL_RIGHT_LOCAL_X * bdy.scale + dualOilRightOffsetX);
+      const rightAnchorY = bdy.y + DUAL_ORANGE_OIL_RIGHT_LOCAL_Y * bdy.scale + dualOilRightOffsetY;
+      ctx.fillStyle = dualOilCalibrationTarget === 'right' ? '#50ff78' : 'rgba(80,255,120,0.5)';
+      ctx.beginPath(); ctx.arc(rightAnchorX, rightAnchorY, 4, 0, Math.PI * 2); ctx.fill();
+
+      // ── 紅色 damage hitbox preview ──
+      ctx.fillStyle   = 'rgba(255,40,40,0.14)';
+      ctx.strokeStyle = 'rgba(255,40,40,0.95)';
+      ctx.lineWidth   = 2;
+      ctx.fillRect  (scr(lHB.x), lHB.y, lHB.w, lHB.h);
+      ctx.strokeRect(scr(lHB.x), lHB.y, lHB.w, lHB.h);
+      ctx.fillRect  (scr(rHB.x), rHB.y, rHB.w, rHB.h);
+      ctx.strokeRect(scr(rHB.x), rHB.y, rHB.w, rHB.h);
 
       ctx.restore();
     }
@@ -5214,28 +5336,45 @@ function drawDualNozzleOranges(cx) {
     const hudX = 16;
     const hudY = 90;
     const lineH = 18;
+    const isVisual = dualOilEditMode === 'visual';
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.70)';
-    ctx.fillRect(hudX - 6, hudY - 16, 300, 230);
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(hudX - 6, hudY - 16, 330, 420);
     ctx.font = 'bold 13px monospace';
     ctx.fillStyle = '#ffe066';
     ctx.fillText('[Dual Oil Align Mode]', hudX, hudY);
     ctx.font = '12px monospace';
     ctx.fillStyle = '#cccccc';
-    ctx.fillText('F10: 關閉  Tab: 切換 left/right', hudX, hudY + lineH);
-    ctx.fillText('←/→: X ±1   ↑/↓: Y ±1', hudX, hudY + lineH * 2);
-    ctx.fillText('Shift+arrows: ±10', hudX, hudY + lineH * 3);
-    ctx.fillText('S: save   R: reset   C: copy', hudX, hudY + lineH * 4);
-    ctx.fillStyle = '#ffe066';
-    ctx.fillText('Target: ' + dualOilCalibrationTarget.toUpperCase(), hudX, hudY + lineH * 5);
-    // left values
-    ctx.fillStyle = dualOilCalibrationTarget === 'left' ? '#ffdd00' : '#aaaaaa';
-    ctx.fillText(`leftOffsetX:  ${dualOilLeftOffsetX}`, hudX, hudY + lineH * 6);
-    ctx.fillText(`leftOffsetY:  ${dualOilLeftOffsetY}`, hudX, hudY + lineH * 7);
-    // right values
-    ctx.fillStyle = dualOilCalibrationTarget === 'right' ? '#50ff78' : '#aaaaaa';
-    ctx.fillText(`rightOffsetX: ${dualOilRightOffsetX}`, hudX, hudY + lineH * 8);
-    ctx.fillText(`rightOffsetY: ${dualOilRightOffsetY}`, hudX, hudY + lineH * 9);
+    ctx.fillText('F10: 關閉  Tab: left/right  H: mode', hudX, hudY + lineH);
+    ctx.fillStyle = isVisual ? '#ffe066' : '#888';
+    ctx.fillText('Mode: ' + dualOilEditMode.toUpperCase(), hudX, hudY + lineH * 2);
+    ctx.fillStyle = '#cccccc';
+    ctx.fillText('Target: ' + dualOilCalibrationTarget.toUpperCase(), hudX, hudY + lineH * 3);
+    if (isVisual) {
+      ctx.fillStyle = '#cccccc';
+      ctx.fillText('VISUAL: ←/→ X  ↑/↓ Y  Shift±10', hudX, hudY + lineH * 4);
+    } else {
+      ctx.fillStyle = '#ff8080';
+      ctx.fillText('HITBOX: ←/→ offsetX  ↑/↓ offsetY', hudX, hudY + lineH * 4);
+      ctx.fillText('        [ ] width±5   ; \' height±5', hudX, hudY + lineH * 5);
+    }
+    ctx.fillStyle = '#cccccc';
+    ctx.fillText('S: save   R: reset   C: copy', hudX, hudY + lineH * 6);
+    ctx.fillText('紅框 = damage hitbox', hudX, hudY + lineH * 7);
+
+    // ── left values ──
+    ctx.fillStyle = dualOilCalibrationTarget === 'left' ? '#ffdd00' : '#888888';
+    ctx.fillText('── LEFT ──', hudX, hudY + lineH * 9);
+    ctx.fillText(`visual  X: ${dualOilLeftOffsetX}  Y: ${dualOilLeftOffsetY}`, hudX, hudY + lineH * 10);
+    ctx.fillText(`hitbox  W: ${dualOilLeftHitboxW}  H: ${dualOilLeftHitboxH}`, hudX, hudY + lineH * 11);
+    ctx.fillText(`hitbox OX: ${dualOilLeftHitboxOffsetX}  OY: ${dualOilLeftHitboxOffsetY}`, hudX, hudY + lineH * 12);
+
+    // ── right values ──
+    ctx.fillStyle = dualOilCalibrationTarget === 'right' ? '#50ff78' : '#888888';
+    ctx.fillText('── RIGHT ──', hudX, hudY + lineH * 14);
+    ctx.fillText(`visual  X: ${dualOilRightOffsetX}  Y: ${dualOilRightOffsetY}`, hudX, hudY + lineH * 15);
+    ctx.fillText(`hitbox  W: ${dualOilRightHitboxW}  H: ${dualOilRightHitboxH}`, hudX, hudY + lineH * 16);
+    ctx.fillText(`hitbox OX: ${dualOilRightHitboxOffsetX}  OY: ${dualOilRightHitboxOffsetY}`, hudX, hudY + lineH * 17);
     ctx.restore();
   }
 }
@@ -7558,8 +7697,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-oil-hitbox-calibration → dual-oil-hitbox-N
+  if (GAME_VERSION.includes('dual-orange-oil-hitbox-calibration')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-oil-hitbox-' + tN;
   // v0.3.25+：dual-orange-oil-position-final → dual-oil-pos-final-N
-  if (GAME_VERSION.includes('dual-orange-oil-position-final')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-position-final')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-pos-final-' + tN;
   // v0.3.25+：dual-orange-oil-layer-fix → dual-oil-layer-fix-N
