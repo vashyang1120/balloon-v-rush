@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-layer-fix-test-1';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-position-final-test-1';
 const BUILD_TIME   = '2026-10-09 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -1111,11 +1111,11 @@ const DUAL_ORANGE_OIL_LEFT_LOCAL_Y = 240;
 const DUAL_ORANGE_OIL_RIGHT_LOCAL_X = 392;
 const DUAL_ORANGE_OIL_RIGHT_LOCAL_Y = 240;
 
-// 左右油圖 extra offset 預設值（用 calibration tool 調出正式值後填入）
-const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X  = 0;
-const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = 0;
-const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = 0;
-const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 0;
+// 左右油圖 extra offset 預設值（v0.3.25-dual-orange-oil-position-final-test-1 手動校準值）
+const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_X  = -8;
+const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = 11;
+const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = -139;
+const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 10;
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
 const ORANGE_BODY_DRAW_SCALE = 2.4;   // v0.3.13-test-2：本體寬度 = o.w * 此比例 ≈ 44*2.4=106px
@@ -1913,9 +1913,10 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
-  // 測試版：F9 開關 chimney oil calibration mode
+  // 測試版：F9 開關 chimney oil calibration mode（開啟時自動關閉 dual oil mode）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F9') {
     chimneyOilCalibrationMode = !chimneyOilCalibrationMode;
+    if (chimneyOilCalibrationMode) dualOilCalibrationMode = false; // 互斥
     showHint(chimneyOilCalibrationMode
       ? '🎯 Oil Align Mode ON（F9 關閉）\n請使用 暫停→測試第二章 進入 2-1'
       : '🎯 Oil Align Mode OFF', 180);
@@ -1935,9 +1936,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyC') { copyChimneyOilCalibrationSettings(); e.preventDefault(); return; }
   }
 
-  // 測試版：F10 開關 dual oil calibration mode
+  // 測試版：F10 開關 dual oil calibration mode（開啟時自動關閉 chimney oil mode）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F10') {
     dualOilCalibrationMode = !dualOilCalibrationMode;
+    if (dualOilCalibrationMode) chimneyOilCalibrationMode = false; // 互斥
     showHint(dualOilCalibrationMode
       ? '🎯 Dual Oil Align Mode ON（F10 關閉）\n請用 暫停→🍊 測試 Dual Orange 進入 2-2'
       : '🎯 Dual Oil Align Mode OFF', 180);
@@ -7556,8 +7558,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-oil-position-final → dual-oil-pos-final-N
+  if (GAME_VERSION.includes('dual-orange-oil-position-final')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-oil-pos-final-' + tN;
   // v0.3.25+：dual-orange-oil-layer-fix → dual-oil-layer-fix-N
-  if (GAME_VERSION.includes('dual-orange-oil-layer-fix')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-layer-fix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-layer-fix-' + tN;
   // v0.3.25+：dual-orange-oil-calibration → dual-oil-align
