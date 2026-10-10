@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-size-formula-fix-test-1';
-const BUILD_TIME   = '2026-10-09 20:00';
+const GAME_VERSION = 'adventure-v0.3.25-dual-orange-oil-hitbox-final-test-1';
+const BUILD_TIME   = '2026-10-10 16:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1117,15 +1117,15 @@ const DUAL_ORANGE_OIL_LEFT_EXTRA_OFFSET_Y  = 11;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_X = -139;
 const DUAL_ORANGE_OIL_RIGHT_EXTRA_OFFSET_Y = 10;
 
-// ── v0.3.25-oil-hitbox-calibration：左右油圖 damage hitbox 預設值 ────────────
+// ── v0.3.25-oil-hitbox-final：左右油圖 damage hitbox 預設值（F10 手動校準完成值）──
 // 判定集中在主要水平油流，不吃整張油圖外框
-const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 300;
-const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 90;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_W  = 70;
+const DUAL_ORANGE_OIL_LEFT_HITBOX_H  = 35;
 const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_X  = 0;
 const DUAL_ORANGE_OIL_LEFT_HITBOX_OFFSET_Y  = 0;
-const DUAL_ORANGE_OIL_RIGHT_HITBOX_W = 300;
-const DUAL_ORANGE_OIL_RIGHT_HITBOX_H = 90;
-const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = 0;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_W = 70;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_H = 40;
+const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_X = 143;
 const DUAL_ORANGE_OIL_RIGHT_HITBOX_OFFSET_Y = 0;
 
 // 橘子怪 skin 繪製參數（只影響視覺，不動 hitbox）
@@ -7699,8 +7699,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.25+：dual-orange-oil-hitbox-final → dual-oil-hitbox-final-N
+  if (GAME_VERSION.includes('dual-orange-oil-hitbox-final')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dual-oil-hitbox-final-' + tN;
   // v0.3.25+：dual-orange-oil-size-formula-fix → dual-oil-size-fix-N
-  if (GAME_VERSION.includes('dual-orange-oil-size-formula-fix')) {
+  } else if (GAME_VERSION.includes('dual-orange-oil-size-formula-fix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'dual-oil-size-fix-' + tN;
   // v0.3.25+：dual-orange-oil-hitbox-calibration → dual-oil-hitbox-N
