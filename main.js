@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.27-chapter2-terrain-prototype-test-1';
-const BUILD_TIME   = '2026-10-11 09:40';
+const GAME_VERSION = 'adventure-v0.3.28-chapter2-formal-2-1-to-2-3-test-1';
+const BUILD_TIME   = '2026-10-11 11:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2064,6 +2064,9 @@ function startOrangeFamilyMixTestLevel() {
   fanOranges.length = 0;
   spikes.length = 0;
 
+  // v0.3.28：維持舊 2-2 底板平台（2-2 已改為正式關卡）
+  applyLegacy22TestTerrain();
+
   // v0.3.27-test-2：本關只測敵人，清空所有收集物（避免終點後 / 與橘子重疊的金幣與氣球）
   coins.length = 0;
   balloons260.length = 0;
@@ -2290,6 +2293,13 @@ function startProjectileOrangeTestLevel() {
   dualNozzleOranges.length = 0;
   fanOranges.length = 0;
   spikes.length = 0;
+
+  // v0.3.28：維持舊 2-2 底板平台（2-2 已改為正式關卡），並清掉新 2-2 的收集物，
+  // 避免金幣懸在已移除的平台位置上
+  applyLegacy22TestTerrain();
+  coins.length = 0;
+  balloons260.length = 0;
+  roundBalloons.length = 0;
 
   // 放 projectile orange：第一隻 x=700（一進場就看得到），共 3 隻
   projectileOranges.length = 0;
@@ -2638,6 +2648,14 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
+  // 測試版：F3 開 / 關 projectile orange hitbox debug 紅框（不與 F7 / F9 / F10 互斥）
+  if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F3') {
+    projectileOrangeHitboxDebugVisible = !projectileOrangeHitboxDebugVisible;
+    showHint(projectileOrangeHitboxDebugVisible ? 'Projectile hitbox debug: ON' : 'Projectile hitbox debug: OFF', 120);
+    e.preventDefault();
+    return;
+  }
+
   // 測試版：F6 開 / 關 asset status HUD（不與 F7 / F9 / F10 互斥）
   // F2 為備用鍵：部分瀏覽器的 F6 會把焦點跳到網址列
   if (ADVENTURE_TEST_TOOLS_ENABLED && (e.code === 'F6' || e.code === 'F2')) {
@@ -3380,6 +3398,64 @@ function getGroundGapUnderPlayer() {
   return null;
 }
 
+// v0.3.28：地面缺口的坑底高度（玩家高 80px；坑底需低於 GROUND_Y+59，
+// 玩家頭頂才會低於飛行油彈 damage hitbox 底端，+66 留安全空間）
+const GROUND_GAP_FLOOR_Y = GROUND_Y + 66;
+
+// v0.3.28：產生坑底平台（延伸到畫面底部），搭配關卡的 buildGroundGaps 使用
+function groundGapFloor(x, w) {
+  return [{ x, y: GROUND_GAP_FLOOR_Y, w, h: CANVAS_H - GROUND_GAP_FLOOR_Y }];
+}
+
+// v0.3.28：第二章正式關卡的敵人建構 helper（欄位與既有橘子邏輯一致）
+// surfaceY = 橘子站立面的 y（地面 GROUND_Y 或平台頂端）
+function makeChapter2NormalOrange(x, surfaceY) {
+  return {
+    x, y: surfaceY - CONFIG.ORANGE_H, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false,
+    type: 'balloonNemesis', variant: 'straight', tier: 'normal',
+  };
+}
+function makeChapter2ChimneyOrange(x, surfaceY, phaseTimer = 0) {
+  return {
+    x, y: surfaceY - CONFIG.ORANGE_H, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'chimneyOrange', sprayPhase: 'idle', phaseTimer, sprayActive: false, active: true,
+  };
+}
+function makeChapter2DualOrange(x, surfaceY, phaseTimer = 0) {
+  return {
+    x, y: surfaceY - CONFIG.ORANGE_H, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'dualNozzleOrange', sprayPhase: 'idle', phaseTimer, sprayActive: false, active: true,
+  };
+}
+function makeChapter2ProjectileOrange(x, surfaceY, phaseTimer = 0) {
+  return {
+    x, y: surfaceY - CONFIG.ORANGE_H, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    active: true, phase: 'idle', phaseTimer, shotSpawned: false,
+  };
+}
+// v0.3.28：圓氣球依攜帶上限補生成（同 1-2 規則：最多補到 ROUND_BALLOON_CARRY_LIMIT 顆）
+// spots = [[x, yOff], ...]，依序取用
+function buildChapter2RoundBalloons(spots) {
+  const have    = Number(playerInventory.roundBalloon || 0);
+  const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
+  return spots.slice(0, missing).map(([x, yOff]) => ({
+    x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2,
+  }));
+}
+
+// v0.3.28：2-2 改為正式「雙噴嘴封鎖線」後，以 2-2 為底板的測試關（橘子家族 / Projectile Orange）
+// 改用舊 2-2 的平台配置，維持原本測試環境不變
+function applyLegacy22TestTerrain() {
+  platforms.length = 0;
+  groundGaps.length = 0;
+  [
+    { x: 6100, y: GROUND_Y-140, w: 220, h: 20 },
+    { x: 6500, y: GROUND_Y-140, w: 220, h: 20 },
+    { x: 7300, y: GROUND_Y-140, w: 220, h: 20 },
+  ].forEach(p => platforms.push(p));
+}
+
 // 第 1 關平台（配合 5 段節奏，世界寬 6400）
 const platforms = [
   // 段 1：安全區平台，低跳可上，引導移動
@@ -4038,297 +4114,220 @@ const LEVELS = [
   },
 
   // ════════════════════════════════════════════════════════════
-  //  Chapter 2 Foundation (v0.3.19)
-  //  煙囟橘子（Chimney Orange）三節關卡架構
-  //  美術：暫用幾何 placeholder，後續替換 sprite
+  //  Chapter 2 正式關卡（v0.3.28）：2-1 / 2-2 / 2-3
+  //  ──────────────────────────────────────────────────────────
+  //  2-1 橘子油危機入門：普通橘子 + 煙囪橘子
+  //  2-2 雙噴嘴封鎖線：雙噴嘴橘子為主，搭配普通 / 煙囪
+  //  2-3 飛行油彈訓練場：飛行油彈橘子為主，兼橘子家族總複習
+  //  不使用 fan orange；舊「複合挑戰」已移出正式流程。
+  //  2-4 保留給下一階段 Boss 關。
+  //  地形：平台 { x, y, w, h }（top-only 碰撞）；低處坑道用 buildGroundGaps + 坑底平台
+  //        （坑底 GROUND_GAP_FLOOR_Y，不是落穴，不會死亡）
   // ════════════════════════════════════════════════════════════
 
-  // Stage 2-1：認識煙囟橘子
+  // Stage 2-1：橘子油危機入門
   {
+    chapterId:   2,
     stageId:     '2-1',
-    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
-    displayName: '第 2-1 節｜煙囟橘子初遭遇',
-    name:        '煙囟橘子初遭遇',
-    shortName:   '煙囟橘子',
-    length:      4800,
+    displayName: '第 2-1 關：橘子油危機',
+    name:        '第 2-1 關：橘子油危機',
+    shortName:   '橘子油危機',
+    length:      5400,               // FINISH_X = 5200
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.19-test-2：移除平台，讓地形單純化 — 純地面通行，
-    // 強調「煙囟橘子威脅空中、地面附近安全」這個核心觀念
-    buildPlatforms: () => [],
-    buildSpikes:        () => [],
-    // v0.3.20-economy：2-1 教學關，約 17 枚金幣（每枚 1 金幣）
-    // 主要沿路平均分布，少量集中在煙囟橘子本體附近（地面安全但靠近威脅來源，培養觀察習慣）
+    hints: [
+      { triggerX:   30, msg: '🍊 第二章：橘子油會讓氣球破掉！看準空檔再通過', shown: false, duration: 270 },
+      { triggerX: 2250, msg: '🔥 煙囪橘子會往上噴油柱，別在它頭上跳！',       shown: false, duration: 260 },
+    ],
+    buildPlatforms: () => [
+      { x:  380, y: GROUND_Y -  70, w: 200, h: 22 },  // 入口短平台
+      { x:  600, y: GROUND_Y - 100, w: 200, h: 22 },  // 普通橘子(850) 前的上路（在噴油範圍上方）
+      { x: 1380, y: GROUND_Y - 110, w: 220, h: 22 },  // 普通橘子(1650) 前的上路
+      ...groundGapFloor(1950, 220),                    // 小凹洞（低處，有金幣引導）
+      { x: 2700, y: GROUND_Y -  60, w: 200, h: 22 },  // 煙囪橘子(2500) 後的安全等待區
+      { x: 3130, y: GROUND_Y - 110, w: 220, h: 22 },  // 普通橘子(3400) 前的上路
+      { x: 3950, y: GROUND_Y -  70, w: 200, h: 22 },  // 煙囪橘子(4300) 前的等待區
+      { x: 4500, y: GROUND_Y -  90, w: 200, h: 22 },  // 煙囪橘子(4300) 後的平台
+    ],
+    buildGroundGaps: () => [ { x: 1950, w: 220 } ],
+    buildSpikes: () => [],
     buildCoins: () => {
       const placements = [
-        [300,55],[500,55],
-        [880,55],[940,55],[1060,55],[1120,55],   // 1000 煙囟橘子周圍
-        [1500,55],[1750,55],[2000,55],
-        [2280,55],[2340,55],[2460,55],[2520,55], // 2400 煙囟橘子周圍
-        [2900,55],[3150,55],[3400,55],
-        [4100,55],
+        [250,55],[330,55],
+        [420,105],[480,105],[540,105],             // 入口平台
+        [640,135],[700,135],[760,135],             // 上路
+        [1000,55],[1060,55],
+        [1420,145],[1480,145],[1540,145],          // 上路
+        [1760,55],
+        [2020,-31],[2100,-31],                     // 凹洞底
+        [2300,55],[2380,55],                       // 煙囪橘子前（地面安全）
+        [2740,95],[2800,95],[2860,95],             // 等待區
+        [3050,55],
+        [3170,145],[3230,145],[3290,145],          // 上路
+        [3550,55],[3620,55],
+        [3990,105],[4050,105],[4110,105],          // 等待區
+        [4540,125],[4600,125],[4660,125],
+        [4850,55],[4950,55],
       ];
       return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
     },
-    buildBalloons:      () => [600,1400,2200,3000,3800].map(x => ({
-      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
+    buildBalloons: () => [1180, 2240, 3800, 4800].map(x => ({
+      x, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
-    buildRoundBalloons: () => [],
+    buildRoundBalloons: () => buildChapter2RoundBalloons([[2800, 160]]),
     buildEnemies:       () => [],
-    buildOranges:       () => [],
-    // v0.3.19-test-2：3 隻，間距拉開到 1200px，計時器錯開讓玩家一次只觀察一隻
+    buildOranges: () => [850, 1650, 3400].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
-      { x: 1000, phaseTimer: 0    },
-      { x: 2400, phaseTimer: 900  },
-      { x: 3700, phaseTimer: 1600 },
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'chimneyOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
+      { x: 2500, phaseTimer: 0   },
+      { x: 4300, phaseTimer: 900 },
+    ].map(d => makeChapter2ChimneyOrange(d.x, GROUND_Y, d.phaseTimer)),
+    buildDualNozzleOranges: () => [],
+    buildProjectileOranges: () => [],
   },
 
-  // Stage 2-2：抓噴油時機通過
+  // Stage 2-2：雙噴嘴封鎖線
   {
+    chapterId:   2,
     stageId:     '2-2',
-    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
-    displayName: '第 2-2 節｜油幕時機訓練',
-    name:        '油幕時機訓練',
-    shortName:   '油幕訓練',
-    length:      8000,
+    displayName: '第 2-2 關：雙噴嘴封鎖線',
+    name:        '第 2-2 關：雙噴嘴封鎖線',
+    shortName:   '雙噴嘴封鎖線',
+    length:      6400,               // FINISH_X = 6200
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.20-test-1：節奏分段——
-    //   前段 (0~5600)：純煙囟橘子，沿用 test-2 的時機訓練配置
-    //   後段 (5600~8000)：首次登場雙噴嘴橘子，提供高處平台路線繞過
+    hints: [
+      { triggerX:   30, msg: '🍊 第 2-2 關：雙噴嘴封鎖線！',                       shown: false, duration: 240 },
+      { triggerX: 2050, msg: '⏳ 雙噴嘴會往左右噴油！在等待區看準冷卻空檔再通過', shown: false, duration: 280 },
+    ],
     buildPlatforms: () => [
-      // 後段：雙噴嘴橘子上方的高處平台路線（繞過本體左右噴油範圍）
-      { x: 6100, y: GROUND_Y-140, w: 220, h: 20 },
-      { x: 6500, y: GROUND_Y-140, w: 220, h: 20 },
-      { x: 7300, y: GROUND_Y-140, w: 220, h: 20 },
+      { x:  300, y: GROUND_Y -  70, w: 180, h: 22 },  // 入口平台
+      { x:  520, y: GROUND_Y - 110, w: 180, h: 22 },  // 普通橘子(750) 前的上路
+      { x: 1200, y: GROUND_Y -  70, w: 180, h: 22 },  // 煙囪橘子(1500) 前的等待區
+      { x: 2150, y: GROUND_Y -  80, w: 200, h: 22 },  // 雙噴嘴(2500) 前的等待 / 觀察區
+      { x: 2420, y: GROUND_Y - 140, w: 220, h: 22 },  // 雙噴嘴(2500) 上方的上路
+      { x: 3030, y: GROUND_Y - 110, w: 220, h: 22 },  // 普通橘子(3300) 前的上路
+      ...groundGapFloor(3650, 230),                    // 低處安全區
+      { x: 3940, y: GROUND_Y -  75, w: 160, h: 22 },  // 雙噴嘴(4200) 前的等待區
+      { x: 4130, y: GROUND_Y - 140, w: 220, h: 22 },  // 雙噴嘴(4200) 上方的上路
+      { x: 4850, y: GROUND_Y -  70, w: 200, h: 22 },  // 煙囪橘子(5150) 前的等待區
+      { x: 5350, y: GROUND_Y -  90, w: 200, h: 22 },  // 煙囪橘子(5150) 後的平台
     ],
-    buildSpikes: () => [
-      { x: 1300, y: GROUND_Y-24, w: 36, h: 24 },
-      { x: 3000, y: GROUND_Y-24, w: 36, h: 24 },
-      { x: 4500, y: GROUND_Y-24, w: 36, h: 24 },
-    ],
+    buildGroundGaps: () => [ { x: 3650, w: 230 } ],
+    buildSpikes: () => [],
     buildCoins: () => {
       const placements = [
-        // 前段：煙囟橘子時機訓練區，沿路平均分布，少量緊鄰本體
-        [250,55],[600,55],
-        [780,55],[850,55],[1020,55], // 900 煙囟橘子周圍
-        [1300,140],                  // 尖刺旁，需精準跳躍
-        [1600,55],[1950,55],
-        [2150,55],[2750,55],[2820,55], // 2700 煙囟橘子周圍
-        [3200,55],[3500,55],
-        [3550,55],[3850,55],           // 3700 煙囟橘子周圍
-        [4200,140],                    // 尖刺旁
-        [4500,55],[4900,55],
-        [4650,55],[4750,55],           // 4700 煙囟橘子周圍
-        [5300,55],
-        // 後段：雙噴嘴橘子區域 — 高處平台上放金幣（鼓勵走安全路線）
-        [6150,150],[6200,150],[6580,150],[6620,150],
-        // 後段：地面靠近雙噴嘴橘子噴油範圍邊緣（真正的風險回報，靠近危險才拿得到）
-        [6050,55],[6480,55],
-        [7350,150],[7400,150],
+        [200,55],
+        [340,105],[400,105],[460,105],             // 入口平台
+        [560,145],[620,145],[680,145],             // 上路
+        [900,55],[960,55],
+        [1240,105],[1300,105],[1360,105],          // 等待區
+        [1650,55],[1720,55],[1800,55],
+        [2190,115],[2250,115],[2310,115],          // 雙噴嘴前等待區
+        [2460,175],[2530,175],[2600,175],          // 雙噴嘴上方上路
+        [2850,55],[2920,55],
+        [3070,145],[3130,145],[3190,145],          // 上路
+        [3420,55],[3480,55],
+        [3720,-31],[3810,-31],                     // 低處
+        [3980,110],[4060,110],                     // 雙噴嘴前等待區
+        [4170,175],[4310,175],                     // 雙噴嘴上方上路
+        [4550,55],
+        [4890,105],[4950,105],[5010,105],          // 等待區
+        [5390,125],[5450,125],[5510,125],
+        [5700,55],
       ];
       return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
     },
-    buildBalloons:      () => [500,1700,2400,3500,4200,5000,6300,7400].map(x => ({
-      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
-    })),
-    buildRoundBalloons: () => [],
+    buildBalloons: () => [
+      [1100, 85], [2000, 85], [3560, 85], [4240, 200], [5800, 85],
+    ].map(([x, yOff]) => ({ x, y: GROUND_Y-yOff, collected: false, bobOffset: Math.random()*Math.PI*2 })),
+    buildRoundBalloons: () => buildChapter2RoundBalloons([[2530, 215], [5450, 185]]),
     buildEnemies:       () => [],
-    buildOranges:       () => [],
-    // v0.3.19-test-2：5 隻，間距比 2-1 更密（800~900px），
-    // 計時器錯開讓不同煙囟橘子的噴油時機交錯，逼玩家抓空檔通過
+    buildOranges: () => [750, 3300].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
-      { x: 900,  phaseTimer: 0    },
-      { x: 1800, phaseTimer: 700  },
-      { x: 2700, phaseTimer: 1400 },
-      { x: 3700, phaseTimer: 400  },
-      { x: 4700, phaseTimer: 1100 },
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'chimneyOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
-    // v0.3.20-test-1：後段首次登場，單獨展示（不與煙囟橘子混在一起）
-    // 旁邊提供高處平台路線，讓玩家明確理解「走高處繞過」是正解
+      { x: 1500, phaseTimer: 0   },
+      { x: 5150, phaseTimer: 700 },
+    ].map(d => makeChapter2ChimneyOrange(d.x, GROUND_Y, d.phaseTimer)),
     buildDualNozzleOranges: () => [
-      { x: 6300, phaseTimer: 0   },
-      { x: 7500, phaseTimer: 800 },
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'dualNozzleOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
+      { x: 2500, phaseTimer: 0   },
+      { x: 4200, phaseTimer: 800 },
+    ].map(d => makeChapter2DualOrange(d.x, GROUND_Y, d.phaseTimer)),
+    buildProjectileOranges: () => [],
   },
 
-  // Stage 2-3：蠍子 + 煙囟橘子 複合挑戰
+  // Stage 2-3：飛行油彈訓練場（橘子家族總複習）
   {
+    chapterId:   2,
     stageId:     '2-3',
-    hints:       [], // v0.3.19-fix-2：loadLevel 需要 hints 陣列
-    displayName: '第 2-3 節｜地面與空中複合挑戰',
-    name:        '地面與空中複合挑戰',
-    shortName:   '複合挑戰',
-    length:      10500, // v0.3.21：延長以加入 fan orange 教學段（段5 8800~10200）及收尾
+    displayName: '第 2-3 關：飛行油彈訓練場',
+    name:        '第 2-3 關：飛行油彈訓練場',
+    shortName:   '飛行油彈訓練場',
+    length:      7200,               // FINISH_X = 7000
     scrollSpeed: 1,
     bg:          'stage1',
-    // v0.3.21：節奏分段——
-    //   前段 (0~2000)：只有蠍子，複習第一章地面戰鬥
-    //   中段 (2000~3800)：只有煙囟橘子，複習空中威脅判斷
-    //   段3 (3800~6400)：蠍子 + 煙囟橘子混合（既有複合挑戰）
-    //   段4 (6400~7400)：首次登場雙噴嘴橘子，單獨展示 + 高處平台繞過路線
-    //   後段A (7400~8800)：蠍子 + 煙囟橘子 + 雙噴嘴橘子三者混合
-    //   段5 (8800~10200)：fan 向上油幕橘子教學（先單獨，再與蠍子合流）
-    //   收尾 (10200~10500)：緩衝空間
+    hints: [
+      { triggerX:   30, msg: '🥋 第 2-3 關：飛行油彈訓練場！',             shown: false, duration: 240 },
+      { triggerX: 1750, msg: '⬇️ 躲進低處，飛行油彈會從頭上飛過！',      shown: false, duration: 260 },
+      { triggerX: 4150, msg: '🎯 前方有高處砲台！走下路比較安全',          shown: false, duration: 260 },
+    ],
     buildPlatforms: () => [
-      // 段4：雙噴嘴橘子上方的高處平台路線
-      { x: 6700, y: GROUND_Y-140, w: 200, h: 20 },
-      // 後段A：混合區域也提供一段高處平台，讓玩家有繞過雙噴嘴橘子的選擇
-      { x: 8100, y: GROUND_Y-140, w: 220, h: 20 },
-      // 段5：fan orange 教學段，提供跳躍逃離油幕的高處落腳點
-      { x: 9100, y: GROUND_Y-150, w: 180, h: 20 },
-      { x: 9700, y: GROUND_Y-150, w: 180, h: 20 },
+      { x:  340, y: GROUND_Y -  70, w: 180, h: 22 },  // 入口平台
+      { x:  540, y: GROUND_Y - 110, w: 180, h: 22 },  // 普通橘子(750) 前的上路
+      { x: 1150, y: GROUND_Y -  70, w: 180, h: 22 },  // 煙囪橘子(1450) 前的等待區
+      ...groundGapFloor(1900, 440),                    // 第一個凹洞：躲飛行油彈
+      { x: 2380, y: GROUND_Y - 120, w: 240, h: 22 },  // 飛行油彈橘子(2520) 上方的上路
+      { x: 3080, y: GROUND_Y -  80, w: 180, h: 22 },  // 雙噴嘴(3400) 前的等待區
+      { x: 3310, y: GROUND_Y - 140, w: 220, h: 22 },  // 雙噴嘴(3400) 上方的上路
+      { x: 4250, y: GROUND_Y - 110, w: 200, h: 22 },  // 高風險上路（會被砲台油彈掃到）
+      { x: 4600, y: GROUND_Y - 120, w: 300, h: 22 },  // 高處砲台平台（飛行油彈橘子 4700）
+      { x: 5230, y: GROUND_Y - 110, w: 200, h: 22 },  // 普通橘子(5500) 前的上路
+      ...groundGapFloor(5800, 240),                    // 第二個凹洞
+      { x: 6400, y: GROUND_Y -  90, w: 200, h: 22 },  // 煙囪橘子(6200) 後的平台
     ],
-    buildSpikes: () => [
-      { x: 4400, y: GROUND_Y-24, w: 36, h: 24 },
-    ],
+    buildGroundGaps: () => [ { x: 1900, w: 440 }, { x: 5800, w: 240 } ],
+    buildSpikes: () => [],
     buildCoins: () => {
       const placements = [
-        // 前段：純蠍子複習（700~1800），沿地面平均分布
-        [350,55],[600,55],[850,55],[1100,55],[1400,55],[1900,55],
-        // 中段：純煙囟橘子複習（2400~3600），少量緊鄰本體
-        [2150,55],[2350,55],[2460,55],
-        [3550,55],[3650,55],[3750,55],
-        // 段3：蠍子+煙囟橘子混合（4200~5800），開始升高密度
-        [3950,55],[4150,140],            // 尖刺旁，需精準跳躍
-        [4750,55],[4820,55],[4880,55],   // 4800 煙囟橘子周圍
-        [5200,55],[5450,55],
-        [5950,55],[6020,55],[6080,55],   // 6000 煙囟橘子周圍
-        // 段4：雙噴嘴橘子單獨展示（6400~7400），高處平台 + 地面風險並存
-        [6650,150],[6700,150],[6750,150], // 高處平台上（安全路線獎勵）
-        [6800,55],[6950,55],              // 地面靠近噴嘴範圍邊緣
-        // 後段A：三者混合，最高密度與最高風險回報（7400~8800）
-        [7550,55],[7600,55],[7650,55],    // 7600 煙囟橘子周圍
-        [7850,55],[7950,55],
-        [8050,150],[8100,150],[8150,150], // 高處平台上
-        [8350,55],[8420,55],              // 8400 雙噴嘴橘子周圍，高風險
-        [8550,55],[8650,55],
-        [7900,55],[8000,55],[8250,55],[8480,55],[8600,55],
-        // 段5：fan orange 教學段，硬幣置於油幕旁側，鼓勵閃避後收取
-        [8900,55],[9000,55],             // fan orange (9050) 左側接近處
-        [9120,160],[9180,160],           // 高處平台上方（跳躍逃生路線獎勵）
-        [9400,55],[9500,55],             // fan orange (9450) 旁側
-        [9720,160],[9780,160],           // 高處平台上方
-        [10000,55],[10100,55],           // 段5收尾，蠍子+fan 混合後段
-        // 額外補強，確保整體落在 40~60 目標區間中段
-        [500,150],[1700,140],[3000,55],[3300,55],[5650,55],[6300,55],
+        [200,55],
+        [380,105],[440,105],[490,105],             // 入口平台
+        [580,145],[640,145],[700,145],             // 上路
+        [880,55],[950,55],[1020,55],
+        [1190,105],[1250,105],[1310,105],          // 等待區
+        [1600,55],[1680,55],[1760,55],
+        [1980,-31],[2060,-31],[2140,-31],[2220,-31], // 凹洞底（引導玩家知道低處可以走）
+        [2420,155],[2480,155],[2600,155],          // 油彈橘子上方上路
+        [2750,55],[2820,55],[2890,55],
+        [3120,115],[3180,115],[3240,115],          // 雙噴嘴前等待區
+        [3350,175],[3490,175],                     // 雙噴嘴上方上路
+        [3750,55],[3820,55],
+        [4000,55],
+        [4290,145],[4350,145],[4410,145],          // 高風險上路
+        [4650,55],[4780,55],[4880,55],             // 砲台下方地面（安全）
+        [5050,55],[5120,55],
+        [5270,145],[5330,145],[5390,145],          // 上路
+        [5640,55],[5700,55],
+        [5880,-31],[5960,-31],                     // 第二個凹洞底
+        [6440,125],[6500,125],[6560,125],
+        [6750,55],
       ];
       return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
     },
-    buildBalloons:      () => [500,1300,2600,3400,4600,5600,6900,8200,9800].map(x => ({
-      x: x+20, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
-    })),
-    buildRoundBalloons: () => [],
-    buildOranges:       () => [],
-    buildEnemies: () => {
-      const mkEnemy = (x, patrol, range, variant, tier) => ({
-        x, y: GROUND_Y - CONFIG.ENEMY_H,
-        w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
-        vx: -CONFIG.ENEMY_SPEED, hp: 1,
-        patrol, patrolRange: range,
-        active: true, hitFlash: 0,
-        type: 'scorpion', variant: variant || 'normal', tier: tier || 'normal',
-        baseVx: CONFIG.ENEMY_SPEED,
-      });
-      return [
-        // 前段：純蠍子複習（x: 600~1800）
-        mkEnemy(700,  700,  100, 'normal', 'normal'),
-        mkEnemy(1700, 1700, 110, 'normal', 'normal'),
-        // 段3：與煙囟橘子混合出現（x: 4200~5800）
-        mkEnemy(4200, 4200, 100, 'normal', 'normal'),
-        mkEnemy(5400, 5400, 110, 'normal', 'normal'),
-        // 後段A：三者混合中的蠍子（x: 7900）
-        mkEnemy(7900, 7900, 100, 'normal', 'normal'),
-        // 段5：fan orange 教學後半段，蠍子與 fan orange 同框
-        mkEnemy(9900, 9900, 100, 'normal', 'normal'),
-      ];
-    },
+    buildBalloons: () => [
+      [1100, 85], [2700, 85], [3420, 205], [3950, 85], [5150, 85], [6300, 85],
+    ].map(([x, yOff]) => ({ x, y: GROUND_Y-yOff, collected: false, bobOffset: Math.random()*Math.PI*2 })),
+    buildRoundBalloons: () => buildChapter2RoundBalloons([[2500, 215], [4350, 210]]),
+    buildEnemies:       () => [],
+    buildOranges: () => [750, 5500].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
-      // 中段：純煙囟橘子複習（x: 2400~3600）
-      { x: 2400, phaseTimer: 0   },
-      { x: 3600, phaseTimer: 700 },
-      // 段3：與蠍子混合出現（x: 4800~6000）
-      { x: 4800, phaseTimer: 300 },
-      { x: 6000, phaseTimer: 900 },
-      // 後段A：三者混合中的煙囟橘子（x: 7600）
-      { x: 7600, phaseTimer: 200 },
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'chimneyOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
-    // v0.3.20-test-1：段4 單獨展示一隻（搭配高處平台），
-    // 後段A 再加一隻與蠍子/煙囟橘子混合，作為第二章三種威脅的總結挑戰
+      { x: 1450, phaseTimer: 0   },
+      { x: 6200, phaseTimer: 600 },
+    ].map(d => makeChapter2ChimneyOrange(d.x, GROUND_Y, d.phaseTimer)),
     buildDualNozzleOranges: () => [
-      { x: 6900, phaseTimer: 0   }, // 段4：單獨展示
-      { x: 8400, phaseTimer: 500 }, // 後段A：三者混合
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'dualNozzleOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
-    // v0.3.21：段5 fan orange 教學段
-    //   9050：第一隻 fan orange，單獨展示，玩家需向左右閃避油幕
-    //   9450：第二隻 fan orange，偏移計時，練習連續應對節奏
-    //   9900 區段：fan orange + 蠍子同框（蠍子在 buildEnemies 已定義）
-    buildFanOranges: () => [
-      { x: 9050, phaseTimer: 0   }, // 第一隻：單獨亮相
-      { x: 9450, phaseTimer: 600 }, // 第二隻：偏移計時，節奏交錯
-      { x: 10050, phaseTimer: 300 }, // 第三隻：與蠍子同框的壓力測試
-    ].map(d => ({
-      x:           d.x,
-      y:           GROUND_Y - CONFIG.ORANGE_H,
-      w:           CONFIG.ORANGE_W,
-      h:           CONFIG.ORANGE_H,
-      type:        'fanOrange',
-      sprayPhase:  'idle',
-      phaseTimer:  d.phaseTimer,
-      sprayActive: false,
-      active:      true,
-    })),
+      { x: 3400, phaseTimer: 0 },
+    ].map(d => makeChapter2DualOrange(d.x, GROUND_Y, d.phaseTimer)),
+    buildProjectileOranges: () => [
+      { x: 2520, surfaceY: GROUND_Y,       phaseTimer: 0   },  // 第一隻：地面，凹洞右側
+      { x: 4700, surfaceY: GROUND_Y - 120, phaseTimer: 900 },  // 高處砲台
+    ].map(d => makeChapter2ProjectileOrange(d.x, d.surfaceY, d.phaseTimer)),
   },
 
 ];  // end LEVELS
@@ -4376,13 +4375,35 @@ function isInChapter1Flow(levelIndex) {
 // 流程表最後一步時回傳 LEVELS.length（代表流程結束，避免誤跳到橘子果園）。
 // 若目前關卡不在流程表內（例如未來其他章節關卡），fallback 回傳 levelIndex + 1，
 // 維持舊行為，不影響流程表以外的關卡。
+// v0.3.28：第二章正式流程（stageId-based）：2-1 → 2-2 → 2-3 → 結束（2-4 保留給 Boss 關）
+const CHAPTER2_FLOW_STAGE_IDS = ['2-1', '2-2', '2-3'];
+function getChapter2FlowStep(levelIndex) {
+  const lv = LEVELS[levelIndex];
+  return lv ? CHAPTER2_FLOW_STAGE_IDS.indexOf(lv.stageId) : -1;
+}
+function getLevelIndexByStageId(stageId) {
+  return LEVELS.findIndex(lv => lv.stageId === stageId);
+}
+
 function getNextLevelIndex(levelIndex) {
+  // v0.3.28：第二章正式流程
+  const ch2Step = getChapter2FlowStep(levelIndex);
+  if (ch2Step !== -1) {
+    if (ch2Step + 1 < CHAPTER2_FLOW_STAGE_IDS.length) {
+      const idx = getLevelIndexByStageId(CHAPTER2_FLOW_STAGE_IDS[ch2Step + 1]);
+      return idx >= 0 ? idx : LEVELS.length;
+    }
+    return LEVELS.length; // 2-3 完成：第二章前三關完成，不接舊複合挑戰
+  }
+
   const step = getChapter1FlowStep(levelIndex);
   if (step === -1) return levelIndex + 1; // 不在第一章流程內：維持舊行為
   if (step + 1 < CHAPTER1_FLOW_LEVEL_INDICES.length) {
     return CHAPTER1_FLOW_LEVEL_INDICES[step + 1];
   }
-  return LEVELS.length; // 流程表最後一步：視為「沒有下一關」
+  // v0.3.28：第一章流程最後一步 → 接第二章正式 2-1
+  const ch2Start = getLevelIndexByStageId(CHAPTER2_FLOW_STAGE_IDS[0]);
+  return ch2Start >= 0 ? ch2Start : LEVELS.length;
 }
 
 // 確保 playerInventory.chapter1Flow 旗標物件存在，並回傳它
@@ -4573,6 +4594,19 @@ function getChapter1NextStepInfo() {
       actionLabel: '前往第 3 節',
       actionFn:    'goToNextChapter1Level',
       nextBtnText: '前往第 3 節',
+      nextBtnLocked: false,
+    };
+  }
+
+  // v0.3.28：第一章最後一節通關 → 前往第二章 2-1
+  if (getChapter2FlowStep(nextIdx) === 0) {
+    return {
+      kind:        'goChapter2',
+      title:       '第一章完成！',
+      body:        '下一站：第二章 2-1 橘子油危機。橘子油會讓氣球破掉，要小心！',
+      actionLabel: '前往第二章',
+      actionFn:    'goToNextChapter1Level',
+      nextBtnText: '前往第二章',
       nextBtnLocked: false,
     };
   }
@@ -4929,12 +4963,21 @@ function loadLevel(index) {
   // v0.3.27-test-2：離開橘子家族測試關（任何 loadLevel）時，結束測試補給的存檔保護
   testSupplyOriginalItems = null;
 
-  // v0.3.27-terrain：地面缺口只存在地形測試關，任何 loadLevel 都先清空
+  // v0.3.28：地面缺口（低處坑道）— 依關卡 buildGroundGaps 建立，沒有就清空
   groundGaps.length = 0;
+  if (typeof lv.buildGroundGaps === 'function') {
+    lv.buildGroundGaps().forEach(g => groundGaps.push(g));
+  }
 
-  // v0.3.26：projectile orange 只存在測試關，任何 loadLevel 都先清空
+  // v0.3.28：飛行油彈橘子 — 依關卡 buildProjectileOranges 建立（2-3 正式關卡使用）
   projectileOranges.length = 0;
   projectileOrangeShots.length = 0;
+  if (typeof lv.buildProjectileOranges === 'function') {
+    lv.buildProjectileOranges().forEach(po => {
+      if (!po.active) po.active = true;
+      projectileOranges.push(po);
+    });
+  }
 
   // v0.3.21：Chapter 2 向上油幕橘子
   fanOranges.length = 0;
@@ -6617,8 +6660,12 @@ function checkProjectileOrangeDamage() {
 }
 
 // 測試版：畫實際 damage hitbox 紅框（本體 + 飛行油彈）
+// v0.3.28：projectile orange 紅框預設不顯示；F3 開 / 關，F7 校準模式開啟時也會顯示
+let projectileOrangeHitboxDebugVisible = false;
+
 function drawProjectileOrangeHitboxDebug(cx) {
-  if (!PROJECTILE_ORANGE_HITBOX_DEBUG) return;
+  if (!PROJECTILE_ORANGE_HITBOX_DEBUG) return; // = ADVENTURE_TEST_TOOLS_ENABLED
+  if (!projectileOrangeHitboxDebugVisible && !projectileOilShotCalibrationMode) return;
   if (projectileOranges.length === 0 && projectileOrangeShots.length === 0) return;
   ctx.save();
   ctx.lineWidth   = 1.5;
@@ -8946,8 +8993,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.28+：chapter2-formal-2-1-to-2-3 → ch2-formal-N
+  if (GAME_VERSION.includes('chapter2-formal-2-1-to-2-3')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-formal-' + tN;
   // v0.3.27+：chapter2-terrain-prototype → ch2-terrain-N
-  if (GAME_VERSION.includes('chapter2-terrain-prototype')) {
+  } else if (GAME_VERSION.includes('chapter2-terrain-prototype')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-terrain-' + tN;
   // v0.3.27+：test-menu-cleanup → menu-cleanup-N
@@ -10275,6 +10326,13 @@ function renderHomeNextStage() {
 
   const nextIdx = getNextLevelIndex(currentLevelIndex);
   if (nextIdx >= LEVELS.length) {
+    // v0.3.28：2-3 完成 = 第二章前三關完成，2-4 Boss 關準備中
+    if (getChapter2FlowStep(currentLevelIndex) === CHAPTER2_FLOW_STAGE_IDS.length - 1) {
+      el.innerHTML = '<div class="hns-badge hns-badge--clear">🎉 第二章前三關完成！</div>'
+        + '<div class="hns-hint">🍊 Boss 關準備中，敬請期待！可以重玩或整理背包。</div>';
+      if (btn) { btn.textContent = '🔄 再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
+      return;
+    }
     el.innerHTML = '<div class="hns-badge hns-badge--clear">🎉 全部關卡完成！</div><div class="hns-hint">可以重玩或等待更多冒險！</div>';
     if (btn) { btn.textContent = '🔄 再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
     return;
