@@ -2569,3 +2569,23 @@ html, body {
   }
   .ctrl-right-bottom { gap: 8px; }
 }
+
+
+/* ════════════════════════════════════════════════════════════
+   v0.3.29-fix-3：小V的家上方區塊左右對齊
+   「目前背包摘要」與 result-shop 模式搬到上方的商店區塊，
+   使用與 #home-next-stage-fixed 相同的左右內縮（一般 14px、手機橫向精簡 10px），
+   讓 目前背包 / 商店 / 下一關準備 三者左右邊界一致。
+   ════════════════════════════════════════════════════════════ */
+#home-inventory-summary {
+  padding: 0 14px;
+}
+#home-scroll-body > #home-shop-section {
+  margin-left: 14px;
+  margin-right: 14px;
+  margin-top: 6px;
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #home-inventory-summary { padding: 0 10px; }
+  #home-scroll-body > #home-shop-section { margin-left: 10px; margin-right: 10px; }
+}
