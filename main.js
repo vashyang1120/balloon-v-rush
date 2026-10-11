@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.27-chapter2-orange-family-mix-test-2';
-const BUILD_TIME   = '2026-10-11 01:20';
+const GAME_VERSION = 'adventure-v0.3.27-test-menu-cleanup-test-1';
+const BUILD_TIME   = '2026-10-11 09:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -8765,8 +8765,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.27+：test-menu-cleanup → menu-cleanup-N
+  if (GAME_VERSION.includes('test-menu-cleanup')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'menu-cleanup-' + tN;
   // v0.3.27+：chapter2-orange-family-mix → orange-family-N（test-N 自動帶入）
-  if (GAME_VERSION.includes('chapter2-orange-family-mix')) {
+  } else if (GAME_VERSION.includes('chapter2-orange-family-mix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-family-' + tN;
   // v0.3.26+：projectile-orange-stable → proj-stable-N
@@ -11006,9 +11010,11 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
     btnTestVariant.addEventListener('click', startEnemyVariantTestLevel);
   }
   // v0.3.19：第二章 2-1 測試按鈕
+  // v0.3.27-menu-cleanup：舊「🏭 測試第二章」入口一律隱藏（連到舊版第二章，含 fan orange 幾何版本，
+  // 容易與新的第二章方向混淆）。startChapter2TestLevel() 保留不刪，只是不從暫停選單顯示。
   const btnTestCh2 = document.getElementById('btn-pause-test-ch2');
   if (btnTestCh2) {
-    btnTestCh2.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestCh2.style.display = 'none';
     btnTestCh2.addEventListener('click', startChapter2TestLevel);
   }
   // v0.3.25：雙噴嘴橘子美術測試按鈕
@@ -11028,6 +11034,19 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestOrangeFamily) {
     btnTestOrangeFamily.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestOrangeFamily.addEventListener('click', startOrangeFamilyMixTestLevel);
+  }
+  // v0.3.27-menu-cleanup：⛰️ 測試第二章地形
+  // startChapter2TerrainPrototypeTestLevel() 尚未建立時只顯示提示，不會 crash
+  const btnTestCh2Terrain = document.getElementById('btn-pause-test-chapter2-terrain');
+  if (btnTestCh2Terrain) {
+    btnTestCh2Terrain.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestCh2Terrain.addEventListener('click', () => {
+      if (typeof startChapter2TerrainPrototypeTestLevel === 'function') {
+        startChapter2TerrainPrototypeTestLevel();
+      } else {
+        showHint('⛰️ 第二章地形測試尚未建立', 160);
+      }
+    });
   }
 })();
 
