@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.30-chapter2-scorpion-balance-test-1';
-const BUILD_TIME   = '2026-10-12 01:40';
+const GAME_VERSION = 'adventure-v0.3.31-chapter2-dog-gold-chest-test-1';
+const BUILD_TIME   = '2026-10-12 01:55';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4298,6 +4298,19 @@ const LEVELS = [
       { x: 4200, phaseTimer: 800 },
     ].map(d => makeChapter2DualOrange(d.x, GROUND_Y, d.phaseTimer)),
     buildProjectileOranges: () => [],
+    // v0.3.31：氣球小狗尋寶 — 隱藏金幣寶箱（只有帶氣球小狗才看得到、拿得到）
+    // 放在低處安全區（坑道 3650~3880）裡：遠離雙噴嘴 4200 油線、煙囪 5150、重甲蠍子 4600~4808
+    // 拾取判定為以 (x, y) 為中心 ±50px；玩家要走進坑道才碰得到
+    hiddenTreasure: {
+      type:        'goldChest',
+      name:        '隱藏金幣寶箱',
+      rewardCoins: 40,
+      x:           3790,
+      y:           GROUND_Y + 14,
+      found:       false,
+      emoji:       '🪙',
+      foundMsg:    '氣球小狗找到隱藏金幣寶箱！金幣 +40！',
+    },
   },
 
   // Stage 2-3：飛行油彈訓練場（橘子家族總複習）
@@ -7253,7 +7266,7 @@ function checkHiddenTreasure() {
       saveInventory();
       console.log('gold chest applied:', {
         runCoins: currentRunStats.coins, inventoryCoins: playerInventory.coins });
-      showHint('找到隱藏寶箱！獲得 ' + coins + ' 金幣！', 320);
+      showHint(t.foundMsg || ('找到隱藏寶箱！獲得 ' + coins + ' 金幣！'), 320); // v0.3.31：可用關卡 foundMsg
     }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
@@ -9046,8 +9059,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.31+：chapter2-dog-gold-chest → ch2-dog-chest（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter2-dog-gold-chest')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-dog-chest' + (tN === '1' ? '' : '-' + tN);
   // v0.3.30+：chapter2-scorpion-balance → ch2-scorpion（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-scorpion-balance')) {
+  } else if (GAME_VERSION.includes('chapter2-scorpion-balance')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-scorpion' + (tN === '1' ? '' : '-' + tN);
   // v0.3.29+：inventory-summary-ui-fix → inventory-summary-fix（fix-N > 1 時加上 -N）
@@ -10581,10 +10598,29 @@ function renderHomeNextStage() {
 
   // v0.3.11-test-3：改用 getChapterDisplayInfo，副標統一成「第 N 節｜...」，與結算畫面一致
   const nextDisplayInfo = getChapterDisplayInfo(nextIdx);
+  // v0.3.31：下一關有隱藏寶物時，提示帶氣球小狗（不強制，只是建議）
+  let secretHtml = '';
+  if (lv.hiddenTreasure) {
+    const dog    = playerInventory.balloonDog || {};
+    const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
+    if (!hasDog) {
+      secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……需要氣球小狗才找得到！</div>';
+    } else if (nextBringDog) {
+      secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……</div>'
+        + '<div class="hns-badge hns-badge--clear" style="margin-top:6px">✅ 氣球小狗已安排出發</div>';
+    } else {
+      const canBring = canBringDogNextLevel();
+      secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……帶氣球小狗一起去找找！</div>'
+        + '<button class="rp-next-step-btn" style="margin-top:8px" '
+        + (canBring ? '' : 'disabled ')
+        + 'onclick="homeBringDog(); renderHomeNextStage();">'
+        + (canBring ? '🐾 帶狗出發 -1 🎈' : '🐾 帶狗出發（260 氣球不足）') + '</button>';
+    }
+  }
   el.innerHTML =
     '<div class="hns-stage-id">' + nextDisplayInfo.subtitle + '</div>'
     + '<div class="hns-name">' + nextDisplayInfo.title + '</div>'
-    + (hasSecret ? '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……</div>' : '');
+    + secretHtml;
   if (btn) { btn.textContent = '🚀 出發冒險！'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
 }
 
