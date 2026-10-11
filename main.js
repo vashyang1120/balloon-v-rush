@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-fix-3';
-const BUILD_TIME   = '2026-10-12 01:20';
+const GAME_VERSION = 'adventure-v0.3.30-chapter2-scorpion-balance-test-1';
+const BUILD_TIME   = '2026-10-12 01:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3461,6 +3461,21 @@ function makeChapter2ProjectileOrange(x, surfaceY, phaseTimer = 0) {
     active: true, phase: 'idle', phaseTimer, shotSpawned: false,
   };
 }
+// v0.3.30：第二章蠍子（輔助敵人，讓氣球劍 / 氣球槌在第二章仍有用途）
+// 格式與 1-3 的 mkEnemy 相同；hp 由 loadLevel 依 ENEMY_VARIANTS 重新設定（normal 1 / heavyBody 3）
+// 注意：蠍子會貼地巡邏，巡邏範圍不可跨過地面缺口（坑道）
+function makeChapter2Scorpion(x, patrolRange, variant = 'normal') {
+  return {
+    x, y: GROUND_Y - CONFIG.ENEMY_H,
+    w: CONFIG.ENEMY_W, h: CONFIG.ENEMY_H,
+    vx: -CONFIG.ENEMY_SPEED, hp: 2,
+    patrol: x, patrolRange,
+    active: true, hitFlash: 0,
+    type: 'scorpion', variant, tier: 'normal',
+    baseVx: CONFIG.ENEMY_SPEED,
+  };
+}
+
 // v0.3.28：圓氣球依攜帶上限補生成（同 1-2 規則：最多補到 ROUND_BALLOON_CARRY_LIMIT 顆）
 // spots = [[x, yOff], ...]，依序取用
 function buildChapter2RoundBalloons(spots) {
@@ -4192,6 +4207,7 @@ const LEVELS = [
         [3050,55],
         [3170,145],[3230,145],[3290,145],          // 上路
         [3550,55],[3620,55],
+        [3720,140],[3800,140],[3880,140],          // v0.3.30：蠍子(3800)上方，跳過 / 擊退後的小獎勵
         [3990,105],[4050,105],[4110,105],          // 等待區
         [4540,125],[4600,125],[4660,125],
         [4850,55],[4950,55],
@@ -4202,7 +4218,8 @@ const LEVELS = [
       x, y: GROUND_Y-85, collected: false, bobOffset: Math.random()*Math.PI*2
     })),
     buildRoundBalloons: () => buildChapter2RoundBalloons([[2800, 160]]),
-    buildEnemies:       () => [],
+    // v0.3.30：中後段普通蠍子 x1（普通橘子 3400 之後、煙囪橘子 4300 之前，用氣球劍解決）
+    buildEnemies: () => [ makeChapter2Scorpion(3800, 90, 'normal') ],
     buildOranges: () => [850, 1650, 3400].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
       { x: 2500, phaseTimer: 0   },
@@ -4258,6 +4275,7 @@ const LEVELS = [
         [3980,110],[4060,110],                     // 雙噴嘴前等待區
         [4170,175],[4310,175],                     // 雙噴嘴上方上路
         [4550,55],
+        [4620,140],[4680,140],[4740,140],[4800,140], // v0.3.30：重甲蠍子(4680)上方的通過獎勵
         [4890,105],[4950,105],[5010,105],          // 等待區
         [5390,125],[5450,125],[5510,125],
         [5700,55],
@@ -4268,7 +4286,8 @@ const LEVELS = [
       [1100, 85], [2000, 85], [3560, 85], [4240, 200], [5800, 85],
     ].map(([x, yOff]) => ({ x, y: GROUND_Y-yOff, collected: false, bobOffset: Math.random()*Math.PI*2 })),
     buildRoundBalloons: () => buildChapter2RoundBalloons([[2530, 215], [5450, 185]]),
-    buildEnemies:       () => [],
+    // v0.3.30：重甲蠍子 x1（第二隻雙噴嘴 4200 之後、煙囪橘子 5150 之前的平地，用氣球槌處理）
+    buildEnemies: () => [ makeChapter2Scorpion(4680, 80, 'heavyBody') ],
     buildOranges: () => [750, 3300].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
       { x: 1500, phaseTimer: 0   },
@@ -4335,6 +4354,7 @@ const LEVELS = [
         [5880,-31],[5960,-31],                     // 第二個凹洞底
         [6440,125],[6500,125],[6560,125],
         [6750,55],
+        [6810,55],[6870,55],[6930,55],             // v0.3.30：重甲蠍子(6600)後方、終點前的獎勵
       ];
       return placements.map(([x,yOff]) => ({ x, y: GROUND_Y-yOff, collected:false, bobOffset:Math.random()*Math.PI*2 }));
     },
@@ -4342,7 +4362,12 @@ const LEVELS = [
       [1100, 85], [2700, 85], [3420, 205], [3950, 85], [5150, 85], [6300, 85],
     ].map(([x, yOff]) => ({ x, y: GROUND_Y-yOff, collected: false, bobOffset: Math.random()*Math.PI*2 })),
     buildRoundBalloons: () => buildChapter2RoundBalloons([[2500, 215], [4350, 210]]),
-    buildEnemies:       () => [],
+    // v0.3.30：普通蠍子 x1（雙噴嘴 3400 前，飛行油彈只往左飛不會掃到這裡）
+    //          重甲蠍子 x1（煙囪橘子 6200 之後、終點前的最後戰鬥段）
+    buildEnemies: () => [
+      makeChapter2Scorpion(3050, 80, 'normal'),
+      makeChapter2Scorpion(6600, 70, 'heavyBody'),
+    ],
     buildOranges: () => [750, 5500].map(x => makeChapter2NormalOrange(x, GROUND_Y)),
     buildChimneyOranges: () => [
       { x: 1450, phaseTimer: 0   },
@@ -9021,8 +9046,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.30+：chapter2-scorpion-balance → ch2-scorpion（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter2-scorpion-balance')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-scorpion' + (tN === '1' ? '' : '-' + tN);
   // v0.3.29+：inventory-summary-ui-fix → inventory-summary-fix（fix-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('inventory-summary-ui-fix')) {
+  } else if (GAME_VERSION.includes('inventory-summary-ui-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
     tPart = 'inventory-summary-fix' + (fN === '1' ? '' : fN); // fix-3 → inventory-summary-fix3
   // v0.3.29+：inventory-summary-ui → inventory-summary（test-N > 1 時加上 -N）
