@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.28-chapter2-formal-2-1-to-2-3-test-1';
-const BUILD_TIME   = '2026-10-11 11:30';
+const GAME_VERSION = 'adventure-v0.3.28-chapter2-formal-polish-test-1';
+const BUILD_TIME   = '2026-10-11 11:45';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2272,6 +2272,27 @@ function startChapter2TerrainPrototypeTestLevel() {
   }, 5200);
 }
 
+// v0.3.28-polish：🚀 測試正式第二章 — 直接進入正式 LEVELS 中的 2-1（TEST MODE 限定）
+// 之後依正常流程 2-1 → 2-2 → 2-3；不做任何 runtime 關卡改動
+function startFormalChapter2TestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-1');
+  if (idx < 0) { showHint('找不到 2-1 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('🚀 正式第二章測試：2-1 → 2-2 → 2-3', 240);
+}
+
 function startProjectileOrangeTestLevel() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
@@ -2467,7 +2488,11 @@ function buildAdventureResultSnapshot(clearStatus) {
 
   const foundRecipe   = currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈';
   const foundTreasure = currentRunStats.foundHiddenTreasureName === '金幣寶箱';
-  const progressLabel = [lv.stageId || '', lv.shortName || lv.name || ''].filter(Boolean).join(' ');
+  // v0.3.28-polish：第二章 shortName 已含 stageId（例如「2-1 橘子油危機」），避免重複成「2-1 2-1 …」
+  const _lvLabel = lv.shortName || lv.name || '';
+  const progressLabel = (lv.stageId && _lvLabel.startsWith(lv.stageId))
+    ? _lvLabel
+    : [lv.stageId || '', _lvLabel].filter(Boolean).join(' ');
 
   return {
     gameId:           'adventure',
@@ -4131,7 +4156,7 @@ const LEVELS = [
     stageId:     '2-1',
     displayName: '第 2-1 關：橘子油危機',
     name:        '第 2-1 關：橘子油危機',
-    shortName:   '橘子油危機',
+    shortName:   '2-1 橘子油危機',
     length:      5400,               // FINISH_X = 5200
     scrollSpeed: 1,
     bg:          'stage1',
@@ -4191,7 +4216,7 @@ const LEVELS = [
     stageId:     '2-2',
     displayName: '第 2-2 關：雙噴嘴封鎖線',
     name:        '第 2-2 關：雙噴嘴封鎖線',
-    shortName:   '雙噴嘴封鎖線',
+    shortName:   '2-2 雙噴嘴封鎖線',
     length:      6400,               // FINISH_X = 6200
     scrollSpeed: 1,
     bg:          'stage1',
@@ -4260,7 +4285,7 @@ const LEVELS = [
     stageId:     '2-3',
     displayName: '第 2-3 關：飛行油彈訓練場',
     name:        '第 2-3 關：飛行油彈訓練場',
-    shortName:   '飛行油彈訓練場',
+    shortName:   '2-3 飛行油彈訓練場',
     length:      7200,               // FINISH_X = 7000
     scrollSpeed: 1,
     bg:          'stage1',
@@ -8993,8 +9018,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.28+：chapter2-formal-polish → ch2-formal-polish（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter2-formal-polish')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-formal-polish' + (tN === '1' ? '' : '-' + tN);
   // v0.3.28+：chapter2-formal-2-1-to-2-3 → ch2-formal-N
-  if (GAME_VERSION.includes('chapter2-formal-2-1-to-2-3')) {
+  } else if (GAME_VERSION.includes('chapter2-formal-2-1-to-2-3')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-formal-' + tN;
   // v0.3.27+：chapter2-terrain-prototype → ch2-terrain-N
@@ -11237,19 +11266,19 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   }
   const btnTestLevel3 = document.getElementById('btn-pause-test-level3');
   if (btnTestLevel3) {
-    btnTestLevel3.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestLevel3.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestLevel3.addEventListener('click', startAdventureTestLevel3);
   }
   // v0.3.14：橘子怪測試關按鈕
   const btnTestOrange = document.getElementById('btn-pause-test-orange');
   if (btnTestOrange) {
-    btnTestOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestOrange.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestOrange.addEventListener('click', startOrangeTestLevel);
   }
   // v0.3.15：Enemy Variant+Tier 測試按鈕
   const btnTestVariant = document.getElementById('btn-pause-test-variant');
   if (btnTestVariant) {
-    btnTestVariant.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestVariant.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestVariant.addEventListener('click', startEnemyVariantTestLevel);
   }
   // v0.3.19：第二章 2-1 測試按鈕
@@ -11263,26 +11292,32 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   // v0.3.25：雙噴嘴橘子美術測試按鈕
   const btnTestDualOrange = document.getElementById('btn-pause-test-dual-orange');
   if (btnTestDualOrange) {
-    btnTestDualOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestDualOrange.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestDualOrange.addEventListener('click', startDualOrangeTestLevel);
   }
   // v0.3.26：飛行油彈橘子美術測試按鈕
   const btnTestProjOrange = document.getElementById('btn-pause-test-projectile-orange');
   if (btnTestProjOrange) {
-    btnTestProjOrange.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestProjOrange.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestProjOrange.addEventListener('click', startProjectileOrangeTestLevel);
   }
   // v0.3.27：第二章橘子家族綜合測試按鈕
   const btnTestOrangeFamily = document.getElementById('btn-pause-test-orange-family');
   if (btnTestOrangeFamily) {
-    btnTestOrangeFamily.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestOrangeFamily.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestOrangeFamily.addEventListener('click', startOrangeFamilyMixTestLevel);
   }
   // v0.3.27：⛰️ 測試第二章地形 → 直接進入 runtime-only 地形原型測試關
   const btnTestCh2Terrain = document.getElementById('btn-pause-test-chapter2-terrain');
   if (btnTestCh2Terrain) {
-    btnTestCh2Terrain.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestCh2Terrain.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestCh2Terrain.addEventListener('click', startChapter2TerrainPrototypeTestLevel);
+  }
+  // v0.3.28-polish：🚀 測試正式第二章 → 直接進入正式 2-1（不是地形 prototype）
+  const btnTestCh2Formal = document.getElementById('btn-pause-test-chapter2-formal');
+  if (btnTestCh2Formal) {
+    btnTestCh2Formal.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestCh2Formal.addEventListener('click', startFormalChapter2TestLevel);
   }
 })();
 
