@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-test-1';
-const BUILD_TIME   = '2026-10-11 22:20';
+const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-fix-1';
+const BUILD_TIME   = '2026-10-11 23:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2658,6 +2658,8 @@ const mobileBtn = { left: false, right: false, jump: false, attack: false };
 
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') {
+    // v0.3.29-fix-1：ESC 先關最上層 overlay — 暫停背包開著時只關背包，回到暫停選單
+    if (isPauseBagOpen()) { closePauseBagBackToPauseMenu(); return; }
     if (gameState === 'playing') { pauseGame(); return; }
     if (gameState === 'paused')  { resumeGame(); return; }
     return;
@@ -7414,6 +7416,7 @@ function resumeGame() {
   gameState = 'playing';
   const el = document.getElementById('pause-overlay');
   if (el) el.style.display = 'none';
+  closePauseBag(); // v0.3.29-fix-1：保險 — 遊戲繼續時暫停背包一定不留在畫面上
   // lastTime 重置，避免暫停後 dt 爆炸大
   lastTime = 0;
 }
@@ -9018,8 +9021,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.29+：inventory-summary-ui-fix → inventory-summary-fix（fix-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('inventory-summary-ui-fix')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
+    tPart = 'inventory-summary-fix' + (fN === '1' ? '' : '-' + fN);
   // v0.3.29+：inventory-summary-ui → inventory-summary（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('inventory-summary-ui')) {
+  } else if (GAME_VERSION.includes('inventory-summary-ui')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'inventory-summary' + (tN === '1' ? '' : '-' + tN);
   // v0.3.28+：chapter2-formal-polish → ch2-formal-polish（test-N > 1 時加上 -N）
@@ -9864,6 +9871,24 @@ function buildResultShopHintHtml() {
     + '</div>';
 }
 
+// v0.3.29-fix-1：從結算頁 Shopping 進來時，把商店區塊搬到「目前背包摘要」正下方；
+// 其他入口則把商店放回 #home-body 原本的位置（一般模式順序不變）
+let homeShopOriginalPlace = null; // { parent, next }
+function setHomeShopPriority(on) {
+  const shop    = document.getElementById('home-shop-section');
+  const summary = document.getElementById('home-inventory-summary');
+  if (!shop || !summary || !summary.parentNode) return;
+  if (!homeShopOriginalPlace) {
+    homeShopOriginalPlace = { parent: shop.parentNode, next: shop.nextSibling };
+  }
+  if (on) {
+    summary.parentNode.insertBefore(shop, summary.nextSibling);
+  } else if (shop.parentNode !== homeShopOriginalPlace.parent) {
+    homeShopOriginalPlace.parent.insertBefore(shop, homeShopOriginalPlace.next);
+    shop.style.display = 'none'; // 一般模式：商店維持收合，由卡片展開
+  }
+}
+
 function openHomeShopFromResult() {
   // v0.3.24-fix-1：用 'result-shop' 來源開啟，讓 homeGoBack() 能回到結算頁
   if (typeof openHomeScreen === 'function') openHomeScreen('result-shop');
@@ -9879,8 +9904,9 @@ function openHomeShopFromResult() {
     shopSection.style.display = 'block';
     if (shopCard) shopCard.classList.add('hcard--open');
     renderHomeShop();
-    // 捲動到商店區塊
-    shopSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // v0.3.29-fix-1：商店已在背包摘要正下方，捲到最上方即可同時看到摘要與商店
+    const scrollBody = document.getElementById('home-scroll-body');
+    if (scrollBody) scrollBody.scrollTop = 0;
   }, 80);
 }
 
@@ -10150,6 +10176,9 @@ function openHomeScreen(from) {
       backBtn.classList.add('home-btn--dim');
     }
   }
+
+  // v0.3.29-fix-1：只有 result-shop 模式把商店放在背包摘要下方，其他入口維持一般順序
+  setHomeShopPriority(homeEntryMode === 'result-shop');
 
   // 渲染各區塊
   renderHomeInventory();
@@ -10756,6 +10785,8 @@ function openChallengeSummary() {
 function openPauseBag() {
   const panel = document.getElementById('pause-bag-panel');
   if (!panel) return;
+  // v0.3.29-fix-1：背包只在暫停中開啟，不讓遊戲回到 playing
+  if (gameState === 'playing') pauseGame();
   const ci = playerInventory.craftedItems || {};
   const eqSword  = (equippedSword.id  && equippedSword.currentDur)  ? equippedSword.currentDur  + '/' + equippedSword.maxDur  : null;
   const eqHammer = (equippedHammer.id && equippedHammer.currentDur) ? equippedHammer.currentDur + '/' + equippedHammer.maxDur : null;
@@ -10810,9 +10841,27 @@ function openPauseBag() {
   panel.style.display = 'flex';
 }
 
+// 只關閉暫停背包，不改 gameState、不關閉暫停選單
 function closePauseBag() {
   const panel = document.getElementById('pause-bag-panel');
-  if (panel) panel.style.display = 'none';
+  if (panel) {
+    panel.style.display = 'none';
+    panel.classList.remove('active');
+  }
+}
+
+// v0.3.29-fix-1：暫停背包是否正在顯示
+function isPauseBagOpen() {
+  const panel = document.getElementById('pause-bag-panel');
+  return !!(panel && panel.style.display && panel.style.display !== 'none');
+}
+
+// v0.3.29-fix-1：關閉暫停背包並回到暫停選單（ESC / 手機右上暫停鍵共用）
+function closePauseBagBackToPauseMenu() {
+  closePauseBag();
+  if (gameState === 'playing') gameState = 'paused';
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl && gameState === 'paused') pauseEl.style.display = 'flex';
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {

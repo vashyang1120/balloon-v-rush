@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.29-inventory-summary-ui-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.29-inventory-summary-ui-fix-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -219,7 +219,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.29-inventory-summary-ui-test-1 · 2026-10-11
+        adventure-v0.3.29-inventory-summary-ui-fix-1 · 2026-10-11
       </div>
 
     </div><!-- /#home-panel -->
@@ -345,7 +345,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.29-inventory-summary-ui-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.29-inventory-summary-ui-fix-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
@@ -406,6 +406,11 @@
   function handlePauseClick(e) {
     e.preventDefault();
     if (typeof pauseGame !== 'function') return;
+    // v0.3.29-fix-1：暫停背包開著時，先關背包回到暫停選單（與 ESC 相同優先序）
+    if (typeof isPauseBagOpen === 'function' && isPauseBagOpen()) {
+      closePauseBagBackToPauseMenu();
+      return;
+    }
     if (gameState === 'playing')     pauseGame();
     else if (gameState === 'paused') resumeGame();
   }
