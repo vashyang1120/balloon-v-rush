@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.28-chapter2-formal-polish-test-1';
-const BUILD_TIME   = '2026-10-11 11:45';
+const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-test-1';
+const BUILD_TIME   = '2026-10-11 22:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -9018,8 +9018,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.29+：inventory-summary-ui → inventory-summary（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('inventory-summary-ui')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'inventory-summary' + (tN === '1' ? '' : '-' + tN);
   // v0.3.28+：chapter2-formal-polish → ch2-formal-polish（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-formal-polish')) {
+  } else if (GAME_VERSION.includes('chapter2-formal-polish')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-formal-polish' + (tN === '1' ? '' : '-' + tN);
   // v0.3.28+：chapter2-formal-2-1-to-2-3 → ch2-formal-N
@@ -9326,6 +9330,7 @@ function refreshResultBag() {
     '<div class="rp-row"><span class="rp-label">' + label + '</span>'
     + '<span class="rp-val ' + cls + '">' + val + '</span></div>'
   ).join('');
+  refreshInventorySummary(); // v0.3.29
 }
 
 function populateResultPanel() {
@@ -9611,6 +9616,9 @@ function populateResultPanel() {
     html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
   }
   html += buildResultHpHtml(); // 直接顯示目前 HP
+
+  // v0.3.29：目前背包總量（通關後的總持有量，放在提醒卡片與「本關獲得」之前）
+  html += '<div id="rp-inventory-summary">' + buildInventorySummaryHtml() + '</div>';
 
   // v0.3.11-test-3：「下一步」區塊 — 結算畫面資訊減量後的單一重點行動指引
   // 放在中上方（標題/HP 之後，主要收穫區塊之前），只在第一章流程內、且為 clear（非 gameover）時顯示
@@ -10145,6 +10153,7 @@ function openHomeScreen(from) {
 
   // 渲染各區塊
   renderHomeInventory();
+  renderHomeInventorySummary(); // v0.3.29：置頂背包摘要
   renderHomeSupply();
   renderHomeDog();
   renderHomeNextStage();
@@ -10174,6 +10183,114 @@ function closeHomeScreen() {
 }
 
 // ── 目前背包 ────────────────────────────────
+// ════════════════════════════════════════════════════════
+//  v0.3.29：背包摘要（結算頁 + 小V的家共用）
+//  ──────────────────────────────────────────────────────
+//  三張卡：🪙 金幣 / 🎈 氣球材料 / 📦 其他物品
+//  顯示的是 playerInventory 目前「總持有量」（不是本關獲得）。
+//  其他物品預設最多顯示 3 項，超過時可展開 / 收合（inventoryOtherExpanded）。
+//  樣式由 ensureInventorySummaryStyles() 注入（不需要修改 style.css）。
+// ════════════════════════════════════════════════════════
+const INVENTORY_OTHER_PREVIEW_COUNT = 3;
+let inventoryOtherExpanded = false;
+
+// 其他物品清單（非金幣、非氣球材料）；未來的弱點筆記 / 地圖碎片 / 特殊道具可加在這裡
+function getInventoryOtherItems() {
+  const ci    = playerInventory.craftedItems || {};
+  const items = playerInventory.items || {};
+  const list  = [];
+  const swordQty = Math.max(ci.basicSword || 0, (equippedSword && equippedSword.id === 'basicSword') ? 1 : 0);
+  if (swordQty > 0)                  list.push({ icon: '⚔️', label: '基礎氣球劍', count: swordQty });
+  if ((ci.basicHammer || 0) > 0)     list.push({ icon: '🔨', label: '基礎氣球槌', count: ci.basicHammer });
+  if ((ci.balloonLollipop || 0) > 0) list.push({ icon: '🍭', label: '氣球棒棒糖', count: ci.balloonLollipop });
+  if ((items.bandage || 0) > 0)      list.push({ icon: '🩹', label: '繃帶',       count: items.bandage });
+  if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
+  return list;
+}
+
+function ensureInventorySummaryStyles() {
+  if (document.getElementById('inv-summary-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'inv-summary-styles';
+  style.textContent = `
+    .inv-sum { margin: 8px 0 10px; }
+    .inv-sum__title { font-weight: bold; font-size: 14px; color: #ffe9a8; margin: 0 0 6px 2px; }
+    .inv-sum__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .inv-sum__card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 10px; padding: 7px 8px; min-width: 0; text-align: left; }
+    .inv-sum__head { font-size: 12px; color: #ddd; margin-bottom: 4px; white-space: nowrap; }
+    .inv-sum__big { font-size: 22px; font-weight: bold; color: #ffd84a; line-height: 1.1; }
+    .inv-sum__line { font-size: 12px; color: #f2f2f2; line-height: 1.5; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; }
+    .inv-sum__line b { color: #ff9fd0; }
+    .inv-sum__empty { font-size: 12px; color: #999; }
+    .inv-sum__toggle { margin-top: 4px; font-size: 11px; padding: 2px 8px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; }
+    @media (max-width: 380px) { .inv-sum__big { font-size: 18px; } .inv-sum__line { font-size: 11px; } }
+  `;
+  document.head.appendChild(style);
+}
+
+function buildInventorySummaryHtml(options = {}) {
+  ensureInventorySummaryStyles();
+  const title  = options.title || '🎒 目前背包';
+  const coins  = Number(playerInventory.coins || 0);
+  const b260   = Number(playerInventory.balloon260 || 0);
+  const round  = Number(playerInventory.roundBalloon || 0);
+  const others = getInventoryOtherItems();
+  const shown  = inventoryOtherExpanded ? others : others.slice(0, INVENTORY_OTHER_PREVIEW_COUNT);
+
+  let otherInner;
+  if (others.length === 0) {
+    otherInner = '<div class="inv-sum__empty">目前沒有其他物品</div>';
+  } else {
+    otherInner = shown.map(o =>
+      '<div class="inv-sum__line">' + o.icon + ' ' + o.label + ' <b>×' + o.count + '</b></div>'
+    ).join('');
+    if (others.length > INVENTORY_OTHER_PREVIEW_COUNT) {
+      otherInner += '<button class="inv-sum__toggle" onclick="toggleInventoryOtherExpanded(event)">'
+        + (inventoryOtherExpanded ? '收合 ▲' : '展開（共 ' + others.length + ' 項）▼') + '</button>';
+    }
+  }
+
+  return '<div class="inv-sum">'
+    + '<div class="inv-sum__title">' + title + '</div>'
+    + '<div class="inv-sum__grid">'
+    +   '<div class="inv-sum__card"><div class="inv-sum__head">🪙 金幣</div>'
+    +     '<div class="inv-sum__big">' + coins + '</div></div>'
+    +   '<div class="inv-sum__card"><div class="inv-sum__head">🎈 氣球材料</div>'
+    +     '<div class="inv-sum__line">260 <b>×' + b260 + '</b></div>'
+    +     '<div class="inv-sum__line">圓氣球 <b>×' + round + '</b></div></div>'
+    +   '<div class="inv-sum__card"><div class="inv-sum__head">📦 其他物品</div>' + otherInner + '</div>'
+    + '</div></div>';
+}
+
+// 小V的家最上方的背包摘要
+function renderHomeInventorySummary() {
+  const el = document.getElementById('home-inventory-summary');
+  if (!el) return;
+  el.innerHTML = buildInventorySummaryHtml();
+}
+
+// 結算頁置頂的背包摘要（populateResultPanel 會先建立容器）
+function renderResultInventorySummary() {
+  const el = document.getElementById('rp-inventory-summary');
+  if (!el) return;
+  el.innerHTML = buildInventorySummaryHtml();
+}
+
+// 兩處摘要一起刷新（有容器才會畫）
+function refreshInventorySummary() {
+  try { renderHomeInventorySummary(); } catch (e) {}
+  try { renderResultInventorySummary(); } catch (e) {}
+}
+
+function toggleInventoryOtherExpanded(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  inventoryOtherExpanded = !inventoryOtherExpanded;
+  refreshInventorySummary();
+}
+
 function renderHomeInventory() {
   const el = document.getElementById('home-inventory-body');
   if (!el) return;
@@ -10188,7 +10305,7 @@ function renderHomeInventory() {
     { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
   ].filter(i => i.v > 0);
-  if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; refreshInventorySummary(); return; }
   el.innerHTML = '<div class="inv-grid">'
     + items.map(i =>
         '<div class="inv-item ' + i.cls + '">'
@@ -10199,6 +10316,7 @@ function renderHomeInventory() {
         + '</div>'
       ).join('')
     + '</div>';
+  refreshInventorySummary(); // v0.3.29：完整背包更新時，置頂摘要也一起更新
 }
 
 // ── 補給與生命 ──────────────────────────────
@@ -11320,5 +11438,20 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
     btnTestCh2Formal.addEventListener('click', startFormalChapter2TestLevel);
   }
 })();
+
+// v0.3.29：會改變背包內容的操作，執行後一律刷新背包摘要（結算頁 + 小V的家）
+// 用包裝方式加上刷新，不改動這些函式原本的邏輯與回傳值
+[
+  'bringDogNextLevel', 'homeBringDog', 'buyShopItem', 'useHealingItem',
+  'homeUseBandage', 'buyBandage', 'craftItem', 'homeMakeDog',
+].forEach(name => {
+  const orig = globalThis[name];
+  if (typeof orig !== 'function') return;
+  globalThis[name] = function (...args) {
+    const result = orig.apply(this, args);
+    try { refreshInventorySummary(); } catch (e) {}
+    return result;
+  };
+});
 
 requestAnimationFrame(loop);
