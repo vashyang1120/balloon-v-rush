@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.27-test-menu-cleanup-test-1';
-const BUILD_TIME   = '2026-10-11 09:10';
+const GAME_VERSION = 'adventure-v0.3.27-chapter2-terrain-prototype-test-1';
+const BUILD_TIME   = '2026-10-11 09:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2134,6 +2134,141 @@ function startOrangeFamilyMixTestLevel() {
   }, 9200);
 }
 
+// v0.3.27：⛰️ 第二章地形原型測試關（TEST MODE 限定，runtime-only）
+// 以 2-2 為底板，重建平台 / 低處坑道 / 高處橘子 / 收集物；不修改 LEVELS 原始資料。
+// 不含移動平台、不含落穴死亡（坑底有平台接住）。
+const CH2_TERRAIN_PIT_X       = 1500;
+const CH2_TERRAIN_PIT_W       = 260;
+// 坑底深度：玩家判定框頂端必須低於飛行油彈 damage hitbox 底端（約 GROUND_Y-15）才躲得過，
+// 玩家高 80px，所以坑底至少要在 GROUND_Y+59；取 +66 留一點安全空間。
+const CH2_TERRAIN_PIT_FLOOR_Y = GROUND_Y + 66;
+
+function startChapter2TerrainPrototypeTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
+  if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
+  resetInventory();
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  initEquippedSword();
+  initEquippedHammer();
+  normalizeActiveWeaponSlot();
+  applyAdventureTestLoadout();
+  restart({ keepHp: false, preserveBringDog: false });
+  applyAdventureTestLoadout();
+
+  // ── 清掉底板原有威脅與收集物（只影響本次 runtime）──
+  enemies.length = 0;
+  orangeNemeses.length = 0;
+  chimneyOranges.length = 0;
+  dualNozzleOranges.length = 0;
+  projectileOranges.length = 0;
+  projectileOrangeShots.length = 0;
+  fanOranges.length = 0;
+  spikes.length = 0;
+  coins.length = 0;
+  balloons260.length = 0;
+  roundBalloons.length = 0;
+  currentHiddenTreasure = null;
+
+  // ── 關卡長度與終點 ──
+  LEVEL_LENGTH = 7000;
+  FINISH_X     = 6800;
+
+  // ── 測試容錯：HP 6、補給（runtime-only，存檔保護同橘子家族測試關）──
+  player.maxHp = 6;
+  player.hp    = 6;
+  levelStartHp = 6;
+  if (levelStartSnapshot) levelStartSnapshot.hp = 6;
+  ensureInventoryItems();
+  testSupplyOriginalItems = Object.assign({}, playerInventory.items);
+  playerInventory.items.bandage     = Math.max(playerInventory.items.bandage     || 0, 5);
+  playerInventory.items.firstAidKit = Math.max(playerInventory.items.firstAidKit || 0, 1);
+
+  // ── 地形：清掉底板平台後重建 ──
+  platforms.length = 0;
+  groundGaps.length = 0;
+  const P = (x, y, w, h = 22) => platforms.push({ x, y, w, h });
+  // A. 入口低平台
+  P(520,  GROUND_Y - 90,  260);
+  // B. 低處坑道：兩側階梯平台 + 坑底（地面在 1500~1760 挖空，坑底平台接住玩家）
+  P(1250, GROUND_Y - 50,  160);
+  groundGaps.push({ x: CH2_TERRAIN_PIT_X, w: CH2_TERRAIN_PIT_W });
+  P(CH2_TERRAIN_PIT_X, CH2_TERRAIN_PIT_FLOOR_Y, CH2_TERRAIN_PIT_W, CANVAS_H - CH2_TERRAIN_PIT_FLOOR_Y);
+  P(1820, GROUND_Y - 50,  160);
+  // C. 上路獎勵平台（下路不放敵人，可選擇避開）
+  P(2350, GROUND_Y - 130, 520);
+  // D. 雙噴嘴橘子前等待平台
+  P(3350, GROUND_Y - 70,  280);
+  // F. 下路安全平台（放在 E 之前宣告，與 E 部分重疊、高度不同）
+  P(4450, GROUND_Y - 40,  280);
+  // E. 高處飛行油彈橘子砲台平台
+  P(4700, GROUND_Y - 120, 360);
+  // G. 結尾等待平台
+  P(5750, GROUND_Y - 80,  280);
+
+  // ── 橘子怪 ──
+  const groundOrangeY = GROUND_Y - CONFIG.ORANGE_H;
+  const yOnPlatform = (platformY) => platformY - CONFIG.ORANGE_H;
+  const mkNormalOrange = (x, y) => ({
+    x, y, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    sprayDir: -1, phase: 'idle', phaseTimer: 0, sprayActive: false,
+    type: 'balloonNemesis', variant: 'straight', tier: 'normal',
+  });
+  const mkChimneyOrange = (x, y) => ({
+    x, y, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'chimneyOrange', sprayPhase: 'idle', phaseTimer: 0, sprayActive: false, active: true,
+  });
+  const mkDualOrange = (x, y) => ({
+    x, y, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    type: 'dualNozzleOrange', sprayPhase: 'idle', phaseTimer: 0, sprayActive: false, active: true,
+  });
+  const mkProjectileOrange = (x, y) => ({
+    x, y, w: CONFIG.ORANGE_W, h: CONFIG.ORANGE_H,
+    active: true, phase: 'idle', phaseTimer: 0, shotSpawned: false,
+  });
+
+  // A 段：普通橘子（地面，在入口平台右側；平台是躲噴油的上路）
+  orangeNemeses.push(mkNormalOrange(860, groundOrangeY));
+  // B 段：飛行油彈橘子（地面，坑道右側；油彈往左飛越坑道上方）
+  projectileOranges.push(mkProjectileOrange(2150, groundOrangeY));
+  // C 段：上路平台上的普通橘子（高處）
+  orangeNemeses.push(mkNormalOrange(2600, yOnPlatform(GROUND_Y - 130)));
+  // D 段：雙噴嘴橘子（地面）
+  dualNozzleOranges.push(mkDualOrange(3750, groundOrangeY));
+  // E 段：高處飛行油彈橘子（站在 E 平台上）
+  projectileOranges.push(mkProjectileOrange(4850, yOnPlatform(GROUND_Y - 120)));
+  // F 段：煙囪橘子 + 雙噴嘴橘子（地面，相距 550px）
+  chimneyOranges.push(mkChimneyOrange(5700, groundOrangeY));
+  dualNozzleOranges.push(mkDualOrange(6250, groundOrangeY));
+
+  // ── 收集物（全部可取得，不放終點後、不與橘子重疊）──
+  const C  = (x, y) => coins.push({ x, y, collected: false, bobOffset: Math.random() * Math.PI * 2 });
+  const B  = (x, y) => balloons260.push({ x, y, collected: false, bobOffset: Math.random() * Math.PI * 2 });
+  const RB = (x, y) => roundBalloons.push({ x, y, collected: false, bobOffset: Math.random() * Math.PI * 2 });
+  // 入口平台上方
+  C(560, GROUND_Y - 125); C(620, GROUND_Y - 125); C(680, GROUND_Y - 125);
+  // 上路獎勵平台上方（原 2620 會與平台上的橘子重疊，移到橘子右側 2720）
+  C(2380, GROUND_Y - 165); C(2460, GROUND_Y - 165); C(2540, GROUND_Y - 165); C(2720, GROUND_Y - 165);
+  // 下路安全平台上方
+  C(4480, GROUND_Y - 75); C(4560, GROUND_Y - 75);
+  // 氣球
+  B(2800, GROUND_Y - 185);
+  B(4950, GROUND_Y - 175);
+  RB(5050, GROUND_Y - 180);
+
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  gameState = 'playing';
+  showHint('⛰️ 第二章地形測試：高低平台 / 低處躲油彈 / 高處橘子', 300);
+  const terrainLevelIdx = idx;
+  setTimeout(() => {
+    if (gameState === 'playing' && currentLevelIndex === terrainLevelIdx && LEVEL_LENGTH === 7000) {
+      showHint('低處可以用來躲飛行油彈，上路有額外獎勵！', 240);
+    }
+  }, 5200);
+}
+
 function startProjectileOrangeTestLevel() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
@@ -3229,6 +3364,21 @@ const player = {
 
 // ── Level generation ──────────────────────────
 // All positions are in world coordinates.
+
+// v0.3.27-terrain：runtime-only 地面缺口（只在「⛰️ 測試第二章地形」使用）
+// 每個缺口 { x, w }：缺口範圍內沒有地面，玩家會掉到坑底平台上（不是落穴，不會死亡）。
+// 正式關卡一律是空陣列（loadLevel 會清空），地面行為與原本完全相同。
+const groundGaps = [];
+
+// 玩家中心點所在的地面缺口（沒有則回傳 null）
+function getGroundGapUnderPlayer() {
+  if (groundGaps.length === 0) return null;
+  const cxp = player.x + player.w / 2;
+  for (const g of groundGaps) {
+    if (cxp >= g.x && cxp <= g.x + g.w) return g;
+  }
+  return null;
+}
 
 // 第 1 關平台（配合 5 段節奏，世界寬 6400）
 const platforms = [
@@ -4779,6 +4929,9 @@ function loadLevel(index) {
   // v0.3.27-test-2：離開橘子家族測試關（任何 loadLevel）時，結束測試補給的存檔保護
   testSupplyOriginalItems = null;
 
+  // v0.3.27-terrain：地面缺口只存在地形測試關，任何 loadLevel 都先清空
+  groundGaps.length = 0;
+
   // v0.3.26：projectile orange 只存在測試關，任何 loadLevel 都先清空
   projectileOranges.length = 0;
   projectileOrangeShots.length = 0;
@@ -5095,7 +5248,24 @@ function updatePlayer(dt) {
   player.onGround = false;
 
   // Ground collision
-  if (player.y + player.h >= GROUND_Y) {
+  // v0.3.27-terrain：站在地面缺口上方時沒有地面，交給坑底平台接住
+  const groundGap = getGroundGapUnderPlayer();
+  if (groundGap) {
+    // 腳已低於地面＝在坑裡：坑的左右兩側視為牆，只能跳出去
+    if (player.y + player.h > GROUND_Y) {
+      const minX = groundGap.x;
+      const maxX = groundGap.x + groundGap.w - player.w;
+      if (player.x < minX) player.x = minX;
+      if (player.x > maxX) player.x = maxX;
+      // 自動捲軸把玩家推到坑牆外時，直接抬回坑右側地面，避免卡在畫面外
+      if (player.x < cameraX + 30) {
+        player.x = groundGap.x + groundGap.w;
+        player.y = GROUND_Y - player.h;
+        player.vy = 0;
+        player.onGround = true;
+      }
+    }
+  } else if (player.y + player.h >= GROUND_Y) {
     player.y = GROUND_Y - player.h;
     player.vy = 0;
     player.onGround = true;
@@ -7464,6 +7634,17 @@ function drawWorld() {
   ctx.fillStyle = COLORS.dirt;
   ctx.fillRect(0, GROUND_Y + 8, CANVAS_W, CANVAS_H - GROUND_Y - 8);
 
+  // v0.3.27-terrain：地面缺口（低處坑道）— 挖掉地面，坑底由平台繪製
+  groundGaps.forEach(g => {
+    const gx = g.x - cx;
+    if (gx > CANVAS_W + 10 || gx + g.w < -10) return;
+    ctx.fillStyle = '#4a3220';                       // 坑內陰影
+    ctx.fillRect(gx, GROUND_Y, g.w, CANVAS_H - GROUND_Y);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';              // 左右坑壁
+    ctx.fillRect(gx, GROUND_Y, 6, CANVAS_H - GROUND_Y);
+    ctx.fillRect(gx + g.w - 6, GROUND_Y, 6, CANVAS_H - GROUND_Y);
+  });
+
   // Finish flag
   drawFinishFlag(cx);
 
@@ -8765,8 +8946,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.27+：chapter2-terrain-prototype → ch2-terrain-N
+  if (GAME_VERSION.includes('chapter2-terrain-prototype')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-terrain-' + tN;
   // v0.3.27+：test-menu-cleanup → menu-cleanup-N
-  if (GAME_VERSION.includes('test-menu-cleanup')) {
+  } else if (GAME_VERSION.includes('test-menu-cleanup')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'menu-cleanup-' + tN;
   // v0.3.27+：chapter2-orange-family-mix → orange-family-N（test-N 自動帶入）
@@ -11035,18 +11220,11 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
     btnTestOrangeFamily.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
     btnTestOrangeFamily.addEventListener('click', startOrangeFamilyMixTestLevel);
   }
-  // v0.3.27-menu-cleanup：⛰️ 測試第二章地形
-  // startChapter2TerrainPrototypeTestLevel() 尚未建立時只顯示提示，不會 crash
+  // v0.3.27：⛰️ 測試第二章地形 → 直接進入 runtime-only 地形原型測試關
   const btnTestCh2Terrain = document.getElementById('btn-pause-test-chapter2-terrain');
   if (btnTestCh2Terrain) {
     btnTestCh2Terrain.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
-    btnTestCh2Terrain.addEventListener('click', () => {
-      if (typeof startChapter2TerrainPrototypeTestLevel === 'function') {
-        startChapter2TerrainPrototypeTestLevel();
-      } else {
-        showHint('⛰️ 第二章地形測試尚未建立', 160);
-      }
-    });
+    btnTestCh2Terrain.addEventListener('click', startChapter2TerrainPrototypeTestLevel);
   }
 })();
 
