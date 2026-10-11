@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.31-chapter2-dog-gold-chest-test-1';
-const BUILD_TIME   = '2026-10-12 01:55';
+const GAME_VERSION = 'adventure-v0.3.32-chapter2-boss-note-foundation-test-1';
+const BUILD_TIME   = '2026-10-12 02:45';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2926,6 +2926,9 @@ const INVENTORY_DEFAULTS = {
     bandage:     0,
     firstAidKit: 0,
   },
+  // v0.3.32：重要物品（Boss 弱點筆記、未來的地圖碎片 / 特殊道具）
+  // 以物品 id 為 key 的紀錄：{ id, type, name, emoji, title, noteText, acquiredAt }
+  keyItems: {},
   // v0.3.11 Chapter1 核心流程旗標（一次性教學 / 保底機制，隨背包存檔）
   chapter1Flow: {
     dogIntroDone:                  false,
@@ -3149,6 +3152,8 @@ function loadInventory() {
       merged.items = Object.assign(
         {}, INVENTORY_DEFAULTS.items, parsed.items || {}
       );
+      // v0.3.32 migration：舊存檔沒有 keyItems 時補空物件
+      merged.keyItems = Object.assign({}, parsed.keyItems || {});
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
@@ -3157,6 +3162,7 @@ function loadInventory() {
   d.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
   d.chapter1Flow = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
   d.items        = Object.assign({}, INVENTORY_DEFAULTS.items);
+  d.keyItems     = {};
   return d;
 }
 
@@ -3182,6 +3188,7 @@ function resetInventory() {
   playerInventory.balloonDog         = Object.assign({}, INVENTORY_DEFAULTS.balloonDog);
   playerInventory.chapter1Flow       = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
   playerInventory.items              = Object.assign({}, INVENTORY_DEFAULTS.items);
+  playerInventory.keyItems           = {}; // v0.3.32
   playerInventory.equippedSwordDur     = 0;
   playerInventory.tutorialSwordGranted = false;
   saveInventory();
@@ -3301,6 +3308,7 @@ let currentRunStats = {
   pendingRecipeUnlocks:     {},
   pendingCoins:             0,
   foundHiddenTreasureName:  null,
+  foundBossNote:            null,  // v0.3.32：本關找到的 Boss 弱點筆記 { title, noteText, name }
   dogHealed:                false,
   dogGoneThisClear:         false,
   // V幣（Phase 3A）
@@ -4393,6 +4401,22 @@ const LEVELS = [
       { x: 2520, surfaceY: GROUND_Y,       phaseTimer: 0   },  // 第一隻：地面，凹洞右側
       { x: 4700, surfaceY: GROUND_Y - 120, phaseTimer: 900 },  // 高處砲台
     ].map(d => makeChapter2ProjectileOrange(d.x, d.surfaceY, d.phaseTimer)),
+    // v0.3.32：氣球小狗尋寶 — 橘子王弱點筆記（只有帶氣球小狗才看得到、拿得到）
+    // 放在上路平台(5230)前的地面：高處砲台 4700 的油彈只往左飛、普通橘子 5500 的噴油區在 5360 以右、
+    // 煙囪 6200 / 重甲蠍子 6530 以後都很遠；拾取判定為以 (x, y) 為中心 ±50px
+    hiddenTreasure: {
+      type:        'bossNote',
+      id:          'orangeKingWeaknessNote01',
+      name:        '橘子王弱點筆記',
+      displayName: '橘子王弱點筆記',
+      x:           5200,
+      y:           GROUND_Y - 70,
+      found:       false,
+      emoji:       '📓',
+      title:       '橘子王弱點筆記 01',
+      noteText:    '橘子王噴油前，頭上的油管會先發亮。看到亮光時，不要硬衝，先躲到安全位置等待空檔。',
+      foundMsg:    '氣球小狗找到橘子王弱點筆記！',
+    },
   },
 
 ];  // end LEVELS
@@ -4817,6 +4841,7 @@ function createLevelStartSnapshot() {
     unlockedRecipes:    JSON.parse(JSON.stringify(playerInventory.unlockedRecipes || {})),
     uniqueCollectibles: JSON.parse(JSON.stringify(playerInventory.uniqueCollectibles || {})),
     balloonDog:         JSON.parse(JSON.stringify(playerInventory.balloonDog || {})),
+    keyItems:           JSON.parse(JSON.stringify(playerInventory.keyItems || {})), // v0.3.32
     // 裝備耐久（執行期）
     equippedSwordId:    equippedSword.id,
     equippedSwordDur:   equippedSword.currentDur,
@@ -4846,6 +4871,8 @@ function restoreLevelStartSnapshot() {
   playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
   playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
   playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
+  // v0.3.32：重要物品跟金幣一樣，死亡重試時回到進關前狀態（重試時可再找一次）
+  if (levelStartSnapshot.keyItems) playerInventory.keyItems = JSON.parse(JSON.stringify(levelStartSnapshot.keyItems));
   playerInventory.equippedSwordDur   = levelStartSnapshot.equippedSwordDur;
   playerInventory.equippedHammerDur  = levelStartSnapshot.equippedHammerDur;
   // 還原執行期裝備狀態
@@ -7238,6 +7265,9 @@ function checkHiddenTreasure() {
       } else if (t.type === 'goldChest') {
         notifTitle    = '🎁 獲得金幣寶箱！';
         notifSubtitle = '金幣 +' + (t.rewardCoins || 30);
+      } else if (t.type === 'bossNote') {
+        notifTitle    = (t.emoji || '📓') + ' 找到' + (t.name || 'Boss 弱點筆記') + '！';
+        notifSubtitle = '已收進背包「其他物品」';
       } else {
         notifTitle    = '找到隱藏寶藏！';
         notifSubtitle = '';
@@ -7267,6 +7297,28 @@ function checkHiddenTreasure() {
       console.log('gold chest applied:', {
         runCoins: currentRunStats.coins, inventoryCoins: playerInventory.coins });
       showHint(t.foundMsg || ('找到隱藏寶箱！獲得 ' + coins + ' 金幣！'), 320); // v0.3.31：可用關卡 foundMsg
+    } else if (t.type === 'bossNote') {
+      // v0.3.32：Boss 弱點筆記 — 立即收進 playerInventory.keyItems（同 id 不重複）
+      if (!playerInventory.keyItems) playerInventory.keyItems = {};
+      const noteId = t.id || 'bossNote';
+      if (!playerInventory.keyItems[noteId]) {
+        playerInventory.keyItems[noteId] = {
+          id:         noteId,
+          type:       'bossNote',
+          name:       t.name || 'Boss 弱點筆記',
+          emoji:      t.emoji || '📓',
+          title:      t.title || t.name || 'Boss 弱點筆記',
+          noteText:   t.noteText || '',
+          acquiredAt: Date.now(),
+        };
+      }
+      currentRunStats.foundHiddenTreasureName = t.name || 'Boss 弱點筆記';
+      currentRunStats.foundBossNote = {
+        name: t.name || 'Boss 弱點筆記', title: t.title || '', noteText: t.noteText || '',
+      };
+      saveInventory();
+      console.log('boss note found:', noteId, playerInventory.keyItems[noteId]);
+      showHint(t.foundMsg || ('找到' + (t.name || 'Boss 弱點筆記') + '！'), 320);
     }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
@@ -9059,8 +9111,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.32+：chapter2-boss-note-foundation → ch2-boss-note（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter2-boss-note-foundation')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch2-boss-note' + (tN === '1' ? '' : '-' + tN);
   // v0.3.31+：chapter2-dog-gold-chest → ch2-dog-chest（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-dog-gold-chest')) {
+  } else if (GAME_VERSION.includes('chapter2-dog-gold-chest')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-dog-chest' + (tN === '1' ? '' : '-' + tN);
   // v0.3.30+：chapter2-scorpion-balance → ch2-scorpion（test-N > 1 時加上 -N）
@@ -9436,7 +9492,18 @@ function populateResultPanel() {
     'pendingCoins:', currentRunStats.pendingCoins);
 
   // 隱藏物發現提示（只在通關結算時顯示）
-  const treasureHint = (gameState === 'clear' && currentRunStats.foundHiddenTreasure)
+  // v0.3.32：Boss 弱點筆記有專屬提示卡；其他隱藏物沿用原本提示
+  const bossNoteFound = (gameState === 'clear' && currentRunStats.foundBossNote) ? currentRunStats.foundBossNote : null;
+  const bossNoteFirstLine = bossNoteFound ? String(bossNoteFound.noteText || '').split('。')[0] : '';
+  const treasureHint = bossNoteFound
+    ? ('<div class="rp-guidebook-hint" style="border-color:rgba(255,220,80,0.5);background:rgba(80,60,0,0.2)">'
+      + '<div class="rp-guidebook-hint__title">📓 找到 Boss 弱點筆記！</div>'
+      + '<div class="rp-guidebook-hint__body">'
+      + '氣球小狗找到了一張沾滿橘子油的筆記：<br>'
+      + (bossNoteFirstLine ? '「' + bossNoteFirstLine + '。」<br>' : '')
+      + '已收進背包「其他物品」。這可能是前往 2-4 Boss 關的重要線索……'
+      + '</div></div>')
+    : (gameState === 'clear' && currentRunStats.foundHiddenTreasure)
     ? ('<div class="rp-guidebook-hint" style="border-color:rgba(255,220,80,0.5);background:rgba(80,60,0,0.2)">'
       + '<div class="rp-guidebook-hint__title">🎉 隱藏發現！</div>'
       + '<div class="rp-guidebook-hint__body">'
@@ -9605,6 +9672,8 @@ function populateResultPanel() {
   const foundBadges = [];
   if (currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈')
     foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📖</span>新秘笈發現！</div>');
+  if (currentRunStats.foundBossNote) // v0.3.32
+    foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📓</span>Boss 弱點筆記！</div>');
   if (currentRunStats.foundHiddenTreasureName === '金幣寶箱')
     foundBadges.push('<div class="rp-award-badge rp-award-badge--chest"><span>🎁</span>隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
   if (currentRunStats.dogHealed)
@@ -10283,6 +10352,10 @@ function getInventoryOtherItems() {
   if ((ci.balloonLollipop || 0) > 0) list.push({ icon: '🍭', label: '氣球棒棒糖', count: ci.balloonLollipop });
   if ((items.bandage || 0) > 0)      list.push({ icon: '🩹', label: '繃帶',       count: items.bandage });
   if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
+  // v0.3.32：重要物品（Boss 弱點筆記等），每個 id 一件
+  Object.values(playerInventory.keyItems || {}).forEach(k => {
+    if (k && k.id) list.push({ icon: k.emoji || '📓', label: k.name || k.id, count: 1 });
+  });
   return list;
 }
 
@@ -10382,6 +10455,9 @@ function renderHomeInventory() {
     { e:'⚔️', v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
     { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
+    // v0.3.32：重要物品（Boss 弱點筆記等）
+    ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
+      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null })),
   ].filter(i => i.v > 0);
   if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; refreshInventorySummary(); return; }
   el.innerHTML = '<div class="inv-grid">'
@@ -10865,6 +10941,9 @@ function openPauseBag() {
     { e:'⚔️', v:ci.basicSword     ||0,         lbl:'氣球劍', cls:'inv-sword',   dur:eqSword },
     { e:'🔨', v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
     { e:'🍭', v:ci.balloonLollipop||0,         lbl:'棒棒糖', cls:'inv-candy',   dur:null },
+    // v0.3.32：重要物品
+    ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
+      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null })),
   ].filter(i => i.v > 0);
 
   const dog = playerInventory.balloonDog || {};
@@ -10992,6 +11071,7 @@ function restart(opts) {
   currentRunStats.pendingRecipeUnlocks     = {};
   currentRunStats.pendingCoins             = 0;
   currentRunStats.foundHiddenTreasureName  = null;
+  currentRunStats.foundBossNote           = null; // v0.3.32
   currentRunStats.foundTreasureCoins      = 0;
   if (currentHiddenTreasure) currentHiddenTreasure.found = false; // 重試時重置取得狀態
   currentRunStats.dogHealed               = false;
