@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-fix-1';
-const BUILD_TIME   = '2026-10-11 23:00';
+const GAME_VERSION = 'adventure-v0.3.29-inventory-summary-ui-fix-2';
+const BUILD_TIME   = '2026-10-12 01:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -9024,7 +9024,7 @@ function getShortVersionLabel() {
   // v0.3.29+：inventory-summary-ui-fix → inventory-summary-fix（fix-N > 1 時加上 -N）
   if (GAME_VERSION.includes('inventory-summary-ui-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
-    tPart = 'inventory-summary-fix' + (fN === '1' ? '' : '-' + fN);
+    tPart = 'inventory-summary-fix' + (fN === '1' ? '' : fN); // fix-2 → inventory-summary-fix2
   // v0.3.29+：inventory-summary-ui → inventory-summary（test-N > 1 時加上 -N）
   } else if (GAME_VERSION.includes('inventory-summary-ui')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -9889,6 +9889,50 @@ function setHomeShopPriority(on) {
   }
 }
 
+// v0.3.29-fix-2：讓「目前背包摘要」與 result-shop 模式下搬到上方的商店區塊，
+// 左右邊界與「下一關準備」一致。直接量測「下一關準備」框線相對於同一個父容器的左右內縮，
+// 套用為 margin（不依賴 style.css 的實際數值，手機 / 電腦都適用）。
+function alignHomeTopBlocks() {
+  const summary = document.getElementById('home-inventory-summary');
+  const ref     = document.getElementById('home-next-stage-section'); // 下一關準備的外框
+  const shop    = document.getElementById('home-shop-section');
+  if (!summary) return;
+  ensureInventorySummaryStyles();
+  summary.classList.add('home-top-aligned-section');
+
+  const shopIsOnTop = !!(shop && shop.parentNode === summary.parentNode);
+  if (shop) {
+    if (shopIsOnTop) shop.classList.add('home-top-aligned-section');
+    else {
+      shop.classList.remove('home-top-aligned-section');
+      shop.style.marginLeft = '';
+      shop.style.marginRight = '';
+    }
+  }
+
+  // 量測（畫面隱藏時量不到，就保留 CSS 預設 14px）
+  const parent = summary.parentNode;
+  if (!ref || !parent || typeof ref.getBoundingClientRect !== 'function') return;
+  const r = ref.getBoundingClientRect();
+  const p = parent.getBoundingClientRect();
+  if (!r || !p || !(r.width > 0) || !(p.width > 0)) return;
+  const cs   = getComputedStyle(parent);
+  const padL = (parseFloat(cs.paddingLeft)  || 0) + (parseFloat(cs.borderLeftWidth)  || 0);
+  const padR = (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+  const left  = Math.max(0, Math.round(r.left - p.left - padL));
+  const right = Math.max(0, Math.round(p.right - r.right - padR));
+  const targets = [summary];
+  if (shopIsOnTop) targets.push(shop);
+  targets.forEach(el => {
+    el.style.marginLeft  = left + 'px';
+    el.style.marginRight = right + 'px';
+  });
+}
+window.addEventListener('resize', () => {
+  const home = document.getElementById('home-screen');
+  if (home && home.style.display !== 'none') alignHomeTopBlocks();
+});
+
 function openHomeShopFromResult() {
   // v0.3.24-fix-1：用 'result-shop' 來源開啟，讓 homeGoBack() 能回到結算頁
   if (typeof openHomeScreen === 'function') openHomeScreen('result-shop');
@@ -9904,6 +9948,7 @@ function openHomeShopFromResult() {
     shopSection.style.display = 'block';
     if (shopCard) shopCard.classList.add('hcard--open');
     renderHomeShop();
+    alignHomeTopBlocks(); // v0.3.29-fix-2：與「下一關準備」左右對齊
     // v0.3.29-fix-1：商店已在背包摘要正下方，捲到最上方即可同時看到摘要與商店
     const scrollBody = document.getElementById('home-scroll-body');
     if (scrollBody) scrollBody.scrollTop = 0;
@@ -10183,6 +10228,10 @@ function openHomeScreen(from) {
   // 渲染各區塊
   renderHomeInventory();
   renderHomeInventorySummary(); // v0.3.29：置頂背包摘要
+  // v0.3.29-fix-2：等小V的家顯示出來（下一幀）再量測對齊
+  alignHomeTopBlocks();
+  setTimeout(alignHomeTopBlocks, 0);
+  setTimeout(alignHomeTopBlocks, 120);
   renderHomeSupply();
   renderHomeDog();
   renderHomeNextStage();
@@ -10256,6 +10305,8 @@ function ensureInventorySummaryStyles() {
     .inv-sum__toggle { margin-top: 4px; font-size: 11px; padding: 2px 8px; border-radius: 8px;
       border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; }
     @media (max-width: 380px) { .inv-sum__big { font-size: 18px; } .inv-sum__line { font-size: 11px; } }
+    /* v0.3.29-fix-2：小V的家上方區塊與「下一關準備」左右對齊（實際值由 alignHomeTopBlocks() 量測覆蓋） */
+    .home-top-aligned-section { margin-left: 14px; margin-right: 14px; }
   `;
   document.head.appendChild(style);
 }
