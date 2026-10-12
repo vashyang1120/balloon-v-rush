@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-victory-pose-fix-1';
-const BUILD_TIME   = '2026-10-12 22:50';
+const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-damage-cap-fix-1';
+const BUILD_TIME   = '2026-10-12 23:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -7740,9 +7740,10 @@ const ORANGE_KING = {
   COOLDOWN_MS:       3200, // v0.3.35-fix-1：一般喘氣（2300 → 3200）
   FIRST_COOLDOWN_MS: 3900, // 第一次正式喘氣（2800 → 3900）
   CHARGE_COOLDOWN_MS: 3600, // 縮球衝撞（大招）後的喘氣，略長
-  HURT_INVULN_MS:  450,   // 被打一下後短暫無敵，避免一次喘氣就被連打到底
-  SWORD_DAMAGE:    1,
-  HAMMER_DAMAGE:   2,
+  // v0.3.35-damage-cap-fix-1：Boss 受傷規則
+  HURT_INVULN_MS:  300,   // 被打一下後短暫無敵（450 → 300），避免同一揮砍連續幀重複計算
+  MELEE_DAMAGE:    0.5,   // 任何有效近戰（劍 / 槌）每次扣 0.5 格（原本劍 1、槌 2）
+  COOLDOWN_DAMAGE_CAP: 2, // 每次喘氣最多扣 2 格；扣滿立即結束喘氣、進入下一組攻擊
   SPRAY_BAND_H:    46,
   LOB_GRAVITY:     0.15,  // v0.3.35-fix-1：0.22 → 0.15（配合較慢的水平速度，弧線不會飛出畫面）
   LOB_RADIUS:      15,
@@ -7838,7 +7839,8 @@ function initOrangeKingBoss() {
     defeatMs: 0, crownY: 0, crownVy: 0, crownRot: 0,
     clearTriggered: false,
     ringAuraMs: 0, sparks: [],
-    victorySafe: false,          // v0.3.35-victory-pose-fix-1：擊敗後的勝利保護（不共用 player.invincible）
+    victorySafe: false,
+    cooldownDamageTaken: 0,      // v0.3.35-damage-cap-fix-1：本次喘氣已受到的傷害（上限 2 格）          // v0.3.35-victory-pose-fix-1：擊敗後的勝利保護（不共用 player.invincible）
   };
   orangeKingInputLocked = true;
   orangeKingBoss.ring = { state: 'onBoss', x: 0, y: 0, vx: 0, vy: 0 };
@@ -8213,6 +8215,7 @@ function finishOrangeKingAttack() {
     : (lastAtk === 'charge' ? ORANGE_KING.CHARGE_COOLDOWN_MS : ORANGE_KING.COOLDOWN_MS);
   if (b.cooldownCount === 0 && b.ringActive) showHint('💦 橘子王在喘氣！快靠近攻擊！', 200);
   b.cooldownCount++;
+  b.cooldownDamageTaken = 0; // v0.3.35-damage-cap-fix-1：每次進入喘氣都重置本輪傷害累計
   setOrangeKingPhase('cooldown');
 }
 
@@ -8277,8 +8280,10 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
     if (b.phase !== 'cooldown') showHint('🛡️ 現在打不進去！等牠喘氣再攻擊！', 130);
     return;
   }
-  const dmg = weapon === 'hammer' ? ORANGE_KING.HAMMER_DAMAGE : ORANGE_KING.SWORD_DAMAGE;
+  // v0.3.35-damage-cap-fix-1：劍 / 槌一律 0.5 格；累計本次喘氣受到的傷害
+  const dmg = ORANGE_KING.MELEE_DAMAGE;
   b.hp = Math.max(0, b.hp - dmg);
+  b.cooldownDamageTaken = (b.cooldownDamageTaken || 0) + dmg;
   b.hurtFlashMs = 260;
   b.invulnMs = ORANGE_KING.HURT_INVULN_MS;
   orangeKingFloatText('-' + dmg, fx, fy - 10, '#ff5c5c');
@@ -8287,7 +8292,13 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
     b.sparks.push({ x: fx, y: fy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, ms: 0 });
   }
   orangeKingShake(160, 3);
-  if (b.hp <= 0) startOrangeKingDefeat();
+  if (b.hp <= 0) { startOrangeKingDefeat(); return; }
+  // 本次喘氣已扣滿上限 → 立即結束喘氣，橘子王重新振作，進入下一組攻擊
+  if (b.cooldownDamageTaken >= ORANGE_KING.COOLDOWN_DAMAGE_CAP) {
+    b.cooldownDamageTaken = 0;
+    orangeKingFloatText('💢 重新振作！', b.x + b.w / 2, b.y - 70, '#ffb347');
+    setOrangeKingPhase('idle');
+  }
 }
 
 // ── 擊敗流程 ──
@@ -8759,9 +8770,14 @@ function drawOrangeKingHpBar() {
   ctx.fillStyle = 'rgba(20,10,30,0.65)';
   ctx.beginPath(); ctx.roundRect(x0 - 10, y0 - 4, totalW + 20, 22, 8); ctx.fill();
   for (let i = 0; i < n; i++) {
-    const filled = i < b.hp;
-    ctx.fillStyle = filled ? (b.hurtFlashMs > 0 ? '#ffffff' : '#ff8a1f') : 'rgba(255,255,255,0.15)';
+    // v0.3.35-damage-cap-fix-1：支援半格 — 先畫空格，再依剩餘血量畫滿格或半格
+    const fillRatio = Math.max(0, Math.min(1, b.hp - i)); // 1 = 滿、0.5 = 半格、0 = 空
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath(); ctx.roundRect(x0 + i * (segW + gap), y0, segW, 14, 4); ctx.fill();
+    if (fillRatio > 0) {
+      ctx.fillStyle = b.hurtFlashMs > 0 ? '#ffffff' : '#ff8a1f';
+      ctx.beginPath(); ctx.roundRect(x0 + i * (segW + gap), y0, segW * fillRatio, 14, 4); ctx.fill();
+    }
   }
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
@@ -10479,8 +10495,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.35-fix：orange-king-boss-damage-cap-fix-N → boss-dmgcap-fixN
+  if (GAME_VERSION.includes('orange-king-boss-damage-cap-fix')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
+    tPart = 'boss-dmgcap-fix' + fN;
   // v0.3.35-fix：orange-king-boss-victory-pose-fix-N → boss-victory-fixN
-  if (GAME_VERSION.includes('orange-king-boss-victory-pose-fix')) {
+  } else if (GAME_VERSION.includes('orange-king-boss-victory-pose-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
     tPart = 'boss-victory-fix' + fN;
   // v0.3.35-fix：orange-king-boss-timing-and-platform-fix-N → boss-timing-fixN
