@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-timing-and-platform-fix-1';
-const BUILD_TIME   = '2026-10-12 22:00';
+const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-victory-pose-fix-1';
+const BUILD_TIME   = '2026-10-12 22:50';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -7838,6 +7838,7 @@ function initOrangeKingBoss() {
     defeatMs: 0, crownY: 0, crownVy: 0, crownRot: 0,
     clearTriggered: false,
     ringAuraMs: 0, sparks: [],
+    victorySafe: false,          // v0.3.35-victory-pose-fix-1：擊敗後的勝利保護（不共用 player.invincible）
   };
   orangeKingInputLocked = true;
   orangeKingBoss.ring = { state: 'onBoss', x: 0, y: 0, vx: 0, vy: 0 };
@@ -7912,6 +7913,9 @@ function playerHazardRect() {
   return { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };
 }
 function orangeKingHitPlayer() {
+  // v0.3.35-victory-pose-fix-1：擊敗後（勝利保護旗標）Boss 的任何攻擊都不再判定
+  const b = orangeKingBoss;
+  if (b && (b.victorySafe || b.phase === 'defeated')) return false;
   if (player.invincible > 0 || gameState !== 'playing') return false;
   damagePlayer();
   return true;
@@ -8298,7 +8302,11 @@ function startOrangeKingDefeat() {
   b.crownY = 0; b.crownVy = -6; b.crownRot = 0;
   b.ringActive = false; // 油管環失去光芒，實體化效果結束
   orangeKingShake(600, 8);
-  player.invincible = Math.max(player.invincible, 400);
+  // v0.3.35-victory-pose-fix-1：不再用 player.invincible 保護（會讓小V顯示 hurt 受傷臉並閃爍）
+  //   改用 Boss 自己的勝利保護旗標 victorySafe：orangeKingHitPlayer() 直接不判定
+  b.victorySafe = true;
+  b.dashHitDone = true;
+  player.invincible = 0;       // 立刻恢復正常姿勢（idle / 跑步），不顯示受傷臉、不閃爍
   orangeKingBanner('橘子王被打敗了！', '', 1400);
 }
 function updateOrangeKingDefeat(dtMs, k) {
@@ -10471,8 +10479,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.35-fix：orange-king-boss-victory-pose-fix-N → boss-victory-fixN
+  if (GAME_VERSION.includes('orange-king-boss-victory-pose-fix')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
+    tPart = 'boss-victory-fix' + fN;
   // v0.3.35-fix：orange-king-boss-timing-and-platform-fix-N → boss-timing-fixN
-  if (GAME_VERSION.includes('orange-king-boss-timing-and-platform-fix')) {
+  } else if (GAME_VERSION.includes('orange-king-boss-timing-and-platform-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
     tPart = 'boss-timing-fix' + fN;
   // v0.3.35+：chapter2-orange-king-boss-foundation → orange-king-boss（test-N > 1 時加上 -N）
