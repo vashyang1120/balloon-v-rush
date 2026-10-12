@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.37-orange-king-oil-stream-art-test-1';
-const BUILD_TIME   = '2026-10-13 04:10';
+const GAME_VERSION = 'adventure-v0.3.38-orange-king-boss-bg-test-1';
+const BUILD_TIME   = '2026-10-13 05:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -8837,7 +8837,13 @@ const ORANGE_KING_BOSS_ASSETS = {
   machineBase:       'assets/bosses/orange-king/orange_king_machine_base.png',
   oilPipeHorizontal: 'assets/bosses/orange-king/orange_king_oil_pipe_horizontal.png',
   oilStreamHorizontal: 'assets/bosses/orange-king/orange_king_oil_stream_horizontal.png', // v0.3.37：水平噴油特效圖
+  bossRoomBg: 'assets/bosses/orange-king/orange_king_boss_room_bg.png', // v0.3.38：Boss 房背景（只用正式路徑，沒有備用路徑）
 };
+// v0.3.38：Boss 房背景
+const ORANGE_KING_BG_DIM_ALPHA = 0.0;       // 背景上疊的暗色遮罩（0 = 不調暗；背景太搶時可調 0.1～0.3）
+// 背景圖底部自帶金屬地板，前緣剛好在 GROUND_Y（y=460）；
+// false = 背景載入成功時不再畫舊的草地 / 泥土地面（碰撞不變），true = 舊地面照畫、蓋在背景圖上
+const ORANGE_KING_BG_DRAW_OLD_GROUND = false;
 // v0.3.37：主路徑載入失敗時依序嘗試的備用路徑
 // （目前 GitHub 上這張圖放在 repo 根目錄；之後搬到 assets/bosses/orange-king/ 就會直接用主路徑）
 const ORANGE_KING_BOSS_ASSET_FALLBACKS = {
@@ -8883,7 +8889,8 @@ function initOrangeKingBossArt() {
       orangeKingBossImgStatus[key] = 'loading';
       img.onload  = () => { orangeKingBossImgStatus[key] = tryIdx === 0 ? 'ok' : 'ok(備用路徑)'; };
       img.onerror = () => {
-        console.warn('[OrangeKingArt] load failed:', candidates[tryIdx]);
+        if (key === 'bossRoomBg') console.warn('Orange King boss room background failed to load:', candidates[tryIdx]);
+        else console.warn('[OrangeKingArt] load failed:', candidates[tryIdx]);
         tryIdx++;
         if (tryIdx < candidates.length) {
           img.src = resolveAdventureAssetSrc(candidates[tryIdx]) + '?v=' + encodeURIComponent(GAME_VERSION);
@@ -9225,7 +9232,8 @@ function drawOrangeKingMachineCalibOverlay() {
     'oilBandH: ' + A.oilBandH + '   oilExtendX: ' + A.oilExtendX,
     'oilStream: offsetX ' + A.oilStreamOffsetX + '  offsetY ' + A.oilStreamOffsetY + '  scaleX ' + A.oilStreamScaleX + '  scaleY ' + A.oilStreamScaleY,
     'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-')
-      + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-'),
+      + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-')
+      + '  bg=' + (orangeKingBossImgStatus.bossRoomBg || '-'),
     '1~7 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale(X)｜; \' 噴油圖高度｜R 重置目標｜C 輸出 console',
   ];
   if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
@@ -9572,29 +9580,56 @@ function draw() {
 
 // v0.3.35：Boss 震動時整個世界一起晃（HUD 不晃）
 function drawWorld() {
+  // v0.3.38：2-4 Boss 房背景畫在最底層、固定在畫面上（不跟 cameraX、不跟震動一起晃，避免震動時露出黑邊）
+  orangeKingBgDrawn = drawOrangeKingBossBg();
   const shake = getOrangeKingShakeOffset();
   if (shake) { ctx.save(); ctx.translate(shake.x, shake.y); }
   drawWorldInner();
   if (shake) ctx.restore();
 }
 
+// v0.3.38：橘子王 Boss 房背景（只在 2-4；圖片沒載好回傳 false → 照舊畫藍天）
+var orangeKingBgDrawn = false;
+function drawOrangeKingBossBg() {
+  if (!isOrangeKingStageActive()) return false;
+  const img = getOrangeKingBossImg('bossRoomBg');
+  if (!img) return false;
+  // cover：等比例縮放到完全蓋滿 960×540（1920×1081 → ×0.5），置中，不變形、不留黑邊
+  const scale = Math.max(CANVAS_W / img.naturalWidth, CANVAS_H / img.naturalHeight);
+  const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+  if (ORANGE_KING_BG_DIM_ALPHA > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,' + ORANGE_KING_BG_DIM_ALPHA + ')';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+  ctx.restore();
+  return true;
+}
+
 function drawWorldInner() {
-  // Sky gradient
+  // Sky gradient（v0.3.38：2-4 已畫 Boss 房背景時跳過）
+  if (!orangeKingBgDrawn) {
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
   grad.addColorStop(0, COLORS.sky);
   grad.addColorStop(1, COLORS.skyGrad2);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
 
   const cx = cameraX;
 
-  // Ground
+  // Ground（v0.3.38：Boss 房背景自帶地板，預設不再蓋舊地面；碰撞仍是 GROUND_Y）
+  if (!orangeKingBgDrawn || ORANGE_KING_BG_DRAW_OLD_GROUND) {
   ctx.fillStyle = COLORS.ground;
   ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
   ctx.fillStyle = COLORS.groundDark;
   ctx.fillRect(0, GROUND_Y, CANVAS_W, 8);
   ctx.fillStyle = COLORS.dirt;
   ctx.fillRect(0, GROUND_Y + 8, CANVAS_W, CANVAS_H - GROUND_Y - 8);
+  }
 
   // v0.3.27-terrain：地面缺口（低處坑道）— 挖掉地面，坑底由平台繪製
   groundGaps.forEach(g => {
@@ -9618,6 +9653,12 @@ function drawWorldInner() {
     ctx.fillRect(sx, p.y, p.w, p.h);
     ctx.fillStyle = COLORS.platformTop;
     ctx.fillRect(sx, p.y, p.w, 6);
+    // v0.3.38：Boss 房背景較複雜，平台加深色描邊，維持可讀性（位置 / 碰撞不變）
+    if (orangeKingBgDrawn) {
+      ctx.strokeStyle = 'rgba(30,15,5,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx + 1, p.y + 1, p.w - 2, p.h - 2);
+    }
   });
 
   // Coins
@@ -10920,8 +10961,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.38+：orange-king-boss-bg → orange-boss-bg（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-boss-bg')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-boss-bg' + (tN === '1' ? '' : '-' + tN);
   // v0.3.37+：orange-king-oil-stream-art → orange-oil-stream-art（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-oil-stream-art')) {
+  } else if (GAME_VERSION.includes('orange-king-oil-stream-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-oil-stream-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.36+：orange-king-machine-art-integration → orange-machine-art（test-N > 1 時加上 -N）
