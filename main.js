@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-damage-cap-fix-1';
-const BUILD_TIME   = '2026-10-12 23:10';
+const GAME_VERSION = 'adventure-v0.3.36-orange-king-machine-art-integration-test-1';
+const BUILD_TIME   = '2026-10-13 03:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2679,6 +2679,8 @@ window.addEventListener('keydown', e => {
     if (gameState === 'paused')  { resumeGame(); return; }
     return;
   }
+  // v0.3.36：橘子王機關美術定位工具（測試版 F4）— 開啟時數字鍵 / 方向鍵 / [ ] 由工具使用
+  if (handleOrangeKingMachineCalibKey(e)) return;
   // 數字鍵切換武器
   if (e.code === 'Digit1' && gameState === 'playing') {
     if (equippedSword.id) activeSlot = 'sword';
@@ -5367,7 +5369,8 @@ function update(dt, dtMs = 16.667) {
   if (bossStage) cameraX = 0; // v0.3.35：Boss 房固定鏡頭，不自動捲動
   else updateCamera();
   updatePlayer(dt);
-  if (bossStage) updateOrangeKingBoss(dtMs); // v0.3.35
+  // v0.3.35；v0.3.36：定位工具開啟時 Boss 暫停動作，方便對位
+  if (bossStage && !orangeKingMachineCalibMode) updateOrangeKingBoss(dtMs);
   updateEnemies();
   updateProjectiles();
   updateMeleeAttack();
@@ -7775,6 +7778,7 @@ const ORANGE_KING_TIMING = {
   SLAM_LAND:            650, // 落地震動後停頓（450 → 650）
 };
 // 三高度油管（世界座標 y 中心）：高 = 最高平台、中 = 中層平台、低 = 地面
+// v0.3.36：實際攻擊高度改由 ORANGE_KING_MACHINE_ART 的 pipeHighY / pipeMidY / pipeLowY 決定（此表保留作參考）
 const ORANGE_KING_LANES = {
   high: { y: GROUND_Y - 260, label: '高' },
   mid:  { y: GROUND_Y - 155, label: '中' },
@@ -7888,12 +7892,10 @@ function getOrangeKingDashHitbox() {
   const r = getOrangeKingBodyRect();
   return { x: r.x + 8, y: r.y + 6, w: r.w - 16, h: r.h - 6 };
 }
+// v0.3.36：水平噴油改由右側機關的三根油管噴出 — 噴嘴 = 對應油管的左端管口
 function getOrangeKingNozzle(laneKey) {
-  const b = orangeKingBoss;
-  const lane = ORANGE_KING_LANES[laneKey];
-  // 噴嘴放在身體輪廓外側，三個高度都看得到
-  const nx = laneKey === 'high' ? b.x - 6 : (laneKey === 'mid' ? b.x - 8 : b.x - 6);
-  return { x: nx, y: lane.y };
+  const pg = getOrangeKingPipeGeom(laneKey);
+  return { x: pg.mouthX, y: pg.y };
 }
 function getOrangeKingLobOrigin() {
   const b = orangeKingBoss;
@@ -8172,10 +8174,11 @@ function collectOrangeKingRing() {
   b.pendingHint = { msg: '💡 等橘子王連續攻擊後喘氣，再靠近反擊！', delayMs: 3500 };
 }
 
+// v0.3.36：hitbox = 畫面左緣 → 管口（+ oilExtendX），高度 oilBandH（都可用定位工具調）
 function getOrangeKingSprayBand(laneKey) {
   const n = getOrangeKingNozzle(laneKey);
-  const h = ORANGE_KING.SPRAY_BAND_H;
-  return { x: 0, y: n.y - h / 2, w: n.x, h };
+  const h = ORANGE_KING_MACHINE_ART.oilBandH;
+  return { x: 0, y: n.y - h / 2, w: n.x + ORANGE_KING_MACHINE_ART.oilExtendX, h, mouthX: n.x };
 }
 
 function startNextOrangeKingPattern() {
@@ -8371,6 +8374,9 @@ function drawOrangeKingBack(cx) {
   ctx.fillStyle = 'rgba(60,30,20,0.55)';
   ctx.fillRect(0 - cx, 0, 10, GROUND_Y);
 
+  // v0.3.36：右側機關（主裝置 + 三根水平油管），在 Boss 本體後面
+  drawOrangeKingMachine(cx);
+
   // 油漬
   b.puddles.forEach(p => {
     const grow = Math.min(1, p.ms / 200);
@@ -8553,10 +8559,8 @@ function drawOrangeKingBody(cx) {
   ctx.save();
   // 油管（身體後方）
   if (!defeated) {
-    const nh = getOrangeKingNozzle('high'), nm = getOrangeKingNozzle('mid'), nl = getOrangeKingNozzle('low');
-    drawOrangeKingPipe(bx + bw * 0.35, by + 18, nh.x - cx + 8, nh.y, sprayGlow && lane === 'high', t);
-    drawOrangeKingPipe(bx + bw * 0.3, by + bh * 0.42, nm.x - cx + 8, nm.y, sprayGlow && lane === 'mid', t);
-    drawOrangeKingPipe(bx + bw * 0.3, by + bh * 0.85, nl.x - cx + 8, nl.y, sprayGlow && lane === 'low', t);
+    // v0.3.36：高 / 中 / 低三根噴油管改由右側機關負責（drawOrangeKingMachine），本體只留頭頂拋物線油管
+    void sprayGlow; void lane;
     const lo = getOrangeKingLobOrigin();
     drawOrangeKingPipe(bx + bw * 0.62, by + 14, lo.x - cx, lo.y, b.phase === 'lobAim', t);
   }
@@ -8587,10 +8591,6 @@ function drawOrangeKingBody(cx) {
 
   // 三根油管的噴嘴（畫在身體前面，攻擊前會發亮）
   if (!defeated) {
-    ['high', 'mid', 'low'].forEach(key => {
-      const nz = getOrangeKingNozzle(key);
-      drawOrangeKingNozzle(nz.x - cx + wobbleX, nz.y, sprayGlow && lane === key, t);
-    });
     const lo = getOrangeKingLobOrigin();
     drawOrangeKingNozzle(lo.x - cx + wobbleX, lo.y, b.phase === 'lobAim', t);
   }
@@ -8686,7 +8686,9 @@ function drawOrangeKingFront(cx) {
   if (!b) return;
   const t = b.totalMs;
   if (b.phase === 'sprayFire' && b.activeLane) {
-    const band = getOrangeKingSprayBand(b.activeLane);
+    // v0.3.36：油流視覺從油管管口噴出（hitbox 另外由 getOrangeKingSprayBand 決定）
+    const hb = getOrangeKingSprayBand(b.activeLane);
+    const band = { x: 0, y: hb.y, w: hb.mouthX, h: hb.h };
     const grow = Math.min(1, b.phaseMs / 120);
     const x0 = band.x + band.w * (1 - grow);
     ctx.save();
@@ -8814,6 +8816,333 @@ function drawOrangeKingBanner() {
     ctx.fillStyle = '#fff';
     ctx.fillText(bn.sub, 0, 40);
   }
+  ctx.restore();
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.36：橘子王 Boss 房右側機關美術（主裝置 + 三根水平油管）＋ 定位工具
+//  ・主裝置 orange_king_machine_base.png（512×512）畫在右側，Boss 站在它前面
+//  ・水平油管 orange_king_oil_pipe_horizontal.png（1024×256）同一張圖畫三次（高 / 中 / 低）
+//    油管右端接在主裝置左側的垂直主管上；油從油管左端的管口噴出
+//  ・水平噴油的高度與 hitbox 由三根油管的 Y（pipeHighY / pipeMidY / pipeLowY）決定
+//    → 用定位工具移動油管時，攻擊高度會一起移動（工具會畫出平台與玩家框方便對照）
+//  ・圖片載入失敗時，退回簡單 canvas 幾何圖形，不影響攻擊判定
+// ════════════════════════════════════════════════════════════════════
+const ORANGE_KING_BOSS_ASSETS = {
+  machineBase:       'assets/bosses/orange-king/orange_king_machine_base.png',
+  oilPipeHorizontal: 'assets/bosses/orange-king/orange_king_oil_pipe_horizontal.png',
+};
+// 素材內的關鍵位置（原圖像素）：油管左端管口 / 右端接頭 / 管身中心線；主裝置左側垂直主管中心
+const ORANGE_KING_PIPE_SRC    = { w: 1024, h: 256, mouthX: 634, rightX: 1021, centerY: 120 };
+const ORANGE_KING_MACHINE_SRC = { w: 512,  h: 512, vPipeX: 262, vPipeTopY: 140, vPipeBottomY: 430 };
+
+// 初始定位（之後用定位工具微調，按 C 輸出數值）
+const ORANGE_KING_MACHINE_ART_DEFAULTS = {
+  baseX:     646,    // 主裝置繪製左緣（右側略超出畫面）
+  baseY:     111,    // 主裝置繪製上緣（底部約在地面下 20px）
+  baseScale: 0.72,   // 512 → 約 369px
+  pipeX:     840,    // 三根油管共用：右端接頭的 x（接到主裝置左側垂直主管）
+  pipeScale: 0.58,   // 1024×256 → 594×148（實際管身約 226px 長）
+  pipeHighY: GROUND_Y - 260, // 200：管身中心線 = 高位噴油高度（最高平台）
+  pipeMidY:  GROUND_Y - 155, // 305：中位（中層平台）
+  pipeLowY:  GROUND_Y - 40,  // 420：低位（地面）
+  oilBandH:  46,     // 噴油 hitbox 高度
+  oilExtendX: 100,   // 噴油 hitbox 從管口再往右延伸（100 → 約到 x=715，和上一版一樣涵蓋到貼著橘子王的位置；設 0 = 只到管口）
+};
+const ORANGE_KING_MACHINE_ART = Object.assign({}, ORANGE_KING_MACHINE_ART_DEFAULTS);
+
+const orangeKingBossImgs = {};
+const orangeKingBossImgStatus = {}; // key → 'loading' | 'ok' | 'error'
+function initOrangeKingBossArt() {
+  if (typeof Image === 'undefined') return;
+  Object.entries(ORANGE_KING_BOSS_ASSETS).forEach(([key, path]) => {
+    if (orangeKingBossImgs[key]) return;
+    try {
+      const img = new Image();
+      orangeKingBossImgStatus[key] = 'loading';
+      img.onload  = () => { orangeKingBossImgStatus[key] = 'ok'; };
+      img.onerror = () => { orangeKingBossImgStatus[key] = 'error'; console.warn('[OrangeKingArt] load failed:', path); };
+      img.src = resolveAdventureAssetSrc(path) + '?v=' + encodeURIComponent(GAME_VERSION);
+      orangeKingBossImgs[key] = img;
+    } catch (e) { orangeKingBossImgStatus[key] = 'error'; }
+  });
+}
+// 回傳已載入完成的圖片；沒載好 / 失敗回傳 null（呼叫端改畫幾何 fallback）
+function getOrangeKingBossImg(key) {
+  const img = orangeKingBossImgs[key];
+  return (img && img.complete && img.naturalWidth > 0) ? img : null;
+}
+initOrangeKingBossArt();
+
+function getOrangeKingPipeY(laneKey) {
+  const A = ORANGE_KING_MACHINE_ART;
+  return laneKey === 'high' ? A.pipeHighY : (laneKey === 'mid' ? A.pipeMidY : A.pipeLowY);
+}
+// 油管繪製矩形（整張圖）＋ 管口 / 接頭位置（世界座標）
+function getOrangeKingPipeGeom(laneKey) {
+  const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_PIPE_SRC, s = A.pipeScale;
+  const y = getOrangeKingPipeY(laneKey);
+  const drawX = A.pipeX - S.rightX * s;
+  const drawY = y - S.centerY * s;
+  return {
+    drawX, drawY, drawW: S.w * s, drawH: S.h * s,
+    mouthX: drawX + S.mouthX * s, joinX: A.pipeX, y,
+    opaqueX: drawX + 632 * s, opaqueY: drawY + 74 * s, opaqueW: (1021 - 632) * s, opaqueH: (190 - 74) * s,
+  };
+}
+function getOrangeKingMachineGeom() {
+  const A = ORANGE_KING_MACHINE_ART, M = ORANGE_KING_MACHINE_SRC, s = A.baseScale;
+  return {
+    drawX: A.baseX, drawY: A.baseY, drawW: M.w * s, drawH: M.h * s,
+    vPipeX: A.baseX + M.vPipeX * s, vPipeTop: A.baseY + M.vPipeTopY * s, vPipeBottom: A.baseY + M.vPipeBottomY * s,
+  };
+}
+
+// 主裝置 + 三根油管（畫在 Boss 後面）
+function drawOrangeKingMachine(cx) {
+  const b = orangeKingBoss;
+  const t = b ? b.totalMs : 0;
+  const mg = getOrangeKingMachineGeom();
+  const baseImg = getOrangeKingBossImg('machineBase');
+  ctx.save();
+  if (baseImg) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(baseImg, mg.drawX - cx, mg.drawY, mg.drawW, mg.drawH);
+  } else {
+    // fallback：簡單機台 + 垂直主管
+    ctx.fillStyle = '#3d3d44';
+    ctx.fillRect(mg.vPipeX - 10 - cx, mg.vPipeTop, 20, mg.vPipeBottom - mg.vPipeTop);
+    ctx.fillStyle = '#55555e';
+    ctx.fillRect(mg.vPipeX + 14 - cx, mg.drawY + mg.drawH * 0.2, mg.drawW * 0.5, mg.drawH * 0.75);
+    ctx.fillStyle = 'rgba(255,160,30,0.75)';
+    ctx.fillRect(mg.vPipeX + 34 - cx, mg.drawY + mg.drawH * 0.3, mg.drawW * 0.3, mg.drawH * 0.4);
+  }
+  const pipeImg = getOrangeKingBossImg('oilPipeHorizontal');
+  const sprayLane = b && (b.phase === 'sprayWarn' || b.phase === 'sprayFire') ? b.activeLane : null;
+  const calibLane = orangeKingMachineCalibMode ? ['high', 'mid', 'low'][['pipeHigh', 'pipeMid', 'pipeLow'].indexOf(orangeKingMachineCalibTarget)] : null;
+  ['high', 'mid', 'low'].forEach(key => {
+    const pg = getOrangeKingPipeGeom(key);
+    const warn = sprayLane === key;
+    // 預警光效：管身外圈 glow（略閃爍），管口亮光
+    if (warn) {
+      const pulse = 0.55 + 0.45 * Math.sin(t / 60);
+      ctx.save();
+      ctx.shadowColor = `rgba(255,230,90,${0.9 * pulse})`;
+      ctx.shadowBlur = 26;
+      ctx.fillStyle = `rgba(255,220,80,${0.28 * pulse})`;
+      ctx.beginPath();
+      ctx.roundRect(pg.opaqueX - 6 - cx, pg.opaqueY - 4, pg.opaqueW + 12, pg.opaqueH + 8, 16);
+      ctx.fill();
+      ctx.restore();
+    }
+    if (pipeImg) {
+      ctx.drawImage(pipeImg, pg.drawX - cx, pg.drawY, pg.drawW, pg.drawH);
+    } else {
+      // fallback：簡單管子
+      ctx.fillStyle = '#c98a1a';
+      ctx.fillRect(pg.mouthX - cx, pg.y - 9, pg.joinX - pg.mouthX, 18);
+      ctx.fillStyle = '#4b4b52';
+      ctx.fillRect(pg.mouthX - 4 - cx, pg.y - 13, 16, 26);
+    }
+    if (warn) {
+      const pulse = 0.5 + 0.5 * Math.sin(t / 45);
+      const g = ctx.createRadialGradient(pg.mouthX - cx, pg.y, 2, pg.mouthX - cx, pg.y, 34);
+      g.addColorStop(0, `rgba(255,255,200,${0.95})`);
+      g.addColorStop(0.4, `rgba(255,210,70,${0.55 + 0.4 * pulse})`);
+      g.addColorStop(1, 'rgba(255,170,30,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(pg.mouthX - cx, pg.y, 34, 0, Math.PI * 2); ctx.fill();
+    } else if (calibLane === key) {
+      ctx.strokeStyle = 'rgba(0,255,200,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pg.opaqueX - cx, pg.opaqueY, pg.opaqueW, pg.opaqueH);
+    }
+  });
+  ctx.restore();
+}
+
+// ── 定位工具（測試版 F4）──────────────────────────────
+const ORANGE_KING_MACHINE_CALIB_LS_KEY = 'balloonV_orangeKingMachineArtCalib';
+const ORANGE_KING_MACHINE_CALIB_TARGETS = [
+  { key: 'base',    label: '1 Machine Base（方向鍵 X/Y、[ ] scale）' },
+  { key: 'pipe',    label: '2 Pipe 共用（← → pipeX、[ ] pipeScale）' },
+  { key: 'pipeHigh', label: '3 High Pipe Y（↑ ↓）' },
+  { key: 'pipeMid',  label: '4 Mid Pipe Y（↑ ↓）' },
+  { key: 'pipeLow',  label: '5 Low Pipe Y（↑ ↓）' },
+  { key: 'oil',     label: '6 Oil hitbox（↑ ↓ 高度、← → 往右延伸）' },
+];
+var orangeKingMachineCalibMode   = false;
+var orangeKingMachineCalibTarget = 'base';
+
+// 只讀取同版本存下來的定位值（版本不同就用程式內的預設值）
+function loadOrangeKingMachineCalib() {
+  try {
+    const raw = localStorage.getItem(ORANGE_KING_MACHINE_CALIB_LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || data.version !== GAME_VERSION || !data.values) return;
+    Object.keys(ORANGE_KING_MACHINE_ART_DEFAULTS).forEach(k => {
+      if (typeof data.values[k] === 'number' && isFinite(data.values[k])) ORANGE_KING_MACHINE_ART[k] = data.values[k];
+    });
+  } catch (e) {}
+}
+function saveOrangeKingMachineCalib() {
+  try {
+    localStorage.setItem(ORANGE_KING_MACHINE_CALIB_LS_KEY,
+      JSON.stringify({ version: GAME_VERSION, values: ORANGE_KING_MACHINE_ART }));
+  } catch (e) {}
+}
+if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) loadOrangeKingMachineCalib();
+
+function getOrangeKingMachineCalibText() {
+  const A = ORANGE_KING_MACHINE_ART;
+  const r2 = v => Math.round(v * 100) / 100;
+  return 'const ORANGE_KING_MACHINE_ART = {\n'
+    + `  baseX: ${r2(A.baseX)},\n  baseY: ${r2(A.baseY)},\n  baseScale: ${r2(A.baseScale)},\n`
+    + `  pipeX: ${r2(A.pipeX)},\n  pipeScale: ${r2(A.pipeScale)},\n`
+    + `  pipeHighY: ${r2(A.pipeHighY)},\n  pipeMidY: ${r2(A.pipeMidY)},\n  pipeLowY: ${r2(A.pipeLowY)},\n`
+    + `  oilBandH: ${r2(A.oilBandH)},\n  oilExtendX: ${r2(A.oilExtendX)},\n};`;
+}
+function resetOrangeKingMachineCalibTarget() {
+  const D = ORANGE_KING_MACHINE_ART_DEFAULTS, A = ORANGE_KING_MACHINE_ART;
+  const keysByTarget = {
+    base: ['baseX', 'baseY', 'baseScale'], pipe: ['pipeX', 'pipeScale'],
+    pipeHigh: ['pipeHighY'], pipeMid: ['pipeMidY'], pipeLow: ['pipeLowY'], oil: ['oilBandH', 'oilExtendX'],
+  };
+  (keysByTarget[orangeKingMachineCalibTarget] || []).forEach(k => { A[k] = D[k]; });
+  saveOrangeKingMachineCalib();
+  showHint('↺ 已重置：' + orangeKingMachineCalibTarget, 120);
+}
+
+// 回傳 true = 這個按鍵已被定位工具處理（不要再傳給遊戲）
+function handleOrangeKingMachineCalibKey(e) {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return false;
+  if (e.code === 'F4') {
+    orangeKingMachineCalibMode = !orangeKingMachineCalibMode;
+    if (orangeKingMachineCalibMode) {
+      // 與其他定位工具互斥
+      chimneyOilCalibrationMode = false;
+      dualOilCalibrationMode = false;
+      projectileOilShotCalibrationMode = false;
+      for (const k in keys) keys[k] = false;
+    }
+    showHint(orangeKingMachineCalibMode
+      ? '🎯 Orange King Machine Calibration ON（F4 關閉）' + (isOrangeKingStageActive() ? '' : '　請用 暫停→🍊 測試 2-4 橘子王 進入')
+      : '🎯 Orange King Machine Calibration OFF', 200);
+    e.preventDefault();
+    return true;
+  }
+  if (!orangeKingMachineCalibMode) return false;
+  const A = ORANGE_KING_MACHINE_ART;
+  const tg = orangeKingMachineCalibTarget;
+  const step = e.shiftKey ? 10 : 1;
+  const sStep = e.shiftKey ? 0.05 : 0.01;
+  const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil' }[e.code];
+  if (digit) { orangeKingMachineCalibTarget = digit; e.preventDefault(); return true; }
+  let changed = false;
+  const dx = e.code === 'ArrowLeft' ? -step : (e.code === 'ArrowRight' ? step : 0);
+  const dy = e.code === 'ArrowUp' ? -step : (e.code === 'ArrowDown' ? step : 0);
+  const ds = e.code === 'BracketLeft' ? -sStep : (e.code === 'BracketRight' ? sStep : 0);
+  if (dx || dy || ds) {
+    if (tg === 'base')      { A.baseX += dx; A.baseY += dy; A.baseScale = Math.max(0.1, Math.round((A.baseScale + ds) * 100) / 100); }
+    else if (tg === 'pipe') { A.pipeX += dx; A.pipeScale = Math.max(0.1, Math.round((A.pipeScale + ds) * 100) / 100); }
+    else if (tg === 'pipeHigh') A.pipeHighY += dy;
+    else if (tg === 'pipeMid')  A.pipeMidY  += dy;
+    else if (tg === 'pipeLow')  A.pipeLowY  += dy;
+    else if (tg === 'oil')  { A.oilBandH = Math.max(6, A.oilBandH - dy); A.oilExtendX = Math.max(0, A.oilExtendX + dx); }
+    changed = true;
+  }
+  if (e.code === 'KeyR') { resetOrangeKingMachineCalibTarget(); e.preventDefault(); return true; }
+  if (e.code === 'KeyC') {
+    const text = getOrangeKingMachineCalibText();
+    console.log('[OrangeKingMachineCalib]\n' + text);
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {}); } catch (err) {}
+    showHint('📋 定位數值已輸出到 console（也嘗試複製到剪貼簿）', 180);
+    e.preventDefault();
+    return true;
+  }
+  if (changed) { saveOrangeKingMachineCalib(); e.preventDefault(); return true; }
+  // 定位模式開啟時，方向鍵 / 數字鍵 / [ ] 都不傳給遊戲
+  if (/^(Arrow|Digit|Bracket)/.test(e.code)) { e.preventDefault(); return true; }
+  return false;
+}
+
+// 最上層的輔助框與數值面板
+function drawOrangeKingMachineCalibOverlay() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED || !orangeKingMachineCalibMode) return;
+  const cx = cameraX;
+  const A = ORANGE_KING_MACHINE_ART;
+  ctx.save();
+  if (isOrangeKingStageActive()) {
+    const mg = getOrangeKingMachineGeom();
+    // 主裝置 draw rect + 垂直主管
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(mg.drawX - cx, mg.drawY, mg.drawW, mg.drawH);
+    ctx.strokeStyle = 'rgba(0,200,255,0.9)';
+    ctx.beginPath(); ctx.moveTo(mg.vPipeX - cx, mg.vPipeTop); ctx.lineTo(mg.vPipeX - cx, mg.vPipeBottom); ctx.stroke();
+    ctx.setLineDash([]);
+    // 平台
+    ctx.strokeStyle = 'rgba(120,255,120,0.9)';
+    platforms.forEach(p => ctx.strokeRect(p.x - cx, p.y, p.w, p.h));
+    // 三根油管 / 攻擊高度 / hitbox
+    const colors = { high: '#ff5c8a', mid: '#ffb347', low: '#7fd3ff' };
+    ['high', 'mid', 'low'].forEach(key => {
+      const pg = getOrangeKingPipeGeom(key);
+      const band = getOrangeKingSprayBand(key);
+      const col = colors[key];
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(pg.drawX - cx, pg.drawY, pg.drawW, pg.drawH);              // 油管整張圖 draw rect
+      ctx.setLineDash([10, 6]);
+      ctx.beginPath(); ctx.moveTo(0, pg.y); ctx.lineTo(CANVAS_W, pg.y); ctx.stroke(); // 攻擊高度線
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = col;
+      ctx.fillRect(band.x - cx, band.y, band.w, band.h);                          // 油流 hitbox
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(band.x - cx, band.y, band.w, band.h);
+      // 右端接合點 / 管口
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(pg.joinX - cx, pg.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(pg.mouthX - cx, pg.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(key + ' y=' + Math.round(pg.y), 14, pg.y - 6);
+    });
+    // 玩家 hitbox
+    const pr = playerHazardRect();
+    ctx.strokeStyle = '#00ff66';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pr.x - cx, pr.y, pr.w, pr.h);
+  }
+  // 數值面板
+  const lines = [
+    'Orange King Machine Calibration ON（F4 關閉）',
+    'Target: ' + (ORANGE_KING_MACHINE_CALIB_TARGETS.find(x => x.key === orangeKingMachineCalibTarget) || {}).label,
+    'baseX: ' + A.baseX + '   baseY: ' + A.baseY + '   baseScale: ' + A.baseScale,
+    'pipeX: ' + A.pipeX + '   pipeScale: ' + A.pipeScale,
+    'pipeHighY: ' + A.pipeHighY + '   pipeMidY: ' + A.pipeMidY + '   pipeLowY: ' + A.pipeLowY,
+    'oilBandH: ' + A.oilBandH + '   oilExtendX: ' + A.oilExtendX,
+    'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-'),
+    '1~6 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜R 重置目標｜C 輸出 console',
+  ];
+  if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
+  const w = 560, lh = 17, h = lines.length * lh + 12;
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(10, 64, w, h);
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'left';
+  lines.forEach((ln, i) => {
+    ctx.fillStyle = i === 0 ? '#00ffc8' : (i === 1 ? '#ffe066' : '#ffffff');
+    ctx.fillText(ln, 18, 64 + 18 + i * lh);
+  });
   ctx.restore();
 }
 
@@ -9119,6 +9448,7 @@ function draw() {
     drawHUD();
     drawOrangeKingBanner(); // v0.3.35
     drawHintBox();
+    drawOrangeKingMachineCalibOverlay(); // v0.3.36：定位工具（測試版 F4，最上層）
     drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
     drawProjectileOrangeAssetStatusHud(); // v0.3.26-debug：projectile orange 載入狀態（測試版）
   } else if (gameState === 'paused') {
@@ -10495,8 +10825,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.36+：orange-king-machine-art-integration → orange-machine-art（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-machine-art-integration')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-machine-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.35-fix：orange-king-boss-damage-cap-fix-N → boss-dmgcap-fixN
-  if (GAME_VERSION.includes('orange-king-boss-damage-cap-fix')) {
+  } else if (GAME_VERSION.includes('orange-king-boss-damage-cap-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
     tPart = 'boss-dmgcap-fix' + fN;
   // v0.3.35-fix：orange-king-boss-victory-pose-fix-N → boss-victory-fixN
