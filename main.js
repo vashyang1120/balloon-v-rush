@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.35-chapter2-orange-king-boss-foundation-test-1';
-const BUILD_TIME   = '2026-10-12 21:00';
+const GAME_VERSION = 'adventure-v0.3.35-orange-king-boss-timing-and-platform-fix-1';
+const BUILD_TIME   = '2026-10-12 22:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3121,6 +3121,8 @@ function craftItem(recipeId) {
     (playerInventory.craftedItems[recipeId] || 0) + 1;
 
   saveInventory();
+  // v0.3.35-fix-1：做出劍 / 槌後，結算頁與小V的家的「下一關」狀態要立刻解鎖（2-4 武器檢查）
+  if (recipeId === 'basicSword' || recipeId === 'basicHammer') refreshAdventureProgressAfterCraft();
   return true;
 }
 
@@ -4440,7 +4442,7 @@ const LEVELS = [
       noteText:    '橘子王身上的油管會在攻擊前發亮。不同高度的油管，代表不同高度的噴油攻擊。'
                  + '牠用頭上的油管瞄準時，會先出現油彈路線。看到路線後，立刻移動到安全平台。'
                  + '小心牠縮成一顆高速旋轉的橘子球。牠衝撞時，高處平台可能是安全位置。'
-                 + '第一次衝撞後，牠身上的金色油管環可能會掉落。撿起那個環，氣球武器就能暫時變成真正的武器。'
+                 + '橘子王身上有一個金色油管環。第一次衝撞後，那個環可能會掉落。那個環能讓你手上的氣球武器暫時變成真正的武器。'
                  + '記住：不要急著硬衝。等橘子王連續攻擊後喘氣，再靠近反擊！',
       foundMsg:    '氣球小狗找到橘子王弱點筆記！',
       hintText:    '這可能是前往 2-4 Boss 關的重要線索……', // v0.3.33：發現物品視窗底部提示
@@ -4462,9 +4464,11 @@ const LEVELS = [
     isBossStage: true,
     bossId:      'orangeKing',
     hints:       [],
+    // v0.3.35-fix-1：兩層平台左緣貼齊畫面左邊（左側 = 小V躲避 / 觀察 / 換層的安全區）
+    //   中層比高層長 110px：從高層往右走會先落到中層，再往右走出中層就回到地面
     buildPlatforms: () => [
-      { x:  60, y: GROUND_Y - 220, w: 180, h: 22 },  // 最高平台（躲衝撞）
-      { x: 250, y: GROUND_Y - 115, w: 170, h: 22 },  // 中層平台
+      { x: 0, y: GROUND_Y - 220, w: 190, h: 22 },  // 最高平台（躲衝撞）
+      { x: 0, y: GROUND_Y - 115, w: 300, h: 22 },  // 中層平台
     ],
     buildSpikes:   () => [],
     buildCoins:    () => [],
@@ -4772,7 +4776,24 @@ function goToNextChapter1Level() {
 //  兩個既有的「下一關」入口（結算畫面按鈕 / 小V的家）都呼叫這個函式，
 //  確保第一章流程的關卡阻擋邏輯只需要維護一份。
 // ════════════════════════════════════════════════════════
+// v0.3.35-fix-1：進入 2-4 Boss 關前，背包裡至少要有一把可用的氣球劍或氣球槌
+// 以背包（craftedItems）判斷：耐久用完時 consumeXxxDurability 會把數量扣到 0，所以數量 > 0 = 還有可用武器
+// （測試版的 runtime 測試武器不寫入背包，不算數）
+function hasUsableBossWeapon() {
+  const ci = playerInventory.craftedItems || {};
+  return (ci.basicSword || 0) > 0 || (ci.basicHammer || 0) > 0;
+}
+function isBossWeaponGateBlocked(nextIdx) {
+  return isBossStageLevel(nextIdx) && !hasUsableBossWeapon();
+}
+const BOSS_WEAPON_GATE_MSG = '⚔️ 橘子王太危險了！請先製作一把氣球劍或氣球槌，再前往 2-4。';
+
 function checkChapter1ProgressionGate(nextIdx) {
+  // v0.3.35-fix-1：阻擋零 — 沒有武器不能進 2-4 Boss 關（只擋 2-4）
+  if (isBossWeaponGateBlocked(nextIdx)) {
+    showHint(BOSS_WEAPON_GATE_MSG, 260);
+    return false;
+  }
   // 阻擋一：前往 Chapter1-2（狗狗尋寶關）前，必須帶狗出門
   if (nextIdx === dogHammerStageIndex) {
     const flags = ensureChapter1Flags();
@@ -7713,20 +7734,44 @@ const ORANGE_KING = {
   H:               190,
   BALL_W:          160,   // 縮球後尺寸
   BALL_H:          150,   // 衝撞判定頂端 = GROUND_Y - 150 → 打得到地面 / 中層，打不到最高平台
-  DASH_SPEED:      12,    // px / frame
-  TUTORIAL_DASH_SPEED: 9,
+  DASH_SPEED:      11,    // px / frame（v0.3.35-fix-1：12 → 11）
+  TUTORIAL_DASH_SPEED: 8, // （9 → 8）
   DASH_STOP_X:     18,
-  COOLDOWN_MS:     2300,
-  FIRST_COOLDOWN_MS: 2800,
+  COOLDOWN_MS:       3200, // v0.3.35-fix-1：一般喘氣（2300 → 3200）
+  FIRST_COOLDOWN_MS: 3900, // 第一次正式喘氣（2800 → 3900）
+  CHARGE_COOLDOWN_MS: 3600, // 縮球衝撞（大招）後的喘氣，略長
   HURT_INVULN_MS:  450,   // 被打一下後短暫無敵，避免一次喘氣就被連打到底
   SWORD_DAMAGE:    1,
   HAMMER_DAMAGE:   2,
   SPRAY_BAND_H:    46,
-  LOB_GRAVITY:     0.22,
+  LOB_GRAVITY:     0.15,  // v0.3.35-fix-1：0.22 → 0.15（配合較慢的水平速度，弧線不會飛出畫面）
   LOB_RADIUS:      15,
   PUDDLE_W:        100,
   PUDDLE_LIFE_MS:  3200,
   RING_LAND_X:     440,
+};
+// v0.3.35-fix-1：Boss 節奏（ms）— 預警 → 出招 → 收招 / 停頓 → 下一招 → 整組結束才喘氣
+const ORANGE_KING_TIMING = {
+  IDLE_BEFORE_PATTERN: 1100, // 喘氣結束 → 下一組攻擊前的站定（900 → 1100）
+  BETWEEN_ATTACKS:      650, // 同一組兩招之間的停頓（380 → 650）
+  SPRAY_WARN:          1100, // 油管發亮 + 水平預警線（850 → 1100）
+  SPRAY_FIRE:           750, // 實際噴油（650 → 750）
+  SPRAY_RECOVER:        450, // 噴完收招（新增）
+  LOB_AIM:             1250, // 拋物線預測線 + 頭頂油管發亮（950 → 1250）
+  LOB_RECOVER:          800, // 發射後收招（450 → 800；油彈仍在飛）
+  CHARGE_WARN:          850, // 表情變兇 / 抖動（750 → 850）
+  CHARGE_CURL:          600, // 蹲低壓縮（380 → 600）
+  CHARGE_SPIN:         1000, // 原地高速旋轉蓄力（650 → 1000）
+  CHARGE_STUN:         1000, // 撞牆暈眩（750 → 1000）
+  LEAP_BACK:            900, // 跳回右側（750 → 900）
+  TUTORIAL_CHARGE_WARN: 1400, // 第一次教學衝撞再慢一點（1300 → 1400）
+  TUTORIAL_CHARGE_CURL:  800, // （380 → 800）
+  TUTORIAL_CHARGE_SPIN: 1300, // （900 → 1300）
+  TUTORIAL_CHARGE_STUN: 1300, // （1100 → 1300）
+  SLAM_PREP:            750, // 起跳前搖：蹲低抖動（新增）
+  SLAM_UP:              550, // 離地（480 → 550）
+  SLAM_DOWN:            300, // 落下（260 → 300）
+  SLAM_LAND:            650, // 落地震動後停頓（450 → 650）
 };
 // 三高度油管（世界座標 y 中心）：高 = 最高平台、中 = 中層平台、低 = 地面
 const ORANGE_KING_LANES = {
@@ -7737,10 +7782,11 @@ const ORANGE_KING_LANES = {
 const ORANGE_KING_LANE_ORDER = ['low', 'high', 'mid', 'high', 'low', 'mid'];
 // 拋物線油彈路線（依序輪替）：tx / ty = 路線經過的目標點，vx = 水平速度
 const ORANGE_KING_LOB_ROUTES = [
-  { tx: 150, ty: GROUND_Y - 255, vx: -10 },  // 掃過最高平台
-  { tx: 330, ty: GROUND_Y - 150, vx: -10 },  // 掃過中層平台
-  { tx: 480, ty: GROUND_Y - 35,  vx: -7  },  // 打地面中段
-  { tx: 120, ty: GROUND_Y - 30,  vx: -11 },  // 打地面左側
+  // v0.3.35-fix-1：水平速度放慢（約 1.5 秒飛完），配合 LOB_GRAVITY 0.15
+  { tx: 150, ty: GROUND_Y - 255, vx: -8.5 },  // 掃過最高平台（弧頂約 y=79，不被 HUD 擋住）
+  { tx: 200, ty: GROUND_Y - 150, vx: -7   },  // 掃過中層平台
+  { tx: 480, ty: GROUND_Y - 35,  vx: -5.5 },  // 打地面中段
+  { tx: 120, ty: GROUND_Y - 30,  vx: -8   },  // 打地面左側
 ];
 // 攻擊組合（固定順序輪替，每組結束才進 cooldown）
 const ORANGE_KING_PATTERNS = [
@@ -7791,7 +7837,7 @@ function initOrangeKingBoss() {
     dashHitDone: false,
     defeatMs: 0, crownY: 0, crownVy: 0, crownRot: 0,
     clearTriggered: false,
-    tempWeaponGranted: false,
+    ringAuraMs: 0, sparks: [],
   };
   orangeKingInputLocked = true;
   orangeKingBoss.ring = { state: 'onBoss', x: 0, y: 0, vx: 0, vy: 0 };
@@ -7800,13 +7846,6 @@ function initOrangeKingBoss() {
 
 // 離開 2-4（或重置）時清掉 Boss 與暫時能力
 function clearOrangeKingBoss() {
-  if (orangeKingBoss && orangeKingBoss.tempWeaponGranted) {
-    // 沒有武器時發的「實體化氣球劍」只在 2-4 有效，離開就還原成背包真正的裝備
-    initEquippedSword();
-    initEquippedHammer();
-    normalizeActiveWeaponSlot();
-    applyAdventureTestLoadout();
-  }
   orangeKingBoss = null;
   orangeKingInputLocked = false;
 }
@@ -7890,6 +7929,9 @@ function updateOrangeKingBoss(dtMs) {
   if (b.invulnMs > 0) b.invulnMs -= dtMs;
   if (b.banner) { b.banner.ms += dtMs; if (b.banner.ms >= b.banner.dur) b.banner = null; }
   b.floatTexts.forEach(f => { f.ms += dtMs; f.y -= 0.6 * k; });
+  if (b.ringAuraMs > 0) b.ringAuraMs -= dtMs;
+  b.sparks.forEach(sp => { sp.ms += dtMs; sp.x += sp.vx * k; sp.y += sp.vy * k; sp.vy += 0.25 * k; });
+  b.sparks = b.sparks.filter(sp => sp.ms < 500);
   b.floatTexts = b.floatTexts.filter(f => f.ms < 900);
 
   tickOrangeKingPendingHint(dtMs);
@@ -7923,10 +7965,10 @@ function updateOrangeKingBoss(dtMs) {
 
     // ── 縮球衝撞（教學 + 正式共用）──
     case 'chargeWarn':
-      if (b.phaseMs >= (b.chargeTutorial ? 1300 : 750)) setOrangeKingPhase('chargeCurl');
+      if (b.phaseMs >= (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_WARN : ORANGE_KING_TIMING.CHARGE_WARN)) setOrangeKingPhase('chargeCurl');
       break;
     case 'chargeCurl':
-      if (b.phaseMs >= 380) {
+      if (b.phaseMs >= (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_CURL : ORANGE_KING_TIMING.CHARGE_CURL)) {
         b.curled = true;
         b.x = ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2;
         setOrangeKingPhase('chargeSpin');
@@ -7934,7 +7976,7 @@ function updateOrangeKingBoss(dtMs) {
       break;
     case 'chargeSpin':
       b.spinAngle += 0.45 * k;
-      if (b.phaseMs >= (b.chargeTutorial ? 900 : 650)) { b.dashHitDone = false; setOrangeKingPhase('chargeDash'); }
+      if (b.phaseMs >= (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_SPIN : ORANGE_KING_TIMING.CHARGE_SPIN)) { b.dashHitDone = false; setOrangeKingPhase('chargeDash'); }
       break;
     case 'chargeDash': {
       b.spinAngle += 0.6 * k;
@@ -7954,7 +7996,7 @@ function updateOrangeKingBoss(dtMs) {
     }
     case 'chargeRecover':
       if (b.chargeTutorial && b.ring.state === 'onBoss' && b.phaseMs >= 250) dropOrangeKingRing();
-      if (b.phaseMs >= (b.chargeTutorial ? 1100 : 750)) {
+      if (b.phaseMs >= (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_STUN : ORANGE_KING_TIMING.CHARGE_STUN)) {
         b.curled = false;
         b.y = GROUND_Y - b.h;
         b.leapFromX = b.x;
@@ -7962,7 +8004,7 @@ function updateOrangeKingBoss(dtMs) {
       }
       break;
     case 'leapBack': {
-      const dur = 750;
+      const dur = ORANGE_KING_TIMING.LEAP_BACK;
       const p = Math.min(1, b.phaseMs / dur);
       b.x = b.leapFromX + (ORANGE_KING.HOME_X - b.leapFromX) * p;
       b.y = GROUND_Y - b.h - Math.sin(p * Math.PI) * 230;
@@ -7993,45 +8035,52 @@ function updateOrangeKingBoss(dtMs) {
       break;
 
     case 'idle':
-      if (b.phaseMs >= 900) startNextOrangeKingPattern();
+      if (b.phaseMs >= ORANGE_KING_TIMING.IDLE_BEFORE_PATTERN) startNextOrangeKingPattern();
       break;
     case 'between':
-      if (b.phaseMs >= 380) runOrangeKingPatternStep();
+      if (b.phaseMs >= ORANGE_KING_TIMING.BETWEEN_ATTACKS) runOrangeKingPatternStep();
       break;
 
     // ── 攻擊 A：三高度水平噴油 ──
     case 'sprayWarn':
-      if (b.phaseMs >= 850) setOrangeKingPhase('sprayFire');
+      if (b.phaseMs >= ORANGE_KING_TIMING.SPRAY_WARN) setOrangeKingPhase('sprayFire');
       break;
     case 'sprayFire': {
       const band = getOrangeKingSprayBand(b.activeLane);
       const pr = playerHazardRect();
       if (rectsOverlap(pr.x, pr.y, pr.w, pr.h, band.x, band.y, band.w, band.h)) orangeKingHitPlayer();
-      if (b.phaseMs >= 650) { b.activeLane = null; finishOrangeKingAttack(); }
+      if (b.phaseMs >= ORANGE_KING_TIMING.SPRAY_FIRE) { b.activeLane = null; setOrangeKingPhase('sprayRecover'); }
       break;
     }
+    case 'sprayRecover': // 收招停頓
+      if (b.phaseMs >= ORANGE_KING_TIMING.SPRAY_RECOVER) finishOrangeKingAttack();
+      break;
 
     // ── 攻擊 B：前景拋物線油彈 ──
     case 'lobAim':
-      if (b.phaseMs >= 950) {
+      if (b.phaseMs >= ORANGE_KING_TIMING.LOB_AIM) {
         const shot = Object.assign({}, b.activeLob, { t: 0, x: b.activeLob.sx, y: b.activeLob.sy });
         b.lobShots.push(shot);
         setOrangeKingPhase('lobFire');
       }
       break;
     case 'lobFire':
-      if (b.phaseMs >= 450) { b.activeLob = null; finishOrangeKingAttack(); }
+      if (b.phaseMs >= ORANGE_KING_TIMING.LOB_RECOVER) { b.activeLob = null; finishOrangeKingAttack(); }
       break;
 
     // ── 攻擊 D：跳起震地 ──
+    case 'slamPrep': // 起跳前搖：蹲低抖動
+      if (b.phaseMs < 100) orangeKingShake(200, 2);
+      if (b.phaseMs >= ORANGE_KING_TIMING.SLAM_PREP) setOrangeKingPhase('slamUp');
+      break;
     case 'slamUp': {
-      const p = Math.min(1, b.phaseMs / 480);
+      const p = Math.min(1, b.phaseMs / ORANGE_KING_TIMING.SLAM_UP);
       b.y = GROUND_Y - b.h - Math.sin(p * Math.PI / 2) * 170;
       if (p >= 1) setOrangeKingPhase('slamDown');
       break;
     }
     case 'slamDown': {
-      const p = Math.min(1, b.phaseMs / 260);
+      const p = Math.min(1, b.phaseMs / ORANGE_KING_TIMING.SLAM_DOWN);
       b.y = GROUND_Y - b.h - (1 - p * p) * 170;
       if (p >= 1) {
         b.y = GROUND_Y - b.h;
@@ -8042,7 +8091,7 @@ function updateOrangeKingBoss(dtMs) {
       break;
     }
     case 'slamLand':
-      if (b.phaseMs >= 450) finishOrangeKingAttack();
+      if (b.phaseMs >= ORANGE_KING_TIMING.SLAM_LAND) finishOrangeKingAttack();
       break;
 
     // ── 喘氣（唯一可受傷時段）──
@@ -8109,17 +8158,9 @@ function collectOrangeKingRing() {
   const b = orangeKingBoss;
   b.ring.state = 'collected';
   b.ringActive = true;
-  // 沒有任何武器時，發一把只在 2-4 有效的實體化氣球劍（runtime-only，不寫入背包）
-  const hasSword  = !!(equippedSword && equippedSword.id === 'basicSword');
-  const hasHammer = !!(equippedHammer && equippedHammer.id);
-  if (!hasSword && !hasHammer) {
-    equippedSword.id = 'basicSword';
-    equippedSword.name = '實體化氣球劍';
-    equippedSword.maxDur = 999;
-    equippedSword.currentDur = 999;
-    activeSlot = 'sword';
-    b.tempWeaponGranted = true;
-  }
+  // v0.3.35-fix-1：金色油管環只讓「已經擁有的」氣球劍 / 槌暫時實體化，不會產生武器
+  //               （沒有武器的玩家在進入 2-4 前就會被 checkChapter1ProgressionGate 擋下）
+  b.ringAuraMs = 1400; // 小V身上的金色光圈
   orangeKingFloatText('武器實體化！', player.x + player.w / 2, player.y - 10, '#ffe066');
   showHint('✨ 金色油管環讓氣球武器實體化了！', 210);
   b.pendingHint = { msg: '💡 等橘子王連續攻擊後喘氣，再靠近反擊！', delayMs: 3500 };
@@ -8150,7 +8191,7 @@ function runOrangeKingPatternStep() {
     b.lobCursor++;
     setOrangeKingPhase('lobAim');
   } else if (atk === 'slam') {
-    setOrangeKingPhase('slamUp');
+    setOrangeKingPhase('slamPrep');
   } else if (atk === 'charge') {
     startOrangeKingCharge(false);
   }
@@ -8163,7 +8204,9 @@ function finishOrangeKingAttack() {
     setOrangeKingPhase('between');
     return;
   }
-  b.cooldownDur = b.cooldownCount === 0 ? ORANGE_KING.FIRST_COOLDOWN_MS : ORANGE_KING.COOLDOWN_MS;
+  const lastAtk = b.currentPattern ? b.currentPattern[b.currentPattern.length - 1] : '';
+  b.cooldownDur = b.cooldownCount === 0 ? ORANGE_KING.FIRST_COOLDOWN_MS
+    : (lastAtk === 'charge' ? ORANGE_KING.CHARGE_COOLDOWN_MS : ORANGE_KING.COOLDOWN_MS);
   if (b.cooldownCount === 0 && b.ringActive) showHint('💦 橘子王在喘氣！快靠近攻擊！', 200);
   b.cooldownCount++;
   setOrangeKingPhase('cooldown');
@@ -8235,6 +8278,10 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
   b.hurtFlashMs = 260;
   b.invulnMs = ORANGE_KING.HURT_INVULN_MS;
   orangeKingFloatText('-' + dmg, fx, fy - 10, '#ff5c5c');
+  for (let i = 0; i < 12; i++) { // 命中點金色火花
+    const ang = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4;
+    b.sparks.push({ x: fx, y: fy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, ms: 0 });
+  }
   orangeKingShake(160, 3);
   if (b.hp <= 0) startOrangeKingDefeat();
 }
@@ -8301,9 +8348,9 @@ function drawOrangeKingBack(cx) {
     ctx.fill();
     ctx.restore();
   }
-  // 左側牆
+  // 左側牆（v0.3.35-fix-1：平台從牆面延伸出來）
   ctx.fillStyle = 'rgba(60,30,20,0.55)';
-  ctx.fillRect(0 - cx, 0, 14, GROUND_Y);
+  ctx.fillRect(0 - cx, 0, 10, GROUND_Y);
 
   // 油漬
   b.puddles.forEach(p => {
@@ -8472,7 +8519,8 @@ function drawOrangeKingBody(cx) {
 
   let wobbleX = 0, squashY = 1;
   if (b.phase === 'chargeWarn') wobbleX = Math.sin(t / 25) * 4;
-  if (b.phase === 'chargeCurl') squashY = 1 - Math.min(1, b.phaseMs / 380) * 0.2;
+  if (b.phase === 'chargeCurl') squashY = 1 - Math.min(1, b.phaseMs / (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_CURL : ORANGE_KING_TIMING.CHARGE_CURL)) * 0.2;
+  if (b.phase === 'slamPrep')  { squashY = 1 - Math.min(1, b.phaseMs / ORANGE_KING_TIMING.SLAM_PREP) * 0.14; wobbleX = Math.sin(t / 30) * 3; }
   if (b.phase === 'cooldown')   squashY = 1 + Math.sin(t / 160) * 0.03;
   if (defeated)                 wobbleX = Math.sin(t / 40) * 6 * deflate;
 
@@ -8530,7 +8578,7 @@ function drawOrangeKingBody(cx) {
 
   // 臉
   const eyeY = ccy - bh * 0.08;
-  const angry = ['chargeWarn', 'chargeCurl', 'sprayWarn', 'sprayFire', 'lobAim', 'slamUp', 'slamDown', 'introRoar'].includes(b.phase);
+  const angry = ['chargeWarn', 'chargeCurl', 'sprayWarn', 'sprayFire', 'lobAim', 'slamPrep', 'slamUp', 'slamDown', 'introRoar'].includes(b.phase);
   const tired = b.phase === 'cooldown' || b.phase === 'chargeRecover' || defeated;
   ctx.fillStyle = '#2a1205';
   ctx.strokeStyle = '#2a1205';
@@ -8587,7 +8635,7 @@ function drawOrangeKingBody(cx) {
   ctx.restore();
 
   // 蓄力警示 / 喘氣汗滴
-  if (b.phase === 'chargeWarn') {
+  if (b.phase === 'chargeWarn' || b.phase === 'slamPrep') {
     ctx.fillStyle = Math.floor(b.phaseMs / 120) % 2 ? '#ff4d4d' : '#ffe066';
     ctx.font = 'bold 44px sans-serif';
     ctx.textAlign = 'center';
@@ -8653,6 +8701,28 @@ function drawOrangeKingFront(cx) {
     g.addColorStop(1, '#c75b00');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(s.x - cx, s.y, ORANGE_KING.LOB_RADIUS, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  });
+  // 撿到金色油管環：小V身上短暫金色光圈
+  if (b.ringAuraMs > 0) {
+    const a = Math.min(1, b.ringAuraMs / 400);
+    const px = player.x + player.w / 2 - cx, py = player.y + player.h / 2;
+    const rr = 50 + (1400 - b.ringAuraMs) / 40;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = '#ffd23f';
+    ctx.lineWidth = 5;
+    ctx.shadowColor = 'rgba(255,220,80,0.9)';
+    ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.ellipse(px, py, rr * 0.7, rr, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // 命中金色火花
+  b.sparks.forEach(sp => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - sp.ms / 500);
+    ctx.fillStyle = sp.ms < 150 ? '#fff6c2' : '#ffd23f';
+    ctx.beginPath(); ctx.arc(sp.x - cx, sp.y, 3.5, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   });
   b.floatTexts.forEach(f => {
@@ -8989,8 +9059,9 @@ function updateNextLevelButton() {
     // （「請先帶狗出發」/「請先製作氣球槌」/「前往第 N 節」），
     // 不在第一章流程內的關卡 fallback 回舊版「下一關」文字
     const nextStepInfo = getChapter1NextStepInfo();
-    const btnText = nextStepInfo ? nextStepInfo.nextBtnText : '下一關';
-    const isLocked = nextStepInfo ? nextStepInfo.nextBtnLocked : false;
+    const bossGate = isBossWeaponGateBlocked(nextIdx); // v0.3.35-fix-1
+    const btnText = bossGate ? '請先製作武器' : (nextStepInfo ? nextStepInfo.nextBtnText : '下一關');
+    const isLocked = bossGate || (nextStepInfo ? nextStepInfo.nextBtnLocked : false);
     if (ADVENTURE_TEST_TOOLS_ENABLED && nextStepInfo) {
       console.log('[DogFlow] updateNextLevelButton', { kind: nextStepInfo.kind, btnText, isLocked, nextBringDog,
         hasDog: !!(playerInventory.balloonDog?.present), turnsLeft: playerInventory.balloonDog?.turnsLeft });
@@ -9001,10 +9072,12 @@ function updateNextLevelButton() {
     if (sub) sub.textContent = isLocked ? 'Locked' : 'Next Level';
     // v0.3.18-fix-5：Locked 時明確設 _nextLevel=false，防止點擊真的進下一關
     btn._nextLevel = !isLocked;
-    btn.dataset.lockedReason = isLocked ? (nextStepInfo?.kind || 'locked') : '';
+    btn.dataset.lockedReason = isLocked ? (bossGate ? 'bossWeapon' : (nextStepInfo?.kind || 'locked')) : '';
 
     btn.style.opacity = isLocked ? '0.45' : '';
+    btn.disabled = bossGate; // v0.3.35-fix-1：沒有武器時「下一關」直接 disabled（不會誤觸再玩一次）
   } else {
+    btn.disabled = false;
     btn.childNodes[0].textContent = '再玩一次';
     const sub = btn.querySelector('.result-btn-sub');
     if (sub) sub.textContent = 'Play Again';
@@ -10398,8 +10471,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.35-fix：orange-king-boss-timing-and-platform-fix-N → boss-timing-fixN
+  if (GAME_VERSION.includes('orange-king-boss-timing-and-platform-fix')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
+    tPart = 'boss-timing-fix' + fN;
   // v0.3.35+：chapter2-orange-king-boss-foundation → orange-king-boss（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-orange-king-boss-foundation')) {
+  } else if (GAME_VERSION.includes('chapter2-orange-king-boss-foundation')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-king-boss' + (tN === '1' ? '' : '-' + tN);
   // v0.3.34+：result-home-sticky-status-and-supply → sticky-status（test-N > 1 時加上 -N）
@@ -11090,6 +11167,14 @@ function populateResultPanel() {
       + '<div class="rp-guidebook-hint__body">橘子王被打敗了！小V保護了派對島的氣球。</div>'
       + '</div>';
   }
+  // v0.3.35-fix-1：下一關是 Boss 關但沒有武器 → Boss 戰前準備（下一關按鈕鎖住）
+  if (gameState === 'clear' && isBossWeaponGateBlocked(getNextLevelIndex(currentLevelIndex))) {
+    html += '<div class="rp-guidebook-hint rp-boss-next-card" id="rp-boss-weapon-gate">'
+      + '<div class="rp-guidebook-hint__title">⚔️ Boss 戰前準備</div>'
+      + '<div class="rp-guidebook-hint__body">橘子王太危險了！<br>請先製作一把氣球劍或氣球槌，再前往 2-4。</div>'
+      + '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openGuidebook()">📖 打開氣球秘笈製作武器</button>'
+      + '</div>';
+  } else
   // v0.3.35：下一關是 Boss 關 → 出發前提醒
   if (gameState === 'clear' && isBossStageLevel(getNextLevelIndex(currentLevelIndex))) {
     const hasNote = !!(playerInventory.keyItems || {}).orangeKingWeaknessNote01;
@@ -12196,6 +12281,19 @@ function renderHomeNextStage() {
   const lv = LEVELS[nextIdx];
   const hasSecret = lv.hiddenTreasure && playerInventory.balloonDog?.present;
 
+  // v0.3.35-fix-1：下一關是 2-4 Boss 關但沒有武器 → 鎖住「出發冒險」，引導去氣球秘笈
+  if (isBossWeaponGateBlocked(nextIdx)) {
+    el.innerHTML =
+      '<div class="hns-badge hns-badge--warn">⚔️ Boss 戰前準備</div>'
+      + '<div class="hns-name">' + getChapterDisplayInfo(nextIdx).title + '</div>'
+      + '<div class="hns-hint" style="margin-top:8px">橘子王太危險了！</div>'
+      + '<div class="hns-hint">請先製作一把氣球劍或氣球槌，再前往 2-4。</div>'
+      + '<button class="rp-next-step-btn" style="margin-top:10px" onclick="openGuidebook()">📖 打開氣球秘笈製作武器</button>';
+    if (btn) { btn.textContent = '請先製作武器'; btn.disabled = true; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
+    return;
+  }
+  if (btn) btn.disabled = false; // v0.3.35-fix-1：離開阻擋狀態時恢復可按
+
   // v0.3.18-fix-3：下一關是狗狗尋寶關時，依狗狗狀態顯示正確引導
   if (nextIdx === dogHammerStageIndex) {
     const dog    = playerInventory.balloonDog || {};
@@ -12753,6 +12851,11 @@ function hideResultButtons() {
     ['click', 'touchstart'].forEach(ev =>
       btnPlay.addEventListener(ev, e => {
         e.preventDefault();
+        // v0.3.35-fix-1：2-4 武器檢查鎖住時，按了只提示，不做任何事（不會變成再玩一次）
+        if (gameState === 'clear' && btnPlay.dataset && btnPlay.dataset.lockedReason === 'bossWeapon') {
+          showHint(BOSS_WEAPON_GATE_MSG, 220);
+          return;
+        }
         if (gameState !== 'playing') {
           try {
             if (btnPlay._nextLevel && gameState === 'clear') { // 防呆：只有 clear 才能進下一關
