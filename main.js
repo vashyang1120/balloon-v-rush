@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.32-chapter2-boss-note-foundation-test-1';
-const BUILD_TIME   = '2026-10-12 02:45';
+const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-test-1';
+const BUILD_TIME   = '2026-10-12 03:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2658,6 +2658,8 @@ const mobileBtn = { left: false, right: false, jump: false, attack: false };
 
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') {
+    // v0.3.33：最上層是發現物品視窗 → ESC 等同「收進背包，繼續冒險」
+    if (isDiscoveryItemModalOpen()) { closeDiscoveryItemModal(); return; }
     // v0.3.29-fix-1：ESC 先關最上層 overlay — 暫停背包開著時只關背包，回到暫停選單
     if (isPauseBagOpen()) { closePauseBagBackToPauseMenu(); return; }
     if (gameState === 'playing') { pauseGame(); return; }
@@ -4416,6 +4418,7 @@ const LEVELS = [
       title:       '橘子王弱點筆記 01',
       noteText:    '橘子王噴油前，頭上的油管會先發亮。看到亮光時，不要硬衝，先躲到安全位置等待空檔。',
       foundMsg:    '氣球小狗找到橘子王弱點筆記！',
+      hintText:    '這可能是前往 2-4 Boss 關的重要線索……', // v0.3.33：發現物品視窗底部提示
     },
   },
 
@@ -5105,7 +5108,8 @@ function loadLevel(index) {
   stageFlowHints.scorpionHammerHintShown = false;
 
   // 隱藏寶物（深拷貝，避免 found 狀態污染 LEVELS 原始資料）
-  const rawTreasure = lv.hiddenTreasure || null;
+  // v0.3.33：已取得的重要物品（例如 Boss 弱點筆記）不再出現在關卡中
+  const rawTreasure = (lv.hiddenTreasure && isHiddenTreasureAvailable(lv.hiddenTreasure)) ? lv.hiddenTreasure : null;
   currentHiddenTreasure = rawTreasure
     ? Object.assign({}, rawTreasure, { found: false })
     : null;
@@ -7239,6 +7243,82 @@ function updateDogNose() {
   } catch(e) { dogNoseGlow = 0; dogNoseLevel = 0; }
 }
 
+// ════════════════════════════════════════════════════════
+//  v0.3.33：發現重要物品展示視窗（discovery item modal）
+//  ──────────────────────────────────────────────────────
+//  共用框架：openDiscoveryItemModal(item)
+//    item = { id, type, emoji, name, title, noteText, hintText }
+//  目前只有 bossNote 使用；未來 mapFragment / blueprint / specialItem / storyClue 可沿用。
+//  資源獎勵（goldChest）不使用這個視窗。
+//  開啟時暫停遊戲（gameState = 'paused'，但不顯示一般暫停選單），關閉後恢復。
+// ════════════════════════════════════════════════════════
+const DISCOVERY_MODAL_TREASURE_TYPES = ['bossNote']; // 會跳出展示視窗的 hiddenTreasure 類型
+let discoveryModalWasPlaying = false;
+
+// 重要物品若已在背包裡，就不再出現在關卡中（避免重複取得 / 重複跳視窗）
+function isHiddenTreasureAvailable(t) {
+  if (!t) return false;
+  if (t.type === 'bossNote' && t.id && playerInventory.keyItems && playerInventory.keyItems[t.id]) return false;
+  return true;
+}
+
+function isDiscoveryItemModalOpen() {
+  const el = document.getElementById('discovery-item-overlay');
+  return !!(el && el.style.display && el.style.display !== 'none');
+}
+
+function escapeDiscoveryText(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderDiscoveryItemModal(item) {
+  const titleEl = document.getElementById('discovery-item-title');
+  const bodyEl  = document.getElementById('discovery-item-body');
+  if (titleEl) titleEl.textContent = (item.emoji || '📦') + ' 發現重要物品！';
+  if (!bodyEl) return;
+  // 內文依「。」分行，方便手機閱讀
+  const lines = String(item.noteText || '').split('。').map(s => s.trim()).filter(Boolean);
+  bodyEl.innerHTML =
+      '<div class="discovery-item-emoji">' + escapeDiscoveryText(item.emoji || '📦') + '</div>'
+    + '<div class="discovery-item-name">' + escapeDiscoveryText(item.name || '') + '</div>'
+    + '<div class="discovery-item-note">'
+    +   (item.title ? '<div class="discovery-item-note-title">' + escapeDiscoveryText(item.title) + '</div>' : '')
+    +   lines.map(l => '<p>' + escapeDiscoveryText(l) + '。</p>').join('')
+    + '</div>'
+    + (item.hintText ? '<div class="discovery-item-hint">' + escapeDiscoveryText(item.hintText) + '</div>' : '');
+}
+
+function openDiscoveryItemModal(item) {
+  const overlay = document.getElementById('discovery-item-overlay');
+  if (!overlay || !item) return;
+  if (isDiscoveryItemModalOpen()) return; // 已開啟時不重複開
+  discoveryModalWasPlaying = (gameState === 'playing');
+  if (discoveryModalWasPlaying) gameState = 'paused'; // 不呼叫 pauseGame()：不顯示一般暫停選單
+  renderDiscoveryItemModal(item);
+  overlay.style.display = 'flex';
+  // 重新觸發進場動畫
+  overlay.classList.remove('discovery-item-overlay--show');
+  void overlay.offsetWidth;
+  overlay.classList.add('discovery-item-overlay--show');
+  // 開啟時放開所有移動 / 攻擊按鍵，避免關閉後角色自己往前衝
+  Object.keys(keys).forEach(k => { keys[k] = false; });
+  console.log('[Discovery] open modal:', item.id, item.type);
+}
+
+function closeDiscoveryItemModal() {
+  const overlay = document.getElementById('discovery-item-overlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.classList.remove('discovery-item-overlay--show');
+  }
+  if (discoveryModalWasPlaying && gameState === 'paused') {
+    gameState = 'playing';
+    lastTime = 0; // 避免恢復時 dt 過大
+  }
+  discoveryModalWasPlaying = false;
+}
+
 // ── 隱藏寶物碰撞 ────────────────────────────
 function checkHiddenTreasure() {
   try {
@@ -7301,6 +7381,7 @@ function checkHiddenTreasure() {
       // v0.3.32：Boss 弱點筆記 — 立即收進 playerInventory.keyItems（同 id 不重複）
       if (!playerInventory.keyItems) playerInventory.keyItems = {};
       const noteId = t.id || 'bossNote';
+      const isNewNote = !playerInventory.keyItems[noteId]; // v0.3.33：只有第一次取得才跳展示視窗
       if (!playerInventory.keyItems[noteId]) {
         playerInventory.keyItems[noteId] = {
           id:         noteId,
@@ -7319,6 +7400,18 @@ function checkHiddenTreasure() {
       saveInventory();
       console.log('boss note found:', noteId, playerInventory.keyItems[noteId]);
       showHint(t.foundMsg || ('找到' + (t.name || 'Boss 弱點筆記') + '！'), 320);
+      // v0.3.33：重要發現物品 → 展示視窗（資料已先存好，視窗只負責展示）
+      if (isNewNote && DISCOVERY_MODAL_TREASURE_TYPES.includes(t.type)) {
+        openDiscoveryItemModal({
+          id:       noteId,
+          type:     t.type,
+          emoji:    t.emoji || '📓',
+          name:     t.name || 'Boss 弱點筆記',
+          title:    t.title || '',
+          noteText: t.noteText || '',
+          hintText: t.hintText || '',
+        });
+      }
     }
   } catch(e) { console.error('checkHiddenTreasure error:', e.message, e.stack); }
 }
@@ -9111,8 +9204,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.33+：discovery-item-modal → discovery-modal（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('discovery-item-modal')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'discovery-modal' + (tN === '1' ? '' : '-' + tN);
   // v0.3.32+：chapter2-boss-note-foundation → ch2-boss-note（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-boss-note-foundation')) {
+  } else if (GAME_VERSION.includes('chapter2-boss-note-foundation')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-boss-note' + (tN === '1' ? '' : '-' + tN);
   // v0.3.31+：chapter2-dog-gold-chest → ch2-dog-chest（test-N > 1 時加上 -N）
@@ -9386,7 +9483,7 @@ function refreshResultDog() {
   const hasDog = dog.present;
   const turns  = dog.turnsLeft || 0;
   const nextLvIndex       = getNextLevelIndex(currentLevelIndex);
-  const nextLvHasTreasure = nextLvIndex < LEVELS.length && !!LEVELS[nextLvIndex]?.hiddenTreasure;
+  const nextLvHasTreasure = nextLvIndex < LEVELS.length && isHiddenTreasureAvailable(LEVELS[nextLvIndex]?.hiddenTreasure); // v0.3.33
   const canBringDog       = canBringDogNextLevel(); // v0.3.18-fix-1：用共用 helper（含教學保底）
 
   let inner = '';
@@ -9521,7 +9618,7 @@ function populateResultPanel() {
   const dogTurns      = dogData.turnsLeft || 0;
   const nextLvIndex   = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length
-    && !!LEVELS[nextLvIndex].hiddenTreasure;
+    && isHiddenTreasureAvailable(LEVELS[nextLvIndex].hiddenTreasure); // v0.3.33
   const canBringDog   = canBringDogNextLevel(); // v0.3.18-fix-1
 
   // 第 3 關：basicHammer 解鎖提示（只在「這局第一次解鎖」時顯示）
@@ -10515,7 +10612,7 @@ function renderHomeDog() {
   const hasDog          = dog.present;
   const turns           = dog.turnsLeft || 0;
   const nextLvIdx       = getNextLevelIndex(currentLevelIndex);
-  const nextHasTreasure = nextLvIdx < LEVELS.length && !!LEVELS[nextLvIdx]?.hiddenTreasure;
+  const nextHasTreasure = nextLvIdx < LEVELS.length && isHiddenTreasureAvailable(LEVELS[nextLvIdx]?.hiddenTreasure); // v0.3.33
   const canBringDog     = canBringDogNextLevel(); // v0.3.18-fix-1：含教學保底
 
   if (!hasDog) {
@@ -10676,7 +10773,7 @@ function renderHomeNextStage() {
   const nextDisplayInfo = getChapterDisplayInfo(nextIdx);
   // v0.3.31：下一關有隱藏寶物時，提示帶氣球小狗（不強制，只是建議）
   let secretHtml = '';
-  if (lv.hiddenTreasure) {
+  if (isHiddenTreasureAvailable(lv.hiddenTreasure)) { // v0.3.33：已取得的重要物品不再提示
     const dog    = playerInventory.balloonDog || {};
     const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
     if (!hasDog) {
@@ -11627,6 +11724,15 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
   if (btnTestCh2Terrain) {
     btnTestCh2Terrain.style.display = 'none'; // v0.3.28-polish：已測試完成，暫停選單不再顯示（function 保留）
     btnTestCh2Terrain.addEventListener('click', startChapter2TerrainPrototypeTestLevel);
+  }
+  // v0.3.33：發現物品視窗「收進背包，繼續冒險」
+  const btnDiscoveryClose = document.getElementById('btn-discovery-item-close');
+  if (btnDiscoveryClose) {
+    ['click', 'touchstart'].forEach(ev => btnDiscoveryClose.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeDiscoveryItemModal();
+    }));
   }
   // v0.3.28-polish：🚀 測試正式第二章 → 直接進入正式 2-1（不是地形 prototype）
   const btnTestCh2Formal = document.getElementById('btn-pause-test-chapter2-formal');

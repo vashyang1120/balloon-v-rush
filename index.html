@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.32-chapter2-boss-note-foundation-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.33-discovery-item-modal-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -219,7 +219,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.32-chapter2-boss-note-foundation-test-1 · 2026-10-12
+        adventure-v0.3.33-discovery-item-modal-test-1 · 2026-10-12
       </div>
 
     </div><!-- /#home-panel -->
@@ -276,6 +276,17 @@
         </div>
         <div id="pause-bag-body" class="pause-bag-body"></div>
         <div class="pause-bag-footer">⏸ 暫停中 · 背包僅供查看</div>
+      </div>
+    </div>
+
+    <!-- v0.3.33：發現重要物品展示視窗（由 main.js openDiscoveryItemModal() 控制）-->
+    <div id="discovery-item-overlay" style="display:none">
+      <div id="discovery-item-panel">
+        <div id="discovery-item-header">
+          <span id="discovery-item-title">發現重要物品！</span>
+        </div>
+        <div id="discovery-item-body"></div>
+        <button id="btn-discovery-item-close">收進背包，繼續冒險</button>
       </div>
     </div>
 
@@ -345,7 +356,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.32-chapter2-boss-note-foundation-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.33-discovery-item-modal-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
@@ -406,6 +417,11 @@
   function handlePauseClick(e) {
     e.preventDefault();
     if (typeof pauseGame !== 'function') return;
+    // v0.3.33：發現物品視窗開著時，最優先關閉視窗並繼續冒險（與 ESC 相同優先序）
+    if (typeof isDiscoveryItemModalOpen === 'function' && isDiscoveryItemModalOpen()) {
+      closeDiscoveryItemModal();
+      return;
+    }
     // v0.3.29-fix-1：暫停背包開著時，先關背包回到暫停選單（與 ESC 相同優先序）
     if (typeof isPauseBagOpen === 'function' && isPauseBagOpen()) {
       closePauseBagBackToPauseMenu();
