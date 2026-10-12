@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.36-orange-king-machine-art-integration-test-1';
-const BUILD_TIME   = '2026-10-13 03:30';
+const GAME_VERSION = 'adventure-v0.3.37-orange-king-oil-stream-art-test-1';
+const BUILD_TIME   = '2026-10-13 04:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -8685,8 +8685,12 @@ function drawOrangeKingFront(cx) {
   const b = orangeKingBoss;
   if (!b) return;
   const t = b.totalMs;
-  if (b.phase === 'sprayFire' && b.activeLane) {
-    // v0.3.36：油流視覺從油管管口噴出（hitbox 另外由 getOrangeKingSprayBand 決定）
+  // v0.3.37：優先用正式水平噴油圖（只是視覺；傷害仍由 getOrangeKingSprayBand 判定）
+  const usedOilArt = (b.phase === 'sprayFire' && b.activeLane)
+    && drawOrangeKingOilStreamArt(b.activeLane, cx, Math.min(1, b.phaseMs / 140),
+         b.phaseMs > ORANGE_KING_TIMING.SPRAY_FIRE - 120 ? Math.max(0, (ORANGE_KING_TIMING.SPRAY_FIRE - b.phaseMs) / 120) : 1, t);
+  if (b.phase === 'sprayFire' && b.activeLane && !usedOilArt) {
+    // v0.3.36：油流視覺從油管管口噴出（hitbox 另外由 getOrangeKingSprayBand 決定）— v0.3.37 起為圖片載入失敗時的 fallback
     const hb = getOrangeKingSprayBand(b.activeLane);
     const band = { x: 0, y: hb.y, w: hb.mouthX, h: hb.h };
     const grow = Math.min(1, b.phaseMs / 120);
@@ -8832,7 +8836,15 @@ function drawOrangeKingBanner() {
 const ORANGE_KING_BOSS_ASSETS = {
   machineBase:       'assets/bosses/orange-king/orange_king_machine_base.png',
   oilPipeHorizontal: 'assets/bosses/orange-king/orange_king_oil_pipe_horizontal.png',
+  oilStreamHorizontal: 'assets/bosses/orange-king/orange_king_oil_stream_horizontal.png', // v0.3.37：水平噴油特效圖
 };
+// v0.3.37：主路徑載入失敗時依序嘗試的備用路徑
+// （目前 GitHub 上這張圖放在 repo 根目錄；之後搬到 assets/bosses/orange-king/ 就會直接用主路徑）
+const ORANGE_KING_BOSS_ASSET_FALLBACKS = {
+  oilStreamHorizontal: ['orange_king_oil_stream_horizontal.png'],
+};
+// v0.3.37：水平噴油圖（1024×256，油從右端噴口往左噴）— 原圖中的噴口錨點
+const ORANGE_KING_OIL_STREAM_SRC = { w: 1024, h: 256, anchorX: 1015, anchorY: 126, opaqueX: 212 };
 // 素材內的關鍵位置（原圖像素）：油管左端管口 / 右端接頭 / 管身中心線；主裝置左側垂直主管中心
 const ORANGE_KING_PIPE_SRC    = { w: 1024, h: 256, mouthX: 634, rightX: 1021, centerY: 120 };
 const ORANGE_KING_MACHINE_SRC = { w: 512,  h: 512, vPipeX: 262, vPipeTopY: 140, vPipeBottomY: 430 };
@@ -8849,6 +8861,12 @@ const ORANGE_KING_MACHINE_ART_DEFAULTS = {
   pipeLowY:  GROUND_Y - 40,  // 420：低位（地面）
   oilBandH:  46,     // 噴油 hitbox 高度
   oilExtendX: 100,   // 噴油 hitbox 從管口再往右延伸（100 → 約到 x=715，和上一版一樣涵蓋到貼著橘子王的位置；設 0 = 只到管口）
+  // v0.3.37：水平噴油特效圖（只管視覺，不影響 hitbox）
+  //   原圖噴口錨點 (1015,126) 對齊油管管口 + offset；scaleX / scaleY 是對原圖的縮放
+  oilStreamOffsetX: 0,
+  oilStreamOffsetY: 0,
+  oilStreamScaleX:  0.77, // 油流長度約 618px：從管口一路噴到畫面左緣
+  oilStreamScaleY:  0.42, // 高度約 108px（噴口油團約 102px、油身約 30～40px）；油團太大可再調小
 };
 const ORANGE_KING_MACHINE_ART = Object.assign({}, ORANGE_KING_MACHINE_ART_DEFAULTS);
 
@@ -8860,9 +8878,19 @@ function initOrangeKingBossArt() {
     if (orangeKingBossImgs[key]) return;
     try {
       const img = new Image();
+      const candidates = [path].concat(ORANGE_KING_BOSS_ASSET_FALLBACKS[key] || []);
+      let tryIdx = 0;
       orangeKingBossImgStatus[key] = 'loading';
-      img.onload  = () => { orangeKingBossImgStatus[key] = 'ok'; };
-      img.onerror = () => { orangeKingBossImgStatus[key] = 'error'; console.warn('[OrangeKingArt] load failed:', path); };
+      img.onload  = () => { orangeKingBossImgStatus[key] = tryIdx === 0 ? 'ok' : 'ok(備用路徑)'; };
+      img.onerror = () => {
+        console.warn('[OrangeKingArt] load failed:', candidates[tryIdx]);
+        tryIdx++;
+        if (tryIdx < candidates.length) {
+          img.src = resolveAdventureAssetSrc(candidates[tryIdx]) + '?v=' + encodeURIComponent(GAME_VERSION);
+        } else {
+          orangeKingBossImgStatus[key] = 'error';
+        }
+      };
       img.src = resolveAdventureAssetSrc(path) + '?v=' + encodeURIComponent(GAME_VERSION);
       orangeKingBossImgs[key] = img;
     } catch (e) { orangeKingBossImgStatus[key] = 'error'; }
@@ -8891,6 +8919,37 @@ function getOrangeKingPipeGeom(laneKey) {
     opaqueX: drawX + 632 * s, opaqueY: drawY + 74 * s, opaqueW: (1021 - 632) * s, opaqueH: (190 - 74) * s,
   };
 }
+// v0.3.37：水平噴油圖的繪製矩形（世界座標）— 錨點 = 原圖噴口對齊油管管口
+function getOrangeKingOilStreamGeom(laneKey) {
+  const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_OIL_STREAM_SRC;
+  const pg = getOrangeKingPipeGeom(laneKey);
+  const anchorX = pg.mouthX + A.oilStreamOffsetX;
+  const anchorY = pg.y + A.oilStreamOffsetY;
+  const drawW = S.w * A.oilStreamScaleX, drawH = S.h * A.oilStreamScaleY;
+  const drawX = anchorX - S.anchorX * A.oilStreamScaleX;
+  const drawY = anchorY - S.anchorY * A.oilStreamScaleY;
+  return { anchorX, anchorY, drawX, drawY, drawW, drawH, tipX: drawX + S.opaqueX * A.oilStreamScaleX, mouthX: pg.mouthX, mouthY: pg.y };
+}
+// v0.3.37：畫正式水平噴油圖；grow 0→1 = 從噴口往左長出來。圖片沒載好回傳 false（呼叫端改畫 canvas 油流）
+function drawOrangeKingOilStreamArt(laneKey, cx, grow, alpha, t) {
+  const img = getOrangeKingBossImg('oilStreamHorizontal');
+  if (!img) return false;
+  const g = getOrangeKingOilStreamGeom(laneKey);
+  const wobble = 1 + Math.sin(t / 55) * 0.04; // 油柱輕微脈動
+  const h = g.drawH * wobble;
+  const y = g.anchorY - (g.anchorY - g.drawY) * wobble;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // 從噴口往左裁切，做出「噴出去」的感覺
+  const visibleLeft = g.anchorX - (g.anchorX - g.tipX) * grow;
+  ctx.beginPath();
+  ctx.rect(visibleLeft - cx, y - 4, g.drawX + g.drawW - visibleLeft + 4, h + 8);
+  ctx.clip();
+  ctx.drawImage(img, g.drawX - cx, y, g.drawW, h);
+  ctx.restore();
+  return true;
+}
+
 function getOrangeKingMachineGeom() {
   const A = ORANGE_KING_MACHINE_ART, M = ORANGE_KING_MACHINE_SRC, s = A.baseScale;
   return {
@@ -8972,6 +9031,7 @@ const ORANGE_KING_MACHINE_CALIB_TARGETS = [
   { key: 'pipeMid',  label: '4 Mid Pipe Y（↑ ↓）' },
   { key: 'pipeLow',  label: '5 Low Pipe Y（↑ ↓）' },
   { key: 'oil',     label: '6 Oil hitbox（↑ ↓ 高度、← → 往右延伸）' },
+  { key: 'oilStream', label: '7 水平噴油特效圖（方向鍵 X/Y、[ ] 寬度、; \' 高度）' },
 ];
 var orangeKingMachineCalibMode   = false;
 var orangeKingMachineCalibTarget = 'base';
@@ -9003,13 +9063,16 @@ function getOrangeKingMachineCalibText() {
     + `  baseX: ${r2(A.baseX)},\n  baseY: ${r2(A.baseY)},\n  baseScale: ${r2(A.baseScale)},\n`
     + `  pipeX: ${r2(A.pipeX)},\n  pipeScale: ${r2(A.pipeScale)},\n`
     + `  pipeHighY: ${r2(A.pipeHighY)},\n  pipeMidY: ${r2(A.pipeMidY)},\n  pipeLowY: ${r2(A.pipeLowY)},\n`
-    + `  oilBandH: ${r2(A.oilBandH)},\n  oilExtendX: ${r2(A.oilExtendX)},\n};`;
+    + `  oilBandH: ${r2(A.oilBandH)},\n  oilExtendX: ${r2(A.oilExtendX)},\n`
+    + `  oilStreamOffsetX: ${r2(A.oilStreamOffsetX)},\n  oilStreamOffsetY: ${r2(A.oilStreamOffsetY)},\n`
+    + `  oilStreamScaleX: ${r2(A.oilStreamScaleX)},\n  oilStreamScaleY: ${r2(A.oilStreamScaleY)},\n};`;
 }
 function resetOrangeKingMachineCalibTarget() {
   const D = ORANGE_KING_MACHINE_ART_DEFAULTS, A = ORANGE_KING_MACHINE_ART;
   const keysByTarget = {
     base: ['baseX', 'baseY', 'baseScale'], pipe: ['pipeX', 'pipeScale'],
     pipeHigh: ['pipeHighY'], pipeMid: ['pipeMidY'], pipeLow: ['pipeLowY'], oil: ['oilBandH', 'oilExtendX'],
+    oilStream: ['oilStreamOffsetX', 'oilStreamOffsetY', 'oilStreamScaleX', 'oilStreamScaleY'],
   };
   (keysByTarget[orangeKingMachineCalibTarget] || []).forEach(k => { A[k] = D[k]; });
   saveOrangeKingMachineCalib();
@@ -9039,12 +9102,20 @@ function handleOrangeKingMachineCalibKey(e) {
   const tg = orangeKingMachineCalibTarget;
   const step = e.shiftKey ? 10 : 1;
   const sStep = e.shiftKey ? 0.05 : 0.01;
-  const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil' }[e.code];
+  const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil', Digit7: 'oilStream' }[e.code];
   if (digit) { orangeKingMachineCalibTarget = digit; e.preventDefault(); return true; }
   let changed = false;
   const dx = e.code === 'ArrowLeft' ? -step : (e.code === 'ArrowRight' ? step : 0);
   const dy = e.code === 'ArrowUp' ? -step : (e.code === 'ArrowDown' ? step : 0);
   const ds = e.code === 'BracketLeft' ? -sStep : (e.code === 'BracketRight' ? sStep : 0);
+  const dsy = e.code === 'Semicolon' ? -sStep : (e.code === 'Quote' ? sStep : 0); // v0.3.37：; ' 調 Y scale
+  if (tg === 'oilStream' && (dx || dy || ds || dsy)) {
+    A.oilStreamOffsetX += dx;
+    A.oilStreamOffsetY += dy;
+    A.oilStreamScaleX = Math.max(0.05, Math.round((A.oilStreamScaleX + ds) * 100) / 100);
+    A.oilStreamScaleY = Math.max(0.05, Math.round((A.oilStreamScaleY + dsy) * 100) / 100);
+    saveOrangeKingMachineCalib(); e.preventDefault(); return true;
+  }
   if (dx || dy || ds) {
     if (tg === 'base')      { A.baseX += dx; A.baseY += dy; A.baseScale = Math.max(0.1, Math.round((A.baseScale + ds) * 100) / 100); }
     else if (tg === 'pipe') { A.pipeX += dx; A.pipeScale = Math.max(0.1, Math.round((A.pipeScale + ds) * 100) / 100); }
@@ -9065,7 +9136,7 @@ function handleOrangeKingMachineCalibKey(e) {
   }
   if (changed) { saveOrangeKingMachineCalib(); e.preventDefault(); return true; }
   // 定位模式開啟時，方向鍵 / 數字鍵 / [ ] 都不傳給遊戲
-  if (/^(Arrow|Digit|Bracket)/.test(e.code)) { e.preventDefault(); return true; }
+  if (/^(Arrow|Digit|Bracket)/.test(e.code) || e.code === 'Semicolon' || e.code === 'Quote') { e.preventDefault(); return true; }
   return false;
 }
 
@@ -9116,6 +9187,28 @@ function drawOrangeKingMachineCalibOverlay() {
       ctx.textAlign = 'left';
       ctx.fillText(key + ' y=' + Math.round(pg.y), 14, pg.y - 6);
     });
+    // v0.3.37：水平噴油特效圖 — 選到 7 時三層都預覽；外框 / 噴口錨點 / 管口對位點
+    ['high', 'mid', 'low'].forEach(key => {
+      const og = getOrangeKingOilStreamGeom(key);
+      if (orangeKingMachineCalibTarget === 'oilStream') {
+        if (!drawOrangeKingOilStreamArt(key, cx, 1, 0.85, 0)) {
+          ctx.fillStyle = 'rgba(255,150,20,0.5)';
+          ctx.fillRect(0 - cx, og.mouthY - 10, og.mouthX, 20);
+        }
+      }
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.strokeRect(og.drawX - cx, og.drawY, og.drawW, og.drawH);       // 噴油圖 draw rect
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#ff2bd6';                                         // 噴口錨點（十字）
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(og.anchorX - 9 - cx, og.anchorY); ctx.lineTo(og.anchorX + 9 - cx, og.anchorY);
+      ctx.moveTo(og.anchorX - cx, og.anchorY - 9); ctx.lineTo(og.anchorX - cx, og.anchorY + 9);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(og.mouthX - cx, og.mouthY, 8, 0, Math.PI * 2); ctx.stroke(); // 管口對位圈
+    });
     // 玩家 hitbox
     const pr = playerHazardRect();
     ctx.strokeStyle = '#00ff66';
@@ -9130,8 +9223,10 @@ function drawOrangeKingMachineCalibOverlay() {
     'pipeX: ' + A.pipeX + '   pipeScale: ' + A.pipeScale,
     'pipeHighY: ' + A.pipeHighY + '   pipeMidY: ' + A.pipeMidY + '   pipeLowY: ' + A.pipeLowY,
     'oilBandH: ' + A.oilBandH + '   oilExtendX: ' + A.oilExtendX,
-    'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-'),
-    '1~6 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜R 重置目標｜C 輸出 console',
+    'oilStream: offsetX ' + A.oilStreamOffsetX + '  offsetY ' + A.oilStreamOffsetY + '  scaleX ' + A.oilStreamScaleX + '  scaleY ' + A.oilStreamScaleY,
+    'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-')
+      + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-'),
+    '1~7 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale(X)｜; \' 噴油圖高度｜R 重置目標｜C 輸出 console',
   ];
   if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
   const w = 560, lh = 17, h = lines.length * lh + 12;
@@ -10825,8 +10920,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.37+：orange-king-oil-stream-art → orange-oil-stream-art（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-oil-stream-art')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-oil-stream-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.36+：orange-king-machine-art-integration → orange-machine-art（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-machine-art-integration')) {
+  } else if (GAME_VERSION.includes('orange-king-machine-art-integration')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-machine-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.35-fix：orange-king-boss-damage-cap-fix-N → boss-dmgcap-fixN
