@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-fix-2';
-const BUILD_TIME   = '2026-10-12 13:30';
+const GAME_VERSION = 'adventure-v0.3.34-result-home-sticky-status-and-supply-test-1';
+const BUILD_TIME   = '2026-10-12 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -9278,8 +9278,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.34+：result-home-sticky-status-and-supply → sticky-status（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('result-home-sticky-status')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'sticky-status' + (tN === '1' ? '' : '-' + tN);
   // v0.3.33+：discovery-item-modal-fix-N → discovery-fixN
-  if (GAME_VERSION.includes('discovery-item-modal-fix')) {
+  } else if (GAME_VERSION.includes('discovery-item-modal-fix')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
     tPart = 'discovery-fix' + fN;
   // v0.3.33+：discovery-item-modal → discovery-modal（test-N > 1 時加上 -N）
@@ -9553,14 +9557,22 @@ function buildBagRows() {
 // ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
 // 使用明確 id="rp-inventory-section"，不猜 querySelectorAll index
 
-// v0.3.33-fix-2：小狗消氣通知（結算頁狗狗區塊）
+// v0.3.33-fix-2：小狗消氣 — 狗狗區塊內只留簡短狀態
+// v0.3.34：完整通知改成結算頁上方的提醒卡（buildDogGoneReminderHtml），這裡不再放長文
 function buildDogGoneNoticeHtml() {
-  return '<div class="rp-section-title">🐶 氣球小狗消氣了</div>'
-    + '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#ff9a9a">已消氣，下一關不會同行</span></div>'
-    + '<div class="rp-supply-hp" style="color:#ffaaaa;line-height:1.6">'
-    + '氣球小狗陪小V完成了最後一段冒險，因為氣球慢慢消氣，牠已經不在了。<br>'
-    + '如果下一關還想帶小狗同行，請先到氣球秘笈重新製作氣球小狗，然後再按「帶狗出發」。'
-    + '</div>';
+  return '<div class="rp-section-title">🐶 氣球小狗</div>'
+    + '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#ff9a9a">已消氣，下一關不會同行</span></div>';
+}
+// v0.3.34：結算頁「重要提醒」區的小狗消氣卡（在「本關獲取」上方）
+function buildDogGoneReminderHtml() {
+  return '<div class="rp-guidebook-hint rp-dog-gone-card" id="rp-dog-gone-card">'
+    + '<div class="rp-guidebook-hint__title">🐶 氣球小狗消氣了</div>'
+    + '<div class="rp-dog-gone-card__status">已消氣，下一關不會同行</div>'
+    + '<div class="rp-guidebook-hint__body">'
+    + '小狗陪你完成最後一次冒險，已經消氣回家了。<br>'
+    + '下一關不會自動同行。<br>'
+    + '如果還想帶牠，請先重新製作小狗，再按「帶狗出發」。'
+    + '</div></div>';
 }
 // 本關小狗消氣、但玩家已在結算後重新製作新小狗
 function buildDogRecraftedNoticeHtml() {
@@ -9900,20 +9912,16 @@ function populateResultPanel() {
     + '<span class="rp-fold-icon">📋</span><span>詳細紀錄</span><span class="rp-toggle-arrow">▶</span></div>'
     + '<div id="rp-detail-body" style="display:none">' + makeTable(runRows) + '</div></div>';
 
-  // 【第四層】補給（預設收合）
+  // 【第四層】補給（預設收合；v0.3.34：受傷且背包有繃帶 / 急救包時自動展開）
+  const _healItems     = playerInventory.items || {};
+  const supplyAutoOpen = player.hp < player.maxHp
+    && ((_healItems.bandage || 0) > 0 || (_healItems.firstAidKit || 0) > 0);
   const supplyHtml = '<div class="rp-fold-card" id="supply-section">'
     + '<div class="rp-fold-btn" data-target="rp-supply-body" onclick="rpToggle(this)">'
-    + '<span class="rp-fold-icon">🏥</span><span>補給</span><span class="rp-toggle-arrow">▶</span></div>'
-    + '<div id="rp-supply-body" style="display:none">'
-    + (function(){
-        var hpFilled = Math.floor(player.hp);
-        var hpHalf   = player.hp % 1 >= 0.5;
-        var hearts   = '';
-        for(var i=0;i<player.maxHp;i++){
-          hearts += '<span class="rp-hp-heart'+(i<hpFilled?' rp-hp-heart--full':(i===hpFilled&&hpHalf?' rp-hp-heart--half':''))+'">❤️</span>';
-        }
-        return '<div class="rp-supply-hp-row">'+hearts+'<span class="rp-supply-hp-num" id="supply-hp">'+player.hp+' / '+player.maxHp+'</span></div>';
-      })()
+    + '<span class="rp-fold-icon">🏥</span><span>補給</span><span class="rp-toggle-arrow">' + (supplyAutoOpen ? '▼' : '▶') + '</span></div>'
+    + '<div id="rp-supply-body" style="display:' + (supplyAutoOpen ? 'block' : 'none') + '">'
+    + buildResultSupplyHpRowHtml()
+    + '<div id="rp-heal-items">' + buildHealingItemRowsHtml('result') + '</div>'
     + '<div class="rp-supply-bandage-row"><div class="rp-supply-bandage-info"><span class="rp-supply-name">🩹 愛心貼布</span><span class="rp-supply-price">−20 🪙　+1 ❤️</span></div>'
     + '<button id="btn-buy-bandage" class="rp-supply-btn rp-supply-btn--'
     + (player.hp>=player.maxHp||currentRunStats.usedHeartPatch||(playerInventory.coins||0)<BANDAGE_PRICE ? 'disabled' : 'active')
@@ -9945,10 +9953,16 @@ function populateResultPanel() {
     html += '<div class="rp-level-display-name">' + chapterTitle + '</div>';
     html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
   }
-  html += buildResultHpHtml(); // 直接顯示目前 HP
+  // v0.3.34：置頂狀態列（血量 + 背包）— 往下滑時釘在結算內容區頂部
+  html += '<div id="rp-sticky-status" class="sticky-status">' + buildStickyStatusBarHtml() + '</div>';
+  // v0.3.29：目前背包總量（v0.3.34：加入血量）
+  html += '<div id="rp-inventory-summary">' + buildInventorySummaryHtml({ showHp: true }) + '</div>';
+  html += buildResultHpHtml(); // v0.3.34：只剩低血量警告（血量已在上方狀態列）
 
-  // v0.3.29：目前背包總量（通關後的總持有量，放在提醒卡片與「本關獲得」之前）
-  html += '<div id="rp-inventory-summary">' + buildInventorySummaryHtml() + '</div>';
+  // v0.3.34：重要提醒區（在「本關獲取」之前）— 小狗消氣
+  if (currentRunStats.dogGoneThisClear && !(playerInventory.balloonDog || {}).present) {
+    html += buildDogGoneReminderHtml();
+  }
 
   // v0.3.11-test-3：「下一步」區塊 — 結算畫面資訊減量後的單一重點行動指引
   // 放在中上方（標題/HP 之後，主要收穫區塊之前），只在第一章流程內、且為 clear（非 gameover）時顯示
@@ -9966,6 +9980,10 @@ function populateResultPanel() {
 
   // v0.3.24：Shopping 提示（移到本關獎勵之前，讓玩家在手機上更容易看到）
   html += buildResultShopHintHtml();
+  // v0.3.34：秘笈 / 新秘笈 / 受傷提醒也屬於重要提醒，移到「本關獲取」之前
+  html += hammerHint;
+  html += guideBookHint;
+  html += lowHpRescueHint;
 
   // 第一層：重點收穫
   html += '<div class="rp-hero-section" id="rp-hero-section">'
@@ -9975,11 +9993,8 @@ function populateResultPanel() {
   // V幣獎勵 section（Phase 3A，earned > 0 才顯示）
   html += '<div id="rp-vcoin-section" style="display:none"></div>';
 
-  // 特殊提示（槌子解鎖 / 秘笈按鈕）
+  // 隱藏發現（槌子解鎖 / 秘笈 / 受傷提醒已移到上方提醒區）
   html += treasureHint;
-  html += hammerHint;
-  html += guideBookHint;
-  html += lowHpRescueHint;
   // 氣球小狗
   html += dogSectionHtml;
   // 可收合的三層
@@ -10012,6 +10027,7 @@ function populateResultPanel() {
   }
   // Phase 3A：V幣明細顯示（DOM 建立後才呼叫）
   if (typeof refreshResultVCoins === 'function') refreshResultVCoins();
+  updateStickyStatusVisibility(); // v0.3.34
 }
 
 
@@ -10602,6 +10618,170 @@ function ensureInventorySummaryStyles() {
   document.head.appendChild(style);
 }
 
+// ════════════════════════════════════════════════
+//  v0.3.34：置頂狀態列（血量 + 背包）
+//  血量唯一來源：player.hp / player.maxHp（跨關 restart({keepHp:true}) 也是讀這個）
+// ════════════════════════════════════════════════
+function buildHpHeartsHtml() {
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  const hp    = Math.max(0, Math.min(maxHp, Number(player.hp) || 0));
+  let html = '';
+  for (let i = 0; i < maxHp; i++) {
+    const cls = hp >= i + 1 ? 'ss-heart--full' : (hp >= i + 0.5 ? 'ss-heart--half' : 'ss-heart--empty');
+    html += '<span class="ss-heart ' + cls + '">❤️</span>';
+  }
+  return html;
+}
+function formatHpText() {
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  return (Number(player.hp) || 0) + ' / ' + maxHp;
+}
+function buildStickyStatusBarHtml() {
+  const others = getInventoryOtherItems();
+  const low    = (Number(player.hp) || 0) <= 1;
+  return '<div class="sticky-status__bar">'
+    + '<span class="ss-item ss-hp' + (low ? ' ss-hp--low' : '') + '">' + buildHpHeartsHtml()
+    +   '<b>' + formatHpText() + '</b></span>'
+    + '<span class="ss-item">🪙 <b>' + Number(playerInventory.coins || 0) + '</b></span>'
+    + '<span class="ss-item">🎈<span class="ss-lbl"> 260</span> <b>×' + Number(playerInventory.balloon260 || 0) + '</b></span>'
+    + '<span class="ss-item">⚪ <b>×' + Number(playerInventory.roundBalloon || 0) + '</b></span>'
+    + '<span class="ss-item">📦 <b>' + others.length + '</b><span class="ss-lbl"> 項</span></span>'
+    + '</div>';
+}
+function ensureHomeStickyStatusEl() {
+  let el = document.getElementById('home-sticky-status');
+  if (el) return el;
+  const summary = document.getElementById('home-inventory-summary');
+  if (!summary || !summary.parentNode || typeof document.createElement !== 'function') return null;
+  el = document.createElement('div');
+  el.id = 'home-sticky-status';
+  el.className = 'sticky-status';
+  summary.parentNode.insertBefore(el, summary);
+  return el;
+}
+// 狀態列在「完整背包摘要」捲出畫面後才浮現（不佔版面、不會讓內容跳動）
+function updateStickyStatusVisibility() {
+  [['result-panel-body', 'rp-sticky-status',   'rp-inventory-summary'],
+   ['home-scroll-body',  'home-sticky-status', 'home-inventory-summary']].forEach(([cId, bId, sId]) => {
+    try {
+      const ce = document.getElementById(cId);
+      const be = document.getElementById(bId);
+      const se = document.getElementById(sId);
+      if (!ce || !be || !se || !be.classList) return;
+      if (!ce._stickyStatusBound && typeof ce.addEventListener === 'function') {
+        ce.addEventListener('scroll', updateStickyStatusVisibility, { passive: true });
+        ce._stickyStatusBound = true;
+      }
+      let show = false;
+      if ((ce.scrollTop || 0) > 0 && ce.clientHeight > 0 && typeof se.getBoundingClientRect === 'function') {
+        // 摘要的標題列（含血量）一捲出畫面就顯示狀態列
+        show = se.getBoundingClientRect().top < ce.getBoundingClientRect().top - 4;
+      }
+      be.classList.toggle('sticky-status--show', show);
+    } catch (e) {}
+  });
+}
+function refreshStickyStatus() {
+  const rp = document.getElementById('rp-sticky-status');
+  if (rp) rp.innerHTML = buildStickyStatusBarHtml();
+  const hm = ensureHomeStickyStatusEl();
+  if (hm) hm.innerHTML = buildStickyStatusBarHtml();
+  updateStickyStatusVisibility();
+}
+
+// ════════════════════════════════════════════════
+//  v0.3.34：非冒險中使用補給（結算頁 / 小V的家）
+//  規則沿用 SHOP_ITEMS：繃帶 +0.5、急救包補滿；滿血不消耗
+// ════════════════════════════════════════════════
+function buildHealingItemRowsHtml(ctx) {
+  ensureInventoryItems();
+  const maxHp  = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  const isFull = player.hp >= maxHp;
+  return ['bandage', 'firstAidKit'].map(id => {
+    const it      = SHOP_ITEMS[id];
+    const have    = playerInventory.items[id] || 0;
+    const disable = have <= 0 || isFull;
+    const label   = have <= 0 ? (id === 'bandage' ? '沒有繃帶' : '沒有急救包')
+                  : isFull    ? '生命已滿'
+                  : '使用';
+    const effect  = it.healFull ? '補滿生命' : '+' + it.healAmount + ' ❤️';
+    const btnId   = 'btn-' + ctx + '-use-' + id;
+    if (ctx === 'home') {
+      return '<div class="home-supply-item heal-item-row">'
+        + '<div><span class="home-row-label">' + it.icon + ' ' + it.name + ' ×' + have + '</span>'
+        + '<span style="color:#888;font-size:11px;margin-left:6px">' + effect + '</span></div>'
+        + '<button id="' + btnId + '" class="home-btn ' + (disable ? 'home-btn--dim' : 'home-btn--red') + '" '
+        + (disable ? 'disabled' : '') + ' onclick="useHealingItemOutOfAdventure(\'' + id + '\')">'
+        + label + '</button></div>';
+    }
+    return '<div class="rp-supply-bandage-row heal-item-row"><div class="rp-supply-bandage-info">'
+      + '<span class="rp-supply-name">' + it.icon + ' ' + it.name + ' ×' + have + '</span>'
+      + '<span class="rp-supply-price">' + effect + '</span></div>'
+      + '<button id="' + btnId + '" class="rp-supply-btn rp-supply-btn--' + (disable ? 'disabled' : 'active') + '" '
+      + (disable ? 'disabled' : '') + ' onclick="useHealingItemOutOfAdventure(\'' + id + '\')">'
+      + label + '</button></div>';
+  }).join('');
+}
+
+function buildResultSupplyHpRowHtml() {
+  return '<div class="rp-supply-hp-row" id="rp-supply-hp-row">' + buildHpHeartsHtml()
+    + '<span class="rp-supply-hp-num" id="supply-hp">' + formatHpText() + '</span></div>';
+}
+
+// 結算頁 / 小V的家使用繃帶、急救包（冒險中仍走暫停背包 useHealingItem）
+function useHealingItemOutOfAdventure(itemId) {
+  const item = SHOP_ITEMS[itemId];
+  if (!item) return false;
+  ensureInventoryItems();
+  const have = playerInventory.items[itemId] || 0;
+  if (have <= 0) {
+    showHint(itemId === 'bandage' ? '沒有繃帶，可以到商店購買！' : '沒有急救包，可以到商店購買！', 160);
+    refreshAfterOutOfAdventureHeal();
+    return false;
+  }
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  if (player.hp >= maxHp) {
+    showHint('生命已經滿了！', 140); // 不消耗道具
+    refreshAfterOutOfAdventureHeal();
+    return false;
+  }
+  if (item.healFull) player.hp = maxHp;
+  else if (item.healAmount) player.hp = Math.min(maxHp, player.hp + item.healAmount);
+  playerInventory.items[itemId] = have - 1;
+  saveInventory();
+  syncOutOfAdventureHpToRetry();
+  refreshAfterOutOfAdventureHeal();
+  showHint(item.healFull ? '🚑 使用急救包，生命補滿！' : '🩹 使用繃帶，回復 0.5 顆心！', 200);
+  return true;
+}
+
+// 失敗 / 時間到畫面補血後，重試本關要帶著補好的血量（道具已消耗，不可被快照倒回）
+function syncOutOfAdventureHpToRetry() {
+  if (gameState !== 'failed' && gameState !== 'gameover') return;
+  if (levelStartSnapshot) levelStartSnapshot.hp = player.hp;
+  levelStartHp = player.hp;
+  if (gameState === 'failed' && typeof updateFailedPanelInfo === 'function') {
+    try { updateFailedPanelInfo(); } catch (e) {}
+  }
+}
+
+function refreshAfterOutOfAdventureHeal() {
+  // 結算頁
+  const rpHeal = document.getElementById('rp-heal-items');
+  if (rpHeal) rpHeal.innerHTML = buildHealingItemRowsHtml('result');
+  const rpHpRow = document.getElementById('rp-supply-hp-row');
+  if (rpHpRow) rpHpRow.outerHTML = buildResultSupplyHpRowHtml();
+  if (typeof updateBandageBtn === 'function') updateBandageBtn();
+  if (typeof refreshResultBag === 'function') { try { refreshResultBag(); } catch (e) {} }
+  if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
+  // 小V的家
+  if (typeof renderHomeSupply === 'function')    renderHomeSupply();
+  if (typeof renderHomeInventory === 'function') renderHomeInventory();
+  if (typeof renderHomeShop === 'function' && document.getElementById('home-shop-body')) renderHomeShop();
+  // 置頂狀態列 + 背包摘要（兩處）
+  refreshInventorySummary();
+}
+
 function buildInventorySummaryHtml(options = {}) {
   ensureInventorySummaryStyles();
   const title  = options.title || '🎒 目前背包';
@@ -10627,8 +10807,13 @@ function buildInventorySummaryHtml(options = {}) {
     }
   }
 
+  // v0.3.34：showHp → 標題列右側顯示目前血量
+  const titleHtml = options.showHp
+    ? '<div class="inv-sum__titlerow"><div class="inv-sum__title">' + title + '</div>'
+      + '<div class="inv-sum__hp">' + buildHpHeartsHtml() + '<b>' + formatHpText() + '</b></div></div>'
+    : '<div class="inv-sum__title">' + title + '</div>';
   return '<div class="inv-sum">'
-    + '<div class="inv-sum__title">' + title + '</div>'
+    + titleHtml
     + '<div class="inv-sum__grid">'
     +   '<div class="inv-sum__card"><div class="inv-sum__head">🪙 金幣</div>'
     +     '<div class="inv-sum__big">' + coins + '</div></div>'
@@ -10643,20 +10828,21 @@ function buildInventorySummaryHtml(options = {}) {
 function renderHomeInventorySummary() {
   const el = document.getElementById('home-inventory-summary');
   if (!el) return;
-  el.innerHTML = buildInventorySummaryHtml();
+  el.innerHTML = buildInventorySummaryHtml({ showHp: true }); // v0.3.34：含血量
 }
 
 // 結算頁置頂的背包摘要（populateResultPanel 會先建立容器）
 function renderResultInventorySummary() {
   const el = document.getElementById('rp-inventory-summary');
   if (!el) return;
-  el.innerHTML = buildInventorySummaryHtml();
+  el.innerHTML = buildInventorySummaryHtml({ showHp: true }); // v0.3.34：含血量
 }
 
-// 兩處摘要一起刷新（有容器才會畫）
+// 兩處摘要一起刷新（有容器才會畫）；v0.3.34：置頂狀態列一起刷新
 function refreshInventorySummary() {
   try { renderHomeInventorySummary(); } catch (e) {}
   try { renderResultInventorySummary(); } catch (e) {}
+  try { refreshStickyStatus(); } catch (e) {}
 }
 
 function toggleInventoryOtherExpanded(ev) {
@@ -10721,6 +10907,7 @@ function renderHomeSupply() {
     + (bandageDisabled ? 'home-btn--dim' : 'home-btn--red') + '" '
     + (bandageDisabled ? 'disabled' : '') + ' onclick="homeUseBandage()">'
     + bandageBtnText + '</button></div>'
+    + '<div id="home-heal-items">' + buildHealingItemRowsHtml('home') + '</div>' // v0.3.34
     + '<div id="home-bandage-msg" class="home-msg"></div>';
 }
 
@@ -11024,15 +11211,16 @@ function buildResultHpHtml() {
   }
   const warn = player.hp <= 1
     ? '<div class="rp-hp-warn">⚠️ 生命偏低，建議先補給再出發！</div>' : '';
-  return '<div class="rp-hp-status" id="rp-hp-status">'
-    + '<div class="rp-hp-status__row">' + hearts
-    + '<span class="rp-hp-status__num">' + player.hp + ' / ' + player.maxHp + '</span></div>'
+  // v0.3.34：血量改顯示在置頂狀態列（sticky status），這裡只保留低血量警告
+  void hearts;
+  return '<div class="rp-hp-status" id="rp-hp-status"' + (warn ? '' : ' style="display:none"') + '>'
     + warn + '</div>';
 }
 
 function refreshResultHpStatus() {
   const el = document.getElementById('rp-hp-status');
   if (el) el.outerHTML = buildResultHpHtml();
+  refreshInventorySummary(); // v0.3.34：置頂狀態列的血量一起刷新
 }
 
 function retryCurrentLevelFromStart() {

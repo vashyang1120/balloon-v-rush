@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.33-discovery-item-modal-fix-2" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.34-result-home-sticky-status-and-supply-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -73,6 +73,8 @@
       <div id="home-scroll-body">
 
       <!-- v0.3.29：目前背包摘要（永遠顯示，在下一關準備之上；內容由 main.js renderHomeInventorySummary() 產生）-->
+      <!-- v0.3.34：置頂狀態列（血量 + 背包），往下滑時釘在捲動區頂部；內容由 main.js refreshStickyStatus() 產生 -->
+      <div id="home-sticky-status" class="sticky-status"></div>
       <div id="home-inventory-summary"></div>
 
       <!-- 下一關準備（在 scroll 內，不固定吃高度）-->
@@ -219,7 +221,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.33-discovery-item-modal-fix-2 · 2026-10-12
+        adventure-v0.3.34-result-home-sticky-status-and-supply-test-1 · 2026-10-12
       </div>
 
     </div><!-- /#home-panel -->
@@ -356,7 +358,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.33-discovery-item-modal-fix-2"></script>
+  <script src="main.js?v=adventure-v0.3.34-result-home-sticky-status-and-supply-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
