@@ -2681,6 +2681,12 @@ html, body {
 }
 #btn-discovery-item-close:active { transform: scale(0.97); }
 
+/* v0.3.33-fix-1：閱讀模式（從結算頁 / 小V的家打開）— 蓋在小V的家(12000)、氣球秘笈(13000)之上 */
+#discovery-item-overlay.discovery-item-overlay--read {
+  position: fixed;
+  z-index: 13500;
+}
+
 @keyframes discoveryFadeIn  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes discoveryScaleIn { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: scale(1); } }
 @keyframes discoveryFloat   { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }

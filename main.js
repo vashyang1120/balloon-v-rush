@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-test-1';
-const BUILD_TIME   = '2026-10-12 03:40';
+const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-fix-1';
+const BUILD_TIME   = '2026-10-12 11:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -648,7 +648,19 @@ function initAdventureHeroArt() {
 }
 
 // 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
+// v0.3.33-fix-1：發現物品視窗（發現模式）開啟時，主角畫面定格在開窗當下的那一張，
+// 不再推進跑步動畫計時器（原本 getHeroArtKey 每次繪製都會推進 _heroFrameTimer，造成原地跑步）。
+// 只在發現模式套用；一般暫停選單、閱讀模式都不受影響。
+let _heroLastArtKey = null;
 function getHeroArtKey() {
+  if (_heroLastArtKey && isDiscoveryItemModalOpen() && discoveryModalMode === 'discovery') {
+    return _heroLastArtKey;
+  }
+  _heroLastArtKey = computeHeroArtKey();
+  return _heroLastArtKey;
+}
+
+function computeHeroArtKey() {
   // ── 優先 0：槌子攻擊視覺動畫（hammerAnimTimer > 0）──
   // 01→02→03→04，一次性下砸動作，不循環
   if (player.hammerAnimTimer > 0) {
@@ -3311,6 +3323,7 @@ let currentRunStats = {
   pendingCoins:             0,
   foundHiddenTreasureName:  null,
   foundBossNote:            null,  // v0.3.32：本關找到的 Boss 弱點筆記 { title, noteText, name }
+  pendingKeyItems:          {},    // v0.3.33-fix-1：本關找到、通關才正式寫入的重要物品
   dogHealed:                false,
   dogGoneThisClear:         false,
   // V幣（Phase 3A）
@@ -7254,6 +7267,10 @@ function updateDogNose() {
 // ════════════════════════════════════════════════════════
 const DISCOVERY_MODAL_TREASURE_TYPES = ['bossNote']; // 會跳出展示視窗的 hiddenTreasure 類型
 let discoveryModalWasPlaying = false;
+// v0.3.33-fix-1：視窗模式
+//   'discovery'：遊戲中找到重要物品 → 暫停遊戲，按鈕「收進背包，繼續冒險」，關閉後恢復
+//   'read'     ：從結算頁 / 小V的家再次閱讀 → 不改 gameState，按鈕「關閉」
+let discoveryModalMode = 'discovery';
 
 // 重要物品若已在背包裡，就不再出現在關卡中（避免重複取得 / 重複跳視窗）
 function isHiddenTreasureAvailable(t) {
@@ -7272,16 +7289,20 @@ function escapeDiscoveryText(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function renderDiscoveryItemModal(item) {
+function renderDiscoveryItemModal(item, mode) {
   const titleEl = document.getElementById('discovery-item-title');
   const bodyEl  = document.getElementById('discovery-item-body');
-  if (titleEl) titleEl.textContent = (item.emoji || '📦') + ' 發現重要物品！';
+  const btnEl   = document.getElementById('btn-discovery-item-close');
+  const isRead  = (mode === 'read');
+  if (titleEl) titleEl.textContent = (item.emoji || '📦') + ' '
+    + (isRead ? (item.name || '重要物品') : '發現重要物品！');
+  if (btnEl) btnEl.textContent = isRead ? '關閉' : '收進背包，繼續冒險';
   if (!bodyEl) return;
   // 內文依「。」分行，方便手機閱讀
   const lines = String(item.noteText || '').split('。').map(s => s.trim()).filter(Boolean);
   bodyEl.innerHTML =
       '<div class="discovery-item-emoji">' + escapeDiscoveryText(item.emoji || '📦') + '</div>'
-    + '<div class="discovery-item-name">' + escapeDiscoveryText(item.name || '') + '</div>'
+    + (isRead ? '' : '<div class="discovery-item-name">' + escapeDiscoveryText(item.name || '') + '</div>')
     + '<div class="discovery-item-note">'
     +   (item.title ? '<div class="discovery-item-note-title">' + escapeDiscoveryText(item.title) + '</div>' : '')
     +   lines.map(l => '<p>' + escapeDiscoveryText(l) + '。</p>').join('')
@@ -7289,21 +7310,50 @@ function renderDiscoveryItemModal(item) {
     + (item.hintText ? '<div class="discovery-item-hint">' + escapeDiscoveryText(item.hintText) + '</div>' : '');
 }
 
-function openDiscoveryItemModal(item) {
+function openDiscoveryItemModal(item, options = {}) {
   const overlay = document.getElementById('discovery-item-overlay');
   if (!overlay || !item) return;
   if (isDiscoveryItemModalOpen()) return; // 已開啟時不重複開
-  discoveryModalWasPlaying = (gameState === 'playing');
-  if (discoveryModalWasPlaying) gameState = 'paused'; // 不呼叫 pauseGame()：不顯示一般暫停選單
-  renderDiscoveryItemModal(item);
+  const mode = (options.mode === 'read') ? 'read' : 'discovery';
+  discoveryModalMode = mode;
+  if (mode === 'discovery') {
+    discoveryModalWasPlaying = (gameState === 'playing');
+    if (discoveryModalWasPlaying) gameState = 'paused'; // 不呼叫 pauseGame()：不顯示一般暫停選單
+  } else {
+    discoveryModalWasPlaying = false; // 閱讀模式：完全不碰 gameState
+  }
+  renderDiscoveryItemModal(item, mode);
+  // 閱讀模式要能蓋在小V的家(12000) / 氣球秘笈(13000) 之上 → 改成 fixed + 高 z-index
+  overlay.classList.toggle('discovery-item-overlay--read', mode === 'read');
   overlay.style.display = 'flex';
   // 重新觸發進場動畫
   overlay.classList.remove('discovery-item-overlay--show');
   void overlay.offsetWidth;
   overlay.classList.add('discovery-item-overlay--show');
   // 開啟時放開所有移動 / 攻擊按鍵，避免關閉後角色自己往前衝
-  Object.keys(keys).forEach(k => { keys[k] = false; });
-  console.log('[Discovery] open modal:', item.id, item.type);
+  if (mode === 'discovery') Object.keys(keys).forEach(k => { keys[k] = false; });
+  console.log('[Discovery] open modal:', mode, item.id, item.type);
+}
+
+// v0.3.33-fix-1：閱讀模式入口（結算頁 / 小V的家）— 只讀取資料，不加入背包、不存檔、不改 gameState
+function getKeyItemDisplayData(id) {
+  const k = (playerInventory.keyItems || {})[id];
+  if (!k) return null;
+  // 舊版存檔沒有 hintText 時，從關卡資料補上
+  let hintText = k.hintText || '';
+  if (!hintText) {
+    const lv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
+    if (lv) hintText = lv.hiddenTreasure.hintText || '';
+  }
+  return {
+    id: k.id, type: k.type, emoji: k.emoji || '📓', name: k.name || k.id,
+    title: k.title || '', noteText: k.noteText || '', hintText,
+  };
+}
+function openKeyItemReadModal(id) {
+  const item = getKeyItemDisplayData(id);
+  if (!item) return;
+  openDiscoveryItemModal(item, { mode: 'read' });
 }
 
 function closeDiscoveryItemModal() {
@@ -7312,11 +7362,14 @@ function closeDiscoveryItemModal() {
     overlay.style.display = 'none';
     overlay.classList.remove('discovery-item-overlay--show');
   }
-  if (discoveryModalWasPlaying && gameState === 'paused') {
+  // 只有發現模式、且開窗前在遊戲中，才恢復遊戲；閱讀模式不改 gameState
+  if (discoveryModalMode === 'discovery' && discoveryModalWasPlaying && gameState === 'paused') {
     gameState = 'playing';
     lastTime = 0; // 避免恢復時 dt 過大
   }
+  if (overlay) overlay.classList.remove('discovery-item-overlay--read');
   discoveryModalWasPlaying = false;
+  discoveryModalMode = 'discovery';
 }
 
 // ── 隱藏寶物碰撞 ────────────────────────────
@@ -7378,27 +7431,25 @@ function checkHiddenTreasure() {
         runCoins: currentRunStats.coins, inventoryCoins: playerInventory.coins });
       showHint(t.foundMsg || ('找到隱藏寶箱！獲得 ' + coins + ' 金幣！'), 320); // v0.3.31：可用關卡 foundMsg
     } else if (t.type === 'bossNote') {
-      // v0.3.32：Boss 弱點筆記 — 立即收進 playerInventory.keyItems（同 id 不重複）
-      if (!playerInventory.keyItems) playerInventory.keyItems = {};
+      // v0.3.33-fix-1：Boss 弱點筆記先放在本關 pending，通關（triggerClear）才正式寫入
+      // playerInventory.keyItems 並存檔；死亡 / 重試 / 時間到都不會保存，重試時可再找一次
       const noteId = t.id || 'bossNote';
-      const isNewNote = !playerInventory.keyItems[noteId]; // v0.3.33：只有第一次取得才跳展示視窗
-      if (!playerInventory.keyItems[noteId]) {
-        playerInventory.keyItems[noteId] = {
-          id:         noteId,
-          type:       'bossNote',
-          name:       t.name || 'Boss 弱點筆記',
-          emoji:      t.emoji || '📓',
-          title:      t.title || t.name || 'Boss 弱點筆記',
-          noteText:   t.noteText || '',
-          acquiredAt: Date.now(),
-        };
-      }
+      const isNewNote = !(playerInventory.keyItems || {})[noteId]; // 已正式取得的不會出現在關卡（防呆）
+      if (!currentRunStats.pendingKeyItems) currentRunStats.pendingKeyItems = {};
+      currentRunStats.pendingKeyItems[noteId] = {
+        id:         noteId,
+        type:       'bossNote',
+        name:       t.name || 'Boss 弱點筆記',
+        emoji:      t.emoji || '📓',
+        title:      t.title || t.name || 'Boss 弱點筆記',
+        noteText:   t.noteText || '',
+        hintText:   t.hintText || '',
+      };
       currentRunStats.foundHiddenTreasureName = t.name || 'Boss 弱點筆記';
       currentRunStats.foundBossNote = {
-        name: t.name || 'Boss 弱點筆記', title: t.title || '', noteText: t.noteText || '',
+        id: noteId, name: t.name || 'Boss 弱點筆記', title: t.title || '', noteText: t.noteText || '',
       };
-      saveInventory();
-      console.log('boss note found:', noteId, playerInventory.keyItems[noteId]);
+      console.log('boss note found (pending until clear):', noteId);
       showHint(t.foundMsg || ('找到' + (t.name || 'Boss 弱點筆記') + '！'), 320);
       // v0.3.33：重要發現物品 → 展示視窗（資料已先存好，視窗只負責展示）
       if (isNewNote && DISCOVERY_MODAL_TREASURE_TYPES.includes(t.type)) {
@@ -7757,6 +7808,20 @@ function triggerClear() {
     }
 
     saveInventory();
+  }
+
+  // v0.3.33-fix-1：重要物品（Boss 弱點筆記等）通關才正式收進背包並存檔
+  const pendingKeyItems = currentRunStats.pendingKeyItems || {};
+  if (Object.keys(pendingKeyItems).length) {
+    if (!playerInventory.keyItems) playerInventory.keyItems = {};
+    Object.values(pendingKeyItems).forEach(k => {
+      if (!playerInventory.keyItems[k.id]) {
+        playerInventory.keyItems[k.id] = Object.assign({}, k, { acquiredAt: Date.now() });
+      }
+    });
+    currentRunStats.pendingKeyItems = {};
+    saveInventory();
+    console.log('key items committed on clear:', Object.keys(playerInventory.keyItems));
   }
 
   // 隱藏物通關正式結算
@@ -9204,8 +9269,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.33+：discovery-item-modal-fix-N → discovery-fixN
+  if (GAME_VERSION.includes('discovery-item-modal-fix')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1';
+    tPart = 'discovery-fix' + fN;
   // v0.3.33+：discovery-item-modal → discovery-modal（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('discovery-item-modal')) {
+  } else if (GAME_VERSION.includes('discovery-item-modal')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'discovery-modal' + (tN === '1' ? '' : '-' + tN);
   // v0.3.32+：chapter2-boss-note-foundation → ch2-boss-note（test-N > 1 時加上 -N）
@@ -9599,7 +9668,11 @@ function populateResultPanel() {
       + '氣球小狗找到了一張沾滿橘子油的筆記：<br>'
       + (bossNoteFirstLine ? '「' + bossNoteFirstLine + '。」<br>' : '')
       + '已收進背包「其他物品」。這可能是前往 2-4 Boss 關的重要線索……'
-      + '</div></div>')
+      + '</div>'
+      + (bossNoteFound.id && (playerInventory.keyItems || {})[bossNoteFound.id]
+          ? '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openKeyItemReadModal(\'' + bossNoteFound.id + '\')">📖 閱讀筆記</button>'
+          : '')
+      + '</div>')
     : (gameState === 'clear' && currentRunStats.foundHiddenTreasure)
     ? ('<div class="rp-guidebook-hint" style="border-color:rgba(255,220,80,0.5);background:rgba(80,60,0,0.2)">'
       + '<div class="rp-guidebook-hint__title">🎉 隱藏發現！</div>'
@@ -10451,7 +10524,7 @@ function getInventoryOtherItems() {
   if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
   // v0.3.32：重要物品（Boss 弱點筆記等），每個 id 一件
   Object.values(playerInventory.keyItems || {}).forEach(k => {
-    if (k && k.id) list.push({ icon: k.emoji || '📓', label: k.name || k.id, count: 1 });
+    if (k && k.id) list.push({ icon: k.emoji || '📓', label: k.name || k.id, count: 1, readId: k.noteText ? k.id : null });
   });
   return list;
 }
@@ -10471,6 +10544,8 @@ function ensureInventorySummaryStyles() {
     .inv-sum__line { font-size: 12px; color: #f2f2f2; line-height: 1.5; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; }
     .inv-sum__line b { color: #ff9fd0; }
+    .inv-sum__line--read { cursor: pointer; color: #ffe9a8; text-decoration: underline dotted rgba(255,233,168,0.6); }
+    .inv-sum__line--read:hover { color: #fff; }
     .inv-sum__empty { font-size: 12px; color: #999; }
     .inv-sum__toggle { margin-top: 4px; font-size: 11px; padding: 2px 8px; border-radius: 8px;
       border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; }
@@ -10492,8 +10567,11 @@ function buildInventorySummaryHtml(options = {}) {
   if (others.length === 0) {
     otherInner = '<div class="inv-sum__empty">目前沒有其他物品</div>';
   } else {
-    otherInner = shown.map(o =>
-      '<div class="inv-sum__line">' + o.icon + ' ' + o.label + ' <b>×' + o.count + '</b></div>'
+    otherInner = shown.map(o => o.readId
+      // v0.3.33-fix-1：可閱讀的重要物品 → 點一下打開閱讀視窗
+      ? '<div class="inv-sum__line inv-sum__line--read" title="閱讀" onclick="openKeyItemReadModal(\'' + o.readId + '\')">'
+        + o.icon + ' ' + o.label + ' <b>📖</b></div>'
+      : '<div class="inv-sum__line">' + o.icon + ' ' + o.label + ' <b>×' + o.count + '</b></div>'
     ).join('');
     if (others.length > INVENTORY_OTHER_PREVIEW_COUNT) {
       otherInner += '<button class="inv-sum__toggle" onclick="toggleInventoryOtherExpanded(event)">'
@@ -10552,18 +10630,20 @@ function renderHomeInventory() {
     { e:'⚔️', v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
     { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
-    // v0.3.32：重要物品（Boss 弱點筆記等）
+    // v0.3.32：重要物品（Boss 弱點筆記等）；v0.3.33-fix-1：可點擊閱讀
     ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
-      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null })),
+      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null, readId: k.noteText ? k.id : null })),
   ].filter(i => i.v > 0);
   if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; refreshInventorySummary(); return; }
   el.innerHTML = '<div class="inv-grid">'
     + items.map(i =>
-        '<div class="inv-item ' + i.cls + '">'
+        '<div class="inv-item ' + i.cls + '"'
+        + (i.readId ? ' style="cursor:pointer" onclick="openKeyItemReadModal(\'' + i.readId + '\')"' : '') + '>'
         + '<div class="inv-item__icon">' + i.e + '</div>'
         + '<div class="inv-item__count">' + i.v + '</div>'
         + '<div class="inv-item__name">' + i.lbl + '</div>'
         + (i.dur ? '<div class="inv-item__dur">' + i.dur + '</div>' : '')
+        + (i.readId ? '<div class="inv-item__dur" style="color:#ffe066">📖 閱讀筆記</div>' : '')
         + '</div>'
       ).join('')
     + '</div>';
@@ -11169,6 +11249,7 @@ function restart(opts) {
   currentRunStats.pendingCoins             = 0;
   currentRunStats.foundHiddenTreasureName  = null;
   currentRunStats.foundBossNote           = null; // v0.3.32
+  currentRunStats.pendingKeyItems         = {};   // v0.3.33-fix-1：死亡 / 重試時清掉未通關取得的重要物品
   currentRunStats.foundTreasureCoins      = 0;
   if (currentHiddenTreasure) currentHiddenTreasure.found = false; // 重試時重置取得狀態
   currentRunStats.dogHealed               = false;
