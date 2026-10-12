@@ -2806,3 +2806,28 @@ html, body {
 /* 完全不透明，避免下方區塊（含 backdrop-filter 的卡片）透出 */
 .sticky-status { z-index: 20; }
 .sticky-status__bar, .sticky-status__bar::before { background: #100e2c; }
+
+/* v0.3.35：弱點筆記內容變長 — 內文區可捲動，按鈕固定在面板底部永遠看得到 */
+#discovery-item-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#discovery-item-header { flex-shrink: 0; }
+#discovery-item-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+#btn-discovery-item-close { flex-shrink: 0; }
+
+/* v0.3.35：結算頁「第二章完成」/「下一關 Boss」提醒卡 */
+.rp-chapter-complete-card {
+  border-color: rgba(255, 215, 80, 0.6) !important;
+  background: rgba(150, 110, 20, 0.22) !important;
+}
+.rp-boss-next-card {
+  border-color: rgba(255, 160, 60, 0.55) !important;
+  background: rgba(160, 80, 10, 0.18) !important;
+}

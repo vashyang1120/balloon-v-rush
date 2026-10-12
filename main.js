@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.34-result-home-sticky-status-and-supply-test-1';
-const BUILD_TIME   = '2026-10-12 15:00';
+const GAME_VERSION = 'adventure-v0.3.35-chapter2-orange-king-boss-foundation-test-1';
+const BUILD_TIME   = '2026-10-12 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2303,7 +2303,7 @@ function startFormalChapter2TestLevel() {
   const pauseEl = document.getElementById('pause-overlay');
   if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
   gameState = 'playing';
-  showHint('🚀 正式第二章測試：2-1 → 2-2 → 2-3', 240);
+  showHint('🚀 正式第二章測試：2-1 → 2-2 → 2-3 → 2-4', 240);
 }
 
 function startProjectileOrangeTestLevel() {
@@ -2885,6 +2885,7 @@ bindBtn('btn-jump',   'jump');
 bindBtn('btn-attack', 'attack');
 
 function inp(action) {
+  if (orangeKingInputLocked) return false; // v0.3.35：Boss 登場動畫期間暫時不能操作
   switch (action) {
     case 'left':   return keys['ArrowLeft']  || mobileBtn.left;
     case 'right':  return keys['ArrowRight'] || mobileBtn.right;
@@ -3328,6 +3329,7 @@ let currentRunStats = {
   pendingCoins:             0,
   foundHiddenTreasureName:  null,
   foundBossNote:            null,  // v0.3.32：本關找到的 Boss 弱點筆記 { title, noteText, name }
+  chapter2Complete:         false, // v0.3.35：擊敗 2-4 橘子王
   pendingKeyItems:          {},    // v0.3.33-fix-1：本關找到、通關才正式寫入的重要物品
   dogHealed:                false,
   dogGoneThisClear:         false,
@@ -4434,10 +4436,41 @@ const LEVELS = [
       found:       false,
       emoji:       '📓',
       title:       '橘子王弱點筆記 01',
-      noteText:    '橘子王噴油前，頭上的油管會先發亮。看到亮光時，不要硬衝，先躲到安全位置等待空檔。',
+      // v0.3.35：改成 2-4 Boss 戰的完整攻略（renderDiscoveryItemModal 以「。」分段顯示）
+      noteText:    '橘子王身上的油管會在攻擊前發亮。不同高度的油管，代表不同高度的噴油攻擊。'
+                 + '牠用頭上的油管瞄準時，會先出現油彈路線。看到路線後，立刻移動到安全平台。'
+                 + '小心牠縮成一顆高速旋轉的橘子球。牠衝撞時，高處平台可能是安全位置。'
+                 + '第一次衝撞後，牠身上的金色油管環可能會掉落。撿起那個環，氣球武器就能暫時變成真正的武器。'
+                 + '記住：不要急著硬衝。等橘子王連續攻擊後喘氣，再靠近反擊！',
       foundMsg:    '氣球小狗找到橘子王弱點筆記！',
       hintText:    '這可能是前往 2-4 Boss 關的重要線索……', // v0.3.33：發現物品視窗底部提示
     },
+  },
+
+  // Stage 2-4：橘子王決戰（v0.3.35 Boss 關）
+  // Boss 專用房：length = CANVAS_W → 鏡頭固定不捲動；沒有終點線，橘子王 HP 歸零才過關
+  // 左側三層：地面 / 中層平台 / 最高平台（最高平台可躲縮球衝撞，但仍會被高位噴油與拋物線油彈打到）
+  {
+    chapterId:   2,
+    stageId:     '2-4',
+    displayName: '第 2-4 關：橘子王決戰',
+    name:        '第 2-4 關：橘子王決戰',
+    shortName:   '2-4 橘子王',
+    length:      CANVAS_W,
+    scrollSpeed: 0,
+    bg:          'stage1',
+    isBossStage: true,
+    bossId:      'orangeKing',
+    hints:       [],
+    buildPlatforms: () => [
+      { x:  60, y: GROUND_Y - 220, w: 180, h: 22 },  // 最高平台（躲衝撞）
+      { x: 250, y: GROUND_Y - 115, w: 170, h: 22 },  // 中層平台
+    ],
+    buildSpikes:   () => [],
+    buildCoins:    () => [],
+    buildBalloons: () => [],
+    buildEnemies:  () => [],
+    buildOranges:  () => [],
   },
 
 ];  // end LEVELS
@@ -4486,7 +4519,7 @@ function isInChapter1Flow(levelIndex) {
 // 若目前關卡不在流程表內（例如未來其他章節關卡），fallback 回傳 levelIndex + 1，
 // 維持舊行為，不影響流程表以外的關卡。
 // v0.3.28：第二章正式流程（stageId-based）：2-1 → 2-2 → 2-3 → 結束（2-4 保留給 Boss 關）
-const CHAPTER2_FLOW_STAGE_IDS = ['2-1', '2-2', '2-3'];
+const CHAPTER2_FLOW_STAGE_IDS = ['2-1', '2-2', '2-3', '2-4']; // v0.3.35：2-3 → 2-4 Boss 關
 function getChapter2FlowStep(levelIndex) {
   const lv = LEVELS[levelIndex];
   return lv ? CHAPTER2_FLOW_STAGE_IDS.indexOf(lv.stageId) : -1;
@@ -4503,7 +4536,7 @@ function getNextLevelIndex(levelIndex) {
       const idx = getLevelIndexByStageId(CHAPTER2_FLOW_STAGE_IDS[ch2Step + 1]);
       return idx >= 0 ? idx : LEVELS.length;
     }
-    return LEVELS.length; // 2-3 完成：第二章前三關完成，不接舊複合挑戰
+    return LEVELS.length; // v0.3.35：2-4 橘子王擊敗 = 第二章完成
   }
 
   const step = getChapter1FlowStep(levelIndex);
@@ -5002,6 +5035,8 @@ function cycleWeapon() {
 function loadLevel(index) {
   const lv = LEVELS[index];
   if (!lv) return;
+  // v0.3.35：離開 / 重新載入關卡時，清掉 2-4 橘子王與金色油管環暫時能力（restart 會依關卡重新建立）
+  if (orangeKingBoss) clearOrangeKingBoss();
 
   LEVEL_NAME   = lv.name;
   LEVEL_LENGTH = lv.length;
@@ -5301,14 +5336,17 @@ function update(dt, dtMs = 16.667) {
   frameCount++;
   elapsedSec += dtMs / 1000; // real seconds
 
-  // Time up → game over
-  if (elapsedSec >= LEVEL_DURATION) {
+  const bossStage = isOrangeKingStageActive(); // v0.3.35
+  // Time up → game over（Boss 房不計時）
+  if (!bossStage && elapsedSec >= LEVEL_DURATION) {
     triggerGameOver();
     return;
   }
 
-  updateCamera();
+  if (bossStage) cameraX = 0; // v0.3.35：Boss 房固定鏡頭，不自動捲動
+  else updateCamera();
   updatePlayer(dt);
+  if (bossStage) updateOrangeKingBoss(dtMs); // v0.3.35
   updateEnemies();
   updateProjectiles();
   updateMeleeAttack();
@@ -5586,6 +5624,8 @@ function updateMeleeAttack() {
   const atkY = player.y + (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
   const atkW = CONFIG.BASIC_SWORD_ATTACK_RANGE;
   const atkH = CONFIG.BASIC_SWORD_ATTACK_HEIGHT;
+  // v0.3.35：2-4 橘子王（不消耗耐久：金色油管環讓武器實體化）
+  if (orangeKingBoss) checkOrangeKingMeleeHit('sword', atkX, atkY, atkW, atkH);
 
   enemies.forEach(e => {
     if (!e.active) return;
@@ -7110,6 +7150,8 @@ function updateHammerMelee() {
   const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
   const atkW = CONFIG.HAMMER_ATTACK_RANGE;
   const atkH = CONFIG.HAMMER_ATTACK_HEIGHT;
+  // v0.3.35：2-4 橘子王（不消耗耐久：金色油管環讓武器實體化）
+  if (orangeKingBoss) checkOrangeKingMeleeHit('hammer', atkX, atkY, atkW, atkH);
 
   // v0.3.18-test-2：hammer 傷害 = 2；HP 歸零才擊飛（heavyBody 3→1 不飛，1→0 才飛）
   function makeSpinning(e) {
@@ -7304,13 +7346,14 @@ function renderDiscoveryItemModal(item, mode) {
   if (btnEl) btnEl.textContent = isRead ? '關閉' : '收進背包，繼續冒險';
   if (!bodyEl) return;
   // 內文依「。」分行，方便手機閱讀
-  const lines = String(item.noteText || '').split('。').map(s => s.trim()).filter(Boolean);
+  // v0.3.35：保留原本句尾標點（。！？），不再一律補「。」
+  const lines = (String(item.noteText || '').match(/[^。！？]+[。！？]?/g) || []).map(s => s.trim()).filter(Boolean);
   bodyEl.innerHTML =
       '<div class="discovery-item-emoji">' + escapeDiscoveryText(item.emoji || '📦') + '</div>'
     + (isRead ? '' : '<div class="discovery-item-name">' + escapeDiscoveryText(item.name || '') + '</div>')
     + '<div class="discovery-item-note">'
     +   (item.title ? '<div class="discovery-item-note-title">' + escapeDiscoveryText(item.title) + '</div>' : '')
-    +   lines.map(l => '<p>' + escapeDiscoveryText(l) + '。</p>').join('')
+    +   lines.map(l => '<p>' + escapeDiscoveryText(/[。！？]$/.test(l) ? l : l + '。') + '</p>').join('')
     + '</div>'
     + (item.hintText ? '<div class="discovery-item-hint">' + escapeDiscoveryText(item.hintText) + '</div>' : '');
 }
@@ -7350,9 +7393,12 @@ function getKeyItemDisplayData(id) {
     const lv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
     if (lv) hintText = lv.hiddenTreasure.hintText || '';
   }
+  // v0.3.35：筆記內容以目前關卡資料為準（舊存檔裡的筆記也會顯示新版攻略）
+  const srcLv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
+  const latestNote = srcLv && srcLv.hiddenTreasure.noteText;
   return {
     id: k.id, type: k.type, emoji: k.emoji || '📓', name: k.name || k.id,
-    title: k.title || '', noteText: k.noteText || '', hintText,
+    title: k.title || '', noteText: latestNote || k.noteText || '', hintText,
   };
 }
 function openKeyItemReadModal(id) {
@@ -7636,9 +7682,1062 @@ function damagePlayer() {
 }
 
 function checkFinish() {
+  if (isOrangeKingStageActive()) return; // v0.3.35：Boss 房沒有終點線
   if (player.x + player.w >= FINISH_X) {
     triggerClear();
   }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.35：第二章 2-4 Boss「橘子王」（foundation：玩法機制可測，美術為簡化 canvas 圖形）
+//  ──────────────────────────────────────────────────────────────────
+//  ・Boss 專用房：不自動捲動、沒有終點線，橘子王 HP 歸零才過關
+//  ・狀態機（orangeKingBoss.phase）：
+//      introWait → introDrop → introRoar
+//      → [教學衝撞] chargeWarn → chargeCurl → chargeSpin → chargeDash → chargeRecover → leapBack
+//      → waitRing（等玩家撿金色油管環）→ idle
+//      → 攻擊組合（固定 pattern 輪替）→ cooldown（喘氣，唯一可受傷時段）→ idle → 下一組 …
+//      攻擊：sprayWarn → sprayFire（三高度水平噴油）
+//            lobAim → lobFire（前景拋物線油彈，不落地、不留油漬）
+//            charge*（縮球衝撞，最高平台可躲）
+//            slamUp → slamDown（跳起震地，地面短暫油漬）
+//      HP 0 → defeated（漏氣、王冠掉落、油管環失去光芒）→ triggerClear()
+//  ・金色油管環：只在第一次教學衝撞後掉落一次；撿到後氣球劍 / 槌在 2-4 內暫時實體化
+//    （runtime-only，不進 playerInventory，不存檔；restart / 死亡重試 / 離開 2-4 都會重置）
+// ════════════════════════════════════════════════════════════════════
+const ORANGE_KING = {
+  MAX_HP:          8,
+  HOME_X:          730,   // 站位（左緣）
+  W:               190,
+  H:               190,
+  BALL_W:          160,   // 縮球後尺寸
+  BALL_H:          150,   // 衝撞判定頂端 = GROUND_Y - 150 → 打得到地面 / 中層，打不到最高平台
+  DASH_SPEED:      12,    // px / frame
+  TUTORIAL_DASH_SPEED: 9,
+  DASH_STOP_X:     18,
+  COOLDOWN_MS:     2300,
+  FIRST_COOLDOWN_MS: 2800,
+  HURT_INVULN_MS:  450,   // 被打一下後短暫無敵，避免一次喘氣就被連打到底
+  SWORD_DAMAGE:    1,
+  HAMMER_DAMAGE:   2,
+  SPRAY_BAND_H:    46,
+  LOB_GRAVITY:     0.22,
+  LOB_RADIUS:      15,
+  PUDDLE_W:        100,
+  PUDDLE_LIFE_MS:  3200,
+  RING_LAND_X:     440,
+};
+// 三高度油管（世界座標 y 中心）：高 = 最高平台、中 = 中層平台、低 = 地面
+const ORANGE_KING_LANES = {
+  high: { y: GROUND_Y - 260, label: '高' },
+  mid:  { y: GROUND_Y - 155, label: '中' },
+  low:  { y: GROUND_Y - 40,  label: '低' },
+};
+const ORANGE_KING_LANE_ORDER = ['low', 'high', 'mid', 'high', 'low', 'mid'];
+// 拋物線油彈路線（依序輪替）：tx / ty = 路線經過的目標點，vx = 水平速度
+const ORANGE_KING_LOB_ROUTES = [
+  { tx: 150, ty: GROUND_Y - 255, vx: -10 },  // 掃過最高平台
+  { tx: 330, ty: GROUND_Y - 150, vx: -10 },  // 掃過中層平台
+  { tx: 480, ty: GROUND_Y - 35,  vx: -7  },  // 打地面中段
+  { tx: 120, ty: GROUND_Y - 30,  vx: -11 },  // 打地面左側
+];
+// 攻擊組合（固定順序輪替，每組結束才進 cooldown）
+const ORANGE_KING_PATTERNS = [
+  ['spray', 'spray'],
+  ['lob', 'lob'],
+  ['slam'],
+  ['spray', 'lob'],
+  ['charge'],
+];
+const ORANGE_KING_PUDDLE_SETS = [
+  [110, 330, 560],
+  [200, 450],
+];
+
+var orangeKingBoss = null;          // runtime 狀態（只在 2-4 存在）
+var orangeKingInputLocked = false;  // 登場動畫期間鎖操作
+
+function isBossStageLevel(index) {
+  const lv = LEVELS[index];
+  return !!(lv && lv.isBossStage);
+}
+function isOrangeKingStageActive() {
+  return !!orangeKingBoss && isBossStageLevel(currentLevelIndex);
+}
+
+function initOrangeKingBoss() {
+  orangeKingBoss = {
+    hp: ORANGE_KING.MAX_HP, maxHp: ORANGE_KING.MAX_HP,
+    x: ORANGE_KING.HOME_X, y: -ORANGE_KING.H - 40,
+    w: ORANGE_KING.W, h: ORANGE_KING.H,
+    vy: 0,
+    phase: 'introWait', phaseMs: 0, totalMs: 0,
+    curled: false, spinAngle: 0,
+    tutorialDone: false,
+    hpBarVisible: false,
+    ring: null,                 // { x, y, vx, vy, state: 'onBoss'|'flying'|'grounded'|'collected' }
+    ringActive: false,          // 撿到金色油管環 → 氣球武器實體化
+    patternIndex: 0, patternStep: 0, currentPattern: null,
+    laneCursor: 0, lobCursor: 0, puddleCursor: 0, cooldownCount: 0,
+    activeLane: null, activeLob: null,
+    lobShots: [], puddles: [], floatTexts: [],
+    hurtFlashMs: 0, invulnMs: 0,
+    lastSwordSwingId: -1, lastHammerSwingId: -1,
+    lastBlockedSwing: '',
+    shakeMs: 0, shakePower: 0,
+    banner: null,               // { text, sub, ms, dur }
+    ringReminderMs: 0,
+    dashHitDone: false,
+    defeatMs: 0, crownY: 0, crownVy: 0, crownRot: 0,
+    clearTriggered: false,
+    tempWeaponGranted: false,
+  };
+  orangeKingInputLocked = true;
+  orangeKingBoss.ring = { state: 'onBoss', x: 0, y: 0, vx: 0, vy: 0 };
+  currentRunStats.chapter2Complete = false;
+}
+
+// 離開 2-4（或重置）時清掉 Boss 與暫時能力
+function clearOrangeKingBoss() {
+  if (orangeKingBoss && orangeKingBoss.tempWeaponGranted) {
+    // 沒有武器時發的「實體化氣球劍」只在 2-4 有效，離開就還原成背包真正的裝備
+    initEquippedSword();
+    initEquippedHammer();
+    normalizeActiveWeaponSlot();
+    applyAdventureTestLoadout();
+  }
+  orangeKingBoss = null;
+  orangeKingInputLocked = false;
+}
+
+function setOrangeKingPhase(phase) {
+  const b = orangeKingBoss;
+  b.phase = phase;
+  b.phaseMs = 0;
+}
+function orangeKingShake(ms, power) {
+  const b = orangeKingBoss;
+  b.shakeMs = Math.max(b.shakeMs, ms);
+  b.shakePower = Math.max(b.shakePower, power);
+}
+function orangeKingBanner(text, sub, dur) {
+  orangeKingBoss.banner = { text, sub: sub || '', ms: 0, dur: dur || 1600 };
+}
+function orangeKingFloatText(text, x, y, color) {
+  orangeKingBoss.floatTexts.push({ text, x, y, ms: 0, color: color || '#fff' });
+}
+
+// 衝撞 / 縮球時的身體矩形（世界座標）
+function getOrangeKingBodyRect() {
+  const b = orangeKingBoss;
+  if (b.curled) {
+    return { x: b.x, y: GROUND_Y - ORANGE_KING.BALL_H, w: ORANGE_KING.BALL_W, h: ORANGE_KING.BALL_H };
+  }
+  return { x: b.x, y: b.y, w: b.w, h: b.h };
+}
+// 可受傷 hitbox（站在站位時的身體，四周內縮）
+function getOrangeKingHurtRect() {
+  const r = getOrangeKingBodyRect();
+  return { x: r.x + 10, y: r.y + 10, w: r.w - 20, h: r.h - 20 };
+}
+// 衝撞 hitbox：只覆蓋地面與中低高度（頂端 = GROUND_Y - BALL_H），不覆蓋最高平台
+function getOrangeKingDashHitbox() {
+  const r = getOrangeKingBodyRect();
+  return { x: r.x + 8, y: r.y + 6, w: r.w - 16, h: r.h - 6 };
+}
+function getOrangeKingNozzle(laneKey) {
+  const b = orangeKingBoss;
+  const lane = ORANGE_KING_LANES[laneKey];
+  // 噴嘴放在身體輪廓外側，三個高度都看得到
+  const nx = laneKey === 'high' ? b.x - 6 : (laneKey === 'mid' ? b.x - 8 : b.x - 6);
+  return { x: nx, y: lane.y };
+}
+function getOrangeKingLobOrigin() {
+  const b = orangeKingBoss;
+  return { x: b.x + 128, y: b.y - 58 };
+}
+// 依路線算出拋物線參數（經過目標點），軌跡預測與實際飛行用同一組公式
+function buildOrangeKingLob(route) {
+  const o  = getOrangeKingLobOrigin();
+  const g  = ORANGE_KING.LOB_GRAVITY;
+  const T  = (o.x - route.tx) / Math.abs(route.vx);
+  const vy0 = (route.ty - o.y - 0.5 * g * T * T) / T;
+  return { sx: o.x, sy: o.y, vx: route.vx, vy0, g, t: 0 };
+}
+function getLobPoint(lob, t) {
+  return { x: lob.sx + lob.vx * t, y: lob.sy + lob.vy0 * t + 0.5 * lob.g * t * t };
+}
+
+function playerHazardRect() {
+  return { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };
+}
+function orangeKingHitPlayer() {
+  if (player.invincible > 0 || gameState !== 'playing') return false;
+  damagePlayer();
+  return true;
+}
+
+// ── 每幀更新 ─────────────────────────────────────────
+function updateOrangeKingBoss(dtMs) {
+  const b = orangeKingBoss;
+  if (!b) return;
+  const k = dtMs / 16.667;
+  b.phaseMs += dtMs;
+  b.totalMs += dtMs;
+  if (b.shakeMs > 0) { b.shakeMs -= dtMs; if (b.shakeMs <= 0) b.shakePower = 0; }
+  if (b.hurtFlashMs > 0) b.hurtFlashMs -= dtMs;
+  if (b.invulnMs > 0) b.invulnMs -= dtMs;
+  if (b.banner) { b.banner.ms += dtMs; if (b.banner.ms >= b.banner.dur) b.banner = null; }
+  b.floatTexts.forEach(f => { f.ms += dtMs; f.y -= 0.6 * k; });
+  b.floatTexts = b.floatTexts.filter(f => f.ms < 900);
+
+  tickOrangeKingPendingHint(dtMs);
+  updateOrangeKingRing(dtMs, k);
+  updateOrangeKingLobShots(k);
+  updateOrangeKingPuddles(dtMs);
+
+  switch (b.phase) {
+    // ── 登場 ──
+    case 'introWait':
+      if (b.phaseMs >= 450) { setOrangeKingPhase('introDrop'); b.vy = 2; }
+      break;
+    case 'introDrop':
+      b.vy += 0.9 * k;
+      b.y += b.vy * k;
+      if (b.y >= GROUND_Y - b.h) {
+        b.y = GROUND_Y - b.h;
+        orangeKingShake(500, 9);
+        b.hpBarVisible = true;
+        orangeKingBanner('橘子王 登場！', '', 1500);
+        setOrangeKingPhase('introRoar');
+      }
+      break;
+    case 'introRoar':
+      if (b.phaseMs >= 1300) {
+        orangeKingInputLocked = false;
+        showHint('⚠️ 橘子王要衝過來了！快跳上最高的平台躲開！', 260);
+        startOrangeKingCharge(true);
+      }
+      break;
+
+    // ── 縮球衝撞（教學 + 正式共用）──
+    case 'chargeWarn':
+      if (b.phaseMs >= (b.chargeTutorial ? 1300 : 750)) setOrangeKingPhase('chargeCurl');
+      break;
+    case 'chargeCurl':
+      if (b.phaseMs >= 380) {
+        b.curled = true;
+        b.x = ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2;
+        setOrangeKingPhase('chargeSpin');
+      }
+      break;
+    case 'chargeSpin':
+      b.spinAngle += 0.45 * k;
+      if (b.phaseMs >= (b.chargeTutorial ? 900 : 650)) { b.dashHitDone = false; setOrangeKingPhase('chargeDash'); }
+      break;
+    case 'chargeDash': {
+      b.spinAngle += 0.6 * k;
+      const speed = b.chargeTutorial ? ORANGE_KING.TUTORIAL_DASH_SPEED : ORANGE_KING.DASH_SPEED;
+      b.x -= speed * k;
+      const hb = getOrangeKingDashHitbox();
+      const pr = playerHazardRect();
+      if (!b.dashHitDone && rectsOverlap(pr.x, pr.y, pr.w, pr.h, hb.x, hb.y, hb.w, hb.h)) {
+        if (orangeKingHitPlayer()) b.dashHitDone = true;
+      }
+      if (b.x <= ORANGE_KING.DASH_STOP_X) {
+        b.x = ORANGE_KING.DASH_STOP_X;
+        orangeKingShake(350, 7);
+        setOrangeKingPhase('chargeRecover');
+      }
+      break;
+    }
+    case 'chargeRecover':
+      if (b.chargeTutorial && b.ring.state === 'onBoss' && b.phaseMs >= 250) dropOrangeKingRing();
+      if (b.phaseMs >= (b.chargeTutorial ? 1100 : 750)) {
+        b.curled = false;
+        b.y = GROUND_Y - b.h;
+        b.leapFromX = b.x;
+        setOrangeKingPhase('leapBack');
+      }
+      break;
+    case 'leapBack': {
+      const dur = 750;
+      const p = Math.min(1, b.phaseMs / dur);
+      b.x = b.leapFromX + (ORANGE_KING.HOME_X - b.leapFromX) * p;
+      b.y = GROUND_Y - b.h - Math.sin(p * Math.PI) * 230;
+      if (p >= 1) {
+        b.x = ORANGE_KING.HOME_X;
+        b.y = GROUND_Y - b.h;
+        orangeKingShake(250, 5);
+        if (b.chargeTutorial) {
+          b.chargeTutorial = false;
+          b.tutorialDone = true;
+          b.ringReminderMs = 0;
+          setOrangeKingPhase(b.ringActive ? 'idle' : 'waitRing');
+        } else {
+          finishOrangeKingAttack();
+        }
+      }
+      break;
+    }
+
+    // ── 等玩家撿金色油管環 ──
+    case 'waitRing':
+      b.ringReminderMs += dtMs;
+      if (b.ringReminderMs >= 5000) {
+        b.ringReminderMs = 0;
+        showHint('✨ 撿起地上發光的金色油管環！', 200);
+      }
+      if (b.ringActive && b.phaseMs >= 300) setOrangeKingPhase('idle');
+      break;
+
+    case 'idle':
+      if (b.phaseMs >= 900) startNextOrangeKingPattern();
+      break;
+    case 'between':
+      if (b.phaseMs >= 380) runOrangeKingPatternStep();
+      break;
+
+    // ── 攻擊 A：三高度水平噴油 ──
+    case 'sprayWarn':
+      if (b.phaseMs >= 850) setOrangeKingPhase('sprayFire');
+      break;
+    case 'sprayFire': {
+      const band = getOrangeKingSprayBand(b.activeLane);
+      const pr = playerHazardRect();
+      if (rectsOverlap(pr.x, pr.y, pr.w, pr.h, band.x, band.y, band.w, band.h)) orangeKingHitPlayer();
+      if (b.phaseMs >= 650) { b.activeLane = null; finishOrangeKingAttack(); }
+      break;
+    }
+
+    // ── 攻擊 B：前景拋物線油彈 ──
+    case 'lobAim':
+      if (b.phaseMs >= 950) {
+        const shot = Object.assign({}, b.activeLob, { t: 0, x: b.activeLob.sx, y: b.activeLob.sy });
+        b.lobShots.push(shot);
+        setOrangeKingPhase('lobFire');
+      }
+      break;
+    case 'lobFire':
+      if (b.phaseMs >= 450) { b.activeLob = null; finishOrangeKingAttack(); }
+      break;
+
+    // ── 攻擊 D：跳起震地 ──
+    case 'slamUp': {
+      const p = Math.min(1, b.phaseMs / 480);
+      b.y = GROUND_Y - b.h - Math.sin(p * Math.PI / 2) * 170;
+      if (p >= 1) setOrangeKingPhase('slamDown');
+      break;
+    }
+    case 'slamDown': {
+      const p = Math.min(1, b.phaseMs / 260);
+      b.y = GROUND_Y - b.h - (1 - p * p) * 170;
+      if (p >= 1) {
+        b.y = GROUND_Y - b.h;
+        orangeKingShake(450, 10);
+        spawnOrangeKingPuddles();
+        setOrangeKingPhase('slamLand');
+      }
+      break;
+    }
+    case 'slamLand':
+      if (b.phaseMs >= 450) finishOrangeKingAttack();
+      break;
+
+    // ── 喘氣（唯一可受傷時段）──
+    case 'cooldown':
+      if (b.phaseMs >= b.cooldownDur) setOrangeKingPhase('idle');
+      break;
+
+    // ── 擊敗 ──
+    case 'defeated':
+      updateOrangeKingDefeat(dtMs, k);
+      break;
+  }
+
+  // 站在站位時，身體是實心的：玩家不能穿進橘子王（不造成接觸傷害）
+  if (b.phase !== 'defeated' && !b.curled && b.x >= ORANGE_KING.HOME_X - 5 && b.y >= GROUND_Y - b.h - 20) {
+    const wall = b.x + 16 - player.w;
+    if (player.x > wall && player.y + player.h > b.y + 20) {
+      player.x = wall;
+      if (player.vx > 0) player.vx = 0;
+    }
+  }
+}
+
+function startOrangeKingCharge(tutorial) {
+  const b = orangeKingBoss;
+  b.chargeTutorial = !!tutorial;
+  setOrangeKingPhase('chargeWarn');
+}
+
+function dropOrangeKingRing() {
+  const b = orangeKingBoss;
+  const r = getOrangeKingBodyRect();
+  const sx = r.x + r.w / 2, sy = r.y + 20;
+  const T  = 48; // frames
+  b.ring = {
+    state: 'flying', x: sx, y: sy,
+    vx: (ORANGE_KING.RING_LAND_X - sx) / T,
+    vy: -9,
+  };
+  orangeKingFloatText('✨', sx, sy - 10, '#ffe066');
+}
+
+function updateOrangeKingRing(dtMs, k) {
+  const b = orangeKingBoss;
+  const ring = b.ring;
+  if (!ring) return;
+  if (ring.state === 'flying') {
+    ring.vy += 0.38 * k;
+    ring.x  += ring.vx * k;
+    ring.y  += ring.vy * k;
+    const landY = GROUND_Y - 34;
+    if (ring.vy > 0 && ring.y >= landY) {
+      ring.y = landY; ring.x = ORANGE_KING.RING_LAND_X; ring.state = 'grounded';
+      showHint('✨ 金色油管環掉下來了！快去撿起來！', 220);
+    }
+  } else if (ring.state === 'grounded') {
+    const pr = playerHazardRect();
+    // 撿取範圍放寬（從平台跳下 / 跑過去都撿得到）
+    if (rectsOverlap(pr.x, pr.y, pr.w, pr.h, ring.x - 36, ring.y - 70, 72, 100)) collectOrangeKingRing();
+  }
+}
+
+function collectOrangeKingRing() {
+  const b = orangeKingBoss;
+  b.ring.state = 'collected';
+  b.ringActive = true;
+  // 沒有任何武器時，發一把只在 2-4 有效的實體化氣球劍（runtime-only，不寫入背包）
+  const hasSword  = !!(equippedSword && equippedSword.id === 'basicSword');
+  const hasHammer = !!(equippedHammer && equippedHammer.id);
+  if (!hasSword && !hasHammer) {
+    equippedSword.id = 'basicSword';
+    equippedSword.name = '實體化氣球劍';
+    equippedSword.maxDur = 999;
+    equippedSword.currentDur = 999;
+    activeSlot = 'sword';
+    b.tempWeaponGranted = true;
+  }
+  orangeKingFloatText('武器實體化！', player.x + player.w / 2, player.y - 10, '#ffe066');
+  showHint('✨ 金色油管環讓氣球武器實體化了！', 210);
+  b.pendingHint = { msg: '💡 等橘子王連續攻擊後喘氣，再靠近反擊！', delayMs: 3500 };
+}
+
+function getOrangeKingSprayBand(laneKey) {
+  const n = getOrangeKingNozzle(laneKey);
+  const h = ORANGE_KING.SPRAY_BAND_H;
+  return { x: 0, y: n.y - h / 2, w: n.x, h };
+}
+
+function startNextOrangeKingPattern() {
+  const b = orangeKingBoss;
+  b.currentPattern = ORANGE_KING_PATTERNS[b.patternIndex % ORANGE_KING_PATTERNS.length];
+  b.patternIndex++;
+  b.patternStep = 0;
+  runOrangeKingPatternStep();
+}
+function runOrangeKingPatternStep() {
+  const b = orangeKingBoss;
+  const atk = b.currentPattern[b.patternStep];
+  if (atk === 'spray') {
+    b.activeLane = ORANGE_KING_LANE_ORDER[b.laneCursor % ORANGE_KING_LANE_ORDER.length];
+    b.laneCursor++;
+    setOrangeKingPhase('sprayWarn');
+  } else if (atk === 'lob') {
+    b.activeLob = buildOrangeKingLob(ORANGE_KING_LOB_ROUTES[b.lobCursor % ORANGE_KING_LOB_ROUTES.length]);
+    b.lobCursor++;
+    setOrangeKingPhase('lobAim');
+  } else if (atk === 'slam') {
+    setOrangeKingPhase('slamUp');
+  } else if (atk === 'charge') {
+    startOrangeKingCharge(false);
+  }
+}
+// 一招結束：組合內還有下一招 → 短暫停頓後接著打；整組結束才進 cooldown
+function finishOrangeKingAttack() {
+  const b = orangeKingBoss;
+  b.patternStep++;
+  if (b.currentPattern && b.patternStep < b.currentPattern.length) {
+    setOrangeKingPhase('between');
+    return;
+  }
+  b.cooldownDur = b.cooldownCount === 0 ? ORANGE_KING.FIRST_COOLDOWN_MS : ORANGE_KING.COOLDOWN_MS;
+  if (b.cooldownCount === 0 && b.ringActive) showHint('💦 橘子王在喘氣！快靠近攻擊！', 200);
+  b.cooldownCount++;
+  setOrangeKingPhase('cooldown');
+}
+
+function updateOrangeKingLobShots(k) {
+  const b = orangeKingBoss;
+  const pr = playerHazardRect();
+  b.lobShots.forEach(s => {
+    s.t += k;
+    const p = getLobPoint(s, s.t);
+    s.x = p.x; s.y = p.y;
+    // 油彈在前景飛行：不被平台擋、不落地、不留油漬，只判定是否碰到小V
+    if (!s.hit && circleRectOverlap(p.x, p.y, ORANGE_KING.LOB_RADIUS, pr.x, pr.y, pr.w, pr.h)) {
+      if (orangeKingHitPlayer()) s.hit = true;
+    }
+  });
+  b.lobShots = b.lobShots.filter(s => s.x > -60 && s.y < CANVAS_H + 60 && s.x < CANVAS_W + 60);
+}
+function circleRectOverlap(cx, cy, r, rx, ry, rw, rh) {
+  const nx = Math.max(rx, Math.min(cx, rx + rw));
+  const ny = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nx, dy = cy - ny;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function spawnOrangeKingPuddles() {
+  const b = orangeKingBoss;
+  const set = ORANGE_KING_PUDDLE_SETS[b.puddleCursor % ORANGE_KING_PUDDLE_SETS.length];
+  b.puddleCursor++;
+  set.forEach(x => b.puddles.push({ x, w: ORANGE_KING.PUDDLE_W, ms: 0, life: ORANGE_KING.PUDDLE_LIFE_MS }));
+}
+function updateOrangeKingPuddles(dtMs) {
+  const b = orangeKingBoss;
+  const onGround = player.y + player.h >= GROUND_Y - 3;
+  b.puddles.forEach(p => {
+    p.ms += dtMs;
+    // 油漬只影響地面：腳踩在地面且和油漬重疊才受傷（剛出現的 200ms 是擴散動畫，不判定）
+    if (p.ms > 200 && onGround && player.x + player.w - 10 > p.x && player.x + 10 < p.x + p.w) {
+      orangeKingHitPlayer();
+    }
+  });
+  b.puddles = b.puddles.filter(p => p.ms < p.life);
+}
+
+// ── 劍 / 槌命中判定（由 updateMeleeAttack / updateHammerMelee 呼叫）──
+function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
+  const b = orangeKingBoss;
+  if (!b || b.phase === 'defeated' || b.hp <= 0) return;
+  const swingId = weapon === 'hammer' ? player.hammerSwingId : player.swordSwingId;
+  const lockKey = weapon === 'hammer' ? 'lastHammerSwingId' : 'lastSwordSwingId';
+  const hr = getOrangeKingHurtRect();
+  if (!rectsOverlap(ax, ay, aw, ah, hr.x, hr.y, hr.w, hr.h)) return;
+  if (b[lockKey] === swingId) return; // 同一次揮擊只判定一次
+  b[lockKey] = swingId;
+  const fx = hr.x + 10, fy = Math.max(hr.y + 30, ay + ah / 2);
+  if (!b.ringActive) {
+    orangeKingFloatText('✦', fx, fy, '#cfe8ff');
+    showHint('🎈 氣球武器還不能傷到橘子王！', 150);
+    return;
+  }
+  if (b.phase !== 'cooldown' || b.invulnMs > 0) {
+    orangeKingFloatText('✦ 鏘！', fx, fy, '#cfe8ff');
+    if (b.phase !== 'cooldown') showHint('🛡️ 現在打不進去！等牠喘氣再攻擊！', 130);
+    return;
+  }
+  const dmg = weapon === 'hammer' ? ORANGE_KING.HAMMER_DAMAGE : ORANGE_KING.SWORD_DAMAGE;
+  b.hp = Math.max(0, b.hp - dmg);
+  b.hurtFlashMs = 260;
+  b.invulnMs = ORANGE_KING.HURT_INVULN_MS;
+  orangeKingFloatText('-' + dmg, fx, fy - 10, '#ff5c5c');
+  orangeKingShake(160, 3);
+  if (b.hp <= 0) startOrangeKingDefeat();
+}
+
+// ── 擊敗流程 ──
+function startOrangeKingDefeat() {
+  const b = orangeKingBoss;
+  setOrangeKingPhase('defeated');
+  b.curled = false;
+  b.x = Math.max(b.x, 520);
+  b.y = GROUND_Y - b.h;
+  b.activeLane = null; b.activeLob = null;
+  b.lobShots = []; b.puddles = [];
+  b.crownY = 0; b.crownVy = -6; b.crownRot = 0;
+  b.ringActive = false; // 油管環失去光芒，實體化效果結束
+  orangeKingShake(600, 8);
+  player.invincible = Math.max(player.invincible, 400);
+  orangeKingBanner('橘子王被打敗了！', '', 1400);
+}
+function updateOrangeKingDefeat(dtMs, k) {
+  const b = orangeKingBoss;
+  b.crownVy += 0.5 * k;
+  b.crownY += b.crownVy * k;
+  b.crownRot += 0.08 * k;
+  if (b.phaseMs >= 1400 && (!b.banner || b.banner.text !== '第二章完成！')) {
+    if (!b.chapterBannerShown) { b.chapterBannerShown = true; orangeKingBanner('第二章完成！', '🏆 小V保護了派對島的氣球！', 1600); }
+  }
+  if (b.phaseMs >= 3000 && !b.clearTriggered) {
+    b.clearTriggered = true;
+    currentRunStats.chapter2Complete = true;
+    triggerClear();
+  }
+}
+
+// 每幀：延遲提示
+function tickOrangeKingPendingHint(dtMs) {
+  const b = orangeKingBoss;
+  if (!b || !b.pendingHint) return;
+  b.pendingHint.delayMs -= dtMs;
+  if (b.pendingHint.delayMs <= 0) { showHint(b.pendingHint.msg, 230); b.pendingHint = null; }
+}
+
+function getOrangeKingShakeOffset() {
+  const b = orangeKingBoss;
+  if (!b || b.shakeMs <= 0 || gameState !== 'playing') return null;
+  const p = b.shakePower;
+  return { x: (Math.random() * 2 - 1) * p, y: (Math.random() * 2 - 1) * p * 0.6 };
+}
+
+// ════════════════ 繪圖（簡化 canvas 圖形）════════════════
+// 背景層：場地裝飾、預警線、拋物線預測、油漬、金色油管環、Boss 本體（畫在小V之前）
+function drawOrangeKingBack(cx) {
+  const b = orangeKingBoss;
+  if (!b) return;
+  const t = b.totalMs;
+  // 上方洞口（登場用）
+  if (b.phase === 'introWait' || b.phase === 'introDrop' || b.phase === 'introRoar') {
+    const a = b.phase === 'introRoar' ? Math.max(0, 1 - b.phaseMs / 1300) : 1;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#1a0f22';
+    ctx.beginPath();
+    ctx.ellipse(ORANGE_KING.HOME_X + ORANGE_KING.W / 2 - cx, 0, 130, 34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  // 左側牆
+  ctx.fillStyle = 'rgba(60,30,20,0.55)';
+  ctx.fillRect(0 - cx, 0, 14, GROUND_Y);
+
+  // 油漬
+  b.puddles.forEach(p => {
+    const grow = Math.min(1, p.ms / 200);
+    const fade = p.ms > p.life - 600 ? Math.max(0, (p.life - p.ms) / 600) : 1;
+    ctx.save();
+    ctx.globalAlpha = 0.9 * fade;
+    ctx.fillStyle = '#e8961c';
+    ctx.beginPath();
+    ctx.ellipse(p.x + p.w / 2 - cx, GROUND_Y + 2, (p.w / 2) * grow, 9 * grow, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,140,0.8)';
+    ctx.beginPath();
+    ctx.ellipse(p.x + p.w / 2 - cx - 14, GROUND_Y, (p.w / 6) * grow, 3 * grow, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // 水平噴油預警線
+  if (b.phase === 'sprayWarn' && b.activeLane) {
+    const band = getOrangeKingSprayBand(b.activeLane);
+    const blink = Math.floor(b.phaseMs / 120) % 2 === 0;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,60,60,0.10)';
+    ctx.fillRect(band.x - cx, band.y, band.w, band.h);
+    ctx.strokeStyle = blink ? 'rgba(255,70,70,0.95)' : 'rgba(255,170,70,0.7)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath();
+    ctx.moveTo(band.x - cx, band.y + band.h / 2);
+    ctx.lineTo(band.x + band.w - cx, band.y + band.h / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = blink ? '#ff4d4d' : '#ffb347';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('⚠', 22 - cx, band.y + band.h / 2 + 9);
+    ctx.restore();
+  }
+
+  // 拋物線預測軌跡
+  if (b.phase === 'lobAim' && b.activeLob) {
+    ctx.save();
+    const blink = Math.floor(b.phaseMs / 140) % 2 === 0;
+    ctx.fillStyle = blink ? 'rgba(255,90,60,0.95)' : 'rgba(255,190,80,0.85)';
+    for (let tt = 0; tt < 400; tt += 3) {
+      const p = getLobPoint(b.activeLob, tt);
+      if (p.x < -20 || p.y > CANVAS_H + 20) break;
+      ctx.beginPath();
+      ctx.arc(p.x - cx, p.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // 地上的金色油管環
+  const ring = b.ring;
+  if (ring && (ring.state === 'flying' || ring.state === 'grounded')) {
+    const bob = ring.state === 'grounded' ? Math.sin(t / 220) * 4 : 0;
+    drawGoldOilRing(ring.x - cx, ring.y + bob, 1, true, t);
+  }
+
+  drawOrangeKingBody(cx);
+}
+
+function drawGoldOilRing(x, y, scale, glowing, t) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  if (glowing) {
+    const pulse = 0.55 + 0.35 * Math.sin(t / 160);
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 40);
+    g.addColorStop(0, `rgba(255,240,150,${pulse})`);
+    g.addColorStop(1, 'rgba(255,220,80,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = glowing ? '#ffd23f' : '#8a7a4a';
+  ctx.beginPath(); ctx.ellipse(0, 0, 20, 14, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = glowing ? '#fff3b0' : '#b0a27a';
+  ctx.beginPath(); ctx.ellipse(0, -2, 16, 10, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+  ctx.restore();
+}
+
+function drawOrangeKingPipe(x1, y1, x2, y2, glow, t) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  if (glow) {
+    ctx.strokeStyle = `rgba(255,230,90,${0.45 + 0.35 * Math.sin(t / 70)})`;
+    ctx.lineWidth = 22;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  ctx.strokeStyle = '#4b5a3a';
+  ctx.lineWidth = 13;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.strokeStyle = '#7d9460';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(x1, y1 - 3); ctx.lineTo(x2, y2 - 3); ctx.stroke();
+  ctx.restore();
+}
+function drawOrangeKingNozzle(x, y, glow, t) {
+  ctx.save();
+  if (glow) {
+    const g = ctx.createRadialGradient(x, y, 2, x, y, 30);
+    g.addColorStop(0, 'rgba(255,255,180,0.95)');
+    g.addColorStop(1, 'rgba(255,200,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 30, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = glow ? '#ffe066' : '#39452c';
+  ctx.beginPath(); ctx.roundRect(x - 10, y - 10, 20, 20, 5); ctx.fill();
+  ctx.fillStyle = '#1d2416';
+  ctx.beginPath(); ctx.arc(x - 6, y, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawOrangeKingBody(cx) {
+  const b = orangeKingBoss;
+  const t = b.totalMs;
+  const flash = b.hurtFlashMs > 0 && Math.floor(b.hurtFlashMs / 60) % 2 === 0;
+
+  // 衝撞 / 縮球：畫成旋轉的橘子球
+  if (b.curled) {
+    const r = getOrangeKingBodyRect();
+    const ccx = r.x + r.w / 2 - cx, ccy = r.y + r.h / 2;
+    const rad = r.h / 2;
+    ctx.save();
+    if (b.phase === 'chargeDash') {
+      for (let i = 1; i <= 3; i++) {
+        ctx.globalAlpha = 0.18 / i;
+        ctx.fillStyle = '#ff9a1f';
+        ctx.beginPath(); ctx.arc(ccx + i * 34, ccy, rad, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 4; i++) {
+        const ly = ccy - rad * 0.6 + i * rad * 0.4;
+        ctx.beginPath(); ctx.moveTo(ccx + rad + 10, ly); ctx.lineTo(ccx + rad + 60 + (i % 2) * 20, ly); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.translate(ccx, ccy);
+    ctx.rotate(-b.spinAngle);
+    const g = ctx.createRadialGradient(-rad * 0.3, -rad * 0.3, rad * 0.2, 0, 0, rad);
+    g.addColorStop(0, flash ? '#ffffff' : '#ffc24d');
+    g.addColorStop(1, flash ? '#ffd0a0' : '#e8730c');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(150,60,0,0.6)';
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.arc(0, 0, rad * (0.35 + i * 0.22), i, i + Math.PI * 1.2); ctx.stroke();
+    }
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath(); ctx.moveTo(-14, -rad + 4); ctx.lineTo(0, -rad - 14); ctx.lineTo(14, -rad + 4); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const defeated = b.phase === 'defeated';
+  const deflate = defeated ? Math.max(0.45, 1 - b.phaseMs / 1600) : 1;
+  if (defeated && b.phaseMs > 1600 && Math.floor(b.phaseMs / 90) % 2 === 0) return; // 閃爍消失
+
+  let wobbleX = 0, squashY = 1;
+  if (b.phase === 'chargeWarn') wobbleX = Math.sin(t / 25) * 4;
+  if (b.phase === 'chargeCurl') squashY = 1 - Math.min(1, b.phaseMs / 380) * 0.2;
+  if (b.phase === 'cooldown')   squashY = 1 + Math.sin(t / 160) * 0.03;
+  if (defeated)                 wobbleX = Math.sin(t / 40) * 6 * deflate;
+
+  const bw = b.w * deflate, bh = b.h * deflate * squashY;
+  const bx = b.x + (b.w - bw) / 2 - cx + wobbleX;
+  const by = b.y + b.h - bh;
+  const ccx = bx + bw / 2, ccy = by + bh / 2;
+  const lane = b.activeLane;
+  const sprayGlow = (b.phase === 'sprayWarn' || b.phase === 'sprayFire');
+
+  ctx.save();
+  // 油管（身體後方）
+  if (!defeated) {
+    const nh = getOrangeKingNozzle('high'), nm = getOrangeKingNozzle('mid'), nl = getOrangeKingNozzle('low');
+    drawOrangeKingPipe(bx + bw * 0.35, by + 18, nh.x - cx + 8, nh.y, sprayGlow && lane === 'high', t);
+    drawOrangeKingPipe(bx + bw * 0.3, by + bh * 0.42, nm.x - cx + 8, nm.y, sprayGlow && lane === 'mid', t);
+    drawOrangeKingPipe(bx + bw * 0.3, by + bh * 0.85, nl.x - cx + 8, nl.y, sprayGlow && lane === 'low', t);
+    const lo = getOrangeKingLobOrigin();
+    drawOrangeKingPipe(bx + bw * 0.62, by + 14, lo.x - cx, lo.y, b.phase === 'lobAim', t);
+  }
+
+  // 身體
+  const g = ctx.createRadialGradient(ccx - bw * 0.2, ccy - bh * 0.25, bw * 0.08, ccx, ccy, bw * 0.55);
+  g.addColorStop(0, flash ? '#ffffff' : '#ffc95a');
+  g.addColorStop(0.6, flash ? '#ffe2c0' : '#ff9a1f');
+  g.addColorStop(1, flash ? '#ffc8a0' : '#d9620a');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(ccx, ccy, bw / 2, bh / 2, 0, 0, Math.PI * 2); ctx.fill();
+  // 果皮紋
+  ctx.fillStyle = 'rgba(160,70,0,0.18)';
+  for (let i = 0; i < 9; i++) {
+    ctx.beginPath(); ctx.arc(ccx + Math.cos(i * 1.7) * bw * 0.32, ccy + Math.sin(i * 2.3) * bh * 0.3, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 金色油管環（掉落前套在身上）
+  if (b.ring && b.ring.state === 'onBoss') {
+    ctx.save();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = '#ffd23f';
+    ctx.shadowColor = 'rgba(255,220,80,0.9)';
+    ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.ellipse(ccx, ccy + bh * 0.12, bw * 0.5, bh * 0.1, 0, 0, Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+
+  // 三根油管的噴嘴（畫在身體前面，攻擊前會發亮）
+  if (!defeated) {
+    ['high', 'mid', 'low'].forEach(key => {
+      const nz = getOrangeKingNozzle(key);
+      drawOrangeKingNozzle(nz.x - cx + wobbleX, nz.y, sprayGlow && lane === key, t);
+    });
+    const lo = getOrangeKingLobOrigin();
+    drawOrangeKingNozzle(lo.x - cx + wobbleX, lo.y, b.phase === 'lobAim', t);
+  }
+
+  // 臉
+  const eyeY = ccy - bh * 0.08;
+  const angry = ['chargeWarn', 'chargeCurl', 'sprayWarn', 'sprayFire', 'lobAim', 'slamUp', 'slamDown', 'introRoar'].includes(b.phase);
+  const tired = b.phase === 'cooldown' || b.phase === 'chargeRecover' || defeated;
+  ctx.fillStyle = '#2a1205';
+  ctx.strokeStyle = '#2a1205';
+  ctx.lineWidth = 5;
+  if (tired) {
+    // > < 眼
+    [-1, 1].forEach(s => {
+      const ex = ccx + s * bw * 0.17;
+      ctx.beginPath();
+      ctx.moveTo(ex - 10, eyeY - 8); ctx.lineTo(ex + (s < 0 ? 4 : -4), eyeY); ctx.lineTo(ex - 10 + (s < 0 ? 0 : 20), eyeY + 8);
+      ctx.stroke();
+    });
+    ctx.beginPath(); ctx.ellipse(ccx, ccy + bh * 0.2, 16, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff6f8a';
+    ctx.beginPath(); ctx.ellipse(ccx, ccy + bh * 0.26, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    [-1, 1].forEach(s => {
+      const ex = ccx + s * bw * 0.17;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(ex, eyeY, 15, 17, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2a1205';
+      ctx.beginPath(); ctx.arc(ex - 4, eyeY + 2, 7, 0, Math.PI * 2); ctx.fill();
+      if (angry) {
+        // 兇眉：內側往下壓
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(ex - 16, eyeY - (s < 0 ? 28 : 18));
+        ctx.lineTo(ex + 16, eyeY - (s < 0 ? 18 : 28));
+        ctx.stroke();
+      }
+    });
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    if (angry) { ctx.moveTo(ccx - 26, ccy + bh * 0.24); ctx.lineTo(ccx + 26, ccy + bh * 0.2); }
+    else { ctx.arc(ccx, ccy + bh * 0.14, 22, 0.15 * Math.PI, 0.85 * Math.PI); }
+    ctx.stroke();
+  }
+
+  // 皇冠
+  const crownLift = defeated ? b.crownY : 0;
+  ctx.save();
+  ctx.translate(ccx + (defeated ? b.crownY * 0.6 : 0), by + 6 + crownLift);
+  if (defeated) ctx.rotate(b.crownRot);
+  ctx.fillStyle = '#ffd23f';
+  ctx.strokeStyle = '#b8860b';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-42, 0); ctx.lineTo(-46, -40); ctx.lineTo(-22, -18); ctx.lineTo(0, -50); ctx.lineTo(22, -18); ctx.lineTo(46, -40); ctx.lineTo(42, 0);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#e8414f';
+  ctx.beginPath(); ctx.arc(0, -14, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4fc3f7';
+  ctx.beginPath(); ctx.arc(-28, -10, 4, 0, Math.PI * 2); ctx.arc(28, -10, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // 蓄力警示 / 喘氣汗滴
+  if (b.phase === 'chargeWarn') {
+    ctx.fillStyle = Math.floor(b.phaseMs / 120) % 2 ? '#ff4d4d' : '#ffe066';
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('！', ccx, by - 60);
+  }
+  if (b.phase === 'cooldown') {
+    ctx.fillStyle = '#7fd3ff';
+    const dy = (t / 6) % 30;
+    ctx.beginPath(); ctx.ellipse(ccx - bw * 0.42, by + 40 + dy, 6, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ccx + bw * 0.44, by + 60 + ((dy + 15) % 30), 6, 9, 0, 0, Math.PI * 2); ctx.fill();
+    // 可攻擊提示框
+    const pulse = 0.5 + 0.5 * Math.sin(t / 110);
+    ctx.strokeStyle = b.ringActive ? `rgba(120,255,160,${0.4 + 0.5 * pulse})` : `rgba(200,200,200,${0.25 + 0.25 * pulse})`;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.ellipse(ccx, ccy, bw / 2 + 10, bh / 2 + 10, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = b.ringActive ? '#9dffb5' : '#ddd';
+    ctx.fillText(b.ringActive ? '💦 喘氣中！快攻擊！' : '💦 喘氣中', ccx, by - 58);
+  }
+  ctx.restore();
+}
+
+// 前景層：水平油柱、拋物線油彈、浮動文字（畫在小V與平台之上）
+function drawOrangeKingFront(cx) {
+  const b = orangeKingBoss;
+  if (!b) return;
+  const t = b.totalMs;
+  if (b.phase === 'sprayFire' && b.activeLane) {
+    const band = getOrangeKingSprayBand(b.activeLane);
+    const grow = Math.min(1, b.phaseMs / 120);
+    const x0 = band.x + band.w * (1 - grow);
+    ctx.save();
+    const g = ctx.createLinearGradient(0, band.y, 0, band.y + band.h);
+    g.addColorStop(0, 'rgba(255,200,60,0.85)');
+    g.addColorStop(0.5, 'rgba(255,150,20,0.95)');
+    g.addColorStop(1, 'rgba(210,100,0,0.85)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(band.x + band.w - cx, band.y + 8);
+    for (let x = band.x + band.w; x >= x0; x -= 24) {
+      ctx.lineTo(x - cx, band.y + 2 + Math.sin((x + t * 0.8) / 30) * 4);
+    }
+    ctx.lineTo(x0 - cx, band.y + band.h / 2);
+    for (let x = x0; x <= band.x + band.w; x += 24) {
+      ctx.lineTo(x - cx, band.y + band.h - 2 + Math.sin((x - t * 0.8) / 26) * 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,245,200,0.6)';
+    ctx.fillRect(x0 - cx, band.y + band.h * 0.35, band.w * grow, 5);
+    ctx.restore();
+  }
+  b.lobShots.forEach(s => {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,160,30,0.35)';
+    ctx.beginPath(); ctx.arc(s.x - cx + 10, s.y - 4, ORANGE_KING.LOB_RADIUS * 0.7, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(s.x - cx - 5, s.y - 5, 2, s.x - cx, s.y, ORANGE_KING.LOB_RADIUS);
+    g.addColorStop(0, '#fff2b0');
+    g.addColorStop(0.5, '#ffa31a');
+    g.addColorStop(1, '#c75b00');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.x - cx, s.y, ORANGE_KING.LOB_RADIUS, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  });
+  b.floatTexts.forEach(f => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - f.ms / 900);
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.strokeText(f.text, f.x - cx, f.y);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x - cx, f.y);
+    ctx.restore();
+  });
+}
+
+// HUD：Boss 名稱 + 8 格血條（取代一般關卡的倒數 / 進度條）
+function drawOrangeKingHpBar() {
+  const b = orangeKingBoss;
+  if (!b || !b.hpBarVisible) return;
+  const segW = 26, gap = 4, n = b.maxHp;
+  const totalW = n * segW + (n - 1) * gap;
+  const x0 = CANVAS_W / 2 - totalW / 2;
+  const y0 = 24;
+  ctx.save();
+  ctx.fillStyle = 'rgba(20,10,30,0.65)';
+  ctx.beginPath(); ctx.roundRect(x0 - 10, y0 - 4, totalW + 20, 22, 8); ctx.fill();
+  for (let i = 0; i < n; i++) {
+    const filled = i < b.hp;
+    ctx.fillStyle = filled ? (b.hurtFlashMs > 0 ? '#ffffff' : '#ff8a1f') : 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.roundRect(x0 + i * (segW + gap), y0, segW, 14, 4); ctx.fill();
+  }
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd23f';
+  const ringTxt = b.ringActive ? '  ✨ 武器實體化中' : '';
+  ctx.fillText('👑 橘子王  ' + b.hp + ' / ' + b.maxHp + ringTxt, CANVAS_W / 2, y0 + 34);
+  ctx.restore();
+}
+
+// 畫面中央大字（登場 / 擊敗 / 第二章完成）
+function drawOrangeKingBanner() {
+  const b = orangeKingBoss;
+  if (!b || !b.banner) return;
+  const bn = b.banner;
+  const inA = Math.min(1, bn.ms / 200);
+  const outA = Math.min(1, (bn.dur - bn.ms) / 300);
+  const a = Math.max(0, Math.min(inA, outA));
+  const scale = 0.85 + 0.15 * inA;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(CANVAS_W / 2, CANVAS_H * 0.36);
+  ctx.scale(scale, scale);
+  ctx.font = 'bold 54px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = 'rgba(60,20,0,0.85)';
+  ctx.strokeText(bn.text, 0, 0);
+  ctx.fillStyle = '#ffd23f';
+  ctx.fillText(bn.text, 0, 0);
+  if (bn.sub) {
+    ctx.font = 'bold 22px sans-serif';
+    ctx.lineWidth = 5;
+    ctx.strokeText(bn.sub, 0, 40);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(bn.sub, 0, 40);
+  }
+  ctx.restore();
+}
+
+// 測試版：🍊 直接進入 2-4 Boss 關（不清背包，只換關卡）
+function startOrangeKingBossTestLevel() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const idx = LEVELS.findIndex(lv => lv.stageId === '2-4');
+  if (idx < 0) { showHint('找不到 2-4 關卡', 160); return; }
+  bringBalloonDog = false;
+  nextBringDog = false;
+  currentLevelIndex = idx;
+  loadLevel(idx);
+  restart({ keepHp: false, preserveBringDog: false });
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
+  if (typeof closePauseBag === 'function') closePauseBag();
+  gameState = 'playing';
+  lastTime = 0;
 }
 
 
@@ -7921,6 +9020,7 @@ function draw() {
   if (gameState === 'playing') {
     drawWorld();
     drawHUD();
+    drawOrangeKingBanner(); // v0.3.35
     drawHintBox();
     drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
     drawProjectileOrangeAssetStatusHud(); // v0.3.26-debug：projectile orange 載入狀態（測試版）
@@ -7948,7 +9048,15 @@ function draw() {
   drawVersionInfo(); // 所有狀態都顯示版本號
 }
 
+// v0.3.35：Boss 震動時整個世界一起晃（HUD 不晃）
 function drawWorld() {
+  const shake = getOrangeKingShakeOffset();
+  if (shake) { ctx.save(); ctx.translate(shake.x, shake.y); }
+  drawWorldInner();
+  if (shake) ctx.restore();
+}
+
+function drawWorldInner() {
   // Sky gradient
   const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
   grad.addColorStop(0, COLORS.sky);
@@ -7977,8 +9085,8 @@ function drawWorld() {
     ctx.fillRect(gx + g.w - 6, GROUND_Y, 6, CANVAS_H - GROUND_Y);
   });
 
-  // Finish flag
-  drawFinishFlag(cx);
+  // Finish flag（v0.3.35：Boss 房沒有終點線）
+  if (!isOrangeKingStageActive()) drawFinishFlag(cx);
 
   // Platforms
   platforms.forEach(p => {
@@ -8116,6 +9224,9 @@ function drawWorld() {
     ctx.stroke();
   });
 
+  // v0.3.35：2-4 橘子王（預警線 / 油漬 / 金色油管環 / 本體，畫在小V之前）
+  if (orangeKingBoss) drawOrangeKingBack(cx);
+
   // Player
   drawPlayer(cx);
   // 氣球狗（跟隨玩家）
@@ -8145,6 +9256,8 @@ function drawWorld() {
   drawProjectileOrangeShots(cx); // v0.3.26：油彈畫在本體之上
   drawProjectileOrangeHitboxDebug(cx);         // v0.3.26：damage hitbox 紅框（測試版）
   drawProjectileOilShotCalibrationOverlay(cx); // v0.3.26：F7 定位模式（測試版）
+  // v0.3.35：橘子王前景層（水平油柱、拋物線油彈在平台與角色前方）
+  if (orangeKingBoss) drawOrangeKingFront(cx);
 }
 
 function drawPlayer(cx) {
@@ -8220,7 +9333,9 @@ function drawPlayer(cx) {
   }
 
   // Attack effect
-  if (player.meleeActive > 0) {
+  // v0.3.35：劍 / 槌攻擊判定框只在 hitbox debug（測試版 F3）開啟時畫；正式遊玩不顯示（實際 hitbox 不變）
+  const showWeaponHitbox = ADVENTURE_TEST_TOOLS_ENABLED && projectileOrangeHitboxDebugVisible;
+  if (player.meleeActive > 0 && showWeaponHitbox) {
     // basicSword 近戰攻擊框（placeholder：半透明矩形 + 亮框）
     const atkLocalX = player.facingRight ? player.w : -CONFIG.BASIC_SWORD_ATTACK_RANGE;
     const atkLocalY = (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
@@ -8233,7 +9348,7 @@ function drawPlayer(cx) {
     ctx.roundRect(atkLocalX, atkLocalY, CONFIG.BASIC_SWORD_ATTACK_RANGE, CONFIG.BASIC_SWORD_ATTACK_HEIGHT, 6);
     ctx.fill();
     ctx.stroke();
-  } else if (player.meleeHammerActive > 0) {
+  } else if (player.meleeHammerActive > 0 && showWeaponHitbox) {
     // 槌子攻擊效果
     const hx  = player.facingRight ? player.w : -CONFIG.HAMMER_ATTACK_RANGE;
     const hy  = (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
@@ -8251,7 +9366,7 @@ function drawPlayer(cx) {
     ctx.beginPath();
     ctx.arc(hcx, player.h * 0.45, 14, 0, Math.PI * 2);
     ctx.fill();
-  } else if (player.attackActive > 0) {
+  } else if (player.attackActive > 0 && player.meleeActive <= 0 && player.meleeHammerActive <= 0) {
     ctx.fillStyle = 'rgba(255,220,100,0.3)';
     ctx.beginPath();
     ctx.ellipse(
@@ -9195,6 +10310,10 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(200,195,255,0.85)';
   ctx.fillText(stageLabel, CANVAS_W / 2, 13);
 
+  // v0.3.35：Boss 房不顯示倒數 / 進度條，改顯示橘子王 8 格血條
+  if (isOrangeKingStageActive()) {
+    drawOrangeKingHpBar();
+  } else {
   const timerColor = timeLeft <= 10 ? '#FF6B9D' : 'rgba(255,255,255,0.9)';
   ctx.font = 'bold 18px monospace';
   ctx.fillStyle = timerColor;
@@ -9210,6 +10329,7 @@ function drawHUD() {
   barGrad.addColorStop(0, '#55EFC4'); barGrad.addColorStop(1, '#74B9FF');
   ctx.fillStyle = barGrad;
   ctx.beginPath(); ctx.roundRect(barX, 34, barW * progress, 4, 2); ctx.fill();
+  } // end v0.3.35 非 Boss 房
 
   // ── 右下：裝備道具膠囊 ──
   const activeItem = activeSlot === 'hammer' ? equippedHammer : equippedSword;
@@ -9278,8 +10398,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.35+：chapter2-orange-king-boss-foundation → orange-king-boss（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter2-orange-king-boss-foundation')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-king-boss' + (tN === '1' ? '' : '-' + tN);
   // v0.3.34+：result-home-sticky-status-and-supply → sticky-status（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('result-home-sticky-status')) {
+  } else if (GAME_VERSION.includes('result-home-sticky-status')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'sticky-status' + (tN === '1' ? '' : '-' + tN);
   // v0.3.33+：discovery-item-modal-fix-N → discovery-fixN
@@ -9959,6 +11083,23 @@ function populateResultPanel() {
   html += '<div id="rp-inventory-summary">' + buildInventorySummaryHtml({ showHp: true }) + '</div>';
   html += buildResultHpHtml(); // v0.3.34：只剩低血量警告（血量已在上方狀態列）
 
+  // v0.3.35：擊敗橘子王 → 第二章完成
+  if (gameState === 'clear' && currentRunStats.chapter2Complete) {
+    html += '<div class="rp-guidebook-hint rp-chapter-complete-card">'
+      + '<div class="rp-guidebook-hint__title">🏆 第二章完成！</div>'
+      + '<div class="rp-guidebook-hint__body">橘子王被打敗了！小V保護了派對島的氣球。</div>'
+      + '</div>';
+  }
+  // v0.3.35：下一關是 Boss 關 → 出發前提醒
+  if (gameState === 'clear' && isBossStageLevel(getNextLevelIndex(currentLevelIndex))) {
+    const hasNote = !!(playerInventory.keyItems || {}).orangeKingWeaknessNote01;
+    html += '<div class="rp-guidebook-hint rp-boss-next-card">'
+      + '<div class="rp-guidebook-hint__title">👑 下一關：橘子王決戰！</div>'
+      + '<div class="rp-guidebook-hint__body">出發前先補滿血量'
+      + (hasNote ? '，也可以再讀一次弱點筆記。' : '。') + '</div>'
+      + (hasNote ? '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openKeyItemReadModal(\'orangeKingWeaknessNote01\')">📖 閱讀弱點筆記</button>' : '')
+      + '</div>';
+  }
   // v0.3.34：重要提醒區（在「本關獲取」之前）— 小狗消氣
   if (currentRunStats.dogGoneThisClear && !(playerInventory.balloonDog || {}).present) {
     html += buildDogGoneReminderHtml();
@@ -11041,10 +12182,10 @@ function renderHomeNextStage() {
 
   const nextIdx = getNextLevelIndex(currentLevelIndex);
   if (nextIdx >= LEVELS.length) {
-    // v0.3.28：2-3 完成 = 第二章前三關完成，2-4 Boss 關準備中
+    // v0.3.35：2-4 橘子王擊敗 = 第二章完成
     if (getChapter2FlowStep(currentLevelIndex) === CHAPTER2_FLOW_STAGE_IDS.length - 1) {
-      el.innerHTML = '<div class="hns-badge hns-badge--clear">🎉 第二章前三關完成！</div>'
-        + '<div class="hns-hint">🍊 Boss 關準備中，敬請期待！可以重玩或整理背包。</div>';
+      el.innerHTML = '<div class="hns-badge hns-badge--clear">🏆 第二章完成！</div>'
+        + '<div class="hns-hint">👑 橘子王被打敗了！可以重玩 Boss 戰或整理背包。</div>';
       if (btn) { btn.textContent = '🔄 再玩一次'; btn.className = btn.className.replace('home-btn--red','home-btn--green'); }
       return;
     }
@@ -11512,6 +12653,11 @@ function restart(opts) {
   cameraX    = 0;
   frameCount = 0;
   elapsedSec = 0;
+
+  // v0.3.35：2-4 Boss 房 — 每次開始 / 重試都重新建立橘子王（HP、金色油管環、登場流程全部重置）
+  if (orangeKingBoss) clearOrangeKingBoss();
+  currentRunStats.chapter2Complete = false;
+  if (isBossStageLevel(currentLevelIndex)) initOrangeKingBoss();
 
   // ── 建立進關前快照 ── 包含 bringBalloonDog（此行是關鍵修正！）
   levelStartSnapshot = {
@@ -12052,6 +13198,12 @@ applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
       e.stopPropagation();
       closeDiscoveryItemModal();
     }));
+  }
+  // v0.3.35：🍊 測試 2-4 橘子王 → 直接進入 Boss 房（測試版限定，不清背包）
+  const btnTestOrangeKing = document.getElementById('btn-pause-test-orange-king');
+  if (btnTestOrangeKing) {
+    btnTestOrangeKing.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
+    btnTestOrangeKing.addEventListener('click', startOrangeKingBossTestLevel);
   }
   // v0.3.28-polish：🚀 測試正式第二章 → 直接進入正式 2-1（不是地形 prototype）
   const btnTestCh2Formal = document.getElementById('btn-pause-test-chapter2-formal');
