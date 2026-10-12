@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-fix-1';
-const BUILD_TIME   = '2026-10-12 11:20';
+const GAME_VERSION = 'adventure-v0.3.33-discovery-item-modal-fix-2';
+const BUILD_TIME   = '2026-10-12 13:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1575,7 +1575,8 @@ function getOrangeEnemyImg(key) {
 //  正式版自動關閉
 // =============================================
 // 通用測試版判斷：版本號含 -test- 即為測試版
-const IS_ADVENTURE_TEST_VERSION      = GAME_VERSION.includes('-test-');
+// v0.3.33-fix-2：開發流程中 -test- 與 -fix- 都視為測試版（fix-1 因不含 -test- 導致測試入口消失）
+const IS_ADVENTURE_TEST_VERSION      = GAME_VERSION.includes('-test-') || GAME_VERSION.includes('-fix-');
 const HAMMER_ATTACK_VISUAL_TEST_LOADOUT = IS_ADVENTURE_TEST_VERSION;
 const ADVENTURE_TEST_TOOLS_ENABLED      = IS_ADVENTURE_TEST_VERSION;
 
@@ -3077,6 +3078,7 @@ function craftItem(recipeId) {
     }
     const recipe = RECIPES.find(r => r.id === 'balloonDog');
     if (!recipe) return false;
+    clearInvalidDogTripPlan('before craft dog'); // v0.3.33-fix-2
     for (const [mat, qty] of Object.entries(recipe.cost)) {
       if ((playerInventory[mat] || 0) < qty) return false;
     }
@@ -3087,6 +3089,9 @@ function craftItem(recipeId) {
     playerInventory.balloonDog.present   = true;
     playerInventory.balloonDog.turnsLeft = CONFIG.DOG_INITIAL_TURNS || 3;
     player.hp = Math.min(player.maxHp, player.hp + CONFIG.DOG_HEAL_AMOUNT);
+    // v0.3.33-fix-2：製作小狗 ≠ 帶狗出發。新小狗待在小V的家，需另外按「帶狗出發」
+    nextBringDog = false;
+    if (gameState !== 'playing' && gameState !== 'paused') bringBalloonDog = false; // 上一關的同行狀態不延續到新小狗
     // v0.3.18-fix-5：製作成功後設定教學完成旗標
     flags.dogCraftIntroDone = true;
     saveInventory();
@@ -7852,9 +7857,13 @@ function triggerClear() {
       dog.present   = false;
       dog.turnsLeft = 0;
       currentRunStats.dogGoneThisClear = true;
+      // v0.3.33-fix-2：小狗消氣 → 本關同行狀態結束、清除任何殘留安排
+      nextBringDog    = false;
+      bringBalloonDog = false;
     }
     playerInventory.balloonDog = dog;
   }
+  clearInvalidDogTripPlan('clear');
 
   saveInventory();
   gameState = 'clear';
@@ -9544,6 +9553,22 @@ function buildBagRows() {
 // ── refreshResultBag：製作道具後即時重繪「目前背包」區塊 ──
 // 使用明確 id="rp-inventory-section"，不猜 querySelectorAll index
 
+// v0.3.33-fix-2：小狗消氣通知（結算頁狗狗區塊）
+function buildDogGoneNoticeHtml() {
+  return '<div class="rp-section-title">🐶 氣球小狗消氣了</div>'
+    + '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#ff9a9a">已消氣，下一關不會同行</span></div>'
+    + '<div class="rp-supply-hp" style="color:#ffaaaa;line-height:1.6">'
+    + '氣球小狗陪小V完成了最後一段冒險，因為氣球慢慢消氣，牠已經不在了。<br>'
+    + '如果下一關還想帶小狗同行，請先到氣球秘笈重新製作氣球小狗，然後再按「帶狗出發」。'
+    + '</div>';
+}
+// 本關小狗消氣、但玩家已在結算後重新製作新小狗
+function buildDogRecraftedNoticeHtml() {
+  return '<div class="rp-supply-hp" style="color:#ffe0a0">'
+    + '原本的氣球小狗已消氣，新的氣球小狗已入住小V的家。要讓牠同行，請再按「帶狗出發」。'
+    + '</div>';
+}
+
 // ── refreshResultDog：製作狗後即時更新狗區塊（含帶狗出門提示）──
 function refreshResultDog() {
   const sec = document.getElementById('dog-section');
@@ -9553,6 +9578,7 @@ function refreshResultDog() {
   const turns  = dog.turnsLeft || 0;
   const nextLvIndex       = getNextLevelIndex(currentLevelIndex);
   const nextLvHasTreasure = nextLvIndex < LEVELS.length && isHiddenTreasureAvailable(LEVELS[nextLvIndex]?.hiddenTreasure); // v0.3.33
+  clearInvalidDogTripPlan('refreshResultDog'); // v0.3.33-fix-2
   const canBringDog       = canBringDogNextLevel(); // v0.3.18-fix-1：用共用 helper（含教學保底）
 
   let inner = '';
@@ -9564,8 +9590,10 @@ function refreshResultDog() {
     if (currentRunStats.dogHealed) {
       inner += '<div class="rp-row"><span class="rp-label">🐶 療癒</span><span class="rp-val result-red">❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '</span></div>';
     }
+    if (currentRunStats.dogGoneThisClear && !nextBringDog) inner += buildDogRecraftedNoticeHtml(); // v0.3.33-fix-2
     // 帶狗按鈕（不論下一關是否有隱藏物）
-    if (!currentRunStats.dogGoneThisClear && turns > 0) {
+    // v0.3.33-fix-2：本關小狗消氣後若已重新製作，新小狗也要能按「帶狗出發」
+    if (turns > 0) {
       // v0.3.11-test-2：下一關需要帶狗才能進入時，用更直接的行動呼籲
       const dogTripRequired = (nextLvIndex === dogHammerStageIndex) && !nextBringDog;
       const hint = dogTripRequired
@@ -9589,6 +9617,8 @@ function refreshResultDog() {
           + ' onclick="bringDogNextLevel()">' + btnLabel + '</button></div>';
       }
     }
+  } else if (currentRunStats.dogGoneThisClear) {
+    inner += buildDogGoneNoticeHtml(); // v0.3.33-fix-2
   } else {
     inner += '<div class="rp-section-title">🐶 氣球小狗</div>';
     inner += '<div class="rp-row"><span class="rp-label">狀態</span><span class="rp-val" style="color:#666">尚未入住</span></div>';
@@ -9609,6 +9639,7 @@ function refreshResultBag() {
 }
 
 function populateResultPanel() {
+  clearInvalidDogTripPlan('populateResultPanel'); // v0.3.33-fix-2
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
   const ci       = playerInventory.craftedItems || {}; // 供 hammerHint 等使用
   // v0.3.11-test-3：「下一步」狀態提早算好，整個函式內都可參考，
@@ -9792,14 +9823,14 @@ function populateResultPanel() {
           + '</div>';
       }
     }
-    if (currentRunStats.dogGoneThisClear) {
-      dogInner += '<div class="rp-supply-hp" style="color:#ffaaaa">氣球小狗慢慢消氣了。牠陪小V完成了一段美好的冒險。</div>';
+    if (currentRunStats.dogGoneThisClear && !nextBringDog) {
+      dogInner += buildDogRecraftedNoticeHtml(); // v0.3.33-fix-2：消氣後已重新製作
     }
     // v0.3.11-test-3：結算畫面資訊減量 — 帶狗出發的主要行動已移到上方「下一步」區塊，
     // 這裡只在「下一步」沒有顯示帶狗行動時才補完整的提示+按鈕（例如已經安排好帶狗、
     // 或不在第一章流程內但仍有 hiddenTreasure 的情況），避免同一個按鈕重複出現兩次
     const nextStepAlreadyHandlesBringDog = nextStepInfo && nextStepInfo.kind === 'bringDog';
-    if (nextLvHasTreasure && !currentRunStats.dogGoneThisClear && !nextStepAlreadyHandlesBringDog) {
+    if (nextLvHasTreasure && !nextStepAlreadyHandlesBringDog) { // v0.3.33-fix-2：重新製作的小狗也能安排
       dogInner += '<div class="rp-supply-hp" style="color:#ffe080">'
         + '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！'
         + '</div>';
@@ -9814,9 +9845,16 @@ function populateResultPanel() {
           + '</div>'
           + '<button id="btn-bring-dog" class="rp-supply-btn ' + btnCls + '" ' + btnDisStr + ' onclick="bringDogNextLevel()">'
           + btnLabel + '</button></div>';
+      } else {
+        // v0.3.33-fix-2：按下「帶狗出發」後明確顯示已安排
+        dogInner += '<div class="rp-supply-item" style="margin-top:6px">'
+          + '<button class="rp-supply-btn rp-supply-btn--disabled" disabled>✅ 已安排帶狗出發</button></div>';
       }
     }
     dogSectionHtml = '<div class="rp-section" id="dog-section">' + dogInner + '</div>';
+  } else if (currentRunStats.dogGoneThisClear) {
+    // v0.3.33-fix-2：小狗已消氣（present=false）仍要顯示明確通知，不可直接略過
+    dogSectionHtml = '<div class="rp-section" id="dog-section">' + buildDogGoneNoticeHtml() + '</div>';
   } else {
     dogSectionHtml = '<div class="rp-section" id="dog-section">'
       + '<div class="rp-section-title">🐶 氣球小狗</div>'
@@ -10201,6 +10239,16 @@ function openHomeShopFromResult() {
 // ── 帶氣球小狗出門（結算畫面按鈕）────────────
 // v0.3.18-test-2-fix-1：判斷是否可帶狗出發（含第一章教學保底）
 // 三個 UI 路徑（renderHomeDog / refreshResultDog / populateResultPanel）共用此函式
+// v0.3.33-fix-2：小狗不存在 / 已消氣時，清掉殘留的「帶狗出發」安排
+// nextBringDog 只能由 bringDogNextLevel() 成功後設為 true
+function clearInvalidDogTripPlan(reason) {
+  const dog = playerInventory.balloonDog || {};
+  if (!dog.present || (dog.turnsLeft || 0) <= 0) {
+    if (nextBringDog) console.log('[DogFlow] clear stale nextBringDog:', reason);
+    nextBringDog = false;
+  }
+}
+
 function canBringDogNextLevel() {
   const dog  = playerInventory.balloonDog || {};
   if (!dog.present || (dog.turnsLeft || 0) <= 0 || nextBringDog) return false;
@@ -10686,6 +10734,7 @@ function homeUseBandage() {
 
 // ── 氣球小狗 ────────────────────────────────
 function renderHomeDog() {
+  clearInvalidDogTripPlan('renderHomeDog'); // v0.3.33-fix-2
   const el = document.getElementById('home-dog-body');
   if (!el) return;
   const dog             = playerInventory.balloonDog || {};
@@ -10787,6 +10836,7 @@ function homeBringDog() {
 
 // ── 下一關資訊 ──────────────────────────────
 function renderHomeNextStage() {
+  clearInvalidDogTripPlan('renderHomeNextStage'); // v0.3.33-fix-2
   const el  = document.getElementById('home-next-stage-body');
   const btn = document.getElementById('btn-home-next-level');
   if (!el) return;
