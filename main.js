@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.40-orange-king-platform-hint-test-1';
-const BUILD_TIME   = '2026-10-13 12:40';
+const GAME_VERSION = 'adventure-v0.3.41-orange-king-boss-art-test-1';
+const BUILD_TIME   = '2026-10-13 14:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -7788,8 +7788,10 @@ const ORANGE_KING_LANE_ORDER = ['low', 'high', 'mid', 'high', 'low', 'mid'];
 // 拋物線油彈路線（依序輪替）：tx / ty = 路線經過的目標點，vx = 水平速度
 const ORANGE_KING_LOB_ROUTES = [
   // v0.3.35-fix-1：水平速度放慢（約 1.5 秒飛完），配合 LOB_GRAVITY 0.15
-  { tx: 150, ty: GROUND_Y - 255, vx: -8.5 },  // 掃過最高平台（弧頂約 y=79，不被 HUD 擋住）
-  { tx: 200, ty: GROUND_Y - 150, vx: -7   },  // 掃過中層平台
+  // v0.3.41：發射點改到 idle 圖油管口（約 887,156，比原本高 56px）→ 前兩條路線水平速度微調，
+  //          讓弧頂仍在 HUD 下方（約 y=77 / 84），飛行時間與上一版相近（約 1.2～1.6 秒）
+  { tx: 150, ty: GROUND_Y - 255, vx: -10  },  // 掃過最高平台
+  { tx: 200, ty: GROUND_Y - 150, vx: -8   },  // 掃過中層平台
   { tx: 480, ty: GROUND_Y - 35,  vx: -5.5 },  // 打地面中段
   { tx: 120, ty: GROUND_Y - 30,  vx: -8   },  // 打地面左側
 ];
@@ -7897,9 +7899,12 @@ function getOrangeKingNozzle(laneKey) {
   const pg = getOrangeKingPipeGeom(laneKey);
   return { x: pg.mouthX, y: pg.y };
 }
+// v0.3.41：發射點 = idle 圖背後油管的管口（跟著 idle 圖定位一起移動；圖沒載好也用同一點，判定一致）
 function getOrangeKingLobOrigin() {
   const b = orangeKingBoss;
-  return { x: b.x + 128, y: b.y - 58 };
+  const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_BOSS_ART_SRC.idle, sc = A.bossIdleScale;
+  const ax = b.x + b.w / 2 + A.bossIdleOffsetX, ay = b.y + b.h + A.bossIdleOffsetY;
+  return { x: ax + (S.lobMouthX - S.anchorX) * sc, y: ay + (S.lobMouthY - S.anchorY) * sc };
 }
 // 依路線算出拋物線參數（經過目標點），軌跡預測與實際飛行用同一組公式
 function buildOrangeKingLob(route) {
@@ -8497,6 +8502,8 @@ function drawOrangeKingNozzle(x, y, glow, t) {
 
 function drawOrangeKingBody(cx) {
   const b = orangeKingBoss;
+  // v0.3.41：優先用正式美術；任何一張圖沒載好就退回下方原本的簡易畫法
+  if (drawOrangeKingBossArt(cx)) return;
   const t = b.totalMs;
   const flash = b.hurtFlashMs > 0 && Math.floor(b.hurtFlashMs / 60) % 2 === 0;
 
@@ -8841,6 +8848,9 @@ const ORANGE_KING_BOSS_ASSETS = {
   bossRoomBg: 'assets/bosses/orange-king/orange_king_boss_room_bg.png', // v0.3.38：Boss 房背景（只用正式路徑，沒有備用路徑）
   platformHigh: 'assets/bosses/orange-king/orange_king_platform_high.png', // v0.3.39：高平台（短）專用
   platformMid:  'assets/bosses/orange-king/orange_king_platform_mid.png',  // v0.3.39：中平台（長）專用
+  bossIdle:     'assets/bosses/orange-king/orange_king_idle_01.png',       // v0.3.41：一般 / 預警 / 瞄準
+  bossCooldown: 'assets/bosses/orange-king/orange_king_cooldown_01.png',   // v0.3.41：喘氣 / 撞牆暈眩 / 擊敗
+  bossDashBall: 'assets/bosses/orange-king/orange_king_dash_ball_01.png',  // v0.3.41：縮球旋轉 / 衝撞
 };
 // v0.3.39：平台圖（1024×256）中實際有畫面的範圍（原圖像素）— X / Y 定位值 = 這個範圍的左上角
 const ORANGE_KING_PLATFORM_SRC = {
@@ -8892,6 +8902,10 @@ const ORANGE_KING_MACHINE_ART_DEFAULTS = {
   platformMidY: GROUND_Y - 115,   // 345
   platformMidScaleX: 0.57,
   platformMidScaleY: 0.57,
+  // v0.3.41：Boss 本體三張圖（offset = 相對於量測錨點的微調；scale = 對 512×512 原圖）
+  bossIdleOffsetX: 0, bossIdleOffsetY: 0, bossIdleScale: 0.73,
+  bossCooldownOffsetX: 0, bossCooldownOffsetY: 0, bossCooldownScale: 0.73,
+  bossDashOffsetX: 0, bossDashOffsetY: 0, bossDashScale: 0.47,
 };
 const ORANGE_KING_MACHINE_ART = Object.assign({}, ORANGE_KING_MACHINE_ART_DEFAULTS);
 
@@ -9054,6 +9068,155 @@ function drawOrangeKingPlatformHint(p, cx, layer) {
   ctx.restore();
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.41：橘子王本體正式美術（idle / cooldown / dash_ball）
+//  ・三張圖都是 512×512，以「素材上的實際部位」對位（量自原圖）：
+//      idle      ：雙腳底 (225,462) 對齊 Boss 站立點；橘子身體寬約 260px（x 95~355）
+//      cooldown  ：屁股 / 腳底 (230,472) 對齊 Boss 站立點；身體寬約 260px（x 100~360）
+//      dash_ball ：球心 (225,275) 對齊衝撞球判定框中心；球體直徑約 330px（x 60~390）
+//  ・縮放：idle / cooldown 0.73 → 橘子身體約 190px = Boss 身體判定寬；dash 0.47 → 球約 155px = 衝撞球判定（160×150）
+//  ・圖片只負責視覺；hitbox / 衝撞判定 / 受傷判定沿用原本的 getOrangeKingBodyRect 等
+//  ・拋物線油彈的發射點 = idle 圖背後油管的管口 (310,45)
+// ════════════════════════════════════════════════════════════════════
+const ORANGE_KING_BOSS_ART_SRC = {
+  idle:     { w: 512, h: 512, anchorX: 225, anchorY: 462, opaque: [30, 6, 494, 468],  sphere: [95, 135, 355, 405], beltY: 333, lobMouthX: 310, lobMouthY: 45 },
+  cooldown: { w: 512, h: 512, anchorX: 230, anchorY: 472, opaque: [15, 25, 493, 485], sphere: [100, 190, 360, 450], beltY: 395 },
+  dash:     { w: 512, h: 512, anchorX: 225, anchorY: 275, opaque: [30, 55, 512, 495], sphere: [60, 110, 390, 440] },
+};
+const ORANGE_KING_BOSS_ART_KEYS = { idle: 'bossIdle', cooldown: 'bossCooldown', dash: 'bossDashBall' };
+
+// 目前要畫哪一張（純視覺；與判定無關）
+function getOrangeKingArtState(b) {
+  if (orangeKingMachineCalibMode) {
+    const pv = { bossIdle: 'idle', bossCooldown: 'cooldown', bossDash: 'dash' }[orangeKingMachineCalibTarget];
+    if (pv) return pv;
+  }
+  if (b.phase === 'defeated') return 'cooldown';
+  if (b.curled) return (b.phase === 'chargeSpin' || b.phase === 'chargeDash') ? 'dash' : 'cooldown';
+  if (b.phase === 'cooldown') return 'cooldown';
+  return 'idle';
+}
+// 某個狀態的繪製矩形（世界座標）；anchor：idle/cooldown = 站立點（身體中心 x、腳底 y），dash = 球心
+function getOrangeKingBossArtGeom(state, b) {
+  const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_BOSS_ART_SRC[state];
+  const pre = state === 'idle' ? 'bossIdle' : (state === 'cooldown' ? 'bossCooldown' : 'bossDash');
+  const sc = A[pre + 'Scale'];
+  let ax, ay;
+  const previewDash = state === 'dash' && !b.curled; // 定位工具預覽：放在站位上的衝撞球位置
+  if (state === 'dash') {
+    const bx = previewDash ? ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2 : b.x;
+    ax = bx + ORANGE_KING.BALL_W / 2;
+    ay = GROUND_Y - ORANGE_KING.BALL_H / 2;
+  } else {
+    const r = getOrangeKingBodyRect();
+    ax = r.x + r.w / 2;
+    ay = b.curled ? GROUND_Y : b.y + b.h;
+  }
+  ax += A[pre + 'OffsetX'];
+  ay += A[pre + 'OffsetY'];
+  const drawX = ax - S.anchorX * sc, drawY = ay - S.anchorY * sc;
+  const box = arr => ({ x: drawX + arr[0] * sc, y: drawY + arr[1] * sc, w: (arr[2] - arr[0]) * sc, h: (arr[3] - arr[1]) * sc });
+  return { state, sc, ax, ay, drawX, drawY, drawW: S.w * sc, drawH: S.h * sc, opaque: box(S.opaque), sphere: box(S.sphere),
+           beltY: S.beltY != null ? drawY + S.beltY * sc : null, previewDash };
+}
+
+// 回傳 true = 已用正式圖畫好 Boss；false = 圖沒載好，呼叫端畫原本的簡易 Boss
+function drawOrangeKingBossArt(cx) {
+  const b = orangeKingBoss;
+  const state = getOrangeKingArtState(b);
+  const img = getOrangeKingBossImg(ORANGE_KING_BOSS_ART_KEYS[state]);
+  if (!img) return false;
+  const t = b.totalMs;
+  const g = getOrangeKingBossArtGeom(state, b);
+  const defeated = b.phase === 'defeated';
+  if (defeated && b.phaseMs > 1600 && Math.floor(b.phaseMs / 90) % 2 === 0) return true; // 閃爍消失
+
+  // 動作感（只是繪製變形，不影響判定）
+  let wobbleX = 0, squashY = 1, scaleAll = 1, rot = 0;
+  if (b.phase === 'chargeWarn' || b.phase === 'slamPrep') wobbleX = Math.sin(t / 28) * 4;
+  if (b.phase === 'chargeCurl') squashY = 1 - Math.min(1, b.phaseMs / (b.chargeTutorial ? ORANGE_KING_TIMING.TUTORIAL_CHARGE_CURL : ORANGE_KING_TIMING.CHARGE_CURL)) * 0.18;
+  if (b.phase === 'slamPrep')   squashY = 1 - Math.min(1, b.phaseMs / ORANGE_KING_TIMING.SLAM_PREP) * 0.12;
+  if (b.phase === 'cooldown')   squashY = 1 + Math.sin(t / 160) * 0.025;
+  if (state === 'dash' && b.phase === 'chargeSpin') { rot = Math.sin(t / 45) * 0.08; wobbleX = Math.sin(t / 30) * 3; }
+  if (defeated) { scaleAll = Math.max(0.45, 1 - b.phaseMs / 1600); wobbleX = Math.sin(t / 40) * 6 * scaleAll; }
+
+  const drawOne = (dx, alpha, comp) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (comp) ctx.globalCompositeOperation = comp;
+    ctx.translate(g.ax - cx + wobbleX + dx, g.ay);
+    if (rot) ctx.rotate(rot);
+    ctx.scale(scaleAll, scaleAll * squashY);
+    ctx.drawImage(img, g.drawX - g.ax, g.drawY - g.ay, g.drawW, g.drawH);
+    ctx.restore();
+  };
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  // 衝撞殘影（往右拖）
+  if (b.phase === 'chargeDash' && state === 'dash') { drawOne(46, 0.16); drawOne(24, 0.28); }
+  drawOne(0, 1);
+  // 受傷閃白
+  if (b.hurtFlashMs > 0 && Math.floor(b.hurtFlashMs / 60) % 2 === 0) drawOne(0, 0.55, 'lighter');
+  ctx.restore();
+
+  const sph = g.sphere;
+  const scx = sph.x + sph.w / 2 - cx + wobbleX, scy = g.ay - (g.ay - (sph.y + sph.h / 2)) * squashY * scaleAll;
+  const topY = g.ay - (g.ay - g.opaque.y) * squashY * scaleAll;
+  ctx.save();
+  // 金色油管環（掉落前）：身上的金色腰帶發光
+  if (b.ring && b.ring.state === 'onBoss' && g.beltY != null && !defeated) {
+    const by = g.ay - (g.ay - g.beltY) * squashY;
+    const pulse = 0.55 + 0.35 * Math.sin(t / 140);
+    ctx.strokeStyle = `rgba(255,220,80,${pulse})`;
+    ctx.lineWidth = 6;
+    ctx.shadowColor = 'rgba(255,220,80,0.9)';
+    ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.ellipse(scx, by, sph.w * 0.52, sph.h * 0.1, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  // 拋物線油彈瞄準：背後油管管口發亮
+  if (b.phase === 'lobAim' && state === 'idle') {
+    const lo = getOrangeKingLobOrigin();
+    const pulse = 0.5 + 0.5 * Math.sin(t / 45);
+    const gr = ctx.createRadialGradient(lo.x - cx, lo.y, 2, lo.x - cx, lo.y, 32);
+    gr.addColorStop(0, 'rgba(255,255,200,0.95)');
+    gr.addColorStop(0.45, `rgba(255,210,70,${0.5 + 0.4 * pulse})`);
+    gr.addColorStop(1, 'rgba(255,170,30,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(lo.x - cx, lo.y, 32, 0, Math.PI * 2); ctx.fill();
+  }
+  // 衝撞 / 震地預警「！」
+  if (b.phase === 'chargeWarn' || b.phase === 'slamPrep') {
+    ctx.fillStyle = Math.floor(b.phaseMs / 120) % 2 ? '#ff4d4d' : '#ffe066';
+    ctx.strokeStyle = 'rgba(60,20,0,0.85)';
+    ctx.lineWidth = 5;
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeText('！', scx, topY - 8);
+    ctx.fillText('！', scx, topY - 8);
+  }
+  // 喘氣：可攻擊提示框 + 文字
+  if (b.phase === 'cooldown') {
+    const pulse = 0.5 + 0.5 * Math.sin(t / 110);
+    ctx.strokeStyle = b.ringActive ? `rgba(120,255,160,${0.4 + 0.5 * pulse})` : `rgba(200,200,200,${0.25 + 0.25 * pulse})`;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.ellipse(scx, scy, sph.w / 2 + 14, sph.h / 2 + 14, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    const txt = b.ringActive ? '💦 喘氣中！快攻擊！' : '💦 喘氣中';
+    ctx.strokeText(txt, scx, topY - 6);
+    ctx.fillStyle = b.ringActive ? '#9dffb5' : '#ddd';
+    ctx.fillText(txt, scx, topY - 6);
+  }
+  ctx.restore();
+  return true;
+}
+
 // v0.3.39：平台美術繪製矩形（kind = 'high' | 'mid'）— 高平台只用 high 圖、中平台只用 mid 圖
 function getOrangeKingPlatformArtGeom(kind) {
   const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_PLATFORM_SRC[kind];
@@ -9196,6 +9359,9 @@ const ORANGE_KING_MACHINE_CALIB_TARGETS = [
   { key: 'oilStream', label: '7 水平噴油特效圖（方向鍵 X/Y、[ ] 寬度、; \' 高度）' },
   { key: 'platHigh', label: '8 高平台美術（方向鍵 X/Y、[ ] scaleX、; \' scaleY）' },
   { key: 'platMid',  label: '9 中平台美術（方向鍵 X/Y、[ ] scaleX、; \' scaleY）' },
+  { key: 'bossIdle',     label: '0 Boss idle 圖（方向鍵 X/Y、[ ] scale）' },
+  { key: 'bossCooldown', label: '- Boss cooldown 圖（方向鍵 X/Y、[ ] scale）' },
+  { key: 'bossDash',     label: '= Boss dash_ball 圖（方向鍵 X/Y、[ ] scale）' },
 ];
 var orangeKingMachineCalibMode   = false;
 var orangeKingMachineCalibTarget = 'base';
@@ -9233,7 +9399,10 @@ function getOrangeKingMachineCalibText() {
     + `  platformHighX: ${r2(A.platformHighX)},\n  platformHighY: ${r2(A.platformHighY)},\n`
     + `  platformHighScaleX: ${r2(A.platformHighScaleX)},\n  platformHighScaleY: ${r2(A.platformHighScaleY)},\n`
     + `  platformMidX: ${r2(A.platformMidX)},\n  platformMidY: ${r2(A.platformMidY)},\n`
-    + `  platformMidScaleX: ${r2(A.platformMidScaleX)},\n  platformMidScaleY: ${r2(A.platformMidScaleY)},\n};`;
+    + `  platformMidScaleX: ${r2(A.platformMidScaleX)},\n  platformMidScaleY: ${r2(A.platformMidScaleY)},\n`
+    + `  bossIdleOffsetX: ${r2(A.bossIdleOffsetX)}, bossIdleOffsetY: ${r2(A.bossIdleOffsetY)}, bossIdleScale: ${r2(A.bossIdleScale)},\n`
+    + `  bossCooldownOffsetX: ${r2(A.bossCooldownOffsetX)}, bossCooldownOffsetY: ${r2(A.bossCooldownOffsetY)}, bossCooldownScale: ${r2(A.bossCooldownScale)},\n`
+    + `  bossDashOffsetX: ${r2(A.bossDashOffsetX)}, bossDashOffsetY: ${r2(A.bossDashOffsetY)}, bossDashScale: ${r2(A.bossDashScale)},\n};`;
 }
 function resetOrangeKingMachineCalibTarget() {
   const D = ORANGE_KING_MACHINE_ART_DEFAULTS, A = ORANGE_KING_MACHINE_ART;
@@ -9243,6 +9412,9 @@ function resetOrangeKingMachineCalibTarget() {
     oilStream: ['oilStreamOffsetX', 'oilStreamOffsetY', 'oilStreamScaleX', 'oilStreamScaleY'],
     platHigh: ['platformHighX', 'platformHighY', 'platformHighScaleX', 'platformHighScaleY'],
     platMid:  ['platformMidX', 'platformMidY', 'platformMidScaleX', 'platformMidScaleY'],
+    bossIdle:     ['bossIdleOffsetX', 'bossIdleOffsetY', 'bossIdleScale'],
+    bossCooldown: ['bossCooldownOffsetX', 'bossCooldownOffsetY', 'bossCooldownScale'],
+    bossDash:     ['bossDashOffsetX', 'bossDashOffsetY', 'bossDashScale'],
   };
   (keysByTarget[orangeKingMachineCalibTarget] || []).forEach(k => { A[k] = D[k]; });
   saveOrangeKingMachineCalib();
@@ -9272,13 +9444,20 @@ function handleOrangeKingMachineCalibKey(e) {
   const tg = orangeKingMachineCalibTarget;
   const step = e.shiftKey ? 10 : 1;
   const sStep = e.shiftKey ? 0.05 : 0.01;
-  const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil', Digit7: 'oilStream', Digit8: 'platHigh', Digit9: 'platMid' }[e.code];
+  const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil', Digit7: 'oilStream', Digit8: 'platHigh', Digit9: 'platMid',
+                  Digit0: 'bossIdle', Minus: 'bossCooldown', Equal: 'bossDash' }[e.code];
   if (digit) { orangeKingMachineCalibTarget = digit; e.preventDefault(); return true; }
   let changed = false;
   const dx = e.code === 'ArrowLeft' ? -step : (e.code === 'ArrowRight' ? step : 0);
   const dy = e.code === 'ArrowUp' ? -step : (e.code === 'ArrowDown' ? step : 0);
   const ds = e.code === 'BracketLeft' ? -sStep : (e.code === 'BracketRight' ? sStep : 0);
   const dsy = e.code === 'Semicolon' ? -sStep : (e.code === 'Quote' ? sStep : 0); // v0.3.37：; ' 調 Y scale
+  if ((tg === 'bossIdle' || tg === 'bossCooldown' || tg === 'bossDash') && (dx || dy || ds)) {
+    A[tg + 'OffsetX'] += dx;
+    A[tg + 'OffsetY'] += dy;
+    A[tg + 'Scale'] = Math.max(0.05, Math.round((A[tg + 'Scale'] + ds) * 100) / 100);
+    saveOrangeKingMachineCalib(); e.preventDefault(); return true;
+  }
   if ((tg === 'platHigh' || tg === 'platMid') && (dx || dy || ds || dsy)) {
     const pre = tg === 'platHigh' ? 'platformHigh' : 'platformMid';
     A[pre + 'X'] += dx;
@@ -9314,7 +9493,7 @@ function handleOrangeKingMachineCalibKey(e) {
   }
   if (changed) { saveOrangeKingMachineCalib(); e.preventDefault(); return true; }
   // 定位模式開啟時，方向鍵 / 數字鍵 / [ ] 都不傳給遊戲
-  if (/^(Arrow|Digit|Bracket)/.test(e.code) || e.code === 'Semicolon' || e.code === 'Quote') { e.preventDefault(); return true; }
+  if (/^(Arrow|Digit|Bracket)/.test(e.code) || ['Semicolon', 'Quote', 'Minus', 'Equal'].includes(e.code)) { e.preventDefault(); return true; }
   return false;
 }
 
@@ -9407,6 +9586,42 @@ function drawOrangeKingMachineCalibOverlay() {
       ctx.stroke();
       ctx.beginPath(); ctx.arc(og.mouthX - cx, og.mouthY, 8, 0, Math.PI * 2); ctx.stroke(); // 管口對位圈
     });
+    // v0.3.41：Boss 本體 — 判定框（紅 = 可受傷、橘 = 衝撞判定）+ 圖片繪製範圍 / 實際畫面範圍 + 錨點
+    if (orangeKingBoss) {
+      const b = orangeKingBoss;
+      const st = getOrangeKingArtState(b);
+      const bg = getOrangeKingBossArtGeom(st, b);
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bg.drawX - cx, bg.drawY, bg.drawW, bg.drawH);
+      ctx.setLineDash([6, 3]);
+      ctx.strokeStyle = '#ffe066';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bg.opaque.x - cx, bg.opaque.y, bg.opaque.w, bg.opaque.h);
+      ctx.setLineDash([]);
+      const hr = getOrangeKingHurtRect();
+      ctx.strokeStyle = '#ff3b3b';
+      ctx.strokeRect(hr.x - cx, hr.y, hr.w, hr.h);
+      if (st === 'dash') {
+        const dh = bg.previewDash
+          ? { x: ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2 + 8, y: GROUND_Y - ORANGE_KING.BALL_H + 6, w: ORANGE_KING.BALL_W - 16, h: ORANGE_KING.BALL_H - 6 }
+          : getOrangeKingDashHitbox();
+        ctx.strokeStyle = '#ff9a1f';
+        ctx.strokeRect(dh.x - cx, dh.y, dh.w, dh.h);
+      }
+      ctx.strokeStyle = '#ff2bd6';
+      ctx.beginPath();
+      ctx.moveTo(bg.ax - 10 - cx, bg.ay); ctx.lineTo(bg.ax + 10 - cx, bg.ay);
+      ctx.moveTo(bg.ax - cx, bg.ay - 10); ctx.lineTo(bg.ax - cx, bg.ay + 10);
+      ctx.stroke();
+      const lo = getOrangeKingLobOrigin();
+      ctx.beginPath(); ctx.arc(lo.x - cx, lo.y, 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = '#ffe066';
+      ctx.textAlign = 'left';
+      ctx.fillText('Boss 圖：' + st + '（' + b.phase + '）', bg.opaque.x - cx, bg.opaque.y - 6);
+    }
     // 玩家 hitbox
     const pr = playerHazardRect();
     ctx.strokeStyle = '#00ff66';
@@ -9424,11 +9639,16 @@ function drawOrangeKingMachineCalibOverlay() {
     'oilStream: offsetX ' + A.oilStreamOffsetX + '  offsetY ' + A.oilStreamOffsetY + '  scaleX ' + A.oilStreamScaleX + '  scaleY ' + A.oilStreamScaleY,
     'platHigh: X ' + A.platformHighX + '  Y ' + A.platformHighY + '  scaleX ' + A.platformHighScaleX + '  scaleY ' + A.platformHighScaleY,
     'platMid:  X ' + A.platformMidX + '  Y ' + A.platformMidY + '  scaleX ' + A.platformMidScaleX + '  scaleY ' + A.platformMidScaleY,
+    'boss idle: ' + A.bossIdleOffsetX + ',' + A.bossIdleOffsetY + ' ×' + A.bossIdleScale
+      + '  cooldown: ' + A.bossCooldownOffsetX + ',' + A.bossCooldownOffsetY + ' ×' + A.bossCooldownScale
+      + '  dash: ' + A.bossDashOffsetX + ',' + A.bossDashOffsetY + ' ×' + A.bossDashScale,
     'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-')
       + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-')
       + '  bg=' + (orangeKingBossImgStatus.bossRoomBg || '-')
       + '  platHigh=' + (orangeKingBossImgStatus.platformHigh || '-') + '  platMid=' + (orangeKingBossImgStatus.platformMid || '-'),
-    '1~9 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale(X)｜; \' scaleY（7/8/9）｜R 重置目標｜C 輸出 console',
+    'boss art: idle=' + (orangeKingBossImgStatus.bossIdle || '-') + '  cooldown=' + (orangeKingBossImgStatus.bossCooldown || '-')
+      + '  dash=' + (orangeKingBossImgStatus.bossDashBall || '-'),
+    '1~9、0 / - / = 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜; \' scaleY（7/8/9）｜R 重置｜C 輸出',
   ];
   if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
   const w = 560, lh = 17, h = lines.length * lh + 12;
@@ -11162,8 +11382,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.41+：orange-king-boss-art → orange-boss-art（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-boss-art')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-boss-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.40+：orange-king-platform-hint → orange-platform-hint（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-platform-hint')) {
+  } else if (GAME_VERSION.includes('orange-king-platform-hint')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-platform-hint' + (tN === '1' ? '' : '-' + tN);
   // v0.3.39+：orange-king-platform-art → orange-platform-art（test-N > 1 時加上 -N）
