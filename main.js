@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.39-orange-king-platform-art-test-1';
-const BUILD_TIME   = '2026-10-13 05:50';
+const GAME_VERSION = 'adventure-v0.3.40-orange-king-platform-hint-test-1';
+const BUILD_TIME   = '2026-10-13 12:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -7943,6 +7943,7 @@ function updateOrangeKingBoss(dtMs) {
   b.floatTexts = b.floatTexts.filter(f => f.ms < 900);
 
   tickOrangeKingPendingHint(dtMs);
+  updateOrangeKingPlatformHint(dtMs); // v0.3.40
   updateOrangeKingRing(dtMs, k);
   updateOrangeKingLobShots(k);
   updateOrangeKingPuddles(dtMs);
@@ -8944,6 +8945,115 @@ function getOrangeKingPipeGeom(laneKey) {
     opaqueX: drawX + 632 * s, opaqueY: drawY + 74 * s, opaqueW: (1021 - 632) * s, opaqueH: (190 - 74) * s,
   };
 }
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.40：教學衝撞時的「安全平台」發光提示（只在第一次教學衝撞）
+//  ・從教學衝撞預警（chargeWarn）開始亮起，蹲低 / 旋轉 / 衝撞全程維持，撞牆後 0.6 秒淡出
+//  ・橙金色暖光：外圈光暈（呼吸脈衝）+ 平台表面掃光 + 上方小箭頭
+//  ・節奏：每 1.1 秒一拍 — 中平台先亮（較弱）→ 高平台接著亮（較強），引導「往上跳」
+//  ・只是視覺：不改平台碰撞、不改 Boss 節奏
+// ════════════════════════════════════════════════════════════════════
+const ORANGE_KING_PLATFORM_HINT = {
+  FADE_IN_MS:  250,   // 亮起
+  FADE_OUT_MS: 600,   // 教學衝撞撞牆後淡出
+  BEAT_MS:     1100,  // 一拍：中平台 → 高平台
+  BASE:        0.35,  // 提示期間兩個平台的底光
+  MID_PEAK:    0.75,  // 中平台脈衝峰值
+  HIGH_PEAK:   1.0,   // 高平台脈衝峰值（較強，引導往上）
+  HALO_BLUR:   26,    // 外圈光暈模糊半徑
+};
+const ORANGE_KING_PLATFORM_HINT_PHASES = ['chargeWarn', 'chargeCurl', 'chargeSpin', 'chargeDash'];
+
+// 每幀更新提示強度（由 updateOrangeKingBoss 呼叫）
+function updateOrangeKingPlatformHint(dtMs) {
+  const b = orangeKingBoss;
+  if (!b) return;
+  const active = b.chargeTutorial && ORANGE_KING_PLATFORM_HINT_PHASES.includes(b.phase);
+  if (active) {
+    b.platformHintMs = (b.platformHintMs || 0) + dtMs;
+    b.platformHintAlpha = Math.min(1, (b.platformHintAlpha || 0) + dtMs / ORANGE_KING_PLATFORM_HINT.FADE_IN_MS);
+  } else if (b.platformHintAlpha > 0) {
+    b.platformHintMs = (b.platformHintMs || 0) + dtMs;
+    b.platformHintAlpha = Math.max(0, b.platformHintAlpha - dtMs / ORANGE_KING_PLATFORM_HINT.FADE_OUT_MS);
+  }
+}
+// 某個平台目前的提示亮度 0~1（kind = 'high' | 'mid'）
+function getOrangeKingPlatformHintLevel(kind) {
+  const b = orangeKingBoss;
+  if (!b || !(b.platformHintAlpha > 0) || !isOrangeKingStageActive()) return 0;
+  const H = ORANGE_KING_PLATFORM_HINT;
+  const ph = ((b.platformHintMs || 0) % H.BEAT_MS) / H.BEAT_MS;           // 0~1
+  const bell = (c, w) => { const d = Math.abs(ph - c); return d > w ? 0 : 0.5 + 0.5 * Math.cos(d / w * Math.PI); };
+  const pulse = kind === 'mid' ? H.MID_PEAK * bell(0.22, 0.22) : H.HIGH_PEAK * bell(0.55, 0.26);
+  return b.platformHintAlpha * Math.min(1, H.BASE + (1 - H.BASE) * pulse);
+}
+// 平台提示的對象矩形：有正式平台圖就用圖的畫面範圍，否則用碰撞框
+function getOrangeKingPlatformHintRect(p) {
+  if (p.artKey && getOrangeKingBossImg(p.artKey === 'high' ? 'platformHigh' : 'platformMid')) {
+    const g = getOrangeKingPlatformArtGeom(p.artKey);
+    return { x: g.artX, y: g.artY, w: g.artW, h: g.artH };
+  }
+  return { x: p.x, y: p.y, w: p.w, h: p.h };
+}
+// layer = 'back'（平台後方的光暈）| 'front'（平台表面掃光 + 箭頭）
+function drawOrangeKingPlatformHint(p, cx, layer) {
+  if (!p.artKey) return;
+  const lv = getOrangeKingPlatformHintLevel(p.artKey);
+  if (lv <= 0.01) return;
+  const r = getOrangeKingPlatformHintRect(p);
+  const x = r.x - cx;
+  ctx.save();
+  if (layer === 'back') {
+    ctx.shadowColor = `rgba(255,190,60,${0.95 * lv})`;
+    ctx.shadowBlur = ORANGE_KING_PLATFORM_HINT.HALO_BLUR * (0.6 + 0.4 * lv);
+    ctx.fillStyle = `rgba(255,170,40,${0.7 * lv})`;
+    ctx.beginPath(); ctx.roundRect(x - 5, r.y - 5, r.w + 10, r.h + 10, 8); ctx.fill();
+  } else {
+    ctx.globalCompositeOperation = 'lighter';
+    // 表面亮線（可站立的那一面）
+    const top = ctx.createLinearGradient(0, r.y - 6, 0, r.y + 8);
+    top.addColorStop(0, 'rgba(255,220,120,0)');
+    top.addColorStop(0.5, `rgba(255,215,110,${0.75 * lv})`);
+    top.addColorStop(1, 'rgba(255,200,80,0)');
+    ctx.fillStyle = top;
+    ctx.fillRect(x, r.y - 6, r.w, 14);
+    // 掃光：由左往右掃過平台表面
+    const sweepT = ((orangeKingBoss.platformHintMs || 0) % 900) / 900;
+    const sx = x - 60 + (r.w + 120) * sweepT;
+    const sg = ctx.createLinearGradient(sx - 40, 0, sx + 40, 0);
+    sg.addColorStop(0, 'rgba(255,230,150,0)');
+    sg.addColorStop(0.5, `rgba(255,240,170,${0.45 * lv})`);
+    sg.addColorStop(1, 'rgba(255,230,150,0)');
+    ctx.fillStyle = sg;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, r.y - 2, r.w, r.h + 2); ctx.clip();
+    ctx.fillRect(sx - 40, r.y - 2, 80, r.h + 2);
+    ctx.restore();
+    // 亮金色描邊：背景偏橘時仍能一眼分辨「這裡可以站」
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowColor = `rgba(255,200,70,${lv})`;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = `rgba(255,236,150,${0.9 * lv})`;
+    ctx.lineWidth = 1.5 + 2 * lv;
+    ctx.beginPath(); ctx.roundRect(x - 2, r.y - 2, r.w + 4, r.h + 4, 6); ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    // 上方小箭頭（往上跳）
+    const bob = Math.sin((orangeKingBoss.platformHintMs || 0) / 160) * 4;
+    ctx.globalAlpha = Math.min(1, lv * 1.1);
+    ctx.fillStyle = '#ffd23f';
+    ctx.strokeStyle = 'rgba(90,40,0,0.85)';
+    ctx.lineWidth = 2;
+    const ax = x + Math.min(r.w * 0.55, r.w - 30), ay = r.y - 30 + bob;
+    ctx.shadowColor = 'rgba(255,200,60,0.9)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay - 16); ctx.lineTo(ax + 16, ay + 3); ctx.lineTo(ax + 7, ay + 3);
+    ctx.lineTo(ax + 7, ay + 16); ctx.lineTo(ax - 7, ay + 16); ctx.lineTo(ax - 7, ay + 3); ctx.lineTo(ax - 16, ay + 3);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // v0.3.39：平台美術繪製矩形（kind = 'high' | 'mid'）— 高平台只用 high 圖、中平台只用 mid 圖
 function getOrangeKingPlatformArtGeom(kind) {
   const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_PLATFORM_SRC[kind];
@@ -9735,8 +9845,10 @@ function drawWorldInner() {
   platforms.forEach(p => {
     const sx = p.x - cx;
     if (sx > CANVAS_W + 10 || sx + p.w < -10) return;
+    // v0.3.40：教學衝撞時的安全平台提示（光暈在平台後、掃光 / 箭頭在平台上）
+    if (orangeKingBoss) drawOrangeKingPlatformHint(p, cx, 'back');
     // v0.3.39：2-4 平台改畫正式美術（碰撞不變）；圖片沒載好就照舊畫色塊
-    if (drawOrangeKingPlatformArt(p, cx)) return;
+    if (drawOrangeKingPlatformArt(p, cx)) { if (orangeKingBoss) drawOrangeKingPlatformHint(p, cx, 'front'); return; }
     ctx.fillStyle = COLORS.platform;
     ctx.fillRect(sx, p.y, p.w, p.h);
     ctx.fillStyle = COLORS.platformTop;
@@ -9747,6 +9859,7 @@ function drawWorldInner() {
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 1, p.y + 1, p.w - 2, p.h - 2);
     }
+    if (orangeKingBoss) drawOrangeKingPlatformHint(p, cx, 'front'); // v0.3.40（色塊 fallback 也有提示）
   });
 
   // Coins
@@ -11049,8 +11162,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.40+：orange-king-platform-hint → orange-platform-hint（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-platform-hint')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-platform-hint' + (tN === '1' ? '' : '-' + tN);
   // v0.3.39+：orange-king-platform-art → orange-platform-art（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-platform-art')) {
+  } else if (GAME_VERSION.includes('orange-king-platform-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-platform-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.38+：orange-king-boss-bg → orange-boss-bg（test-N > 1 時加上 -N）
