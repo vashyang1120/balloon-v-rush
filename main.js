@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.45-orange-king-polish-ring-sfx-test-1';
-const BUILD_TIME   = '2026-10-14 04:30';
+const GAME_VERSION = 'adventure-v0.3.46-orange-king-royal-sword-arcshot-fix-test-1';
+const BUILD_TIME   = '2026-10-14 06:50';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -596,6 +596,11 @@ const ADVENTURE_HERO_ASSETS = {
   swordAttack03: 'assets/adventure/hero/hero_sword_attack_03.png',
   swordAttack04:   'assets/adventure/hero/hero_sword_attack_04.png',
   // Hammer attack（路徑在 HAMMER_ATTACK_ASSETS，由 initHammerAttackArt 預載）
+  // v0.3.46：橙煌王權劍（只在 2-4 撿到金色油管環後使用；載入失敗 → 自動用原本氣球劍圖）
+  royalSwordAttack01: 'assets/adventure/hero/hero_sword_attack_01_royal.png',
+  royalSwordAttack02: 'assets/adventure/hero/hero_sword_attack_02_royal.png',
+  royalSwordAttack03: 'assets/adventure/hero/hero_sword_attack_03_royal.png',
+  royalSwordAttack04: 'assets/adventure/hero/hero_sword_attack_04_royal.png',
 };
 
 // 圖片快取（key → Image 物件，只載入一次）
@@ -647,6 +652,36 @@ function initAdventureHeroArt() {
   });
 }
 
+// v0.3.46：橙煌王權劍 — 2-4 橘子王戰中，撿到金色油管環（ringActive）且手上是氣球劍時才使用
+function isRoyalSwordActive() {
+  return typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive()
+    && !!orangeKingBoss && !!orangeKingBoss.ringActive && activeSlot === 'sword';
+}
+// F4 預覽王權劍 frame（1~4）時回傳編號，否則 0
+function getRoyalSwordCalibFrame() {
+  if (typeof ADVENTURE_TEST_TOOLS_ENABLED === 'undefined' || !ADVENTURE_TEST_TOOLS_ENABLED) return 0;
+  if (typeof orangeKingMachineCalibMode === 'undefined' || !orangeKingMachineCalibMode) return 0;
+  const m = /^royal([1-4])$/.exec(orangeKingMachineCalibTarget || '');
+  return m ? Number(m[1]) : 0;
+}
+// 主角圖的繪製矩形（local 座標）；royalN = 1~4 時套用王權劍定位（以原本氣球劍的像素比例、腳底線、身體中心為基準）
+function getHeroDrawRect(img, effectiveScale, royalN) {
+  if (royalN) {
+    const A = ORANGE_KING_MACHINE_ART;
+    // 原本氣球劍圖是 420×420（不是 512）：以「對應的原本 frame 寬度」當基準，royal 圖每個像素和原本一樣大
+    const ref = getAdventureImage('swordAttack0' + royalN);
+    const refW = ref ? ref.width : 420;
+    const k = (player.w * HERO_DRAW_SCALE / refW) * (A['royalSwordAttack' + royalN + 'Scale'] || 1);
+    const dW = img.width * k, dH = img.height * k;
+    return { dW, dH,
+      dX: (player.w - dW) / 2 + HERO_DRAW_OFFSET_X + (A['royalSwordAttack' + royalN + 'OffsetX'] || 0),
+      dY: player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y + (A['royalSwordAttack' + royalN + 'OffsetY'] || 0) };
+  }
+  const dW = player.w * HERO_DRAW_SCALE * effectiveScale;
+  const dH = dW * (img.height / img.width);
+  return { dW, dH, dX: (player.w - dW) / 2 + HERO_DRAW_OFFSET_X, dY: player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y };
+}
+
 // 依玩家目前物理狀態選擇最適合的素材 key（run05 + 劍攻擊動畫）
 // v0.3.33-fix-1：發現物品視窗（發現模式）開啟時，主角畫面定格在開窗當下的那一張，
 // 不再推進跑步動畫計時器（原本 getHeroArtKey 每次繪製都會推進 _heroFrameTimer，造成原地跑步）。
@@ -661,6 +696,9 @@ function getHeroArtKey() {
 }
 
 function computeHeroArtKey() {
+  // v0.3.46：F4 預覽王權劍 frame — 固定顯示該張
+  const calibRoyal = getRoyalSwordCalibFrame();
+  if (calibRoyal) return 'swordAttack0' + calibRoyal;
   // ── 優先 0：槌子攻擊視覺動畫（hammerAnimTimer > 0）──
   // 01→02→03→04，一次性下砸動作，不循環
   if (player.hammerAnimTimer > 0) {
@@ -2688,6 +2726,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'Digit2' && gameState === 'playing') {
+    if (isOrangeKingStageActive()) { showHint(BOSS_SWORD_ONLY_MSG, 150); return; } // v0.3.46：2-4 只限劍
     if (equippedHammer.id) activeSlot = 'hammer';
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
@@ -4779,16 +4818,18 @@ function goToNextChapter1Level() {
 //  確保第一章流程的關卡阻擋邏輯只需要維護一份。
 // ════════════════════════════════════════════════════════
 // v0.3.35-fix-1：進入 2-4 Boss 關前，背包裡至少要有一把可用的氣球劍或氣球槌
+// v0.3.46：改成「只限氣球劍」— 2-4 只能用劍（撿到金色油管環後變成橙煌王權劍），只有槌也不能進
 // 以背包（craftedItems）判斷：耐久用完時 consumeXxxDurability 會把數量扣到 0，所以數量 > 0 = 還有可用武器
 // （測試版的 runtime 測試武器不寫入背包，不算數）
 function hasUsableBossWeapon() {
   const ci = playerInventory.craftedItems || {};
-  return (ci.basicSword || 0) > 0 || (ci.basicHammer || 0) > 0;
+  return (ci.basicSword || 0) > 0;
 }
 function isBossWeaponGateBlocked(nextIdx) {
   return isBossStageLevel(nextIdx) && !hasUsableBossWeapon();
 }
-const BOSS_WEAPON_GATE_MSG = '⚔️ 橘子王太危險了！請先製作一把氣球劍或氣球槌，再前往 2-4。';
+const BOSS_WEAPON_GATE_MSG = '⚔️ 橘子王太危險了！請先製作一把氣球劍，再前往 2-4（2-4 只能使用氣球劍）。';
+const BOSS_SWORD_ONLY_MSG  = '🗡️ 橘子王戰只能使用氣球劍！';
 
 function checkChapter1ProgressionGate(nextIdx) {
   // v0.3.35-fix-1：阻擋零 — 沒有武器不能進 2-4 Boss 關（只擋 2-4）
@@ -5045,6 +5086,7 @@ function cycleWeapon() {
   const hasSword  = !!equippedSword.id;
   const hasHammer = !!equippedHammer.id;
   if (!hasSword && !hasHammer) { showHint('目前沒有可裝備道具', 150); return; }
+  if (isOrangeKingStageActive()) { if (hasSword) activeSlot = 'sword'; showHint(BOSS_SWORD_ONLY_MSG, 150); return; } // v0.3.46：2-4 只限劍
   if (activeSlot === 'sword') {
     if (hasHammer) { activeSlot = 'hammer'; }
     else           { showHint('目前沒有其他道具可以切換', 150); }
@@ -5513,6 +5555,8 @@ function updatePlayer(dt) {
   if (player.meleeHammerActive > 0) player.meleeHammerActive--;
 
   if (inp('attack') && player.attackCooldown === 0) {
+    // v0.3.46：2-4 橘子王戰只能用劍（有劍就強制切回劍）
+    if (isOrangeKingStageActive() && activeSlot !== 'sword' && equippedSword && equippedSword.id) activeSlot = 'sword';
     // activeSlot fallback：若指向不存在的武器，自動切到有效武器
     if (activeSlot === 'hammer' && !(equippedHammer && equippedHammer.id)) {
       if (equippedSword && equippedSword.id) { activeSlot = 'sword'; }
@@ -7820,6 +7864,7 @@ function isOrangeKingStageActive() {
 }
 
 function initOrangeKingBoss() {
+  if (typeof equippedSword !== 'undefined' && equippedSword.id) activeSlot = 'sword'; // v0.3.46：2-4 只限劍
   orangeKingBoss = {
     hp: ORANGE_KING.MAX_HP, maxHp: ORANGE_KING.MAX_HP,
     x: ORANGE_KING.HOME_X, y: -ORANGE_KING.H - 40,
@@ -8080,6 +8125,7 @@ function updateOrangeKingBoss(dtMs) {
       if (b.phaseMs >= ORANGE_KING_TIMING.LOB_AIM) {
         const shot = Object.assign({}, b.activeLob, { t: 0, x: b.activeLob.sx, y: b.activeLob.sy });
         b.lobShots.push(shot);
+        b.lobMuzzle = { x: b.activeLob.sx, y: b.activeLob.sy, ms: 0 }; // v0.3.46：管口噴出的油花
         setOrangeKingPhase('lobFire');
       }
       break;
@@ -8177,11 +8223,13 @@ function collectOrangeKingRing() {
   const b = orangeKingBoss;
   b.ring.state = 'collected';
   b.ringActive = true;
+  if (equippedSword && equippedSword.id) activeSlot = 'sword'; // v0.3.46：2-4 只限劍 → 撿到環就是王權劍
   // v0.3.35-fix-1：金色油管環只讓「已經擁有的」氣球劍 / 槌暫時實體化，不會產生武器
   //               （沒有武器的玩家在進入 2-4 前就會被 checkChapter1ProgressionGate 擋下）
   b.ringAuraMs = 1400; // 小V身上的金色光圈
-  orangeKingFloatText('武器實體化！', player.x + player.w / 2, player.y - 10, '#ffe066');
-  showHint('✨ 金色油管環讓氣球武器實體化了！', 210);
+  // v0.3.46：只顯示一句（取代原本的「武器實體化」提示，不重複）
+  orangeKingFloatText('👑', player.x + player.w / 2, player.y - 10, '#ffe066');
+  showHint('小V的氣球劍變成「橙煌王權劍」了！', 230);
   b.pendingHint = { msg: '💡 等橘子王連續攻擊後喘氣，再靠近反擊！', delayMs: 3500 };
 }
 
@@ -8278,6 +8326,7 @@ function updateOrangeKingPuddles(dtMs) {
 function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
   const b = orangeKingBoss;
   if (!b || b.phase === 'defeated' || b.hp <= 0) return;
+  if (weapon === 'hammer') return; // v0.3.46：2-4 只限劍；槌不會對橘子王造成任何判定
   const swingId = weapon === 'hammer' ? player.hammerSwingId : player.swordSwingId;
   const lockKey = weapon === 'hammer' ? 'lastHammerSwingId' : 'lastSwordSwingId';
   const hr = getOrangeKingHurtRect();
@@ -8787,9 +8836,11 @@ function drawOrangeKingFront(cx) {
     ctx.fillRect(x0 - cx, band.y + band.h * 0.35, band.w * grow, 5);
     ctx.restore();
   }
+  drawOrangeKingLobMuzzle(cx);
   b.lobShots.forEach(s => {
     // v0.3.44：正式油彈圖（依飛行方向旋轉；剛從管口射出時由小變大）— 沒載好 → 下面舊的漸層圓球
-    if (drawOrangeKingOilShotArt(s.x, s.y, getOrangeKingOilShotRot(s), Math.min(1, 0.55 + s.t / 14), cx)) return;
+    // v0.3.46：從管口「擠出來」— 一開始只有 35% 大小，約 0.2 秒長到原尺寸
+    if (drawOrangeKingOilShotArt(s.x, s.y, getOrangeKingOilShotRot(s), Math.min(1, 0.35 + s.t / 12), cx)) return;
     ctx.save();
     ctx.fillStyle = 'rgba(255,160,30,0.35)';
     ctx.beginPath(); ctx.arc(s.x - cx + 10, s.y - 4, ORANGE_KING.LOB_RADIUS * 0.7, 0, Math.PI * 2); ctx.fill();
@@ -8861,7 +8912,7 @@ function drawOrangeKingHpBar() {
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd23f';
-  const ringTxt = b.ringActive ? '  ✨ 武器實體化中' : '';
+  const ringTxt = b.ringActive ? '  👑 橙煌王權劍' : '';
   ctx.fillText('👑 橘子王  ' + b.hp + ' / ' + b.maxHp + ringTxt, CANVAS_W / 2, y0 + 34);
   ctx.restore();
 }
@@ -8987,19 +9038,26 @@ const ORANGE_KING_MACHINE_ART_DEFAULTS = {
   bossDashPrep1OffsetX: 0, bossDashPrep1OffsetY: 0, bossDashPrep1Scale: 0.66,
   bossDashPrep2OffsetX: 0, bossDashPrep2OffsetY: 0, bossDashPrep2Scale: 0.60,
   // v0.3.44：拋物線油彈圖 — offset = 圖中球心相對碰撞圓心；scale 0.12 → 球體直徑約 35px（碰撞直徑 30px，略大一點好辨識）
-  oilShotOffsetX: 0, oilShotOffsetY: 0, oilShotScale: 0.12,
+  oilShotOffsetX: 0, oilShotOffsetY: 0, oilShotScale: 0.14,
   // v0.3.44：地面油漬圖 — 依 hitbox 寬度自動等比縮放（主體寬 = 100px），ScaleX/Y 是額外倍率；貼地線對齊地面
   oilSlickOffsetX: 0, oilSlickOffsetY: 0, oilSlickScaleX: 1, oilSlickScaleY: 1, oilSlickAlpha: 0.95,
   // v0.3.44：擊敗圖 — 坐地、身體中心對齊站位中心；0.73 與 idle / cooldown 同比例
   bossDefeatOffsetX: 0, bossDefeatOffsetY: 0, bossDefeatScale: 0.73,
   // v0.3.45：油彈圖旋轉校正（度）；發射起點微調；碰撞圓（中心偏移 + 半徑，半徑 15 = 原本 LOB_RADIUS）
   oilShotRotationOffset: 0,
-  arcShotOriginOffsetX: 0, arcShotOriginOffsetY: 0,
-  arcShotHitboxOffsetX: 0, arcShotHitboxOffsetY: 0, arcShotHitboxRadius: 15,
+  arcShotOriginOffsetX: 3, arcShotOriginOffsetY: -9,
+  arcShotHitboxOffsetX: 0, arcShotHitboxOffsetY: 0, arcShotHitboxRadius: 17, // v0.3.46：油彈圖 0.14 時球體半徑約 20px；碰撞取約 85%（不算皇冠 / 尾巴）較公平
   // v0.3.45：地面油漬底光（橘金色，隨時間輕微呼吸）
   oilSlickGlowAlpha: 0.7, oilSlickGlowScale: 1.35,
   // v0.3.45：金色油管環正式圖 — 以圖中「環＋皇冠」的中心對準環的位置；0.15 → 約 59×63px
   goldenRingOffsetX: 0, goldenRingOffsetY: 0, goldenRingScale: 0.15, goldenRingAlpha: 1,
+  // v0.3.46：橙煌王權劍（小V攻擊 4 張 royal 圖）— offset 單位 = 畫面 px（往角色面向的方向為 +X）；
+  //   scale = 相對原本氣球劍圖的倍率（1 = 每個原圖像素和原本 hero_sword_attack（420×420）一樣大）
+  //   實測（royal 圖皆 500×500；原圖 420 / 485 / 485 / 521）：以頭髮頂端、頭髮中心、鞋底對齊原本 frame 算出，再用頭髮＋皮膚區域微調
+  royalSwordAttack1OffsetX: 0,  royalSwordAttack1OffsetY: 6,  royalSwordAttack1Scale: 0.97,
+  royalSwordAttack2OffsetX: 1,  royalSwordAttack2OffsetY: 2,  royalSwordAttack2Scale: 0.99,
+  royalSwordAttack3OffsetX: -1, royalSwordAttack3OffsetY: 7,  royalSwordAttack3Scale: 1.03,
+  royalSwordAttack4OffsetX: -2, royalSwordAttack4OffsetY: -4, royalSwordAttack4Scale: 1,
 };
 const ORANGE_KING_MACHINE_ART = Object.assign({}, ORANGE_KING_MACHINE_ART_DEFAULTS);
 
@@ -9387,6 +9445,32 @@ function getOrangeKingBossArtGeom(state, b) {
   const box = arr => ({ x: drawX + arr[0] * sc, y: drawY + arr[1] * sc, w: (arr[2] - arr[0]) * sc, h: (arr[3] - arr[1]) * sc });
   return { state, sc, ax, ay, drawX, drawY, drawW: S.w * sc, drawH: S.h * sc, opaque: box(S.opaque), sphere: box(S.sphere),
            beltY: S.beltY != null ? drawY + S.beltY * sc : null, previewDash };
+}
+
+// v0.3.46：油彈發射瞬間，管口的橘金色噴濺光（0.22 秒）
+function drawOrangeKingLobMuzzle(cx) {
+  const b = orangeKingBoss;
+  const m = b && b.lobMuzzle;
+  if (!m) return;
+  m.ms += 16.667;
+  if (m.ms > 220) { b.lobMuzzle = null; return; }
+  const p = m.ms / 220;
+  const x = m.x - cx, y = m.y;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const r = 10 + 18 * p;
+  const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(255,250,200,${0.9 * (1 - p)})`);
+  gr.addColorStop(0.5, `rgba(255,190,60,${0.6 * (1 - p)})`);
+  gr.addColorStop(1, 'rgba(255,140,20,0)');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = `rgba(255,170,30,${0.9 * (1 - p)})`;
+  [[-0.9, 0.6], [-0.5, -0.7], [0.2, -0.9], [-1, -0.1]].forEach(([dx, dy]) => {
+    ctx.beginPath(); ctx.arc(x + dx * 22 * p, y + dy * 18 * p + 10 * p * p, 2.6 * (1 - p * 0.5), 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
 }
 
 // ── v0.3.44：拋物線油彈圖 ──
@@ -9813,9 +9897,14 @@ const ORANGE_KING_MACHINE_CALIB_TARGETS = [
   { key: 'arcHitbox',  label: 'U 油彈碰撞圓（方向鍵 中心 X/Y、[ ] 半徑；T 換路線）' },
   { key: 'oilSlick',   label: 'L 地面油漬圖（方向鍵 X/Y、[ ] scaleX、; \' scaleY、Q E 透明度、N M 底光亮度、V B 底光大小）' },
   { key: 'goldenRing', label: 'G 金色油管環（方向鍵 X/Y、[ ] scale、Q E 透明度）' },
+  { key: 'royal1', label: 'A 王權劍 attack_01（方向鍵 X/Y、[ ] scale；X 切換 對照 / 只看王權劍 / 只看原圖）' },
+  { key: 'royal2', label: 'S 王權劍 attack_02（方向鍵 X/Y、[ ] scale；X 切換 對照 / 只看王權劍 / 只看原圖）' },
+  { key: 'royal3', label: 'D 王權劍 attack_03（方向鍵 X/Y、[ ] scale；X 切換 對照 / 只看王權劍 / 只看原圖）' },
+  { key: 'royal4', label: 'F 王權劍 attack_04（方向鍵 X/Y、[ ] scale；X 切換 對照 / 只看王權劍 / 只看原圖）' },
   { key: 'bossDefeat', label: 'K Boss defeat 擊敗圖（方向鍵 X/Y、[ ] scale）' },
 ];
 var orangeKingMachineCalibMode   = false;
+var orangeKingRoyalPreviewMode   = 0; // v0.3.46：0 = 王權劍＋原圖半透明對照、1 = 只看王權劍、2 = 只看原圖
 var orangeKingOilShotCalibRoute  = 0; // v0.3.44：F4 油彈預覽用的路線（再按一次 O 切換）
 var orangeKingMachineCalibTarget = 'base';
 
@@ -9867,7 +9956,9 @@ function getOrangeKingMachineCalibText() {
     + `  arcShotOriginOffsetX: ${r2(A.arcShotOriginOffsetX)}, arcShotOriginOffsetY: ${r2(A.arcShotOriginOffsetY)},\n`
     + `  arcShotHitboxOffsetX: ${r2(A.arcShotHitboxOffsetX)}, arcShotHitboxOffsetY: ${r2(A.arcShotHitboxOffsetY)}, arcShotHitboxRadius: ${r2(A.arcShotHitboxRadius)},\n`
     + `  oilSlickGlowAlpha: ${r2(A.oilSlickGlowAlpha)}, oilSlickGlowScale: ${r2(A.oilSlickGlowScale)},\n`
-    + `  goldenRingOffsetX: ${r2(A.goldenRingOffsetX)}, goldenRingOffsetY: ${r2(A.goldenRingOffsetY)}, goldenRingScale: ${Math.round(A.goldenRingScale * 1000) / 1000}, goldenRingAlpha: ${r2(A.goldenRingAlpha)},\n};`;
+    + `  goldenRingOffsetX: ${r2(A.goldenRingOffsetX)}, goldenRingOffsetY: ${r2(A.goldenRingOffsetY)}, goldenRingScale: ${Math.round(A.goldenRingScale * 1000) / 1000}, goldenRingAlpha: ${r2(A.goldenRingAlpha)},\n`
+    + [1, 2, 3, 4].map(n => `  royalSwordAttack${n}OffsetX: ${r2(A['royalSwordAttack' + n + 'OffsetX'])}, royalSwordAttack${n}OffsetY: ${r2(A['royalSwordAttack' + n + 'OffsetY'])}, royalSwordAttack${n}Scale: ${r2(A['royalSwordAttack' + n + 'Scale'])},\n`).join('')
+    + '};';
 }
 function resetOrangeKingMachineCalibTarget() {
   const D = ORANGE_KING_MACHINE_ART_DEFAULTS, A = ORANGE_KING_MACHINE_ART;
@@ -9889,6 +9980,10 @@ function resetOrangeKingMachineCalibTarget() {
     arcHitbox:  ['arcShotHitboxOffsetX', 'arcShotHitboxOffsetY', 'arcShotHitboxRadius'],
     oilSlick:   ['oilSlickOffsetX', 'oilSlickOffsetY', 'oilSlickScaleX', 'oilSlickScaleY', 'oilSlickAlpha', 'oilSlickGlowAlpha', 'oilSlickGlowScale'],
     goldenRing: ['goldenRingOffsetX', 'goldenRingOffsetY', 'goldenRingScale', 'goldenRingAlpha'],
+    royal1: ['royalSwordAttack1OffsetX', 'royalSwordAttack1OffsetY', 'royalSwordAttack1Scale'],
+    royal2: ['royalSwordAttack2OffsetX', 'royalSwordAttack2OffsetY', 'royalSwordAttack2Scale'],
+    royal3: ['royalSwordAttack3OffsetX', 'royalSwordAttack3OffsetY', 'royalSwordAttack3Scale'],
+    royal4: ['royalSwordAttack4OffsetX', 'royalSwordAttack4OffsetY', 'royalSwordAttack4Scale'],
     bossDefeat: ['bossDefeatOffsetX', 'bossDefeatOffsetY', 'bossDefeatScale'],
   };
   (keysByTarget[orangeKingMachineCalibTarget] || []).forEach(k => { A[k] = D[k]; });
@@ -9922,7 +10017,10 @@ function handleOrangeKingMachineCalibKey(e) {
   const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil', Digit7: 'oilStream', Digit8: 'platHigh', Digit9: 'platMid',
                   Digit0: 'bossIdle', Minus: 'bossCooldown', Equal: 'bossDash', Backslash: 'bossDashCooldown',
                   Comma: 'bossDashWarn', Period: 'bossDashPrep1', Slash: 'bossDashPrep2',
-                  KeyO: 'oilShot', KeyL: 'oilSlick', KeyK: 'bossDefeat', KeyY: 'arcOrigin', KeyU: 'arcHitbox', KeyG: 'goldenRing' }[e.code];
+                  KeyO: 'oilShot', KeyL: 'oilSlick', KeyK: 'bossDefeat', KeyY: 'arcOrigin', KeyU: 'arcHitbox', KeyG: 'goldenRing',
+                  KeyA: 'royal1', KeyS: 'royal2', KeyD: 'royal3', KeyF: 'royal4' }[e.code];
+  // v0.3.46：X = 王權劍預覽切換（對照 / 只看王權劍 / 只看原圖）
+  if (e.code === 'KeyX') { orangeKingRoyalPreviewMode = (orangeKingRoyalPreviewMode + 1) % 3; e.preventDefault(); return true; }
   // v0.3.45：T = 換預覽的拋物線路線（O / Y / U 都能用）
   if (e.code === 'KeyT') { orangeKingOilShotCalibRoute = (orangeKingOilShotCalibRoute + 1) % ORANGE_KING_LOB_ROUTES.length; e.preventDefault(); return true; }
   if (digit) {
@@ -9935,6 +10033,14 @@ function handleOrangeKingMachineCalibKey(e) {
   const dy = e.code === 'ArrowUp' ? -step : (e.code === 'ArrowDown' ? step : 0);
   const ds = e.code === 'BracketLeft' ? -sStep : (e.code === 'BracketRight' ? sStep : 0);
   const dsy = e.code === 'Semicolon' ? -sStep : (e.code === 'Quote' ? sStep : 0); // v0.3.37：; ' 調 Y scale
+  // v0.3.46：王權劍 4 張（方向鍵 X/Y、[ ] scale；X 方向 = 角色面向的方向）
+  const rm = /^royal([1-4])$/.exec(tg);
+  if (rm && (dx || dy || ds)) {
+    const pre = 'royalSwordAttack' + rm[1];
+    A[pre + 'OffsetX'] += dx; A[pre + 'OffsetY'] += dy;
+    A[pre + 'Scale'] = Math.max(0.2, Math.round((A[pre + 'Scale'] + ds) * 100) / 100);
+    saveOrangeKingMachineCalib(); e.preventDefault(); return true;
+  }
   // v0.3.45：發射起點 / 碰撞圓
   if (tg === 'arcOrigin' && (dx || dy)) {
     A.arcShotOriginOffsetX += dx; A.arcShotOriginOffsetY += dy;
@@ -10017,7 +10123,7 @@ function handleOrangeKingMachineCalibKey(e) {
   }
   if (changed) { saveOrangeKingMachineCalib(); e.preventDefault(); return true; }
   // 定位模式開啟時，方向鍵 / 數字鍵 / [ ] 都不傳給遊戲
-  if (/^(Arrow|Digit|Bracket)/.test(e.code) || ['Semicolon', 'Quote', 'Minus', 'Equal', 'Backslash', 'Comma', 'Period', 'Slash', 'KeyO', 'KeyL', 'KeyK', 'KeyQ', 'KeyE', 'KeyY', 'KeyU', 'KeyG', 'KeyT', 'KeyN', 'KeyM', 'KeyV', 'KeyB'].includes(e.code)) { e.preventDefault(); return true; }
+  if (/^(Arrow|Digit|Bracket)/.test(e.code) || ['Semicolon', 'Quote', 'Minus', 'Equal', 'Backslash', 'Comma', 'Period', 'Slash', 'KeyO', 'KeyL', 'KeyK', 'KeyQ', 'KeyE', 'KeyY', 'KeyU', 'KeyG', 'KeyT', 'KeyN', 'KeyM', 'KeyV', 'KeyB', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyX'].includes(e.code)) { e.preventDefault(); return true; }
   return false;
 }
 
@@ -10030,6 +10136,32 @@ function drawOrangeKingShotSlickCalibOverlay(cx) {
   const b = orangeKingBoss;
   if (!b) return;
   const tg = orangeKingMachineCalibTarget;
+  // v0.3.46：王權劍對位輔助 — 腳底線、身體中心線、小V hitbox、王權劍圖範圍
+  const rN = getRoyalSwordCalibFrame();
+  if (rN) {
+    const px = player.x - cx;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#00ffc8'; ctx.setLineDash([8, 5]);
+    ctx.beginPath(); ctx.moveTo(px - 120, player.y + player.h); ctx.lineTo(px + player.w + 120, player.y + player.h); ctx.stroke(); // 腳底線
+    ctx.strokeStyle = '#ff2bd6';
+    ctx.beginPath(); ctx.moveTo(px + player.w / 2, player.y - 70); ctx.lineTo(px + player.w / 2, player.y + player.h + 10); ctx.stroke(); // 身體中心線
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#3dff6a'; ctx.strokeRect(px, player.y, player.w, player.h); // 小V hitbox
+    const rImg = getAdventureImage('royalSwordAttack0' + rN);
+    if (rImg) {
+      const r = getHeroDrawRect(rImg, 1, rN);
+      const x0 = player.facingRight ? px + r.dX : px + player.w - r.dX - r.dW;
+      ctx.setLineDash([4, 3]); ctx.strokeStyle = '#ffe066';
+      ctx.strokeRect(x0, player.y + r.dY, r.dW, r.dH); // 王權劍整張圖範圍（看會不會超出畫面）
+      ctx.setLineDash([]);
+    }
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffe066';
+    const modeTxt = ['王權劍＋原圖半透明對照', '只看王權劍', '只看原本氣球劍'][orangeKingRoyalPreviewMode];
+    ctx.fillText('王權劍 attack_0' + rN + '：' + modeTxt + '（X 切換）　青線 = 腳底　粉線 = 身體中心　綠框 = 小V hitbox　黃虛線 = 圖片範圍'
+      + (rImg ? '' : '　⚠️ royal 圖未載入'), 14, 56);
+    ctx.restore();
+  }
   ctx.save();
   ctx.lineWidth = 2;
   b.lobShots.forEach(s => {
@@ -10288,6 +10420,8 @@ function drawOrangeKingMachineCalibOverlay() {
     'oilSlick: ' + A.oilSlickOffsetX + ',' + A.oilSlickOffsetY + '  scaleX ' + A.oilSlickScaleX + '  scaleY ' + A.oilSlickScaleY + '  alpha ' + A.oilSlickAlpha
       + '  glow ' + A.oilSlickGlowAlpha + ' ×' + A.oilSlickGlowScale
       + '   ring: ' + A.goldenRingOffsetX + ',' + A.goldenRingOffsetY + ' ×' + A.goldenRingScale + ' α' + A.goldenRingAlpha,
+    'royal: ' + [1, 2, 3, 4].map(n => n + '=' + A['royalSwordAttack' + n + 'OffsetX'] + ',' + A['royalSwordAttack' + n + 'OffsetY'] + ' ×' + A['royalSwordAttack' + n + 'Scale']
+      + (getAdventureImage('royalSwordAttack0' + n) ? '' : '(未載入)')).join('  '),
     'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-')
       + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-')
       + '  bg=' + (orangeKingBossImgStatus.bossRoomBg || '-')
@@ -10299,7 +10433,7 @@ function drawOrangeKingMachineCalibOverlay() {
       + '  shot=' + (orangeKingBossImgStatus.oilShot || '-') + '  slick=' + (orangeKingBossImgStatus.oilSlick || '-')
       + '  ring=' + (orangeKingBossImgStatus.goldenRing || '-')
       + '  bgm=' + orangeKingBgmStatus + '(vol ' + ORANGE_KING_BGM_VOLUME + ')  jingle=' + orangeKingJingleStatus,
-    '1~9、0 - = \\ , . / O Y U L G K 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜; \' scaleY / 旋轉｜Q E 透明度｜T 換路線｜R 重置｜C 輸出',
+    '1~9、0 - = \\ , . / O Y U L G K A S D F 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜; \' scaleY / 旋轉｜Q E 透明度｜T 換路線｜R 重置｜C 輸出',
   ];
   if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
   const w = 780, lh = 17, h = lines.length * lh + 12; // v0.3.45：560 → 780（狀態列變長）
@@ -10931,6 +11065,20 @@ function drawPlayer(cx) {
     heroImg = getAdventureImage(heroKey) || getAdventureImage('idle');
   }
 
+  // v0.3.46：橙煌王權劍（2-4 撿到金色油管環後）；F4 預覽時可切換 王權劍＋原圖 ghost / 只看王權劍 / 只看原圖
+  let royalN = 0, ghostImg = null;
+  const swordFrame = /^swordAttack0([1-4])$/.exec(heroKey);
+  if (swordFrame) {
+    const calibRoyal = getRoyalSwordCalibFrame();
+    const wantRoyal = calibRoyal ? orangeKingRoyalPreviewMode !== 2 : isRoyalSwordActive();
+    const rImg = wantRoyal ? getAdventureImage('royalSwordAttack0' + swordFrame[1]) : null;
+    if (rImg) {
+      if (calibRoyal && orangeKingRoyalPreviewMode === 0) ghostImg = heroImg; // 原本氣球劍 frame 半透明對照
+      heroImg = rImg;
+      royalN = Number(swordFrame[1]);
+    }
+  }
+
   const effectiveScale = useHammerScale ? HAMMER_ATTACK_SCALE_MULTIPLIER : 1;
 
   if (!player.facingRight) {
@@ -10940,11 +11088,12 @@ function drawPlayer(cx) {
       // Foot anchor 對齊：圖片 88.3% 高度處對齊 hitbox 底部（local 座標）
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      const dW = player.w * HERO_DRAW_SCALE * effectiveScale; // hammer 時乘以補償倍率
-      const dH = dW * (heroImg.height / heroImg.width); // 保持圖片比例
-      const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
-      const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
-      ctx.drawImage(heroImg, dX, dY, dW, dH);
+      const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
+      ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
+        const gr = getHeroDrawRect(ghostImg, 1, 0);
+        ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
+      }
     } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
     } else {
@@ -10956,11 +11105,12 @@ function drawPlayer(cx) {
       // Foot anchor 對齊（local 座標，往右走）
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      const dW = player.w * HERO_DRAW_SCALE * effectiveScale; // hammer 時乘以補償倍率
-      const dH = dW * (heroImg.height / heroImg.width);
-      const dX = (player.w - dW) / 2 + HERO_DRAW_OFFSET_X;
-      const dY = player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y;
-      ctx.drawImage(heroImg, dX, dY, dW, dH);
+      const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
+      ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
+        const gr = getHeroDrawRect(ghostImg, 1, 0);
+        ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
+      }
     } else if (playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, 0, 0, player.w, player.h);
     } else {
@@ -12034,8 +12184,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.46+：orange-king-royal-sword-arcshot-fix → orange-royal-sword（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-royal-sword-arcshot-fix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-royal-sword' + (tN === '1' ? '' : '-' + tN);
   // v0.3.45+：orange-king-polish-ring-sfx → orange-ring-sfx（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-polish-ring-sfx')) {
+  } else if (GAME_VERSION.includes('orange-king-polish-ring-sfx')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-ring-sfx' + (tN === '1' ? '' : '-' + tN);
   // v0.3.44+：orange-king-shot-slick-defeat → orange-shot-slick-ko（test-N > 1 時加上 -N）
@@ -12782,7 +12936,7 @@ function populateResultPanel() {
   if (gameState === 'clear' && isBossWeaponGateBlocked(getNextLevelIndex(currentLevelIndex))) {
     html += '<div class="rp-guidebook-hint rp-boss-next-card" id="rp-boss-weapon-gate">'
       + '<div class="rp-guidebook-hint__title">⚔️ Boss 戰前準備</div>'
-      + '<div class="rp-guidebook-hint__body">橘子王太危險了！<br>請先製作一把氣球劍或氣球槌，再前往 2-4。</div>'
+      + '<div class="rp-guidebook-hint__body">橘子王太危險了！<br>請先製作一把氣球劍，再前往 2-4。<br>（2-4 只能使用氣球劍）</div>'
       + '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openGuidebook()">📖 打開氣球秘笈製作武器</button>'
       + '</div>';
   } else
@@ -13898,7 +14052,7 @@ function renderHomeNextStage() {
       '<div class="hns-badge hns-badge--warn">⚔️ Boss 戰前準備</div>'
       + '<div class="hns-name">' + getChapterDisplayInfo(nextIdx).title + '</div>'
       + '<div class="hns-hint" style="margin-top:8px">橘子王太危險了！</div>'
-      + '<div class="hns-hint">請先製作一把氣球劍或氣球槌，再前往 2-4。</div>'
+      + '<div class="hns-hint">請先製作一把氣球劍，再前往 2-4（2-4 只能使用氣球劍）。</div>'
       + '<button class="rp-next-step-btn" style="margin-top:10px" onclick="openGuidebook()">📖 打開氣球秘笈製作武器</button>';
     if (btn) { btn.textContent = '請先製作武器'; btn.disabled = true; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
     return;
