@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.41-orange-king-boss-art-test-1';
-const BUILD_TIME   = '2026-10-13 14:40';
+const GAME_VERSION = 'adventure-v0.3.42-orange-king-boss-art-polish-test-1';
+const BUILD_TIME   = '2026-10-13 15:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -8405,19 +8405,27 @@ function drawOrangeKingBack(cx) {
     const band = getOrangeKingSprayBand(b.activeLane);
     const blink = Math.floor(b.phaseMs / 120) % 2 === 0;
     ctx.save();
-    ctx.fillStyle = 'rgba(255,60,60,0.10)';
+    // v0.3.42：改成暖白半透明（呼吸閃爍），融入橘金工業 Boss 房
+    ctx.fillStyle = 'rgba(255,245,220,0.07)';
     ctx.fillRect(band.x - cx, band.y, band.w, band.h);
-    ctx.strokeStyle = blink ? 'rgba(255,70,70,0.95)' : 'rgba(255,170,70,0.7)';
+    ctx.shadowColor = 'rgba(255,230,180,0.6)';
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = blink ? 'rgba(255,245,220,0.8)' : 'rgba(255,245,220,0.5)';
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.setLineDash([14, 10]);
     ctx.beginPath();
     ctx.moveTo(band.x - cx, band.y + band.h / 2);
     ctx.lineTo(band.x + band.w - cx, band.y + band.h / 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = blink ? '#ff4d4d' : '#ffb347';
+    ctx.shadowBlur = 0;
     ctx.font = 'bold 26px sans-serif';
     ctx.textAlign = 'left';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(60,30,10,0.6)';
+    ctx.strokeText('⚠', 22 - cx, band.y + band.h / 2 + 9);
+    ctx.fillStyle = blink ? 'rgba(255,245,220,0.9)' : 'rgba(255,245,220,0.6)';
     ctx.fillText('⚠', 22 - cx, band.y + band.h / 2 + 9);
     ctx.restore();
   }
@@ -8426,7 +8434,10 @@ function drawOrangeKingBack(cx) {
   if (b.phase === 'lobAim' && b.activeLob) {
     ctx.save();
     const blink = Math.floor(b.phaseMs / 140) % 2 === 0;
-    ctx.fillStyle = blink ? 'rgba(255,90,60,0.95)' : 'rgba(255,190,80,0.85)';
+    // v0.3.42：暖白半透明點線（淡淡外光），位置與實際油彈路徑相同
+    ctx.fillStyle = blink ? 'rgba(255,245,220,0.85)' : 'rgba(255,245,220,0.55)';
+    ctx.shadowColor = 'rgba(255,230,180,0.7)';
+    ctx.shadowBlur = 5;
     for (let tt = 0; tt < 400; tt += 3) {
       const p = getLobPoint(b.activeLob, tt);
       if (p.x < -20 || p.y > CANVAS_H + 20) break;
@@ -8675,14 +8686,20 @@ function drawOrangeKingBody(cx) {
     ctx.beginPath(); ctx.ellipse(ccx + bw * 0.44, by + 60 + ((dy + 15) % 30), 6, 9, 0, 0, Math.PI * 2); ctx.fill();
     // 可攻擊提示框
     const pulse = 0.5 + 0.5 * Math.sin(t / 110);
-    ctx.strokeStyle = b.ringActive ? `rgba(120,255,160,${0.4 + 0.5 * pulse})` : `rgba(200,200,200,${0.25 + 0.25 * pulse})`;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([10, 8]);
+    // v0.3.42：暖白半透明虛線（約 80%），不再用高飽和綠
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,235,190,0.55)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = b.ringActive ? `rgba(255,255,255,${0.7 + 0.15 * pulse})` : `rgba(255,255,255,${0.3 + 0.15 * pulse})`;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([12, 9]);
     ctx.beginPath(); ctx.ellipse(ccx, ccy, bw / 2 + 10, bh / 2 + 10, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
     ctx.font = 'bold 18px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = b.ringActive ? '#9dffb5' : '#ddd';
+    ctx.fillStyle = b.ringActive ? 'rgba(255,240,180,0.95)' : 'rgba(255,255,255,0.75)';
     ctx.fillText(b.ringActive ? '💦 喘氣中！快攻擊！' : '💦 喘氣中', ccx, by - 58);
   }
   ctx.restore();
@@ -8905,7 +8922,10 @@ const ORANGE_KING_MACHINE_ART_DEFAULTS = {
   // v0.3.41：Boss 本體三張圖（offset = 相對於量測錨點的微調；scale = 對 512×512 原圖）
   bossIdleOffsetX: 0, bossIdleOffsetY: 0, bossIdleScale: 0.73,
   bossCooldownOffsetX: 0, bossCooldownOffsetY: 0, bossCooldownScale: 0.73,
-  bossDashOffsetX: 0, bossDashOffsetY: 0, bossDashScale: 0.47,
+  bossDashOffsetX: 0, bossDashOffsetY: -22, bossDashScale: 0.55, // v0.3.42：Vash 用 F4 調好的值
+  // v0.3.42：衝撞撞牆後的暈眩（同一張 cooldown 圖，縮成接近 dash_ball 的大小）
+  //   錨點 = 腳底踩在地面、身體中心對齊衝撞球中心；offsetY 0 = 剛好坐在地板上（不用 -22，否則會懸空）
+  bossDashCooldownOffsetX: 0, bossDashCooldownOffsetY: 0, bossDashCooldownScale: 0.55,
 };
 const ORANGE_KING_MACHINE_ART = Object.assign({}, ORANGE_KING_MACHINE_ART_DEFAULTS);
 
@@ -9083,27 +9103,34 @@ const ORANGE_KING_BOSS_ART_SRC = {
   cooldown: { w: 512, h: 512, anchorX: 230, anchorY: 472, opaque: [15, 25, 493, 485], sphere: [100, 190, 360, 450], beltY: 395 },
   dash:     { w: 512, h: 512, anchorX: 225, anchorY: 275, opaque: [30, 55, 512, 495], sphere: [60, 110, 390, 440] },
 };
-const ORANGE_KING_BOSS_ART_KEYS = { idle: 'bossIdle', cooldown: 'bossCooldown', dash: 'bossDashBall' };
+// v0.3.42：dashCooldown = 衝撞撞牆後暈眩，沿用 cooldown 圖與量測點，只是尺寸 / 定位參數獨立
+ORANGE_KING_BOSS_ART_SRC.dashCooldown = ORANGE_KING_BOSS_ART_SRC.cooldown;
+const ORANGE_KING_BOSS_ART_KEYS = { idle: 'bossIdle', cooldown: 'bossCooldown', dash: 'bossDashBall', dashCooldown: 'bossCooldown' };
+const ORANGE_KING_BOSS_ART_PARAM = { idle: 'bossIdle', cooldown: 'bossCooldown', dash: 'bossDash', dashCooldown: 'bossDashCooldown' };
 
 // 目前要畫哪一張（純視覺；與判定無關）
 function getOrangeKingArtState(b) {
   if (orangeKingMachineCalibMode) {
-    const pv = { bossIdle: 'idle', bossCooldown: 'cooldown', bossDash: 'dash' }[orangeKingMachineCalibTarget];
+    const pv = { bossIdle: 'idle', bossCooldown: 'cooldown', bossDash: 'dash', bossDashCooldown: 'dashCooldown' }[orangeKingMachineCalibTarget];
     if (pv) return pv;
   }
   if (b.phase === 'defeated') return 'cooldown';
-  if (b.curled) return (b.phase === 'chargeSpin' || b.phase === 'chargeDash') ? 'dash' : 'cooldown';
+  if (b.curled) return (b.phase === 'chargeSpin' || b.phase === 'chargeDash') ? 'dash' : 'dashCooldown'; // v0.3.42：撞牆暈眩用小尺寸
   if (b.phase === 'cooldown') return 'cooldown';
   return 'idle';
 }
 // 某個狀態的繪製矩形（世界座標）；anchor：idle/cooldown = 站立點（身體中心 x、腳底 y），dash = 球心
 function getOrangeKingBossArtGeom(state, b) {
   const A = ORANGE_KING_MACHINE_ART, S = ORANGE_KING_BOSS_ART_SRC[state];
-  const pre = state === 'idle' ? 'bossIdle' : (state === 'cooldown' ? 'bossCooldown' : 'bossDash');
+  const pre = ORANGE_KING_BOSS_ART_PARAM[state];
   const sc = A[pre + 'Scale'];
   let ax, ay;
-  const previewDash = state === 'dash' && !b.curled; // 定位工具預覽：放在站位上的衝撞球位置
-  if (state === 'dash') {
+  const previewDash = (state === 'dash' || state === 'dashCooldown') && !b.curled; // 定位工具預覽：放在站位上的衝撞球位置
+  if (state === 'dashCooldown') {
+    const bx = previewDash ? ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2 : b.x;
+    ax = bx + ORANGE_KING.BALL_W / 2;
+    ay = GROUND_Y;
+  } else if (state === 'dash') {
     const bx = previewDash ? ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2 : b.x;
     ax = bx + ORANGE_KING.BALL_W / 2;
     ay = GROUND_Y - ORANGE_KING.BALL_H / 2;
@@ -9199,18 +9226,24 @@ function drawOrangeKingBossArt(cx) {
   // 喘氣：可攻擊提示框 + 文字
   if (b.phase === 'cooldown') {
     const pulse = 0.5 + 0.5 * Math.sin(t / 110);
-    ctx.strokeStyle = b.ringActive ? `rgba(120,255,160,${0.4 + 0.5 * pulse})` : `rgba(200,200,200,${0.25 + 0.25 * pulse})`;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([10, 8]);
+    // v0.3.42：暖白半透明虛線（約 80%）+ 淡淡暖色外光，不再用高飽和綠
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,235,190,0.55)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = b.ringActive ? `rgba(255,255,255,${0.7 + 0.15 * pulse})` : `rgba(255,255,255,${0.3 + 0.15 * pulse})`;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([12, 9]);
     ctx.beginPath(); ctx.ellipse(scx, scy, sph.w / 2 + 14, sph.h / 2 + 14, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
     ctx.font = 'bold 18px sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     const txt = b.ringActive ? '💦 喘氣中！快攻擊！' : '💦 喘氣中';
     ctx.strokeText(txt, scx, topY - 6);
-    ctx.fillStyle = b.ringActive ? '#9dffb5' : '#ddd';
+    ctx.fillStyle = b.ringActive ? 'rgba(255,240,180,0.95)' : 'rgba(255,255,255,0.75)';
     ctx.fillText(txt, scx, topY - 6);
   }
   ctx.restore();
@@ -9362,6 +9395,7 @@ const ORANGE_KING_MACHINE_CALIB_TARGETS = [
   { key: 'bossIdle',     label: '0 Boss idle 圖（方向鍵 X/Y、[ ] scale）' },
   { key: 'bossCooldown', label: '- Boss cooldown 圖（方向鍵 X/Y、[ ] scale）' },
   { key: 'bossDash',     label: '= Boss dash_ball 圖（方向鍵 X/Y、[ ] scale）' },
+  { key: 'bossDashCooldown', label: '\\ Boss 撞牆暈眩圖（cooldown 小尺寸；方向鍵 X/Y、[ ] scale）' },
 ];
 var orangeKingMachineCalibMode   = false;
 var orangeKingMachineCalibTarget = 'base';
@@ -9402,7 +9436,8 @@ function getOrangeKingMachineCalibText() {
     + `  platformMidScaleX: ${r2(A.platformMidScaleX)},\n  platformMidScaleY: ${r2(A.platformMidScaleY)},\n`
     + `  bossIdleOffsetX: ${r2(A.bossIdleOffsetX)}, bossIdleOffsetY: ${r2(A.bossIdleOffsetY)}, bossIdleScale: ${r2(A.bossIdleScale)},\n`
     + `  bossCooldownOffsetX: ${r2(A.bossCooldownOffsetX)}, bossCooldownOffsetY: ${r2(A.bossCooldownOffsetY)}, bossCooldownScale: ${r2(A.bossCooldownScale)},\n`
-    + `  bossDashOffsetX: ${r2(A.bossDashOffsetX)}, bossDashOffsetY: ${r2(A.bossDashOffsetY)}, bossDashScale: ${r2(A.bossDashScale)},\n};`;
+    + `  bossDashOffsetX: ${r2(A.bossDashOffsetX)}, bossDashOffsetY: ${r2(A.bossDashOffsetY)}, bossDashScale: ${r2(A.bossDashScale)},\n`
+    + `  bossDashCooldownOffsetX: ${r2(A.bossDashCooldownOffsetX)}, bossDashCooldownOffsetY: ${r2(A.bossDashCooldownOffsetY)}, bossDashCooldownScale: ${r2(A.bossDashCooldownScale)},\n};`;
 }
 function resetOrangeKingMachineCalibTarget() {
   const D = ORANGE_KING_MACHINE_ART_DEFAULTS, A = ORANGE_KING_MACHINE_ART;
@@ -9415,6 +9450,7 @@ function resetOrangeKingMachineCalibTarget() {
     bossIdle:     ['bossIdleOffsetX', 'bossIdleOffsetY', 'bossIdleScale'],
     bossCooldown: ['bossCooldownOffsetX', 'bossCooldownOffsetY', 'bossCooldownScale'],
     bossDash:     ['bossDashOffsetX', 'bossDashOffsetY', 'bossDashScale'],
+    bossDashCooldown: ['bossDashCooldownOffsetX', 'bossDashCooldownOffsetY', 'bossDashCooldownScale'],
   };
   (keysByTarget[orangeKingMachineCalibTarget] || []).forEach(k => { A[k] = D[k]; });
   saveOrangeKingMachineCalib();
@@ -9445,14 +9481,14 @@ function handleOrangeKingMachineCalibKey(e) {
   const step = e.shiftKey ? 10 : 1;
   const sStep = e.shiftKey ? 0.05 : 0.01;
   const digit = { Digit1: 'base', Digit2: 'pipe', Digit3: 'pipeHigh', Digit4: 'pipeMid', Digit5: 'pipeLow', Digit6: 'oil', Digit7: 'oilStream', Digit8: 'platHigh', Digit9: 'platMid',
-                  Digit0: 'bossIdle', Minus: 'bossCooldown', Equal: 'bossDash' }[e.code];
+                  Digit0: 'bossIdle', Minus: 'bossCooldown', Equal: 'bossDash', Backslash: 'bossDashCooldown' }[e.code];
   if (digit) { orangeKingMachineCalibTarget = digit; e.preventDefault(); return true; }
   let changed = false;
   const dx = e.code === 'ArrowLeft' ? -step : (e.code === 'ArrowRight' ? step : 0);
   const dy = e.code === 'ArrowUp' ? -step : (e.code === 'ArrowDown' ? step : 0);
   const ds = e.code === 'BracketLeft' ? -sStep : (e.code === 'BracketRight' ? sStep : 0);
   const dsy = e.code === 'Semicolon' ? -sStep : (e.code === 'Quote' ? sStep : 0); // v0.3.37：; ' 調 Y scale
-  if ((tg === 'bossIdle' || tg === 'bossCooldown' || tg === 'bossDash') && (dx || dy || ds)) {
+  if ((tg === 'bossIdle' || tg === 'bossCooldown' || tg === 'bossDash' || tg === 'bossDashCooldown') && (dx || dy || ds)) {
     A[tg + 'OffsetX'] += dx;
     A[tg + 'OffsetY'] += dy;
     A[tg + 'Scale'] = Math.max(0.05, Math.round((A[tg + 'Scale'] + ds) * 100) / 100);
@@ -9493,7 +9529,7 @@ function handleOrangeKingMachineCalibKey(e) {
   }
   if (changed) { saveOrangeKingMachineCalib(); e.preventDefault(); return true; }
   // 定位模式開啟時，方向鍵 / 數字鍵 / [ ] 都不傳給遊戲
-  if (/^(Arrow|Digit|Bracket)/.test(e.code) || ['Semicolon', 'Quote', 'Minus', 'Equal'].includes(e.code)) { e.preventDefault(); return true; }
+  if (/^(Arrow|Digit|Bracket)/.test(e.code) || ['Semicolon', 'Quote', 'Minus', 'Equal', 'Backslash'].includes(e.code)) { e.preventDefault(); return true; }
   return false;
 }
 
@@ -9603,7 +9639,7 @@ function drawOrangeKingMachineCalibOverlay() {
       const hr = getOrangeKingHurtRect();
       ctx.strokeStyle = '#ff3b3b';
       ctx.strokeRect(hr.x - cx, hr.y, hr.w, hr.h);
-      if (st === 'dash') {
+      if (st === 'dash' || st === 'dashCooldown') {
         const dh = bg.previewDash
           ? { x: ORANGE_KING.HOME_X + (ORANGE_KING.W - ORANGE_KING.BALL_W) / 2 + 8, y: GROUND_Y - ORANGE_KING.BALL_H + 6, w: ORANGE_KING.BALL_W - 16, h: ORANGE_KING.BALL_H - 6 }
           : getOrangeKingDashHitbox();
@@ -9641,14 +9677,15 @@ function drawOrangeKingMachineCalibOverlay() {
     'platMid:  X ' + A.platformMidX + '  Y ' + A.platformMidY + '  scaleX ' + A.platformMidScaleX + '  scaleY ' + A.platformMidScaleY,
     'boss idle: ' + A.bossIdleOffsetX + ',' + A.bossIdleOffsetY + ' ×' + A.bossIdleScale
       + '  cooldown: ' + A.bossCooldownOffsetX + ',' + A.bossCooldownOffsetY + ' ×' + A.bossCooldownScale
-      + '  dash: ' + A.bossDashOffsetX + ',' + A.bossDashOffsetY + ' ×' + A.bossDashScale,
+      + '  dash: ' + A.bossDashOffsetX + ',' + A.bossDashOffsetY + ' ×' + A.bossDashScale
+      + '  dashCD: ' + A.bossDashCooldownOffsetX + ',' + A.bossDashCooldownOffsetY + ' ×' + A.bossDashCooldownScale,
     'art: base=' + (orangeKingBossImgStatus.machineBase || '-') + '  pipe=' + (orangeKingBossImgStatus.oilPipeHorizontal || '-')
       + '  stream=' + (orangeKingBossImgStatus.oilStreamHorizontal || '-')
       + '  bg=' + (orangeKingBossImgStatus.bossRoomBg || '-')
       + '  platHigh=' + (orangeKingBossImgStatus.platformHigh || '-') + '  platMid=' + (orangeKingBossImgStatus.platformMid || '-'),
     'boss art: idle=' + (orangeKingBossImgStatus.bossIdle || '-') + '  cooldown=' + (orangeKingBossImgStatus.bossCooldown || '-')
       + '  dash=' + (orangeKingBossImgStatus.bossDashBall || '-'),
-    '1~9、0 / - / = 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜; \' scaleY（7/8/9）｜R 重置｜C 輸出',
+    '1~9、0 / - / = / \\ 選目標｜方向鍵 1px（Shift 10px）｜[ ] scale｜; \' scaleY（7/8/9）｜R 重置｜C 輸出',
   ];
   if (!isOrangeKingStageActive()) lines.push('（目前不在 2-4：暫停 → 🍊 測試 2-4 橘子王）');
   const w = 560, lh = 17, h = lines.length * lh + 12;
@@ -11382,8 +11419,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.42+：orange-king-boss-art-polish → orange-boss-art-polish（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('orange-king-boss-art-polish')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'orange-boss-art-polish' + (tN === '1' ? '' : '-' + tN);
   // v0.3.41+：orange-king-boss-art → orange-boss-art（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('orange-king-boss-art')) {
+  } else if (GAME_VERSION.includes('orange-king-boss-art')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'orange-boss-art' + (tN === '1' ? '' : '-' + tN);
   // v0.3.40+：orange-king-platform-hint → orange-platform-hint（test-N > 1 時加上 -N）
