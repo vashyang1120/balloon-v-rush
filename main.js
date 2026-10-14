@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.50-item-icons-goal-flag-test-1';
-const BUILD_TIME   = '2026-10-14 15:00';
+const GAME_VERSION = 'adventure-v0.3.50-item-icons-goal-flag-fix-1';
+const BUILD_TIME   = '2026-10-14 14:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -11532,6 +11532,9 @@ function drawChapter2BgCalibOverlay() {
         + '｜260=' + s2('b260') + ' ×' + I.balloon260IconScale + ' ' + I.balloon260IconOffsetX + ',' + I.balloon260IconOffsetY
         + '｜round=' + s2('round') + ' ×' + I.balloonRoundIconScale + ' ' + I.balloonRoundIconOffsetX + ',' + I.balloonRoundIconOffsetY
         + '｜flag=' + s2('goalFlag') + ' ×' + I.goalFlagScale + ' ' + I.goalFlagOffsetX + ',' + I.goalFlagOffsetY + ' α' + I.goalFlagAlpha; })(),
+    ...Object.keys(ADVENTURE_ITEM_ICON_PATHS).map(k => { const i = adventureItemIconInfo[k] || {}; // v0.3.50-fix-1：完整網址 / 狀態 / 尺寸
+      const last = (i.tried || []).slice(-1)[0];
+      return '  ' + k + '：' + (adventureItemIconStatus[k] || '-') + (i.w ? ' ' + i.w + '×' + i.h : '') + '  ' + (i.url || (last ? last.url : getAdventureItemIconCandidates(k)[0])); }),
     '素材：ground=' + st('groundTile') + ' edgeL=' + st('pitEdgeLeft') + ' edgeR=' + st('pitEdgeRight') + ' shadow=' + st('pitShadow')
       + ' platShort=' + st('platformShort') + ' platLong=' + st('platformLong') + ' bgm=' + chapter2BgmStatus,
     '圖片：far=' + st('far') + ' mid=' + st('mid') + ' near=' + st('near') + '  boiler=' + st('fgBoiler') + ' machine=' + st('fgMachine') + ' tree=' + st('fgTree') + ' crates=' + st('fgCrates'),
@@ -11544,7 +11547,7 @@ function drawChapter2BgCalibOverlay() {
   ];
   // v0.3.50：選道具圖示 / 過關旗時，面板只留相關的幾行（不擋住中間的預覽）
   if (/^ico/.test(chapter2BgCalibTarget)) {
-    const keep = lines.filter((ln, i) => i < 2 || /^道具圖|^Y 金幣/.test(ln));
+    const keep = lines.filter((ln, i) => i < 2 || /^道具圖|^Y 金幣|^  (coin|b260|round|goalFlag)：/.test(ln));
     lines.length = 0; keep.forEach(l => lines.push(l));
   }
   const w = 920, lh = 17, h = lines.length * lh + 12;
@@ -12024,25 +12027,76 @@ const ADVENTURE_ITEM_ICON_DEFAULTS = {
 const ADVENTURE_ITEM_ICON = Object.assign({}, ADVENTURE_ITEM_ICON_DEFAULTS);
 const ADVENTURE_ITEM_ICON_LS_KEY = 'balloonV_itemIconCalib__' + GAME_VERSION;
 const adventureItemIconImgs = {}, adventureItemIconStatus = {};
+// v0.3.50-fix-1：載入來源依序嘗試（任一成功就用）：
+//   1. GitHub Pages（resolveAdventureAssetSrc，正式部署位置）
+//   2. 和目前網頁同一個網站的相對路徑（遊戲放在別的網址 / 本機測試時）
+//   3. raw.githubusercontent.com（repo 一 push 就有，不用等 Pages 重新部署）
+// 每張圖都記錄：每個嘗試的完整網址與結果、最後成功的網址、naturalWidth / naturalHeight
+const ADVENTURE_ITEM_ICON_RAW_BASE = 'https://raw.githubusercontent.com/vashyang1120/balloon-v-rush/main/';
+const adventureItemIconInfo = {}; // key → { status, url, w, h, tried: [{ url, result }] }
+function getAdventureItemIconCandidates(key) {
+  const p = ADVENTURE_ITEM_ICON_PATHS[key];
+  const q = '?v=' + encodeURIComponent(GAME_VERSION);
+  const list = [resolveAdventureAssetSrc(p) + q];
+  try {
+    if (typeof location !== 'undefined' && location.href) list.push(new URL(p, location.href).href + q);
+  } catch (e) {}
+  list.push(ADVENTURE_ITEM_ICON_RAW_BASE + p + q);
+  return list.filter((u, i) => u && list.indexOf(u) === i);
+}
 function initAdventureItemIcons() {
   if (typeof Image === 'undefined') return;
-  Object.entries(ADVENTURE_ITEM_ICON_PATHS).forEach(([key, path]) => {
+  Object.keys(ADVENTURE_ITEM_ICON_PATHS).forEach(key => {
     if (adventureItemIconStatus[key]) return;
     adventureItemIconStatus[key] = 'loading';
-    try {
-      const img = new Image();
-      img.onload = () => { adventureItemIconImgs[key] = img; adventureItemIconStatus[key] = 'ok'; };
-      img.onerror = () => { adventureItemIconStatus[key] = 'error'; console.warn('[ItemIcon] 圖片載入失敗：' + key + ' → ' + path); };
-      img.src = resolveAdventureAssetSrc(path) + '?v=' + encodeURIComponent(GAME_VERSION);
-    } catch (e) { adventureItemIconStatus[key] = 'error'; }
+    const info = adventureItemIconInfo[key] = { status: 'loading', url: '', w: 0, h: 0, tried: [] };
+    const cands = getAdventureItemIconCandidates(key);
+    const tryAt = (i) => {
+      if (i >= cands.length) {
+        adventureItemIconStatus[key] = 'error'; info.status = 'error';
+        console.error('[ItemIcon] ❌ ' + key + ' 全部來源都載入失敗（改用舊畫法 / emoji）：\n'
+          + info.tried.map(t => '   ' + t.result + '  ' + t.url).join('\n'));
+        return;
+      }
+      const url = cands[i];
+      try {
+        const img = new Image();
+        img.onload = () => {
+          if (!img.naturalWidth) { info.tried.push({ url, result: 'error（naturalWidth 0）' }); tryAt(i + 1); return; }
+          adventureItemIconImgs[key] = img;
+          adventureItemIconStatus[key] = 'ok';
+          Object.assign(info, { status: 'ok', url, w: img.naturalWidth, h: img.naturalHeight });
+          info.tried.push({ url, result: 'ok' });
+          console.info('[ItemIcon] ✅ ' + key + ' 載入成功 ' + img.naturalWidth + '×' + img.naturalHeight + '（第 ' + (i + 1) + ' 個來源）\n   ' + url
+            + (i > 0 ? '\n   前面失敗的來源：\n' + info.tried.slice(0, -1).map(t => '   ' + t.result + '  ' + t.url).join('\n') : ''));
+        };
+        img.onerror = () => { info.tried.push({ url, result: 'error' }); console.warn('[ItemIcon] ' + key + ' 來源載入失敗，改試下一個：' + url); tryAt(i + 1); };
+        img.src = url;
+      } catch (e) { info.tried.push({ url, result: 'exception ' + e.message }); tryAt(i + 1); }
+    };
+    tryAt(0);
   });
 }
+// console 手動查詢：debugItemIcons()
+function debugItemIcons() {
+  const rows = Object.keys(ADVENTURE_ITEM_ICON_PATHS).map(k => {
+    const i = adventureItemIconInfo[k] || {};
+    return { key: k, status: adventureItemIconStatus[k] || '-', url: i.url || '(none)', naturalWidth: i.w || 0, naturalHeight: i.h || 0,
+             tried: (i.tried || []).map(t => t.result + ' ' + t.url).join(' | ') };
+  });
+  try { console.table(rows); } catch (e) { console.log(rows); }
+  return rows;
+}
+if (typeof window !== 'undefined') window.debugItemIcons = debugItemIcons;
 function getAdventureItemIconImg(key) {
   if (!adventureItemIconStatus[key]) initAdventureItemIcons();
   const img = adventureItemIconImgs[key];
   return (img && img.complete && img.naturalWidth > 0) ? img : null;
 }
-function getAdventureItemIconSrc(key) { return resolveAdventureAssetSrc(ADVENTURE_ITEM_ICON_PATHS[key]) + '?v=' + encodeURIComponent(GAME_VERSION); }
+function getAdventureItemIconSrc(key) {
+  const info = adventureItemIconInfo[key];
+  return (info && info.url) ? info.url : getAdventureItemIconCandidates(key)[0];
+}
 // 畫面上畫一個道具圖（以對齊點對準 (x, y)）；回傳 false = 圖沒載好
 function drawAdventureItemIcon(key, x, y, scale, alpha) {
   const img = getAdventureItemIconImg(key);
@@ -12061,9 +12115,11 @@ function itemIconHtml(key, emoji) {
   if (adventureItemIconStatus[key] === 'error' || typeof document === 'undefined') return emoji;
   if (!adventureItemIconStatus[key]) initAdventureItemIcons();
   const e = String(emoji).replace(/'/g, '');
+  // 已載入 → 用成功的網址；還在載入 → 先用第一個來源，失敗時改用 raw.githubusercontent，再失敗才換回 emoji
+  const raw = ADVENTURE_ITEM_ICON_RAW_BASE + ADVENTURE_ITEM_ICON_PATHS[key] + '?v=' + encodeURIComponent(GAME_VERSION);
   return '<img class="adv-item-icon" src="' + getAdventureItemIconSrc(key) + '" alt="' + e + '"'
     + ' style="width:1.15em;height:1.15em;object-fit:contain;vertical-align:-0.2em;display:inline-block"'
-    + ' onerror="this.replaceWith(document.createTextNode(\'' + e + '\'))">';
+    + ' onerror="if(!this.dataset.rawTried){this.dataset.rawTried=1;this.src=\'' + raw + '\';}else{this.replaceWith(document.createTextNode(\'' + e + '\'));}">';
 }
 function loadAdventureItemIconCalib() {
   try {
@@ -12077,8 +12133,9 @@ function loadAdventureItemIconCalib() {
 function saveAdventureItemIconCalib() {
   try { localStorage.setItem(ADVENTURE_ITEM_ICON_LS_KEY, JSON.stringify({ version: GAME_VERSION, values: ADVENTURE_ITEM_ICON })); } catch (e) {}
 }
-if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) loadAdventureItemIconCalib();
-initAdventureItemIcons();
+// v0.3.50-fix-1：初始化不依賴任何後面才宣告的常數（定位暫存只有測試版會寫入，正式版讀不到也不影響）
+try { loadAdventureItemIconCalib(); } catch (e) {}
+try { initAdventureItemIcons(); } catch (e) { console.error('[ItemIcon] 初始化失敗', e); }
 
 function drawCoin(x, y) {
   // v0.3.50：正式金幣圖（淡金外光 + 圖）；沒載好 → 原本畫法
@@ -13114,8 +13171,9 @@ function getShortVersionLabel() {
   let tPart = '';
   // v0.3.50+：item-icons-goal-flag → item-icons-flag（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('item-icons-goal-flag')) {
+    const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1];
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
-    tPart = 'item-icons-flag' + (tN === '1' ? '' : '-' + tN);
+    tPart = 'item-icons-flag' + (fN ? '-fix' + fN : (tN === '1' ? '' : '-' + tN));
   // v0.3.49+：chapter2-ground-platform-bgm → ch2-ground-bgm（test-N > 1 時加上 -N）
   } else if (GAME_VERSION.includes('chapter2-ground-platform-bgm')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
