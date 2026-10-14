@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.52-chapter1-bg-readability-layout-fix-1';
-const BUILD_TIME   = '2026-10-14 22:30';
+const GAME_VERSION = 'adventure-v0.3.53-chapter1-platforms-bgm-near-fg-depth-test-1';
+const BUILD_TIME   = '2026-10-14 23:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -10771,6 +10771,7 @@ function updateNextLevelButton() {
 // ── Draw ──────────────────────────────────────
 function draw() {
   try { syncOrangeKingBgm(); } catch (e) {} // v0.3.43：2-4 Boss BGM（依目前狀態播放 / 暫停 / 停止）
+  try { syncChapter1Bgm(); } catch (e) {}   // v0.3.53：1-1～1-3 第一章 BGM（離開第一章立刻停止，不疊播）
   try { syncChapter2Bgm(); } catch (e) {}   // v0.3.49：2-1～2-3 第二章 BGM（和 Boss BGM 互斥，不疊播）
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -11247,6 +11248,7 @@ function syncChapter2Bgm() {
   }
 }
 function getCurrentBgmName() {
+  if (typeof chapter1Bgm !== 'undefined' && chapter1Bgm && !chapter1Bgm.paused) return 'chapter1_balloon_forest_bgm';
   if (chapter2Bgm && !chapter2Bgm.paused) return 'chapter2_orange_factory_bgm';
   if (typeof orangeKingBgm !== 'undefined' && orangeKingBgm && !orangeKingBgm.paused) return 'orange_king_boss_bgm';
   return '（無）';
@@ -11609,17 +11611,19 @@ const CHAPTER1_BG_DEFAULTS = {
   farParallax: 0.12, farScale: 0.609, farOffsetY: 0,
   // mid：× 0.36（639×319），浮島主體在 y 203～418，雲朵底部藏在地面線附近，上半畫面留給天空
   midParallax: 0.32, midScale: 0.36, midOffsetY: 150,
-  // near：× 0.24（426×213），只當畫面下緣 / 兩側的層次（y 230～443），不填滿畫面中央
-  nearParallax: 0.62, nearScale: 0.24, nearOffsetY: 257,
+  // v0.3.53：near = 大型樹洞 / 樹冠框景（單張、不平鋪）。× 0.75（1331×665），offsetY -60 → 畫面 y -60～605，上下緣都蓋滿（不會露出切口）
+  //   框景模式：整關從起點到終點只橫移「圖寬 − 畫面寬」= 371px；實際移動率 = min(nearParallax, 371 ÷ 鏡頭最大位移)
+  //   （6400 長的關卡 ≈ 0.068；要真的到 0.10 需要 nearScale ≥ 0.85，上下會被裁掉更多樹冠 / 籬笆）
+  nearParallax: 0.10, nearScale: 0.75, nearOffsetY: -60, nearFrameMode: 1,
   // 濾鏡（快取圖塊時套用一次）：blur 全部 0（避免整片糊）
   farAlpha: 1,     farBlur: 0, farSaturation: 0.95, farBrightness: 1,
   midAlpha: 0.82,  midBlur: 0, midSaturation: 0.78, midBrightness: 0.98,
-  nearAlpha: 0.68, nearBlur: 0, nearSaturation: 0.72, nearBrightness: 0.96,
+  nearAlpha: 0.82, nearBlur: 0, nearSaturation: 0.72, nearBrightness: 0.96,
   // 可讀性霧幕（暖白 rgba(255,245,230, α)，只蓋到地面線 GROUND_Y）
-  veilEnabled: 1, veilAlpha: 0.20,
+  veilEnabled: 1, veilAlpha: 0.16,
   // near 上緣淡出：fix-1 關閉（0，避免上方被挖空的感覺）；需要時可用 console：setChapter1Bg({ nearTopFade: 0.1 })
   nearTopFade: 0,
-  // 地面小物件：畫在背景之後、地面 / 平台 / 玩法物件之前（全部在小V後方）；底部壓進地面線 groundOffsetY px
+  // 地面小物件：behind（背景之後、玩法物件之前）＋ front（小V / 敵人 / 道具之後、HUD 之前）；底部壓進地面線 groundOffsetY px
   // foregroundParallax：fix-1 改 1.0（和地面同速）。實測 0.88 時物件會在地面上「滑動」，捲動中會滑到金幣 / 尖刺 / 蠍子後面；
   //   1.0 時 1-1～1-3 全程 0 重疊（以畫面中心為基準計算，可在 F4 4 → A D 或 setChapter1Bg 改回 0.88）
   fgEnabled: 1, foregroundParallax: 1.0, fgGroundOffsetY: 10, fgGlobalScale: 0.85, fgAlpha: 0.80,
@@ -11628,13 +11632,47 @@ const CHAPTER1_BG_DEFAULTS = {
   fgBalloonRabbitScale: 0.070,
   fgGiftPileScale: 0.070,
   fgArrowSignScale: 0.075,
+  // v0.3.53：前景（front）物件 — 比後方物件大一點、底部更低（更靠近鏡頭），小V靠近 / 重疊時平滑半透明
+  fgFrontScale: 1.12, fgFrontGroundOffsetY: 22,
+  fgFrontAlpha: 0.88, fgFrontNearAlpha: 0.62, fgFrontOverlapAlpha: 0.40, fgFrontObjectAlpha: 0.55,
+  fgFrontNearDist: 60, fgFrontFadeSpeed: 0.15,
+  // v0.3.53：第一章 BGM 音量（原檔約 -17.8 dBFS，和第二章 -18.0 dBFS 接近 → 0.24 略小於第二章 0.26）
+  chapter1BgmVolume: 0.24,
 };
+// v0.3.53：第一章平台圖（只換視覺，hitbox / 碰撞不變）
+const CHAPTER1_PLATFORM_ART = {
+  long:       'assets/adventure/platforms/chapter1/chapter1_platform_long.png',        // 1774×887
+  shortWood:  'assets/adventure/platforms/chapter1/chapter1_platform_short_wood.png',  // 1254×1254
+  shortCloud: 'assets/adventure/platforms/chapter1/chapter1_platform_short_cloud.png', // 1254×1254
+};
+// 量自原圖：可站立面 topY、對齊平台 hitbox 左右的範圍 x0～x1（其餘花草 / 氣球 / 藤蔓可略超出）
+const CHAPTER1_PLATFORM_SRC = {
+  long:       { topY: 380, x0: 40,  x1: 1735 },  // 草皮上緣 y≈376～382；土塊 + 藤蔓到 y 763
+  shortWood:  { topY: 519, x0: 180, x1: 1090 },  // 木板上緣 y≈519；兩端木樁（含）對齊 hitbox 左右，花叢 / 氣球略超出
+  shortCloud: { topY: 472, x0: 110, x1: 1150 },  // 雲朵上緣 y≈454～486（取 472）；藤蔓往下垂
+};
+// 目前 1-1～1-3 平台寬度只有 110～180 → 寬 ≥ 160 當長平台（每關 2～4 個），其他是短平台
+const CHAPTER1_PLATFORM_LONG_MIN_W = 160;
+const CHAPTER1_PLATFORM_CLOUD_RATIO = 0.4; // 短平台：40% 雲朵、60% 木橋（每關固定，用 stageId + x 雜湊，不用亂數）
+const CHAPTER1_PLATFORM_DRAW_DEFAULTS = {
+  enabled: 1,
+  longScaleX: 1, longScaleY: 1, longOffsetY: 0,
+  shortWoodScaleX: 1, shortWoodScaleY: 1, shortWoodOffsetY: 0,
+  shortCloudScaleX: 1, shortCloudScaleY: 1, shortCloudOffsetY: 0,
+  alpha: 1,
+  shadowAlpha: 0.5, shadowBlur: 7, // 平台外陰影（可讀性）
+};
+const CHAPTER1_PLATFORM_DRAW = Object.assign({}, CHAPTER1_PLATFORM_DRAW_DEFAULTS);
+const CHAPTER1_BGM_PATH = 'assets/audio/bgm/chapter1_balloon_forest_bgm.mp3';
+let chapter1Bgm = null, chapter1BgmStatus = '-', chapter1BgmWantRestart = false, chapter1BgmBlocked = false;
+let chapter1FrontPropDebug = false; // F4 → B：前景物件外框 / 透明狀態
 // 每關配置（x = 世界座標中心）：避開地面高度的金幣 ±25、260 / 圓氣球 ±30、尖刺 ±50、小怪巡邏範圍 ±30、
 // 橘子噴油怪 ±230、低平台（y ≥ 340）±20、出生點 x < 180、終點旗 6080 之後（箭牌例外：放旗子前、指向旗子）
+// v0.3.53：layer 'back' = 小V後方（場景豐富度）、'front' = 小V前方（立體感，小V靠近時半透明）
 const CHAPTER1_FG_PROPS = {
-  '1-1': [{ type: 'flowerHill', x: 1852 }, { type: 'balloonRabbit', x: 3512 }, { type: 'flowerHill', x: 4700 }, { type: 'arrowSign', x: 5962 }],
-  '1-2': [{ type: 'flowerHill', x: 1635 }, { type: 'giftPile', x: 2612 }, { type: 'flowerHill', x: 4027, s: 0.9 }, { type: 'flowerHill', x: 5610 }, { type: 'arrowSign', x: 5912 }],
-  '1-3': [{ type: 'flowerHill', x: 690 }, { type: 'giftPile', x: 1287 }, { type: 'balloonRabbit', x: 2028 }, { type: 'flowerHill', x: 2450 }, { type: 'arrowSign', x: 6128, s: 0.9 }],
+  '1-1': [{ type: 'flowerHill', x: 1852, layer: 'front' }, { type: 'balloonRabbit', x: 3512, layer: 'back' }, { type: 'flowerHill', x: 4700, layer: 'back' }, { type: 'arrowSign', x: 5962, layer: 'front' }],
+  '1-2': [{ type: 'flowerHill', x: 1635, layer: 'front' }, { type: 'giftPile', x: 2612, layer: 'back' }, { type: 'flowerHill', x: 4027, s: 0.9, layer: 'back' }, { type: 'flowerHill', x: 5610, layer: 'front' }, { type: 'arrowSign', x: 5912, layer: 'front' }],
+  '1-3': [{ type: 'flowerHill', x: 690, layer: 'back' }, { type: 'giftPile', x: 1287, layer: 'back' }, { type: 'balloonRabbit', x: 2028, layer: 'back' }, { type: 'flowerHill', x: 2450, layer: 'front' }, { type: 'arrowSign', x: 6128, s: 0.9, layer: 'front' }],
 };
 const CHAPTER1_BG = Object.assign({}, CHAPTER1_BG_DEFAULTS);
 let chapter1FgOverrides = {}; // 'stageId:index' → { dx, dy, s }（F4 單一 prop 微調）
@@ -11716,10 +11754,30 @@ function getChapter1BgTile(key, scale, mirrored) {
   return out;
 }
 // 單一層：依 cameraX × parallax 水平捲動，鏡像平鋪補滿畫面寬度
+// v0.3.53：near 框景的實際位置（單張、不平鋪）
+function getChapter1NearFrameGeom() {
+  const A = CHAPTER1_BG, img = getChapter1BgImg('near');
+  const w = img ? Math.round(img.naturalWidth * A.nearScale) : 0, h = img ? Math.round(img.naturalHeight * A.nearScale) : 0;
+  const spare = Math.max(0, w - CANVAS_W);
+  const maxCam = Math.max(1, (typeof LEVEL_LENGTH !== 'undefined' ? LEVEL_LENGTH : 6400) - CANVAS_W);
+  const rate = Math.min(Math.max(0, A.nearParallax), spare / maxCam);
+  const shift = Math.min(spare, Math.max(0, cameraX) * rate);
+  const x = -Math.round(shift), y = Math.round(A.nearOffsetY);
+  return { x, y, w, h, spare, rate: Math.round(rate * 1000) / 1000, shift: Math.round(shift),
+           coversTop: y <= 0, coversBottom: y + h >= CANVAS_H, coversLeft: x <= 0, coversRight: x + w >= CANVAS_W };
+}
 function drawChapter1BgLayer(key) {
   const A = CHAPTER1_BG, scale = A[key + 'Scale'];
   const t0 = getChapter1BgTile(key, scale, false);
   if (!t0) return false;
+  if (key === 'near' && A.nearFrameMode) { // v0.3.53：大型樹洞 / 樹冠框景 — 單張，只微微橫移
+    const g = getChapter1NearFrameGeom();
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, A.nearAlpha));
+    if (t0.src === getChapter1BgImg('near')) ctx.drawImage(t0.src, g.x, g.y, g.w, g.h); else ctx.drawImage(t0.src, g.x, g.y);
+    ctx.restore();
+    return true;
+  }
   const t1 = getChapter1BgTile(key, scale, true) || t0;
   const raw = getChapter1BgImg(key), w = t0.w, y = Math.round(A[key + 'OffsetY']);
   ctx.save();
@@ -11740,17 +11798,18 @@ function drawChapter1BgLayer(key) {
 function getChapter1FgPropGeom(sid, i, prop) {
   const A = CHAPTER1_BG, S = CHAPTER1_FG_SRC[prop.type];
   const ov = chapter1FgOverrides[sid + ':' + i] || {};
-  const sc = A[S.scaleKey] * A.fgGlobalScale * (prop.s || 1) * (ov.s || 1);
+  const front = prop.layer === 'front';
+  const sc = A[S.scaleKey] * A.fgGlobalScale * (prop.s || 1) * (ov.s || 1) * (front ? A.fgFrontScale : 1);
   const wx = prop.x + (ov.dx || 0);
   const cxs = CANVAS_W / 2 + (wx - Math.max(0, cameraX) - CANVAS_W / 2) * A.foregroundParallax;
-  const baseY = GROUND_Y + A.fgGroundOffsetY + (ov.dy || 0);
+  const baseY = GROUND_Y + (front ? A.fgFrontGroundOffsetY : A.fgGroundOffsetY) + (ov.dy || 0);
   const o = S.opaque;
   const drawX = cxs - ((o[0] + o[2]) / 2) * sc, drawY = baseY - o[3] * sc;
   return { sc, cxs, baseY, drawX, drawY, drawW: 1254 * sc, drawH: 1254 * sc,
            box: { x: drawX + o[0] * sc, y: drawY + o[1] * sc, w: (o[2] - o[0]) * sc, h: (o[3] - o[1]) * sc }, key: S.key };
 }
-// 地面小物件（背景三層之後、地面之前 → 在所有玩法物件與小V後方；底部被地面蓋住一點）
-function drawChapter1ForegroundProps() {
+// 後方小物件（背景三層之後、地面之前 → 在所有玩法物件與小V後方；底部被地面蓋住一點）
+function drawChapter1BackgroundProps() {
   const A = CHAPTER1_BG;
   if (!A.fgEnabled) return;
   const sid = LEVELS[currentLevelIndex].stageId;
@@ -11758,6 +11817,7 @@ function drawChapter1ForegroundProps() {
   ctx.save();
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   list.forEach((prop, i) => {
+    if (prop.layer === 'front') return;
     const g = getChapter1FgPropGeom(sid, i, prop);
     const img = getChapter1BgImg(g.key);
     if (!img) return; // optional：沒載好 / 載入失敗就不畫
@@ -11766,6 +11826,177 @@ function drawChapter1ForegroundProps() {
     ctx.drawImage(img, g.drawX, g.drawY, g.drawW, g.drawH);
   });
   ctx.restore();
+}
+// 小V的畫面矩形（約略的角色圖範圍：寬 = player.w × HERO_DRAW_SCALE、腳底對齊 hitbox 底）
+function getChapter1PlayerScreenRect() {
+  const dW = player.w * HERO_DRAW_SCALE, dH = dW;
+  return { x: player.x - cameraX + (player.w - dW) / 2, y: player.y + player.h - dH * HERO_FOOT_ANCHOR_Y, w: dW, h: dH };
+}
+function chapter1RectOverlap(a, b, pad) {
+  pad = pad || 0;
+  return a.x - pad < b.x + b.w && a.x + a.w + pad > b.x && a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
+}
+// 前方物件目標透明度：與小V重疊 → 0.40、靠近 → 0.62、與敵人 / 金幣 / 氣球 / 尖刺 / 終點旗重疊 → 0.55、其他 → 0.88
+function getChapter1FrontPropTargetAlpha(box) {
+  const A = CHAPTER1_BG, cx = cameraX;
+  const pr = getChapter1PlayerScreenRect();
+  if (chapter1RectOverlap(box, pr)) return { a: A.fgFrontOverlapAlpha, why: 'player' };
+  let objHit = false;
+  const hit = (x, y, w, h) => { if (!objHit && chapter1RectOverlap(box, { x: x - cx, y, w, h })) objHit = true; };
+  enemies.forEach(e => { if (e.active !== false) hit(e.x, e.y, e.w, e.h); });
+  orangeNemeses.forEach(o => hit(o.x, o.y, o.w, o.h));
+  coins.forEach(c => { if (!c.collected) hit(c.x - 12, c.y - 12, 24, 24); });
+  balloons260.forEach(b => { if (!b.collected) hit(b.x - 14, b.y - 22, 28, 44); });
+  roundBalloons.forEach(r => { if (!r.collected) hit(r.x - 16, r.y - 16, 32, 32); });
+  spikes.forEach(sp => hit(sp.x, sp.y, sp.w, sp.h));
+  hit(FINISH_X - 20, GROUND_Y - 140, 120, 140);
+  if (objHit) return { a: A.fgFrontObjectAlpha, why: 'object' };
+  if (chapter1RectOverlap(box, pr, A.fgFrontNearDist)) return { a: A.fgFrontNearAlpha, why: 'near' };
+  return { a: A.fgFrontAlpha, why: '' };
+}
+// 前方小物件（drawWorldInner 最後：小V / 敵人 / 道具之後，HUD 之前）
+function drawChapter1FrontForegroundProps() {
+  const A = CHAPTER1_BG;
+  if (!chapter1BgDrawn || !A.fgEnabled) return;
+  const sid = LEVELS[currentLevelIndex].stageId;
+  const list = CHAPTER1_FG_PROPS[sid] || [];
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  list.forEach((prop, i) => {
+    if (prop.layer !== 'front') return;
+    const g = getChapter1FgPropGeom(sid, i, prop);
+    const img = getChapter1BgImg(g.key);
+    if (!img) return;
+    if (g.drawX > CANVAS_W + 20 || g.drawX + g.drawW < -20) { prop._fade = A.fgFrontAlpha; prop._why = ''; return; }
+    const t = getChapter1FrontPropTargetAlpha(g.box);
+    prop._why = t.why;
+    prop._fade = prop._fade == null ? t.a : prop._fade + (t.a - prop._fade) * Math.max(0.01, Math.min(1, A.fgFrontFadeSpeed)); // 平滑，不閃爍
+    ctx.globalAlpha = Math.max(0, Math.min(1, prop._fade));
+    ctx.drawImage(img, g.drawX, g.drawY, g.drawW, g.drawH);
+    if (chapter1FrontPropDebug) {
+      ctx.globalAlpha = 1; ctx.setLineDash([5, 3]); ctx.lineWidth = 2;
+      ctx.strokeStyle = t.why === 'player' ? '#ff3b3b' : (t.why === 'object' ? '#ffb000' : (t.why === 'near' ? '#ffe066' : '#00ffc8'));
+      ctx.strokeRect(g.box.x, g.box.y, g.box.w, g.box.h); ctx.setLineDash([]);
+      ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+      ctx.fillText('front #' + i + ' α' + prop._fade.toFixed(2) + (t.why ? ' (' + t.why + ')' : ''), g.cxs, g.box.y - 4);
+    }
+  });
+  if (chapter1FrontPropDebug) {
+    const pr = getChapter1PlayerScreenRect();
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 1; ctx.strokeRect(pr.x, pr.y, pr.w, pr.h);
+  }
+  ctx.restore();
+}
+// ── v0.3.53：第一章平台圖 ──
+function chapter1Hash01(str) { // 穩定的 0～1 雜湊（FNV-1a）
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 100000) / 100000;
+}
+const chapter1PlatformKindCache = {}; // stageId → Map(platform → kind)
+// 每關固定分配：寬 ≥ 160 → long；短平台先排高的（y ≤ 335）、同一組內依雜湊排序，取前 40% 當雲朵、其他木橋
+function getChapter1PlatformKind(p) {
+  const lv = LEVELS[currentLevelIndex];
+  const sid = lv ? lv.stageId : '';
+  let m = chapter1PlatformKindCache[sid];
+  if (!m || m.list !== platforms || !m.kinds.has(p)) {
+    m = { list: platforms, kinds: new Map() };
+    const shorts = [];
+    platforms.forEach(q => {
+      if (q.w >= CHAPTER1_PLATFORM_LONG_MIN_W) m.kinds.set(q, 'long');
+      else shorts.push(q);
+    });
+    const score = q => chapter1Hash01(sid + ':' + q.x + ':' + q.y) + (q.y <= 335 ? 0 : 1); // 高的平台（y ≤ 335）一律優先當雲朵，其餘依雜湊補滿 40%
+    const sorted = shorts.slice().sort((a, b) => score(a) - score(b));
+    const nCloud = Math.round(shorts.length * CHAPTER1_PLATFORM_CLOUD_RATIO);
+    sorted.forEach((q, i) => m.kinds.set(q, i < nCloud ? 'shortCloud' : 'shortWood'));
+    chapter1PlatformKindCache[sid] = m;
+  }
+  return m.kinds.get(p) || 'shortWood';
+}
+function getChapter1PlatformArtGeom(p) {
+  const D = CHAPTER1_PLATFORM_DRAW, kind = getChapter1PlatformKind(p), S = CHAPTER1_PLATFORM_SRC[kind];
+  const base = p.w / (S.x1 - S.x0);
+  const sx = base * D[kind + 'ScaleX'], sy = base * D[kind + 'ScaleY'];
+  const img = getChapter1BgImg('plat_' + kind);
+  const iw = img ? img.naturalWidth : (kind === 'long' ? 1774 : 1254), ih = img ? img.naturalHeight : (kind === 'long' ? 887 : 1254);
+  const x = p.x + p.w / 2 - ((S.x0 + S.x1) / 2) * sx;  // 對齊範圍的中心 = hitbox 中心
+  const y = p.y - S.topY * sy + D[kind + 'OffsetY'];    // 可站立面 = hitbox 上緣
+  return { kind, sx, sy, x, y, w: iw * sx, h: ih * sy, img };
+}
+// 回傳 true = 已畫平台圖（呼叫端不要再畫舊矩形）；圖沒載好 → false → 舊矩形 fallback
+function drawChapter1PlatformArt(p, cx) {
+  if (!chapter1BgDrawn || !CHAPTER1_PLATFORM_DRAW.enabled) return false;
+  const g = getChapter1PlatformArtGeom(p);
+  if (!g.img) return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.globalAlpha = Math.max(0, Math.min(1, CHAPTER1_PLATFORM_DRAW.alpha));
+  // 輕微藍灰外陰影：白色雲朵平台在雲朵背景上也看得出輪廓（只是視覺，hitbox 不變）
+  if (CHAPTER1_PLATFORM_DRAW.shadowAlpha > 0) {
+    ctx.shadowColor = 'rgba(30,45,90,' + CHAPTER1_PLATFORM_DRAW.shadowAlpha + ')';
+    ctx.shadowBlur = CHAPTER1_PLATFORM_DRAW.shadowBlur; ctx.shadowOffsetY = 3;
+  }
+  ctx.drawImage(g.img, g.x - cx, g.y, g.w, g.h);
+  ctx.restore();
+  return true;
+}
+function debugChapter1Platforms() {
+  const sid = (LEVELS[currentLevelIndex] || {}).stageId;
+  const st = k => chapter1BgImgStatus['plat_' + k] || (getChapter1BgImg('plat_' + k) ? 'ok' : '-');
+  const rows = platforms.map((p, i) => {
+    const g = getChapter1PlatformArtGeom(p);
+    return { i, kind: g.kind, hitbox: [p.x, p.y, p.w, p.h].join(','), drawRect: [g.x, g.y, g.w, g.h].map(v => Math.round(v)).join(','),
+             scale: Math.round(g.sx * 10000) / 10000 + (g.sy !== g.sx ? '/' + Math.round(g.sy * 10000) / 10000 : ''),
+             offsetY: CHAPTER1_PLATFORM_DRAW[g.kind + 'OffsetY'], art: (isChapter1ParallaxStage() && CHAPTER1_PLATFORM_DRAW.enabled && g.img) ? 'image' : 'fallback 舊矩形' };
+  });
+  const cnt = k => rows.filter(r => r.kind === k).length;
+  console.log('[Chapter1Platforms] ' + sid + '（第一章平台圖' + (isChapter1ParallaxStage() ? '啟用' : '未啟用：不是 1-1～1-3') + '）　long=' + st('long') + ' shortWood=' + st('shortWood') + ' shortCloud=' + st('shortCloud')
+    + '　數量 long ' + cnt('long') + ' / wood ' + cnt('shortWood') + ' / cloud ' + cnt('shortCloud') + '　draw ' + JSON.stringify(CHAPTER1_PLATFORM_DRAW));
+  if (console.table) console.table(rows);
+  return { stage: sid, active: isChapter1ParallaxStage(), images: { long: st('long'), shortWood: st('shortWood'), shortCloud: st('shortCloud') }, draw: Object.assign({}, CHAPTER1_PLATFORM_DRAW), platforms: rows };
+}
+if (typeof window !== 'undefined') window.debugChapter1Platforms = debugChapter1Platforms;
+// ── v0.3.53：第一章 BGM（1-1～1-3；單一 Audio，不疊播；和第二章 / Boss BGM 互斥）──
+function initChapter1Bgm() {
+  if (chapter1Bgm || typeof Audio === 'undefined') return;
+  try {
+    const a = new Audio();
+    a.loop = true; a.preload = 'auto'; a.volume = CHAPTER1_BG.chapter1BgmVolume;
+    chapter1BgmStatus = 'loading';
+    a.addEventListener('canplaythrough', () => { if (chapter1BgmStatus === 'loading') chapter1BgmStatus = 'ok'; });
+    a.addEventListener('error', () => { chapter1BgmStatus = 'error'; console.warn('[Chapter1BGM] 音檔載入失敗：' + CHAPTER1_BGM_PATH); });
+    a.src = resolveAdventureAssetSrc(CHAPTER1_BGM_PATH) + '?v=' + encodeURIComponent(GAME_VERSION);
+    chapter1Bgm = a;
+  } catch (e) { chapter1BgmStatus = 'error'; }
+}
+function stopChapter1Bgm() {
+  const a = chapter1Bgm;
+  if (!a) return;
+  try { if (!a.paused) a.pause(); if (a.currentTime > 0) a.currentTime = 0; } catch (e) {}
+}
+function syncChapter1Bgm() {
+  if (!isChapter1ParallaxStage()) { stopChapter1Bgm(); return; }
+  if (!chapter1Bgm) initChapter1Bgm();
+  const a = chapter1Bgm;
+  if (!a || chapter1BgmStatus === 'error') return;
+  if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter1Bgm(); return; }
+  if (gameState !== 'playing') { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause
+  if (chapter1BgmWantRestart) { chapter1BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
+  try { a.volume = Math.max(0, Math.min(1, CHAPTER1_BG.chapter1BgmVolume)); } catch (e) {}
+  if (a.paused && !chapter1BgmBlocked) {
+    try {
+      const pr = a.play();
+      if (pr && typeof pr.catch === 'function') pr.catch(err => {
+        if (err && err.name === 'NotAllowedError') { // 手機：要等玩家點一下 / 按鍵才能播（不擋進關）
+          chapter1BgmBlocked = true; chapter1BgmStatus = 'blocked';
+          const resume = () => { chapter1BgmBlocked = false; if (chapter1BgmStatus === 'blocked') chapter1BgmStatus = 'ok'; };
+          window.addEventListener('pointerdown', resume, { once: true });
+          window.addEventListener('keydown', resume, { once: true });
+        }
+      });
+    } catch (e) {}
+  }
 }
 // 第一章背景（drawWorldInner 最前面呼叫）；回傳 true = 已畫好背景（不用再畫舊的藍天漸層）
 // far 沒有 ready（理論上 gate 會擋住）→ 回傳 false，沿用舊藍天，不會半套顯示
@@ -11787,7 +12018,7 @@ function drawChapter1ParallaxBackground() {
     ctx.fillRect(0, 0, CANVAS_W, GROUND_Y);
   }
   ctx.restore();
-  drawChapter1ForegroundProps();
+  drawChapter1BackgroundProps(); // v0.3.53：只畫 layer 'back'；'front' 在 drawWorldInner 最後畫
   return true;
 }
 // console 檢查：debugChapter1Bg()
@@ -11810,14 +12041,27 @@ function debugChapter1Bg() {
     offsetY: { far: A.farOffsetY, mid: A.midOffsetY, near: A.nearOffsetY, fgGround: A.fgGroundOffsetY },
     scale: { far: A.farScale, mid: A.midScale, near: A.nearScale, fgFlowerHill: A.fgFlowerHillScale, fgBalloonRabbit: A.fgBalloonRabbitScale, fgGiftPile: A.fgGiftPileScale, fgArrowSign: A.fgArrowSignScale, fgGlobal: A.fgGlobalScale },
     sizes: Object.fromEntries(Object.keys(Object.assign({}, CHAPTER1_BG_ASSETS, CHAPTER1_FG_ASSETS)).map(k => { const im = getChapter1BgImg(k); return [k, im ? im.naturalWidth + '×' + im.naturalHeight : '-']; })),
+    near: Object.assign({ status: st('near'), frameMode: !!A.nearFrameMode, drawW: 0, drawH: 0, offsetY: A.nearOffsetY, parallaxSetting: A.nearParallax }, (() => {
+      const g = getChapter1NearFrameGeom();
+      return { drawW: g.w, drawH: g.h, drawX: g.x, effectiveParallax: g.rate, shiftNow: g.shift, maxShift: g.spare,
+               coversCanvasTop: g.coversTop, coversCanvasBottom: g.coversBottom, coversLeftRight: g.coversLeft && g.coversRight };
+    })()),
+    frontProps: (CHAPTER1_FG_PROPS[sid] || []).filter(p => p.layer === 'front').length,
+    behindProps: (CHAPTER1_FG_PROPS[sid] || []).filter(p => p.layer !== 'front').length,
+    bgm: { status: chapter1BgmStatus, volume: A.chapter1BgmVolume, playing: !!(chapter1Bgm && !chapter1Bgm.paused), nowPlaying: getCurrentBgmName() },
     propsThisStage: (CHAPTER1_FG_PROPS[sid] || []).map((p, i) => {
       const g = getChapter1FgPropGeom(sid, i, p);
-      return { i, type: p.type, worldX: p.x + ((chapter1FgOverrides[sid + ':' + i] || {}).dx || 0), loaded: !!getChapter1BgImg(g.key),
+      return { i, type: p.type, layer: p.layer || 'back',
+               fadingForPlayer: p.layer === 'front' ? (p._why === 'player' || p._why === 'near') : '-', alphaNow: p.layer === 'front' ? Math.round((p._fade == null ? A.fgFrontAlpha : p._fade) * 100) / 100 : A.fgAlpha,
+               worldX: p.x + ((chapter1FgOverrides[sid + ':' + i] || {}).dx || 0), loaded: !!getChapter1BgImg(g.key),
                screenX: Math.round(g.box.x), screenY: Math.round(g.box.y), w: Math.round(g.box.w), h: Math.round(g.box.h), scale: Math.round(g.sc * 10000) / 10000,
                onScreen: g.box.x < CANVAS_W && g.box.x + g.box.w > 0 };
     }),
   };
-  console.log('[Chapter1BG] far ' + info.far + ' / mid ' + info.mid + ' / near ' + info.near + '　foreground ' + info.foregroundLoaded
+  console.log('[Chapter1BG] near 框景 ' + info.near.drawW + '×' + info.near.drawH + ' offsetY ' + A.nearOffsetY + ' 實際視差 ' + info.near.effectiveParallax
+    + ' 蓋滿上緣 ' + info.near.coversCanvasTop + ' / 下緣 ' + info.near.coversCanvasBottom + '　front ' + info.frontProps + ' / behind ' + info.behindProps
+    + '　BGM ' + chapter1BgmStatus + ' vol ' + A.chapter1BgmVolume);
+  console.log('[Chapter1BG] far ' + info.far + ' / mid ' + info.mid + ' / near ' + info.near.status + '　foreground ' + info.foregroundLoaded
     + '　parallax ' + A.farParallax + ' / ' + A.midParallax + ' / ' + A.nearParallax + ' / fg ' + A.foregroundParallax
     + '　offsetY ' + A.farOffsetY + ' / ' + A.midOffsetY + ' / ' + A.nearOffsetY
     + '　scale ' + A.farScale + ' / ' + A.midScale + ' / ' + A.nearScale
@@ -11834,7 +12078,12 @@ if (typeof window !== 'undefined') window.debugChapter1Bg = debugChapter1Bg;
 // v0.3.52-fix-1：console 直接調數值，例如 setChapter1Bg({ nearScale: 0.26, veilAlpha: 0.18 })（測試版會存到瀏覽器）
 function setChapter1Bg(values) {
   if (!values || typeof values !== 'object') { console.log('[Chapter1BG] 可調的 key：', Object.keys(CHAPTER1_BG_DEFAULTS).join(', ')); return CHAPTER1_BG; }
-  Object.keys(values).forEach(k => { if (k in CHAPTER1_BG_DEFAULTS && typeof values[k] === 'number' && isFinite(values[k])) CHAPTER1_BG[k] = values[k]; else console.warn('[Chapter1BG] 略過：' + k); });
+  Object.keys(values).forEach(k => {
+    const ok = typeof values[k] === 'number' && isFinite(values[k]);
+    if (ok && k in CHAPTER1_BG_DEFAULTS) CHAPTER1_BG[k] = values[k];
+    else if (ok && k.startsWith('platform.') && k.slice(9) in CHAPTER1_PLATFORM_DRAW_DEFAULTS) CHAPTER1_PLATFORM_DRAW[k.slice(9)] = values[k]; // 例：'platform.longOffsetY'
+    else console.warn('[Chapter1BG] 略過：' + k);
+  });
   if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) saveChapter1BgCalib();
   return debugChapter1Bg();
 }
@@ -11851,10 +12100,11 @@ function loadChapter1BgCalib() {
     if (!d || d.version !== GAME_VERSION) return;
     Object.keys(CHAPTER1_BG_DEFAULTS).forEach(k => { if (d.values && typeof d.values[k] === 'number' && isFinite(d.values[k])) CHAPTER1_BG[k] = d.values[k]; });
     if (d.props && typeof d.props === 'object') chapter1FgOverrides = d.props;
+    Object.keys(CHAPTER1_PLATFORM_DRAW_DEFAULTS).forEach(k => { if (d.platform && typeof d.platform[k] === 'number' && isFinite(d.platform[k])) CHAPTER1_PLATFORM_DRAW[k] = d.platform[k]; });
   } catch (e) {}
 }
 function saveChapter1BgCalib() {
-  try { localStorage.setItem(CHAPTER1_BG_LS_KEY, JSON.stringify({ version: GAME_VERSION, values: CHAPTER1_BG, props: chapter1FgOverrides })); } catch (e) {}
+  try { localStorage.setItem(CHAPTER1_BG_LS_KEY, JSON.stringify({ version: GAME_VERSION, values: CHAPTER1_BG, props: chapter1FgOverrides, platform: CHAPTER1_PLATFORM_DRAW })); } catch (e) {}
 }
 if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) loadChapter1BgCalib();
 function getChapter1BgCalibText() {
@@ -11862,14 +12112,16 @@ function getChapter1BgCalibText() {
   let t = 'const CHAPTER1_BG_DEFAULTS = {\n';
   Object.keys(CHAPTER1_BG_DEFAULTS).forEach(k => { t += `  ${k}: ${r(A[k])},\n`; });
   t += '};\n// 單一 prop 微調（stage:index → dx / dy / s）\nconst CHAPTER1_FG_OVERRIDES = ' + JSON.stringify(chapter1FgOverrides) + ';';
+  t += '\nconst CHAPTER1_PLATFORM_DRAW_DEFAULTS = ' + JSON.stringify(CHAPTER1_PLATFORM_DRAW) + ';';
   return t;
 }
 function handleChapter1BgCalibKey(e) {
   const A = CHAPTER1_BG, D = CHAPTER1_BG_DEFAULTS;
   const step = e.shiftKey ? 10 : 1, sStep = e.shiftKey ? 0.05 : 0.01;
   const sel = { Digit1: 'far', Digit2: 'mid', Digit3: 'near', Digit4: 'fg', Digit5: 'flowerHill', Digit6: 'balloonRabbit', Digit7: 'giftPile', Digit8: 'arrowSign',
-                Digit9: 'prop', Digit0: 'veil' }[e.code];
+                Digit9: 'prop', Digit0: 'veil', KeyU: 'platLong', KeyI: 'platWood', KeyO: 'platCloud' }[e.code];
   const done = () => { saveChapter1BgCalib(); e.preventDefault(); return true; };
+  if (e.code === 'KeyB') { chapter1FrontPropDebug = !chapter1FrontPropDebug; e.preventDefault(); return true; } // v0.3.53：前景物件透明化外框
   if (sel) { chapter1BgCalibTarget = sel; e.preventDefault(); return true; }
   const tg = chapter1BgCalibTarget;
   const sid = (LEVELS[currentLevelIndex] || {}).stageId;
@@ -11897,6 +12149,16 @@ function handleChapter1BgCalibKey(e) {
     return done();
   }
   if (tg === 'veil' && da) { A.veilAlpha = Math.max(0, Math.min(0.6, r2(A.veilAlpha + da / 5))); return done(); }
+  // v0.3.53：平台圖（W S 上下、[ ] 寬、; ' 高、Q E 全部平台透明度）
+  const plk = { platLong: 'long', platWood: 'shortWood', platCloud: 'shortCloud' }[tg];
+  if (plk && (dy || ds || dbl || da)) {
+    const PD = CHAPTER1_PLATFORM_DRAW;
+    PD[plk + 'OffsetY'] += dy;
+    if (ds) PD[plk + 'ScaleX'] = Math.max(0.3, r2(PD[plk + 'ScaleX'] + ds));
+    if (dbl) PD[plk + 'ScaleY'] = Math.max(0.3, r2(PD[plk + 'ScaleY'] + (dbl > 0 ? 0.01 : -0.01) * (e.shiftKey ? 5 : 1)));
+    if (da) PD.alpha = Math.max(0.1, Math.min(1, r2(PD.alpha + da)));
+    return done();
+  }
   if (tg === 'fg' && (dy || dxp || ds || da)) {
     A.fgGroundOffsetY += dy;
     if (dxp) A.foregroundParallax = Math.max(0.5, Math.min(1.5, r2(A.foregroundParallax + dxp * 0.01)));
@@ -11921,6 +12183,8 @@ function handleChapter1BgCalibKey(e) {
       near: Object.keys(D).filter(k => k.startsWith('near')), veil: ['veilEnabled', 'veilAlpha'],
       fg: ['fgEnabled', 'foregroundParallax', 'fgGroundOffsetY', 'fgGlobalScale', 'fgAlpha'] };
     CHAPTER1_FG_TYPES.forEach(ty => { keysBy[ty] = [CHAPTER1_FG_SRC[ty].scaleKey]; });
+    const plr = { platLong: 'long', platWood: 'shortWood', platCloud: 'shortCloud' }[tg];
+    if (plr) ['ScaleX', 'ScaleY', 'OffsetY'].forEach(sfx => { CHAPTER1_PLATFORM_DRAW[plr + sfx] = CHAPTER1_PLATFORM_DRAW_DEFAULTS[plr + sfx]; });
     if (tg === 'prop') delete chapter1FgOverrides[sid + ':' + chapter1BgCalibPropIdx];
     else (keysBy[tg] || []).forEach(k => { A[k] = D[k]; });
     showHint('↺ 已重置：' + tg, 120);
@@ -11935,7 +12199,7 @@ function handleChapter1BgCalibKey(e) {
   }
   // 方向鍵 / 空白鍵 / Z 留給小V（可邊跑邊看視差）；其他調整鍵不傳給遊戲
   if (/^Digit/.test(e.code) || ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyN', 'KeyH', 'KeyX', 'BracketLeft', 'BracketRight',
-       'Semicolon', 'Quote', 'Comma', 'Period', 'Minus', 'Equal'].includes(e.code)) { e.preventDefault(); return true; }
+       'Semicolon', 'Quote', 'Comma', 'Period', 'Minus', 'Equal', 'KeyU', 'KeyI', 'KeyO', 'KeyB'].includes(e.code)) { e.preventDefault(); return true; }
   return false;
 }
 function drawChapter1BgCalibOverlay() {
@@ -11961,7 +12225,8 @@ function drawChapter1BgCalibOverlay() {
   const st = k => chapter1BgImgStatus[k] || '-';
   const fgN = props.filter(p => getChapter1BgImg(CHAPTER1_FG_SRC[p.type].key)).length;
   const tLabel = { far: '1 遠景 far', mid: '2 中景 mid', near: '3 近景 near', fg: '4 小物件全域', flowerHill: '5 花叢小丘', balloonRabbit: '6 藍色氣球兔',
-                   giftPile: '7 禮物堆', arrowSign: '8 指路箭牌', prop: '9 單一 prop #' + chapter1BgCalibPropIdx, veil: '0 可讀性霧幕' }[chapter1BgCalibTarget];
+                   giftPile: '7 禮物堆', arrowSign: '8 指路箭牌', prop: '9 單一 prop #' + chapter1BgCalibPropIdx, veil: '0 可讀性霧幕',
+                   platLong: 'U 長平台圖', platWood: 'I 短木橋平台圖', platCloud: 'O 短雲朵平台圖' }[chapter1BgCalibTarget];
   const lf = l => l + ': offsetY ' + A[l + 'OffsetY'] + '  scale ' + A[l + 'Scale'] + '  parallax ' + A[l + 'Parallax'] + '  α' + A[l + 'Alpha'] + ' blur ' + A[l + 'Blur'] + ' sat ' + A[l + 'Saturation'] + ' bri ' + A[l + 'Brightness'] + '  圖=' + st(l);
   const ov = chapter1FgOverrides[sid + ':' + chapter1BgCalibPropIdx] || { dx: 0, dy: 0, s: 1 };
   const lines = [
@@ -11973,7 +12238,12 @@ function drawChapter1BgCalibOverlay() {
       + '  prop#' + chapter1BgCalibPropIdx + ' dx ' + ov.dx + ' dy ' + ov.dy + ' ×' + ov.s,
     '  花叢 ×' + A.fgFlowerHillScale + '=' + st('fgFlowerHill') + '  兔 ×' + A.fgBalloonRabbitScale + '=' + st('fgBalloonRabbit')
       + '  禮物 ×' + A.fgGiftPileScale + '=' + st('fgGiftPile') + '  箭牌 ×' + A.fgArrowSignScale + '=' + st('fgArrowSign'),
+    (() => { const PD = CHAPTER1_PLATFORM_DRAW, ng = getChapter1NearFrameGeom();
+      return '平台圖 long ×' + PD.longScaleX + '/' + PD.longScaleY + ' offY ' + PD.longOffsetY + '  wood ×' + PD.shortWoodScaleX + '/' + PD.shortWoodScaleY + ' offY ' + PD.shortWoodOffsetY
+        + '  cloud ×' + PD.shortCloudScaleX + '/' + PD.shortCloudScaleY + ' offY ' + PD.shortCloudOffsetY + '  α' + PD.alpha
+        + '｜near 框景 ' + ng.w + '×' + ng.h + ' 實際視差 ' + ng.rate + ' 位移 ' + ng.shift + '/' + ng.spare + '｜BGM ' + chapter1BgmStatus; })(),
     '1 2 3 層｜4 小物件全域｜5~8 小物件種類｜9 / N 單一 prop｜0 霧幕｜W S 上下｜A D 視差 / prop 左右｜[ ] scale｜Q E 透明度',
+    'U I O 長 / 木橋 / 雲朵平台（W S 上下　[ ] 寬　; \' 高　Q E 透明度）｜B 前景物件透明化外框 ' + (chapter1FrontPropDebug ? 'ON' : 'OFF'),
     '層：; \' blur　, . 飽和度　- = 亮度｜X 開關（霧幕 / 小物件）｜H 小物件｜R 重置｜C 輸出　方向鍵 / 空白 / Z 仍可操作小V',
   ];
   const w = 900, lh = 17, h = lines.length * lh + 12;
@@ -12077,6 +12347,8 @@ function drawWorldInner() {
     // v0.3.49：第二章 — 坑底已由地面帶畫好；一般平台換正式平台圖（碰撞不變；圖沒載好照舊畫色塊）
     if (chapter2TilesDrawn && isChapter2PitFloorPlatform(p)) return;
     if (chapter2BgDrawn && !isChapter2PitFloorPlatform(p) && drawChapter2PlatformArt(p, cx)) return;
+    // v0.3.53：第一章平台圖（可站立面對齊 hitbox 上緣；圖沒載好 → 照舊畫矩形）
+    if (chapter1BgDrawn && drawChapter1PlatformArt(p, cx)) return;
     ctx.fillStyle = COLORS.platform;
     ctx.fillRect(sx, p.y, p.w, p.h);
     ctx.fillStyle = COLORS.platformTop;
@@ -12275,6 +12547,8 @@ function drawWorldInner() {
   if (orangeKingBoss) drawOrangeKingFront(cx);
   // v0.3.47：第二章前景點綴（在小V / 敵人之後，HUD 之前）
   drawChapter2ForegroundProps();
+  // v0.3.53：第一章前方小物件（小V靠近時半透明）
+  drawChapter1FrontForegroundProps();
 }
 
 function drawPlayer(cx) {
@@ -13607,8 +13881,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.53+：chapter1-platforms-bgm-near-fg-depth → ch1-platform-bgm-depth（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter1-platforms-bgm-near-fg-depth')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch1-platform-bgm-depth' + (tN === '1' ? '' : '-' + tN);
   // v0.3.52-fix：chapter1-bg-readability-layout-fix-N → ch1-bg-fix-N
-  if (GAME_VERSION.includes('chapter1-bg-readability-layout-fix')) {
+  } else if (GAME_VERSION.includes('chapter1-bg-readability-layout-fix')) {
     tPart = 'ch1-bg-fix-' + (GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1');
   // v0.3.52+：chapter1-parallax-bg-assets → ch1-bg（test-N > 1 時加上 -N）
   } else if (GAME_VERSION.includes('chapter1-parallax-bg-assets')) {
@@ -15976,7 +16254,8 @@ function restart(opts) {
   if (orangeKingBoss) clearOrangeKingBoss();
   currentRunStats.chapter2Complete = false;
   if (typeof stopOrangeKingVictoryJingle === 'function') stopOrangeKingVictoryJingle(); // v0.3.45：新的一場不帶上一場的勝利音效
-  if (typeof chapter2BgmWantRestart !== 'undefined') chapter2BgmWantRestart = true; // v0.3.49：重試 / 換關 → 第二章 BGM 從頭
+  if (typeof chapter2BgmWantRestart !== 'undefined') chapter2BgmWantRestart = true;
+  if (typeof chapter1BgmWantRestart !== 'undefined') chapter1BgmWantRestart = true; // v0.3.53：重試 / 換關 → 第一章 BGM 從頭 // v0.3.49：重試 / 換關 → 第二章 BGM 從頭
   if (isBossStageLevel(currentLevelIndex)) { initOrangeKingBoss(); orangeKingBgmWantRestart = true; } // v0.3.43：重試 / 重新進入 → BGM 從頭
 
   // ── 建立進關前快照 ── 包含 bringBalloonDog（此行是關鍵修正！）
@@ -16457,6 +16736,12 @@ function buildAssetManifest() {
   Object.entries(CHAPTER1_FG_ASSETS).forEach(([key, path]) => img('chapter1', path, false, 'ch1:' + key,
     im => { chapter1BgImgs[key] = im; chapter1BgImgStatus[key] = 'ok'; },
     () => { chapter1BgImgStatus[key] = 'error'; }));
+  // v0.3.53：第一章平台圖（critical）＋ 第一章 BGM（soft：失敗不擋進關）
+  Object.entries(CHAPTER1_PLATFORM_ART).forEach(([key, path]) => img('chapter1', path, true, 'ch1:plat_' + key,
+    im => { chapter1BgImgs['plat_' + key] = im; chapter1BgImgStatus['plat_' + key] = 'ok'; },
+    () => { chapter1BgImgStatus['plat_' + key] = 'error'; }));
+  M.chapter1.push({ path: CHAPTER1_BGM_PATH, type: 'audio', critical: false, soft: true, label: 'bgm:chapter1',
+    start: () => initChapter1Bgm(), status: () => chapter1BgmStatus });
   // ── chapter2：背景 / 地形 / 平台（critical）；前景與凹洞裝飾（optional）
   const ch2Critical = ['far', 'mid', 'near', 'groundTile', 'platformShort', 'platformLong'];
   Object.entries(CHAPTER2_BG_ASSETS).forEach(([key, path]) => img('chapter2', path, ch2Critical.includes(key), 'ch2:' + key,
