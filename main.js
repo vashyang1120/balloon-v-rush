@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.53-chapter1-opacity-depth-fix-1';
-const BUILD_TIME   = '2026-10-14 23:00';
+const GAME_VERSION = 'adventure-v0.3.54-chapter1-ground-spike-near-frame-test-1';
+const BUILD_TIME   = '2026-10-15 01:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -11608,13 +11608,18 @@ const CHAPTER1_FG_TYPES = ['flowerHill', 'balloonRabbit', 'giftPile', 'arrowSign
 const CHAPTER1_BG_DEFAULTS = {
   // v0.3.52-fix-1：背景退後（靠 alpha / 飽和度 / 暖白霧幕，不靠 blur），玩法物件更清楚
   // far：cover 畫面高 540（887 × 0.609 = 540 → 1080×540），鏡像平鋪，最慢
-  farParallax: 0.12, farScale: 0.609, farOffsetY: 0,
+  // v0.3.54：視差必須「越近越快」：far 0.03 < mid 0.06 < near（≈0.084）< 玩法層 1.0
+  //   之前 far 0.12 / mid 0.32 都比 near（0.068）快 → 近景框看起來像「跟著小V往右、又慢慢往左」（深度順序顛倒的錯覺）
+  farParallax: 0.03, farScale: 0.609, farOffsetY: 0,
   // mid：× 0.36（639×319），浮島主體在 y 203～418，雲朵底部藏在地面線附近，上半畫面留給天空
-  midParallax: 0.32, midScale: 0.36, midOffsetY: 150,
+  midParallax: 0.06, midScale: 0.36, midOffsetY: 150,
   // v0.3.53：near = 大型樹洞 / 樹冠框景（單張、不平鋪）。× 0.75（1331×665），offsetY -60 → 畫面 y -60～605，上下緣都蓋滿（不會露出切口）
   //   框景模式：整關從起點到終點只橫移「圖寬 − 畫面寬」= 371px；實際移動率 = min(nearParallax, 371 ÷ 鏡頭最大位移)
   //   （6400 長的關卡 ≈ 0.068；要真的到 0.10 需要 nearScale ≥ 0.85，上下會被裁掉更多樹冠 / 籬笆）
-  nearParallax: 0.10, nearScale: 0.75, nearOffsetY: -60, nearFrameMode: 1,
+  // v0.3.54：near = 單張不平鋪的前框景。× 0.80（1419×710），offsetY -85 → 畫面 y -85～625，上下緣完整蓋滿
+  //   X 位移只看「關卡進度」：nearX = −(cameraX ÷ 鏡頭最大位移) × (圖寬 − 畫面寬)，只會往左、單調、不反轉，clamp 不露邊
+  //   6400 長的關卡整關只左移 459px（≈ 0.084 倍鏡頭速度）；nearParallax 只當上限（0 = 完全固定）
+  nearParallax: 0.10, nearScale: 0.80, nearOffsetY: -85, nearFrameMode: 1,
   // 濾鏡（快取圖塊時套用一次）：blur 全部 0（避免整片糊）
   // v0.3.53-fix-1：三層都不再整張變淡 / 降飽和（畫面恢復飽和、明亮），退後只靠很輕的暖白霧幕 + 玩法物件外光
   farAlpha: 1,  farBlur: 0, farSaturation: 1,    farBrightness: 1,
@@ -11666,6 +11671,35 @@ const CHAPTER1_PLATFORM_DRAW_DEFAULTS = {
 };
 const CHAPTER1_PLATFORM_DRAW = Object.assign({}, CHAPTER1_PLATFORM_DRAW_DEFAULTS);
 const CHAPTER1_BGM_PATH = 'assets/audio/bgm/chapter1_balloon_forest_bgm.mp3';
+// v0.3.54：第一章地面 / 凹洞 / 尖刺（用 repo 實際檔名；凹洞邊緣與陰影的檔名前面多了 assetsadventuretileschapter1）
+const CHAPTER1_TILE_ASSETS = {
+  groundTile:   'assets/adventure/tiles/chapter1/chapter1_ground_tile.png',                                   // 2172×724
+  pitEdgeLeft:  'assets/adventure/tiles/chapter1/assetsadventuretileschapter1chapter1_pit_edge_left.png',      // 1254×1254
+  pitEdgeRight: 'assets/adventure/tiles/chapter1/assetsadventuretileschapter1chapter1_pit_edge_right.png',     // 1254×1254
+  pitShadow:    'assets/adventure/tiles/chapter1/assetsadventuretileschapter1chapter1_pit_shadow.png',         // 2172×724
+  spike:        'assets/adventure/hazards/chapter1/chapter1_spike.png',                                      // 1254×1254
+};
+// 量自原圖：
+//   地面帶：草皮上緣 y≈250（花朵往上冒到 y 141）、土層到 y≈520、藤蔓到 600；左右可鏡像平鋪
+//   pit_edge_left 圖：右邊是切齊的地面、崖壁在「左側」（x≈260）→ 實際是凹洞的「右壁」
+//   pit_edge_right 圖：左邊是切齊的地面、崖壁在「右側」（x≈1150）→ 實際是凹洞的「左壁」
+//   （依圖的方向對位，不依檔名；崖壁對齊凹洞邊界、草皮上緣對齊地面帶）
+const CHAPTER1_TILE_SRC = {
+  ground:   { topY: 250, cropX0: 0, cropX1: 2172 },
+  wallOfPitRight: { key: 'pitEdgeLeft',  topY: 280, cliffX: 260,  cropX0: 214, cropX1: 1254 },
+  wallOfPitLeft:  { key: 'pitEdgeRight', topY: 235, cliffX: 1150, cropX0: 0,   cropX1: 1206 },
+  shadow:   { x0: 67, y0: 214, x1: 2105, y1: 625 },
+  spike:    { x0: 70, y0: 232, x1: 1210, y1: 1039 }, // 底座底部 y 1039
+};
+const CHAPTER1_TILE_DEFAULTS = {
+  groundScale: 0.32, groundOffsetY: 0,      // 地面帶 × 0.32（695×232）：草皮對齊 GROUND_Y，土層蓋到 y≈546
+  groundFillColor: 0,                        // （保留）地面帶下方補色用固定土色
+  pitEdgeScale: 0.32, pitEdgeOffsetY: 0,
+  pitShadowAlpha: 0.75,
+  spikeWidthScale: 1.9, spikeOffsetY: 8,     // 尖刺圖寬 = hitbox 寬 × 1.9（40 → 76px，尖端高約 50px），底座往地面壓 8px（藏進草皮）
+  spikeGlowAlpha: 1, spikeGlowBlur: 9,   // 第一章尖刺用「紅色」危險外光（綠色底座在花草地面上才看得出來）
+};
+const CHAPTER1_TILE = Object.assign({}, CHAPTER1_TILE_DEFAULTS);
 let chapter1Bgm = null, chapter1BgmStatus = '-', chapter1BgmWantRestart = false, chapter1BgmBlocked = false;
 let chapter1FrontPropDebug = false; // F4 → B：前景物件外框 / 透明狀態
 // 每關配置（x = 世界座標中心）：避開地面高度的金幣 ±25、260 / 圓氣球 ±30、尖刺 ±50、小怪巡邏範圍 ±30、
@@ -11762,8 +11796,11 @@ function getChapter1NearFrameGeom() {
   const w = img ? Math.round(img.naturalWidth * A.nearScale) : 0, h = img ? Math.round(img.naturalHeight * A.nearScale) : 0;
   const spare = Math.max(0, w - CANVAS_W);
   const maxCam = Math.max(1, (typeof LEVEL_LENGTH !== 'undefined' ? LEVEL_LENGTH : 6400) - CANVAS_W);
-  const rate = Math.min(Math.max(0, A.nearParallax), spare / maxCam);
-  const shift = Math.min(spare, Math.max(0, cameraX) * rate);
+  // v0.3.54：進度制（camera progress 0～1）→ 位移 = 進度 × 可移動範圍；cameraX 只增不減 → near 只往左、不反轉
+  const travel = Math.min(spare, Math.max(0, A.nearParallax) * maxCam);
+  const progress = Math.max(0, Math.min(1, Math.max(0, cameraX) / maxCam));
+  const shift = progress * travel;
+  const rate = travel / maxCam;
   const x = -Math.round(shift), y = Math.round(A.nearOffsetY);
   return { x, y, w, h, spare, rate: Math.round(rate * 1000) / 1000, shift: Math.round(shift),
            coversTop: y <= 0, coversBottom: y + h >= CANVAS_H, coversLeft: x <= 0, coversRight: x + w >= CANVAS_W };
@@ -11944,6 +11981,121 @@ function drawChapter1PlatformArt(p, cx) {
   ctx.restore();
   return true;
 }
+// ── v0.3.54：第一章地面帶 / 凹洞 / 尖刺 ──
+const chapter1CropCache = {};
+function getChapter1CropTile(key, cropX0, cropX1, scale, mirrored) {
+  const img = getChapter1BgImg(key);
+  if (!img) return null;
+  const ck = key + '|' + cropX0 + '|' + cropX1 + '|' + scale + '|' + (mirrored ? 1 : 0);
+  if (chapter1CropCache[ck]) return chapter1CropCache[ck];
+  const sw = cropX1 - cropX0;
+  const w = Math.max(1, Math.round(sw * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+  let out = null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    if (mirrored) { g.translate(w, 0); g.scale(-1, 1); }
+    g.drawImage(img, cropX0, 0, sw, img.naturalHeight, 0, 0, w, h);
+    out = { src: c, w, h };
+  } catch (e) { out = { src: img, w, h, raw: true, cropX0, sw, mirrored }; }
+  Object.keys(chapter1CropCache).forEach(k => { if (k.startsWith(key + '|') && k.split('|')[3] !== String(scale)) delete chapter1CropCache[k]; });
+  chapter1CropCache[ck] = out;
+  return out;
+}
+// 地面帶：只畫在 [x0, x1)（世界座標），草皮上緣在 topY；鏡像平鋪、和地形同速
+function drawChapter1GroundStrip(x0, x1, topY, cx) {
+  const T = CHAPTER1_TILE, S = CHAPTER1_TILE_SRC.ground, sc = T.groundScale;
+  const t0 = getChapter1CropTile('groundTile', S.cropX0, S.cropX1, sc, false);
+  if (!t0 || t0.raw) return false;
+  const t1 = getChapter1CropTile('groundTile', S.cropX0, S.cropX1, sc, true) || t0;
+  const sx0 = Math.max(x0 - cx, -2), sx1 = Math.min(x1 - cx, CANVAS_W + 2);
+  if (sx1 <= sx0) return true;
+  const y = Math.round(topY - S.topY * sc);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(sx0, y, sx1 - sx0, CANVAS_H - y + 60); ctx.clip();
+  // 地面帶下方先補土色（地面帶土層約到 y 546，保險起見整段補滿到畫面底）
+  ctx.fillStyle = '#7a4d2b'; ctx.fillRect(sx0, topY + 30, sx1 - sx0, CANVAS_H - topY);
+  const w = t0.w;
+  let i = Math.floor((sx0 + cx) / w);
+  for (let x = Math.round(i * w - cx); x < sx1; x += w, i++) ctx.drawImage((((i % 2) + 2) % 2 === 1) ? t1.src : t0.src, x, y);
+  ctx.restore();
+  return true;
+}
+// 地面帶 + 凹洞（取代舊的純色地面）；回傳 false = 地面帶圖沒載好 → 呼叫端照舊畫純色地面
+function drawChapter1GroundAndPits(cx) {
+  if (!chapter1BgDrawn || !getChapter1BgImg('groundTile')) return false;
+  const T = CHAPTER1_TILE;
+  const topY = GROUND_Y + T.groundOffsetY;
+  const vis0 = cx - 60, vis1 = cx + CANVAS_W + 60;
+  const gaps = groundGaps.filter(g => g.x + g.w > vis0 && g.x < vis1).sort((a, b) => a.x - b.x);
+  let cur = vis0;
+  gaps.forEach(g => { if (g.x > cur) drawChapter1GroundStrip(cur, g.x, topY, cx); cur = Math.max(cur, g.x + g.w); });
+  if (cur < vis1) drawChapter1GroundStrip(cur, vis1, topY, cx);
+  gaps.forEach(g => {
+    const gx = g.x - cx;
+    ctx.fillStyle = '#3d2614';
+    ctx.fillRect(gx, topY, g.w, CANVAS_H - topY);
+    const floorY = (typeof GROUND_GAP_FLOOR_Y !== 'undefined' ? GROUND_GAP_FLOOR_Y : GROUND_Y + 66) + T.groundOffsetY;
+    drawChapter1GroundStrip(g.x, g.x + g.w, floorY, cx);
+    drawChapter1PitShadow(g, cx, topY, floorY);
+    drawChapter1PitWall('left', g, cx, topY);
+    drawChapter1PitWall('right', g, cx, topY);
+  });
+  return true;
+}
+function drawChapter1PitWall(side, g, cx, topY) {
+  const T = CHAPTER1_TILE, S = side === 'left' ? CHAPTER1_TILE_SRC.wallOfPitLeft : CHAPTER1_TILE_SRC.wallOfPitRight;
+  const sc = T.pitEdgeScale;
+  const t = getChapter1CropTile(S.key, S.cropX0, S.cropX1, sc, false);
+  if (!t || t.raw) return; // optional：沒載好就不畫邊緣
+  const wallX = side === 'left' ? g.x : g.x + g.w;
+  const x = Math.round(wallX - cx - (S.cliffX - S.cropX0) * sc);
+  const y = Math.round(topY - S.topY * sc + T.pitEdgeOffsetY);
+  ctx.drawImage(t.src, x, y);
+}
+function drawChapter1PitShadow(g, cx, topY, floorY) {
+  const T = CHAPTER1_TILE, img = getChapter1BgImg('pitShadow');
+  if (!img || T.pitShadowAlpha <= 0) return;
+  const S = CHAPTER1_TILE_SRC.shadow;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, T.pitShadowAlpha));
+  ctx.drawImage(img, S.x0, S.y0, S.x1 - S.x0, S.y1 - S.y0, g.x - cx, topY, g.w, floorY - topY + 14);
+  ctx.restore();
+}
+// 尖刺圖：hitbox 不變；圖寬 = hitbox 寬 × spikeWidthScale、置中，底座底部壓在 hitbox 底 + spikeOffsetY
+function getChapter1SpikeGeom(sx, s) {
+  const T = CHAPTER1_TILE, S = CHAPTER1_TILE_SRC.spike;
+  const sc = (s.w * T.spikeWidthScale) / (S.x1 - S.x0);
+  const x = sx + s.w / 2 - ((S.x0 + S.x1) / 2) * sc;
+  const y = s.y + s.h + T.spikeOffsetY - S.y1 * sc;
+  return { sc, x, y, w: 1254 * sc, h: 1254 * sc, artTop: y + S.y0 * sc };
+}
+function drawChapter1SpikeArt(sx, s) {
+  if (!chapter1BgDrawn) return false;
+  const img = getChapter1BgImg('spike');
+  if (!img) return false;
+  const g = getChapter1SpikeGeom(sx, s), T = CHAPTER1_TILE;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  if (T.spikeGlowAlpha > 0) { ctx.shadowColor = 'rgba(255,40,40,' + T.spikeGlowAlpha + ')'; ctx.shadowBlur = T.spikeGlowBlur; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+  ctx.drawImage(img, g.x, g.y, g.w, g.h);
+  if (T.spikeGlowAlpha > 0) ctx.drawImage(img, g.x, g.y, g.w, g.h); // 第二次疊畫：外光更明顯（圖本身不變）
+  ctx.restore();
+  return true;
+}
+function debugChapter1Tiles() {
+  const st = k => chapter1BgImgStatus[k] || (getChapter1BgImg(k) ? 'ok' : '-');
+  const info = { stage: (LEVELS[currentLevelIndex] || {}).stageId, active: isChapter1ParallaxStage(),
+    images: Object.fromEntries(Object.keys(CHAPTER1_TILE_ASSETS).map(k => [k, st(k)])), values: Object.assign({}, CHAPTER1_TILE),
+    gapsThisStage: groundGaps.length, spikes: spikes.map(sp => { const g = getChapter1SpikeGeom(sp.x, sp);
+      return { hitbox: [sp.x, sp.y, sp.w, sp.h].join(','), art: [Math.round(g.x), Math.round(g.artTop), Math.round((CHAPTER1_TILE_SRC.spike.x1 - CHAPTER1_TILE_SRC.spike.x0) * g.sc), Math.round(sp.y + sp.h + CHAPTER1_TILE.spikeOffsetY - g.artTop)].join(',') }; }) };
+  console.log('[Chapter1Tiles] ' + info.stage + '　ground=' + info.images.groundTile + ' edgeL=' + info.images.pitEdgeLeft + ' edgeR=' + info.images.pitEdgeRight + ' shadow=' + info.images.pitShadow + ' spike=' + info.images.spike + '　凹洞 ' + info.gapsThisStage + ' 個　尖刺 ' + info.spikes.length + ' 個');
+  if (console.table) console.table(info.spikes);
+  return info;
+}
+if (typeof window !== 'undefined') window.debugChapter1Tiles = debugChapter1Tiles;
 function debugChapter1Platforms() {
   const sid = (LEVELS[currentLevelIndex] || {}).stageId;
   const st = k => chapter1BgImgStatus['plat_' + k] || (getChapter1BgImg('plat_' + k) ? 'ok' : '-');
@@ -12306,7 +12458,9 @@ function drawWorldInner() {
 
   // Ground（v0.3.38：Boss 房背景自帶地板，預設不再蓋舊地面；碰撞仍是 GROUND_Y）
   let chapter2TilesDrawn = false;
-  if (chapter2BgDrawn && drawChapter2GroundAndPits(cx)) {
+  if (chapter1BgDrawn && drawChapter1GroundAndPits(cx)) {
+    chapter2TilesDrawn = true; // v0.3.54：第一章正式地面帶 + 凹洞（沿用同一個旗標：不再畫舊凹洞 / 坑底平台色塊）
+  } else if (chapter2BgDrawn && drawChapter2GroundAndPits(cx)) {
     chapter2TilesDrawn = true; // v0.3.49：正式地面帶 + 凹洞邊緣 / 陰影（只畫在實體地面；凹洞不填）
   } else if (chapter2BgDrawn && CHAPTER2_BG.chapter2GroundBlendEnabled) {
     drawChapter2GroundBlend(); // v0.3.48：第二章暫時地面（v0.3.49 起為地面帶圖沒載好時的 fallback）
@@ -12407,6 +12561,7 @@ function drawWorldInner() {
   spikes.forEach(s => {
     const sx = s.x - cx;
     if (sx > CANVAS_W + 10 || sx + s.w < -10) return;
+    if (drawChapter1SpikeArt(sx, s)) return; // v0.3.54：第一章尖刺圖（hitbox / 傷害判定不變；圖沒載好照舊畫三角形）
     drawSpike(sx, s.y, s.w, s.h);
   });
   if (chapter1BgDrawn) ctx.restore();
@@ -13889,6 +14044,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.54+：chapter1-ground-spike-near-frame → ch1-ground-near（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('chapter1-ground-spike-near-frame')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ch1-ground-near' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.53-fix：chapter1-opacity-depth-fix-N → ch1-opacity-fix-N
   if (GAME_VERSION.includes('chapter1-opacity-depth-fix')) {
     tPart = 'ch1-opacity-fix-' + (GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1');
@@ -16752,6 +16912,10 @@ function buildAssetManifest() {
   Object.entries(CHAPTER1_PLATFORM_ART).forEach(([key, path]) => img('chapter1', path, true, 'ch1:plat_' + key,
     im => { chapter1BgImgs['plat_' + key] = im; chapter1BgImgStatus['plat_' + key] = 'ok'; },
     () => { chapter1BgImgStatus['plat_' + key] = 'error'; }));
+  // v0.3.54：地面帶 + 尖刺（critical）；凹洞邊緣 / 陰影（optional：1-1～1-3 目前沒有凹洞）
+  Object.entries(CHAPTER1_TILE_ASSETS).forEach(([key, path]) => img('chapter1', path, key === 'groundTile' || key === 'spike', 'ch1:' + key,
+    im => { chapter1BgImgs[key] = im; chapter1BgImgStatus[key] = 'ok'; },
+    () => { chapter1BgImgStatus[key] = 'error'; }));
   M.chapter1.push({ path: CHAPTER1_BGM_PATH, type: 'audio', critical: false, soft: true, label: 'bgm:chapter1',
     start: () => initChapter1Bgm(), status: () => chapter1BgmStatus });
   // ── chapter2：背景 / 地形 / 平台（critical）；前景與凹洞裝飾（optional）
