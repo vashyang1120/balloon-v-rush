@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.49-chapter2-ground-platform-bgm-test-1';
-const BUILD_TIME   = '2026-10-14 10:30';
+const GAME_VERSION = 'adventure-v0.3.50-item-icons-goal-flag-test-1';
+const BUILD_TIME   = '2026-10-14 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -11292,6 +11292,9 @@ function getChapter2BgCalibText() {
   let t = 'const CHAPTER2_BG_DEFAULTS = {\n';
   Object.keys(CHAPTER2_BG_DEFAULTS).forEach(k => { t += `  ${k}: ${r(A[k])},\n`; });
   t += '};\n// 單一 prop 微調（stage:index → dx / dy / s）\nconst CHAPTER2_FG_OVERRIDES = ' + JSON.stringify(chapter2FgOverrides) + ';';
+  t += '\n// v0.3.50：道具圖示 / 通用過關旗\nconst ADVENTURE_ITEM_ICON_DEFAULTS = {\n';
+  Object.keys(ADVENTURE_ITEM_ICON_DEFAULTS).forEach(k => { t += `  ${k}: ${Math.round(ADVENTURE_ITEM_ICON[k] * 10000) / 10000},\n`; });
+  t += '};';
   return t;
 }
 function handleChapter2BgCalibKey(e) {
@@ -11299,7 +11302,8 @@ function handleChapter2BgCalibKey(e) {
   const step = e.shiftKey ? 10 : 1, sStep = e.shiftKey ? 0.05 : 0.01;
   const sel = { Digit1: 'far', Digit2: 'mid', Digit3: 'near', Digit4: 'fg', Digit5: 'boiler', Digit6: 'machine', Digit7: 'tree', Digit8: 'crates', Digit9: 'prop',
                 Digit0: 'veil', KeyG: 'ground',
-                KeyT: 'tile', KeyJ: 'edgeL', KeyK: 'edgeR', KeyL: 'pitShadow', KeyU: 'platShort', KeyO: 'platLong', KeyM: 'bgm' }[e.code];
+                KeyT: 'tile', KeyJ: 'edgeL', KeyK: 'edgeR', KeyL: 'pitShadow', KeyU: 'platShort', KeyO: 'platLong', KeyM: 'bgm',
+                KeyY: 'icoCoin', KeyI: 'ico260', KeyP: 'icoRound', KeyF: 'icoFlag' }[e.code];
   const done = () => { saveChapter2BgCalib(); e.preventDefault(); return true; };
   if (sel) { chapter2BgCalibTarget = sel; e.preventDefault(); return true; }
   const tg = chapter2BgCalibTarget;
@@ -11330,6 +11334,18 @@ function handleChapter2BgCalibKey(e) {
     if (dsat) A['chapter2' + lay + 'Saturation'] = Math.max(0, Math.min(2, r2(A['chapter2' + lay + 'Saturation'] + dsat)));
     if (dbri) A['chapter2' + lay + 'Brightness'] = Math.max(0.3, Math.min(1.5, r2(A['chapter2' + lay + 'Brightness'] + dbri)));
     return done();
+  }
+  // v0.3.50：道具圖示 / 過關旗（全章節通用；在 2-1～2-3 的 F4 調，數值所有關卡共用）
+  const icoPre = { icoCoin: 'coinIcon', ico260: 'balloon260Icon', icoRound: 'balloonRoundIcon', icoFlag: 'goalFlag' }[tg];
+  if (icoPre && (dy || dxp || ds || da)) {
+    const I = ADVENTURE_ITEM_ICON;
+    I[icoPre + 'OffsetY'] += dy; I[icoPre + 'OffsetX'] += dxp * step;
+    if (ds) I[icoPre + 'Scale'] = Math.max(0.002, Math.round((I[icoPre + 'Scale'] + (ds > 0 ? 1 : -1) * (e.shiftKey ? 0.005 : 0.001)) * 10000) / 10000);
+    if (da) {
+      if (icoPre === 'coinIcon') I.coinIconGlowAlpha = Math.max(0, Math.min(1, r2(I.coinIconGlowAlpha + da)));
+      if (icoPre === 'goalFlag') I.goalFlagAlpha = Math.max(0.1, Math.min(1, r2(I.goalFlagAlpha + da)));
+    }
+    saveAdventureItemIconCalib(); e.preventDefault(); return true;
   }
   // v0.3.49：地面帶 / 凹洞 / 平台 / BGM
   if (tg === 'tile' && (dy || dxp || ds || da)) {
@@ -11403,6 +11419,8 @@ function handleChapter2BgCalibKey(e) {
       platShort: Object.keys(D).filter(k => k.startsWith('chapter2PlatformShort')), platLong: Object.keys(D).filter(k => k.startsWith('chapter2PlatformLong')),
       bgm: ['chapter2BgmVolume'] };
     CHAPTER2_FG_TYPES.forEach(ty => { const cap = ty.charAt(0).toUpperCase() + ty.slice(1); keysBy[ty] = ['chapter2Fg' + cap + 'Scale', 'chapter2Fg' + cap + 'Alpha']; });
+    const icoReset = { icoCoin: 'coinIcon', ico260: 'balloon260Icon', icoRound: 'balloonRoundIcon', icoFlag: 'goalFlag' }[tg];
+    if (icoReset) { Object.keys(ADVENTURE_ITEM_ICON_DEFAULTS).filter(k => k.startsWith(icoReset)).forEach(k => { ADVENTURE_ITEM_ICON[k] = ADVENTURE_ITEM_ICON_DEFAULTS[k]; }); saveAdventureItemIconCalib(); }
     if (tg === 'prop') delete chapter2FgOverrides[sid + ':' + chapter2BgCalibPropIdx];
     else (keysBy[tg] || []).forEach(k => { A[k] = D[k]; });
     showHint('↺ 已重置：' + tg, 120);
@@ -11416,7 +11434,7 @@ function handleChapter2BgCalibKey(e) {
     e.preventDefault(); return true;
   }
   // 方向鍵 / 空白鍵 / Z 留給小V（可邊跑邊看視差）；其他調整鍵不傳給遊戲
-  if (/^Digit/.test(e.code) || ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyN', 'KeyH', 'KeyX', 'KeyG', 'KeyT', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyO', 'KeyM', 'BracketLeft', 'BracketRight',
+  if (/^Digit/.test(e.code) || ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyN', 'KeyH', 'KeyX', 'KeyG', 'KeyT', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyO', 'KeyM', 'KeyY', 'KeyI', 'KeyP', 'KeyF', 'BracketLeft', 'BracketRight',
        'Semicolon', 'Quote', 'Comma', 'Period', 'Minus', 'Equal'].includes(e.code)) { e.preventDefault(); return true; }
   return false;
 }
@@ -11439,6 +11457,25 @@ function drawChapter2BgCalibOverlay() {
     ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
     ctx.fillText('#' + i + ' ' + prop.type, g.cxs, g.box.y - 4);
   });
+  // v0.3.50：道具 / 過關旗預覽（固定畫在畫面中央；綠框 = 原本的拾取 / 過關判定範圍）
+  const icoT = chapter2BgCalibTarget;
+  if (icoT === 'icoCoin' || icoT === 'ico260' || icoT === 'icoRound' || icoT === 'icoFlag') {
+    const px0 = 560, py0 = 330;
+    ctx.save();
+    ctx.strokeStyle = '#3dff6a'; ctx.lineWidth = 2;
+    if (icoT === 'icoCoin')  { drawCoin(px0, py0); ctx.strokeRect(px0 - CONFIG.COIN_R, py0 - CONFIG.COIN_R, CONFIG.COIN_R * 2, CONFIG.COIN_R * 2); }
+    if (icoT === 'ico260')   { drawBalloon260(px0, py0); ctx.strokeRect(px0 - CONFIG.BALLOON_W / 2, py0 - CONFIG.BALLOON_H / 2, CONFIG.BALLOON_W, CONFIG.BALLOON_H); }
+    if (icoT === 'icoRound') { drawRoundBalloon(px0, py0); ctx.strokeRect(px0 - 16, py0 - 16, 32, 32); }
+    if (icoT === 'icoFlag')  {
+      const fx = 700;
+      drawFinishFlag(FINISH_X - fx); // 以 cx = FINISH_X - fx 呼叫 → 旗子畫在畫面 x = fx
+      ctx.beginPath(); ctx.moveTo(fx, GROUND_Y - 200); ctx.lineTo(fx, GROUND_Y + 10); ctx.stroke(); // 過關判定線（FINISH_X）
+      ctx.strokeStyle = '#ff2bd6'; ctx.beginPath(); ctx.moveTo(fx - 60, GROUND_Y); ctx.lineTo(fx + 140, GROUND_Y); ctx.stroke(); // 地面線
+    }
+    ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 1;
+    if (icoT !== 'icoFlag') { ctx.beginPath(); ctx.moveTo(px0 - 30, py0); ctx.lineTo(px0 + 30, py0); ctx.moveTo(px0, py0 - 30); ctx.lineTo(px0, py0 + 30); ctx.stroke(); }
+    ctx.restore();
+  }
   // v0.3.49：平台碰撞框（綠）＋ 平台圖頂面（粉線）— 選到 U / O 時
   if (chapter2BgCalibTarget === 'platShort' || chapter2BgCalibTarget === 'platLong') {
     platforms.forEach(p => {
@@ -11467,7 +11504,8 @@ function drawChapter2BgCalibOverlay() {
   const fgN = props.filter(p => getChapter2BgImg(CHAPTER2_FG_SRC[p.type].key)).length;
   const tLabel = { far: '1 遠景 far', mid: '2 中景 mid', near: '3 近景 near', fg: '4 前景全域', boiler: '5 前景 boiler', machine: '6 前景 machine', tree: '7 前景 tree', crates: '8 前景 crates', prop: '9 單一 prop #' + chapter2BgCalibPropIdx,
                    veil: '0 可讀性霧幕', ground: 'G 地面暫時處理（fallback）', tile: 'T 地面帶', edgeL: 'J 凹洞左邊緣', edgeR: 'K 凹洞右邊緣',
-                   pitShadow: 'L 坑洞陰影', platShort: 'U 短平台圖', platLong: 'O 長平台圖', bgm: 'M 第二章 BGM 音量' }[chapter2BgCalibTarget];
+                   pitShadow: 'L 坑洞陰影', platShort: 'U 短平台圖', platLong: 'O 長平台圖', bgm: 'M 第二章 BGM 音量',
+                   icoCoin: 'Y 金幣圖示（全關卡）', ico260: 'I 260 氣球圖示（全關卡）', icoRound: 'P 圓氣球圖示（全關卡）', icoFlag: 'F 通用過關旗（全關卡）' }[chapter2BgCalibTarget];
   const fx = l => { const c = l.charAt(0).toUpperCase() + l.slice(1); return '  α' + A['chapter2' + c + 'Alpha'] + ' blur ' + A['chapter2' + c + 'Blur'] + ' sat ' + A['chapter2' + c + 'Saturation'] + ' bri ' + A['chapter2' + c + 'Brightness']; };
   const ov = chapter2FgOverrides[sid + ':' + chapter2BgCalibPropIdx] || { dx: 0, dy: 0, s: 1 };
   const lines = [
@@ -11489,6 +11527,11 @@ function drawChapter2BgCalibOverlay() {
     '平台 short ' + A.chapter2PlatformShortOffsetX + ',' + A.chapter2PlatformShortOffsetY + ' ×' + A.chapter2PlatformShortScaleX + '/' + A.chapter2PlatformShortScaleY
       + '  long ' + A.chapter2PlatformLongOffsetX + ',' + A.chapter2PlatformLongOffsetY + ' ×' + A.chapter2PlatformLongScaleX + '/' + A.chapter2PlatformLongScaleY
       + '｜BGM vol ' + A.chapter2BgmVolume + '  ' + chapter2BgmStatus + '  播放中：' + getCurrentBgmName(),
+    (() => { const I = ADVENTURE_ITEM_ICON, s2 = k => adventureItemIconStatus[k] || '-';
+      return '道具圖：coin=' + s2('coin') + ' ×' + I.coinIconScale + ' ' + I.coinIconOffsetX + ',' + I.coinIconOffsetY + ' glow' + I.coinIconGlowAlpha
+        + '｜260=' + s2('b260') + ' ×' + I.balloon260IconScale + ' ' + I.balloon260IconOffsetX + ',' + I.balloon260IconOffsetY
+        + '｜round=' + s2('round') + ' ×' + I.balloonRoundIconScale + ' ' + I.balloonRoundIconOffsetX + ',' + I.balloonRoundIconOffsetY
+        + '｜flag=' + s2('goalFlag') + ' ×' + I.goalFlagScale + ' ' + I.goalFlagOffsetX + ',' + I.goalFlagOffsetY + ' α' + I.goalFlagAlpha; })(),
     '素材：ground=' + st('groundTile') + ' edgeL=' + st('pitEdgeLeft') + ' edgeR=' + st('pitEdgeRight') + ' shadow=' + st('pitShadow')
       + ' platShort=' + st('platformShort') + ' platLong=' + st('platformLong') + ' bgm=' + chapter2BgmStatus,
     '圖片：far=' + st('far') + ' mid=' + st('mid') + ' near=' + st('near') + '  boiler=' + st('fgBoiler') + ' machine=' + st('fgMachine') + ' tree=' + st('fgTree') + ' crates=' + st('fgCrates'),
@@ -11496,8 +11539,14 @@ function drawChapter2BgCalibOverlay() {
     '層：; \' blur　, . 飽和度　- = 亮度｜X 開關（霧幕 / 地面 / 前景）｜H 前景｜R 重置｜C 輸出',
     'T 地面帶（W S 上下　A D 平鋪起點　[ ] scale　Q E α）｜J K 凹洞左 / 右邊緣（W S A D　[ ] scale）',
     'L 坑洞陰影（W S　[ ] 寬　; \' 高　Q E α）｜U O 短 / 長平台（W S A D　[ ] 寬　; \' 高）｜M BGM 音量（Q E）',
+    'Y 金幣　I 260　P 圓氣球　F 過關旗（W S A D 位置　[ ] scale　Q E 金幣外光 / 旗透明度）— 預覽：畫面中央固定顯示 ＋ 綠框 = 拾取 / 過關判定',
     '方向鍵 / 空白 / Z 仍可操作小V（邊跑邊看視差）　紅框 = 凹洞　青虛線 = 地面線',
   ];
+  // v0.3.50：選道具圖示 / 過關旗時，面板只留相關的幾行（不擋住中間的預覽）
+  if (/^ico/.test(chapter2BgCalibTarget)) {
+    const keep = lines.filter((ln, i) => i < 2 || /^道具圖|^Y 金幣/.test(ln));
+    lines.length = 0; keep.forEach(l => lines.push(l));
+  }
   const w = 920, lh = 17, h = lines.length * lh + 12;
   ctx.fillStyle = 'rgba(0,0,0,0.78)';
   ctx.fillRect(10, 64, w, h);
@@ -11944,7 +11993,109 @@ function drawPlayerFallback(x, y, w, h) {
   ctx.fillRect(x + w * 0.15, y + h * 0.45, w * 0.7, h * 0.55); // body
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.50：道具 / 過關旗正式圖（全章節通用）— 金幣、260 長條氣球、圓氣球、通用過關旗
+//  ・只換外觀：數量、拾取判定（COIN_R / BALLOON_W×H / 圓氣球 R16）、過關判定（FINISH_X）完全不變
+//  ・圖片沒載好 → 自動退回原本的簡易畫法；UI 圖示退回原本 emoji
+// ════════════════════════════════════════════════════════════════════
+const ADVENTURE_ITEM_ICON_PATHS = {
+  coin:     'assets/adventure/items/coin_gold.png',
+  b260:     'assets/adventure/items/balloon_260_blue.png',
+  round:    'assets/adventure/items/balloon_round_red.png',
+  goalFlag: 'assets/adventure/items/adventure_goal_flag.png',
+};
+// 量自原圖（1254×1254）：對齊點 [x, y]
+const ADVENTURE_ITEM_ICON_SRC = {
+  coin:     { anchor: [629.5, 622.5] },   // 圓幣中心（幣面寬 1078）
+  b260:     { anchor: [631.5, 632] },     // 斜放長條的中心（內容框 1183×1178）
+  round:    { anchor: [626.5, 544] },     // 球體中心（球寬 919，結在下方 y 1170）
+  goalFlag: { anchor: [352, 1246] },      // 旗桿中心 x / 石座底 y（整支旗高 1239）
+};
+const ADVENTURE_ITEM_ICON_DEFAULTS = {
+  // 金幣：幣面直徑 ≈ 24px（原本 20px，略大更清楚；拾取判定仍是 COIN_R 10）
+  coinIconScale: 0.0223, coinIconOffsetX: 0, coinIconOffsetY: 0, coinIconGlowAlpha: 0.3,
+  // 260：內容框 ≈ 51px（原本畫在 x, y+15 的長條，約 14×44；斜放所以框稍大才不會太細），中心對齊原本長條中心
+  balloon260IconScale: 0.043, balloon260IconOffsetX: 0, balloon260IconOffsetY: 15,
+  // 圓氣球：球體直徑 ≈ 34px（原本 R16 = 32px），球心對齊原本圓心
+  balloonRoundIconScale: 0.037, balloonRoundIconOffsetX: 0, balloonRoundIconOffsetY: 0,
+  // 過關旗：整支 ≈ 150px 高（原本旗桿 120px），旗桿對齊 FINISH_X + 3（原本旗桿中心），石座底略壓進地面 3px
+  goalFlagScale: 0.121, goalFlagOffsetX: 3, goalFlagOffsetY: 3, goalFlagAlpha: 1,
+};
+const ADVENTURE_ITEM_ICON = Object.assign({}, ADVENTURE_ITEM_ICON_DEFAULTS);
+const ADVENTURE_ITEM_ICON_LS_KEY = 'balloonV_itemIconCalib__' + GAME_VERSION;
+const adventureItemIconImgs = {}, adventureItemIconStatus = {};
+function initAdventureItemIcons() {
+  if (typeof Image === 'undefined') return;
+  Object.entries(ADVENTURE_ITEM_ICON_PATHS).forEach(([key, path]) => {
+    if (adventureItemIconStatus[key]) return;
+    adventureItemIconStatus[key] = 'loading';
+    try {
+      const img = new Image();
+      img.onload = () => { adventureItemIconImgs[key] = img; adventureItemIconStatus[key] = 'ok'; };
+      img.onerror = () => { adventureItemIconStatus[key] = 'error'; console.warn('[ItemIcon] 圖片載入失敗：' + key + ' → ' + path); };
+      img.src = resolveAdventureAssetSrc(path) + '?v=' + encodeURIComponent(GAME_VERSION);
+    } catch (e) { adventureItemIconStatus[key] = 'error'; }
+  });
+}
+function getAdventureItemIconImg(key) {
+  if (!adventureItemIconStatus[key]) initAdventureItemIcons();
+  const img = adventureItemIconImgs[key];
+  return (img && img.complete && img.naturalWidth > 0) ? img : null;
+}
+function getAdventureItemIconSrc(key) { return resolveAdventureAssetSrc(ADVENTURE_ITEM_ICON_PATHS[key]) + '?v=' + encodeURIComponent(GAME_VERSION); }
+// 畫面上畫一個道具圖（以對齊點對準 (x, y)）；回傳 false = 圖沒載好
+function drawAdventureItemIcon(key, x, y, scale, alpha) {
+  const img = getAdventureItemIconImg(key);
+  if (!img) return false;
+  const a = ADVENTURE_ITEM_ICON_SRC[key].anchor;
+  const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+  ctx.save();
+  if (alpha != null) ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, x - a[0] * scale, y - a[1] * scale, w, h);
+  ctx.restore();
+  return true;
+}
+// UI（HTML）用的小圖示：統一 1.15em；圖片失敗 → 退回原本 emoji
+function itemIconHtml(key, emoji) {
+  if (adventureItemIconStatus[key] === 'error' || typeof document === 'undefined') return emoji;
+  if (!adventureItemIconStatus[key]) initAdventureItemIcons();
+  const e = String(emoji).replace(/'/g, '');
+  return '<img class="adv-item-icon" src="' + getAdventureItemIconSrc(key) + '" alt="' + e + '"'
+    + ' style="width:1.15em;height:1.15em;object-fit:contain;vertical-align:-0.2em;display:inline-block"'
+    + ' onerror="this.replaceWith(document.createTextNode(\'' + e + '\'))">';
+}
+function loadAdventureItemIconCalib() {
+  try {
+    const raw = localStorage.getItem(ADVENTURE_ITEM_ICON_LS_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || d.version !== GAME_VERSION || !d.values) return;
+    Object.keys(ADVENTURE_ITEM_ICON_DEFAULTS).forEach(k => { if (typeof d.values[k] === 'number' && isFinite(d.values[k])) ADVENTURE_ITEM_ICON[k] = d.values[k]; });
+  } catch (e) {}
+}
+function saveAdventureItemIconCalib() {
+  try { localStorage.setItem(ADVENTURE_ITEM_ICON_LS_KEY, JSON.stringify({ version: GAME_VERSION, values: ADVENTURE_ITEM_ICON })); } catch (e) {}
+}
+if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) loadAdventureItemIconCalib();
+initAdventureItemIcons();
+
 function drawCoin(x, y) {
+  // v0.3.50：正式金幣圖（淡金外光 + 圖）；沒載好 → 原本畫法
+  const A = ADVENTURE_ITEM_ICON;
+  if (getAdventureItemIconImg('coin')) {
+    const cx0 = x + A.coinIconOffsetX, cy0 = y + A.coinIconOffsetY;
+    if (A.coinIconGlowAlpha > 0) {
+      const r = 1078 * A.coinIconScale * 0.75;
+      const gr = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, r);
+      gr.addColorStop(0, 'rgba(255,240,170,' + A.coinIconGlowAlpha + ')'); gr.addColorStop(1, 'rgba(255,230,140,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx0, cy0, r, 0, Math.PI * 2); ctx.fill();
+    }
+    if (drawAdventureItemIcon('coin', cx0, cy0, A.coinIconScale)) return;
+  }
+  drawCoinFallback(x, y);
+}
+function drawCoinFallback(x, y) {
   ctx.fillStyle = COLORS.coin;
   ctx.beginPath();
   ctx.arc(x, y, 10, 0, Math.PI * 2);
@@ -11961,6 +12112,9 @@ function drawCoin(x, y) {
 }
 
 function drawBalloon260(x, y) {
+  // v0.3.50：正式 260 長條氣球圖（中心對齊原本長條中心 x, y+15）；沒載好 → 原本畫法
+  const A = ADVENTURE_ITEM_ICON;
+  if (drawAdventureItemIcon('b260', x + A.balloon260IconOffsetX, y + A.balloon260IconOffsetY, A.balloon260IconScale)) return;
   // Long balloon shape (260 style)
   ctx.fillStyle = COLORS.balloon260;
   ctx.beginPath();
@@ -11990,6 +12144,9 @@ function drawBalloon260(x, y) {
 
 
 function drawRoundBalloon(x, y) {
+  // v0.3.50：正式圓氣球圖（球心對齊原本圓心）；沒載好 → 原本畫法
+  const IA = ADVENTURE_ITEM_ICON;
+  if (drawAdventureItemIcon('round', x + IA.balloonRoundIconOffsetX, y + IA.balloonRoundIconOffsetY, IA.balloonRoundIconScale)) return;
   const R = 16;
   // 主體：藍紫色圓形
   const grad = ctx.createRadialGradient(x - R*0.3, y - R*0.3, R*0.1, x, y, R);
@@ -12738,6 +12895,10 @@ function _drawOrangeSprayGeometry(sx, o) {
 
 function drawFinishFlag(cx) {
   const sx = FINISH_X - cx;
+  if (sx < -160 || sx > CANVAS_W + 60) return;
+  // v0.3.50：全章節通用過關旗（旗桿對齊原本旗桿、石座站在地面上；過關判定 FINISH_X 不變）；沒載好 → 原本畫法
+  const A = ADVENTURE_ITEM_ICON;
+  if (drawAdventureItemIcon('goalFlag', sx + A.goalFlagOffsetX, GROUND_Y + A.goalFlagOffsetY, A.goalFlagScale, A.goalFlagAlpha)) return;
   if (sx < -40 || sx > CANVAS_W + 40) return;
   // Pole
   ctx.fillStyle = '#888';
@@ -12832,16 +12993,27 @@ function drawHUD() {
   ctx.font = 'bold 13px sans-serif';
   const showRound  = roundBalloons.length > 0;
   let rx = CANVAS_W - pad;
+  // v0.3.50：HUD 圖示改用正式道具圖（約 18px，數字在右邊）；圖沒載好 → 原本 emoji
+  const hudIcon = (key, emoji, num, color) => {
+    ctx.fillStyle = color;
+    const img = getAdventureItemIconImg(key);
+    if (img) {
+      const tw = ctx.measureText(String(num)).width;
+      ctx.fillText(String(num), rx, 18);
+      ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, rx - tw - 21, 3, 19, 19);
+      ctx.restore();
+    } else {
+      ctx.fillText(emoji + num, rx, 18);
+    }
+  };
   if (showRound) {
-    ctx.fillStyle = '#A29BFE';
-    ctx.fillText('⚪' + currentRunStats.roundBalloon, rx, 18);
+    hudIcon('round', '⚪', currentRunStats.roundBalloon, '#A29BFE');
     rx -= 56;
   }
-  ctx.fillStyle = '#FF6B9D';
-  ctx.fillText('🎈' + player.balloonsCollected, rx, 18);
+  hudIcon('b260', '🎈', player.balloonsCollected, '#FF6B9D');
   rx -= 60;
-  ctx.fillStyle = '#FFD93D';
-  ctx.fillText('🪙' + player.coinsCollected, rx, 18);
+  hudIcon('coin', '🪙', player.coinsCollected, '#FFD93D');
 
   // ── 中央：關卡名稱 + 計時器（正式 UI，非 debug）──
   ctx.textAlign = 'center';
@@ -12940,8 +13112,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.50+：item-icons-goal-flag → item-icons-flag（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('item-icons-goal-flag')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'item-icons-flag' + (tN === '1' ? '' : '-' + tN);
   // v0.3.49+：chapter2-ground-platform-bgm → ch2-ground-bgm（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('chapter2-ground-platform-bgm')) {
+  } else if (GAME_VERSION.includes('chapter2-ground-platform-bgm')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'ch2-ground-bgm' + (tN === '1' ? '' : '-' + tN);
   // v0.3.48+：chapter2-bg-readability-polish → ch2-bg-readable（test-N > 1 時加上 -N）
@@ -13259,11 +13435,11 @@ function buildBagRows() {
   const w  = playerWallet || getDefaultWallet(); // V幣（Phase 3A）
   const rows = [
     ['🐷 V幣',              `${w.vCoins || 0}`,                'result-gold'],
-    ['🪙 金幣總計',         `${playerInventory.coins} 枚`,          'result-gold'],
-    ['🎈 260 長條氣球總計', `${playerInventory.balloon260} 條`,     'result-pink'],
+    [itemIconHtml('coin', '🪙') + ' 金幣總計',         `${playerInventory.coins} 枚`,          'result-gold'],
+    [itemIconHtml('b260', '🎈') + ' 260 長條氣球總計', `${playerInventory.balloon260} 條`,     'result-pink'],
   ];
   if (playerInventory.roundBalloon > 0) {
-    rows.push(['⚪ 圓氣球總計', `${playerInventory.roundBalloon} 顆`, 'result-purple']);
+    rows.push([itemIconHtml('round', '⚪') + ' 圓氣球總計', `${playerInventory.roundBalloon} 顆`, 'result-purple']);
   }
   // 基礎氣球劍：x數量｜裝備 dur/max（合併，不重複）
   const swordQty = ci.basicSword || 0;
@@ -13394,10 +13570,10 @@ function populateResultPanel() {
 
   // 本關成果：主要圖示磚（emoji, 數值, css class, 標籤）
   const runRowsMain = [
-    ['🪙', String(currentRunStats.coins),                 'result-gold',   '本關金幣'],
-    ['🎈', String(currentRunStats.balloon260),            'result-pink',   '260 氣球'],
+    [itemIconHtml('coin', '🪙'), String(currentRunStats.coins),                 'result-gold',   '本關金幣'],
+    [itemIconHtml('b260', '🎈'), String(currentRunStats.balloon260),            'result-pink',   '260 氣球'],
     ...(currentRunStats.roundBalloon > 0
-      ? [['⚪', String(currentRunStats.roundBalloon),     'result-purple', '圓氣球']]
+      ? [[itemIconHtml('round', '⚪'), String(currentRunStats.roundBalloon),     'result-purple', '圓氣球']]
       : []),
     ['💥', String(currentRunStats.enemiesDefeated),       'result-orange', '擊退小怪'],
   ];
@@ -13656,7 +13832,7 @@ function populateResultPanel() {
     + '<div id="rp-supply-body" style="display:' + (supplyAutoOpen ? 'block' : 'none') + '">'
     + buildResultSupplyHpRowHtml()
     + '<div id="rp-heal-items">' + buildHealingItemRowsHtml('result') + '</div>'
-    + '<div class="rp-supply-bandage-row"><div class="rp-supply-bandage-info"><span class="rp-supply-name">🩹 愛心貼布</span><span class="rp-supply-price">−20 🪙　+1 ❤️</span></div>'
+    + '<div class="rp-supply-bandage-row"><div class="rp-supply-bandage-info"><span class="rp-supply-name">🩹 愛心貼布</span><span class="rp-supply-price">−20 ' + itemIconHtml('coin', '🪙') + '　+1 ❤️</span></div>'
     + '<button id="btn-buy-bandage" class="rp-supply-btn rp-supply-btn--'
     + (player.hp>=player.maxHp||currentRunStats.usedHeartPatch||(playerInventory.coins||0)<BANDAGE_PRICE ? 'disabled' : 'active')
     + '" onclick="buyBandage()">' + bandageBtnText + '</button></div>'
@@ -13944,7 +14120,7 @@ function renderHomeShop() {
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
     html += '<span style="font-size:1.5em">' + item.icon + '</span>';
     html += '<span style="font-weight:bold;font-size:1.05em">' + item.name + '</span>';
-    html += '<span style="margin-left:auto;color:#ffe080;font-size:0.95em">🪙 ' + item.priceCoins + ' 金幣</span>';
+    html += '<span style="margin-left:auto;color:#ffe080;font-size:0.95em">' + itemIconHtml('coin', '🪙') + ' ' + item.priceCoins + ' 金幣</span>';
     html += '</div>';
     html += '<div style="color:#aaa;font-size:0.88em;margin-bottom:6px">' + item.description + '</div>';
     html += '<div style="display:flex;align-items:center;justify-content:space-between">';
@@ -13956,7 +14132,7 @@ function renderHomeShop() {
   });
 
   html += '</div>';
-  html += '<div style="margin-top:8px;color:#888;font-size:0.82em">目前金幣：🪙 ' + coins + '</div>';
+  html += '<div style="margin-top:8px;color:#888;font-size:0.82em">目前金幣：' + itemIconHtml('coin', '🪙') + ' ' + coins + '</div>';
   body.innerHTML = html;
 }
 
@@ -14401,9 +14577,9 @@ function buildStickyStatusBarHtml() {
   return '<div class="sticky-status__bar">'
     + '<span class="ss-item ss-hp' + (low ? ' ss-hp--low' : '') + '">' + buildHpHeartsHtml()
     +   '<b>' + formatHpText() + '</b></span>'
-    + '<span class="ss-item">🪙 <b>' + Number(playerInventory.coins || 0) + '</b></span>'
-    + '<span class="ss-item">🎈<span class="ss-lbl"> 260</span> <b>×' + Number(playerInventory.balloon260 || 0) + '</b></span>'
-    + '<span class="ss-item">⚪ <b>×' + Number(playerInventory.roundBalloon || 0) + '</b></span>'
+    + '<span class="ss-item">' + itemIconHtml('coin', '🪙') + ' <b>' + Number(playerInventory.coins || 0) + '</b></span>'
+    + '<span class="ss-item">' + itemIconHtml('b260', '🎈') + '<span class="ss-lbl"> 260</span> <b>×' + Number(playerInventory.balloon260 || 0) + '</b></span>'
+    + '<span class="ss-item">' + itemIconHtml('round', '⚪') + ' <b>×' + Number(playerInventory.roundBalloon || 0) + '</b></span>'
     + '<span class="ss-item">📦 <b>' + others.length + '</b><span class="ss-lbl"> 項</span></span>'
     + '</div>';
 }
@@ -14574,11 +14750,11 @@ function buildInventorySummaryHtml(options = {}) {
   return '<div class="inv-sum">'
     + titleHtml
     + '<div class="inv-sum__grid">'
-    +   '<div class="inv-sum__card"><div class="inv-sum__head">🪙 金幣</div>'
+    +   '<div class="inv-sum__card"><div class="inv-sum__head">' + itemIconHtml('coin', '🪙') + ' 金幣</div>'
     +     '<div class="inv-sum__big">' + coins + '</div></div>'
     +   '<div class="inv-sum__card"><div class="inv-sum__head">🎈 氣球材料</div>'
-    +     '<div class="inv-sum__line">260 <b>×' + b260 + '</b></div>'
-    +     '<div class="inv-sum__line">圓氣球 <b>×' + round + '</b></div></div>'
+    +     '<div class="inv-sum__line">' + itemIconHtml('b260', '') + ' 260 <b>×' + b260 + '</b></div>'
+    +     '<div class="inv-sum__line">' + itemIconHtml('round', '') + ' 圓氣球 <b>×' + round + '</b></div></div>'
     +   '<div class="inv-sum__card"><div class="inv-sum__head">📦 其他物品</div>' + otherInner + '</div>'
     + '</div></div>';
 }
@@ -14617,9 +14793,9 @@ function renderHomeInventory() {
   const eqSword  = (equippedSword.id && equippedSword.currentDur) ? equippedSword.currentDur + '/' + equippedSword.maxDur : null;
   const eqHammer = (equippedHammer.id && equippedHammer.currentDur) ? equippedHammer.currentDur + '/' + equippedHammer.maxDur : null;
   const items = [
-    { e:'🪙',  v: playerInventory.coins,       lbl:'金幣',    cls:'inv-coin',   dur:null },
-    { e:'🎈',  v: playerInventory.balloon260,  lbl:'260 氣球',cls:'inv-balloon',dur:null },
-    { e:'⚪',  v: playerInventory.roundBalloon,lbl:'圓氣球',  cls:'inv-round',  dur:null },
+    { e:itemIconHtml('coin', '🪙'),  v: playerInventory.coins,       lbl:'金幣',    cls:'inv-coin',   dur:null },
+    { e:itemIconHtml('b260', '🎈'),  v: playerInventory.balloon260,  lbl:'260 氣球',cls:'inv-balloon',dur:null },
+    { e:itemIconHtml('round', '⚪'), v: playerInventory.roundBalloon,lbl:'圓氣球',  cls:'inv-round',  dur:null },
     { e:'⚔️', v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
     { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
@@ -14661,7 +14837,7 @@ function renderHomeSupply() {
     + '<span class="home-row-val result-red">' + player.hp + ' / ' + player.maxHp + '</span></div>'
     + '<div class="home-supply-item">'
     + '<div><span class="home-row-label">🩹 愛心貼布</span>'
-    + '<span style="color:#888;font-size:11px;margin-left:6px">20 🪙 +1 ❤️</span></div>'
+    + '<span style="color:#888;font-size:11px;margin-left:6px">20 ' + itemIconHtml('coin', '🪙') + ' +1 ❤️</span></div>'
     + '<button id="btn-home-bandage" class="home-btn '
     + (bandageDisabled ? 'home-btn--dim' : 'home-btn--red') + '" '
     + (bandageDisabled ? 'disabled' : '') + ' onclick="homeUseBandage()">'
@@ -14893,7 +15069,7 @@ function renderHomeChallenge() {
   const c = currentChallenge;
   const stats = [
     { e:'🗺️', v: c.stagesCleared,      lbl:'完成關卡' },
-    { e:'🪙',  v: c.totalCoinsCollected,lbl:'金幣' },
+    { e:itemIconHtml('coin', '🪙'),  v: c.totalCoinsCollected,lbl:'金幣' },
     { e:'📖', v: c.hiddenRecipesFound,  lbl:'秘笈' },
     { e:'🎁',  v: c.hiddenTreasuresFound,lbl:'寶箱' },
     { e:'↺',  v: c.retryCount,          lbl:'重試' },
@@ -15122,9 +15298,9 @@ function openPauseBag() {
   const eqSword  = (equippedSword.id  && equippedSword.currentDur)  ? equippedSword.currentDur  + '/' + equippedSword.maxDur  : null;
   const eqHammer = (equippedHammer.id && equippedHammer.currentDur) ? equippedHammer.currentDur + '/' + equippedHammer.maxDur : null;
   const items = [
-    { e:'🪙',  v:playerInventory.coins,        lbl:'金幣',   cls:'inv-coin',    dur:null },
-    { e:'🎈',  v:playerInventory.balloon260,   lbl:'260氣球',cls:'inv-balloon', dur:null },
-    { e:'⚪',  v:playerInventory.roundBalloon, lbl:'圓氣球', cls:'inv-round',   dur:null },
+    { e:itemIconHtml('coin', '🪙'),  v:playerInventory.coins,        lbl:'金幣',   cls:'inv-coin',    dur:null },
+    { e:itemIconHtml('b260', '🎈'),  v:playerInventory.balloon260,   lbl:'260氣球',cls:'inv-balloon', dur:null },
+    { e:itemIconHtml('round', '⚪'), v:playerInventory.roundBalloon, lbl:'圓氣球', cls:'inv-round',   dur:null },
     { e:'⚔️', v:ci.basicSword     ||0,         lbl:'氣球劍', cls:'inv-sword',   dur:eqSword },
     { e:'🔨', v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
     { e:'🍭', v:ci.balloonLollipop||0,         lbl:'棒棒糖', cls:'inv-candy',   dur:null },
