@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.50-item-icons-goal-flag-fix-1';
-const BUILD_TIME   = '2026-10-14 14:30';
+const GAME_VERSION = 'adventure-v0.3.51-asset-preload-gate-test-1';
+const BUILD_TIME   = '2026-10-14 17:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -597,11 +597,12 @@ const ADVENTURE_HERO_ASSETS = {
   swordAttack04:   'assets/adventure/hero/hero_sword_attack_04.png',
   // Hammer attack（路徑在 HAMMER_ATTACK_ASSETS，由 initHammerAttackArt 預載）
   // v0.3.46：橙煌王權劍（只在 2-4 撿到金色油管環後使用；載入失敗 → 自動用原本氣球劍圖）
-  royalSwordAttack01: 'assets/adventure/hero/hero_sword_attack_01_royal.png',
+  royalSwordAttack01: 'assets/adventure/hero/hero_sword_attack_01_royal.png', // v0.3.51：屬於 orangeKingBoss 群組（進 2-4 前才載）
   royalSwordAttack02: 'assets/adventure/hero/hero_sword_attack_02_royal.png',
   royalSwordAttack03: 'assets/adventure/hero/hero_sword_attack_03_royal.png',
   royalSwordAttack04: 'assets/adventure/hero/hero_sword_attack_04_royal.png',
 };
+const ROYAL_SWORD_HERO_KEYS = ['royalSwordAttack01', 'royalSwordAttack02', 'royalSwordAttack03', 'royalSwordAttack04'];
 
 // 圖片快取（key → Image 物件，只載入一次）
 const adventureImages = {};
@@ -2021,7 +2022,9 @@ function applyHammerAttackVisualTestLoadout() {
 
 // v0.3.14：橘子怪測試關入口（LEVELS[1]，橘子果園）
 // 測試版限定按鈕觸發，讓玩家快速觀察 idle→warning→spray→cooldown 完整節奏
-function startOrangeTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startOrangeTestLevel() { return runWithAssetGate(['common', 'chapter1'], '橘子怪測試關準備中...', () => startOrangeTestLevel__impl()); }
+function startOrangeTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   resetInventory();
   currentLevelIndex = 1; // LEVELS[1] = 橘子果園（橘子怪所在關）
@@ -2045,7 +2048,9 @@ function startOrangeTestLevel() {
 // 進入一個 runtime-only 測試關，直接在畫面上產生各種 variant/tier 組合，
 // 讓開發者確認 variant+tier 有正確套用（速度、大小、tint）
 // v0.3.19：第二章測試入口（跳到 2-1 煙囟橘子初遭遇）
-function startChapter2TestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startChapter2TestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startChapter2TestLevel__impl()); }
+function startChapter2TestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-1');
   if (idx < 0) { showHint('找不到 2-1 關卡', 160); return; }
@@ -2066,7 +2071,9 @@ function startChapter2TestLevel() {
 
 // v0.3.25：雙噴嘴橘子美術觀察入口（TEST MODE 限定）
 // 跳到 2-2（雙噴嘴橘子所在關），讓開發者觀察 idle/warning/spray/cooldown 美術表現
-function startDualOrangeTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startDualOrangeTestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startDualOrangeTestLevel__impl()); }
+function startDualOrangeTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
   if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
@@ -2091,7 +2098,9 @@ function startDualOrangeTestLevel() {
 // v0.3.27：第二章「橘子怪家族」綜合測試關（TEST MODE 限定，runtime-only）
 // 用 2-2 地圖當底板，清掉原有威脅，依序展示四種橘子怪；不修改 LEVELS 原始資料。
 // 注意：煙囪 / 雙噴嘴橘子的狀態欄位是 sprayPhase（不是 phase），與正式 2-x 關卡的建構方式一致。
-function startOrangeFamilyMixTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startOrangeFamilyMixTestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startOrangeFamilyMixTestLevel__impl()); }
+function startOrangeFamilyMixTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
   if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
@@ -2197,7 +2206,9 @@ const CH2_TERRAIN_PIT_W       = 260;
 // 玩家高 80px，所以坑底至少要在 GROUND_Y+59；取 +66 留一點安全空間。
 const CH2_TERRAIN_PIT_FLOOR_Y = GROUND_Y + 66;
 
-function startChapter2TerrainPrototypeTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startChapter2TerrainPrototypeTestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startChapter2TerrainPrototypeTestLevel__impl()); }
+function startChapter2TerrainPrototypeTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
   if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
@@ -2325,7 +2336,9 @@ function startChapter2TerrainPrototypeTestLevel() {
 
 // v0.3.28-polish：🚀 測試正式第二章 — 直接進入正式 LEVELS 中的 2-1（TEST MODE 限定）
 // 之後依正常流程 2-1 → 2-2 → 2-3；不做任何 runtime 關卡改動
-function startFormalChapter2TestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startFormalChapter2TestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startFormalChapter2TestLevel__impl()); }
+function startFormalChapter2TestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-1');
   if (idx < 0) { showHint('找不到 2-1 關卡', 160); return; }
@@ -2344,7 +2357,9 @@ function startFormalChapter2TestLevel() {
   showHint('🚀 正式第二章測試：2-1 → 2-2 → 2-3 → 2-4', 240);
 }
 
-function startProjectileOrangeTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startProjectileOrangeTestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '第二章素材載入中...', () => startProjectileOrangeTestLevel__impl()); }
+function startProjectileOrangeTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-2');
   if (idx < 0) { showHint('找不到 2-2 關卡', 160); return; }
@@ -2396,7 +2411,9 @@ function startProjectileOrangeTestLevel() {
   showHint('🥋 Projectile Orange 美術測試：觀察 idle → warning → release 循環', 280);
 }
 
-function startEnemyVariantTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startEnemyVariantTestLevel() { return runWithAssetGate(['common', 'chapter1', 'chapter2'], '測試關素材載入中...', () => startEnemyVariantTestLevel__impl()); }
+function startEnemyVariantTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   resetInventory();
   // 用 LEVELS[0]（1-1）作為底板，然後 runtime 置換敵人
@@ -2448,7 +2465,9 @@ function startEnemyVariantTestLevel() {
 }
 
 // 測試版：直接跳第 3 關（完整重設 runtime state，不清玩家身份/V幣/Firebase）
-function startAdventureTestLevel3() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startAdventureTestLevel3() { return runWithAssetGate(['common', 'chapter1'], '派對島準備中...', () => startAdventureTestLevel3__impl()); }
+function startAdventureTestLevel3__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
 
   // 清冒險背包（不清身份/V幣/Firebase）
@@ -9093,7 +9112,7 @@ function getOrangeKingBossImg(key) {
   const img = orangeKingBossImgs[key];
   return (img && img.complete && img.naturalWidth > 0) ? img : null;
 }
-initOrangeKingBossArt();
+// v0.3.51：不再於頁面載入時預載 Boss 素材 — 由 preloadAssetGroup('orangeKingBoss') 在進 2-4 前載入
 
 function getOrangeKingPipeY(laneKey) {
   const A = ORANGE_KING_MACHINE_ART;
@@ -10453,7 +10472,9 @@ function drawOrangeKingMachineCalibOverlay() {
 }
 
 // 測試版：🍊 直接進入 2-4 Boss 關（不清背包，只換關卡）
-function startOrangeKingBossTestLevel() {
+// v0.3.51：測試入口也走 preload gate（跳到哪、載哪；載完才開始）
+function startOrangeKingBossTestLevel() { return runWithAssetGate(['common', 'chapter2', 'orangeKingBoss'], '橘子王 Boss 戰準備中...', () => startOrangeKingBossTestLevel__impl()); }
+function startOrangeKingBossTestLevel__impl() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
   const idx = LEVELS.findIndex(lv => lv.stageId === '2-4');
   if (idx < 0) { showHint('找不到 2-4 關卡', 160); return; }
@@ -11000,8 +11021,7 @@ function drawChapter2BgLayer(key, scale, offY, ratio, alpha) {
 }
 // 背景三層（在 drawWorldInner 最前面呼叫）；回傳 true = far 層已蓋滿畫面（不用再畫藍天）
 function drawChapter2ParallaxBg() {
-  if (!isChapter2ParallaxStage()) return false;
-  initChapter2BgArt();
+  if (!isChapter2ParallaxStage()) return false; // v0.3.51：素材由 preloadAssetGroup('chapter2') 在進關前載好（這裡不再偷偷觸發載入）
   const A = CHAPTER2_BG;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -12088,8 +12108,7 @@ function debugItemIcons() {
   return rows;
 }
 if (typeof window !== 'undefined') window.debugItemIcons = debugItemIcons;
-function getAdventureItemIconImg(key) {
-  if (!adventureItemIconStatus[key]) initAdventureItemIcons();
+function getAdventureItemIconImg(key) { // v0.3.51：不再於繪製時觸發載入（common 群組開機時已載好）
   const img = adventureItemIconImgs[key];
   return (img && img.complete && img.naturalWidth > 0) ? img : null;
 }
@@ -12113,7 +12132,7 @@ function drawAdventureItemIcon(key, x, y, scale, alpha) {
 // UI（HTML）用的小圖示：統一 1.15em；圖片失敗 → 退回原本 emoji
 function itemIconHtml(key, emoji) {
   if (adventureItemIconStatus[key] === 'error' || typeof document === 'undefined') return emoji;
-  if (!adventureItemIconStatus[key]) initAdventureItemIcons();
+  if (!adventureItemIconStatus[key]) return emoji; // v0.3.51：還沒進入載入流程 → 先用 emoji（不觸發載入）
   const e = String(emoji).replace(/'/g, '');
   // 已載入 → 用成功的網址；還在載入 → 先用第一個來源，失敗時改用 raw.githubusercontent，再失敗才換回 emoji
   const raw = ADVENTURE_ITEM_ICON_RAW_BASE + ADVENTURE_ITEM_ICON_PATHS[key] + '?v=' + encodeURIComponent(GAME_VERSION);
@@ -12135,7 +12154,7 @@ function saveAdventureItemIconCalib() {
 }
 // v0.3.50-fix-1：初始化不依賴任何後面才宣告的常數（定位暫存只有測試版會寫入，正式版讀不到也不影響）
 try { loadAdventureItemIconCalib(); } catch (e) {}
-try { initAdventureItemIcons(); } catch (e) { console.error('[ItemIcon] 初始化失敗', e); }
+// v0.3.51：道具圖改由 preloadAssetGroup('common') 載入（多來源 Pages → 相對路徑 → raw 的策略保留在共用載入器）
 
 function drawCoin(x, y) {
   // v0.3.50：正式金幣圖（淡金外光 + 圖）；沒載好 → 原本畫法
@@ -13169,8 +13188,12 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.51+：asset-preload-gate → asset-gate（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('asset-preload-gate')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'asset-gate' + (tN === '1' ? '' : '-' + tN);
   // v0.3.50+：item-icons-goal-flag → item-icons-flag（test-N > 1 時加上 -N）
-  if (GAME_VERSION.includes('item-icons-goal-flag')) {
+  } else if (GAME_VERSION.includes('item-icons-goal-flag')) {
     const fN = GAME_VERSION.match(/-fix-(\d+)/)?.[1];
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
     tPart = 'item-icons-flag' + (fN ? '-fix' + fN : (tN === '1' ? '' : '-' + tN));
@@ -15332,8 +15355,11 @@ function homeGoNextLevel() {
     nextBringDog    = false;
     closeHomeScreen();
     if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-    loadLevel(nextIdx);
-    restart({ keepHp: true });
+    // v0.3.51：下一關的 critical 素材載好才開始
+    runWithAssetGate(getAssetGroupsForLevel(nextIdx), getAssetGateTitleForLevel(nextIdx), () => {
+      loadLevel(nextIdx);
+      restart({ keepHp: true });
+    });
   } catch(err) {
     if (typeof showDebugError === 'function')
       showDebugError('HOME NEXT LEVEL', err.message, '', '', '', err.stack);
@@ -15450,6 +15476,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart(opts) {
+  try { if (typeof flushPendingAssetApplies === 'function') flushPendingAssetApplies(); } catch (e) {} // v0.3.51：關卡開始時才套用晚到的素材
   const keepHp          = opts && opts.keepHp;
   const preserveBringDog = opts && opts.preserveBringDog;
   // 若要保留帶狗狀態，從穩定記錄還原
@@ -15655,12 +15682,15 @@ function hideResultButtons() {
               }
               bringBalloonDog = (nextBringDog === true);
               nextBringDog    = false;
-              console.log('BEFORE loadLevel', nextIdx);
-              loadLevel(nextIdx);
-              console.log('AFTER loadLevel, hiddenTreasure:', currentHiddenTreasure);
-              console.log('BEFORE restart, bringBalloonDog:', bringBalloonDog);
-              restart({ keepHp: true }); // 跨關保留 HP
-              console.log('AFTER restart');
+              // v0.3.51：下一關的 critical 素材載好才開始（第二章 / Boss 素材在這時才載）
+              runWithAssetGate(getAssetGroupsForLevel(nextIdx), getAssetGateTitleForLevel(nextIdx), () => {
+                console.log('BEFORE loadLevel', nextIdx);
+                loadLevel(nextIdx);
+                console.log('AFTER loadLevel, hiddenTreasure:', currentHiddenTreasure);
+                console.log('BEFORE restart, bringBalloonDog:', bringBalloonDog);
+                restart({ keepHp: true }); // 跨關保留 HP
+                console.log('AFTER restart');
+              });
             } else if (gameState === 'gameover') {
               // Game Over 再玩一次：走同一套穩定還原流程（含 HP / 狗 / 背包）
               if (typeof retryCurrentLevelFromStart === 'function') {
@@ -15911,7 +15941,12 @@ function isOrangeCoreArtReady() {
   });
 }
 
+// v0.3.51：開機 gate 改成「common + chapter1 群組完成」（原本的 hero / 蠍子 / 橘子判斷保留在下方，已不再使用）
+var assetBootReady = false;
 function isAdventureCoreArtReady() {
+  return assetBootReady;
+}
+function isAdventureCoreArtReady_legacy() {
   if (_artReadyConfirmed) return true;
   const heroOk = CORE_ART_KEYS.every(k => {
     const img = adventureImages[k];
@@ -15928,6 +15963,414 @@ function isAdventureCoreArtReady() {
   return false;
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.51：Asset manifest + preload gate（章節 / 關卡為單位載入素材）
+//  ・common：主角、共用道具、通用過關旗、蠍子（第一章與通用敵人）— 開機就載
+//  ・chapter1：第一章需要的橘子怪基本圖（1-1～1-3 都有橘子怪）— 開機就載；第一章背景 / 地面 / 平台目前仍是 canvas 畫法
+//  ・chapter2：第二章背景 / 前景 / 地面 / 凹洞 / 平台 / 煙囪・雙噴嘴・飛行油彈橘子 / 第二章 BGM — 進第二章前才載
+//  ・orangeKingBoss：Boss 房 / 橘子王 / 油彈・油漬・金色油管環 / 王權劍 / Boss BGM・勝利音效 — 進 2-4 前才載
+//  ・critical 沒載好不准開始該關；optional 失敗不擋（本關不顯示）；音訊為 soft-critical（失敗只警告、不擋）
+//  ・每張圖依序嘗試 GitHub Pages → 同網站相對路徑 → raw.githubusercontent（每個來源 12 秒 timeout）；
+//    在 gate 期間就決定用哪個來源，遊戲開始後不會再偷偷換來源
+//  ・載好的圖片放進原本各自的快取（adventureImages / scorpionSkinImgs / chapter2BgImgs / orangeKingBossImgs …），
+//    所以原有的 getXXXImg() 與繪製程式完全不用改
+//  ・gate 結束後才到的圖片（例如 timeout 後才成功）先暫存，下一次關卡開始（restart）才套用 → 不會中途跳圖
+// ════════════════════════════════════════════════════════════════════
+const ASSET_SOURCE_TIMEOUT_MS = 12000;
+const ASSET_AUDIO_TIMEOUT_MS  = 8000;
+const ASSET_RAW_BASE = 'https://raw.githubusercontent.com/vashyang1120/balloon-v-rush/main/';
+const ASSET_REGISTRY = {};          // path → record
+const ASSET_GROUP_STATE = {};       // group → { promise, settled, summary }
+const ASSET_PENDING_APPLIES = [];   // gate 結束後才載好的圖片（下次關卡開始才套用）
+let assetGateActive = false;        // gate（loading 畫面）進行中 → 可以直接套用到快取
+let assetGateProgress = { title: '', loaded: 0, failed: 0, total: 0, current: '', groups: [], audio: '' };
+
+const ASSET_LOADING_TIPS = [
+  '你知道嗎？第一章的小怪是蠍子，因為牠有刺，也因為氣球小V是天蠍座！',
+  '撿到圓氣球和 260 長條氣球，回小V的家可以做出氣球武器！',
+  '橘子油會讓氣球破掉，看準橘子怪噴油的空檔再通過！',
+  '帶著氣球小狗出發，牠會幫你找到藏起來的寶物！',
+];
+
+function assetCap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+// 建立 manifest：每筆 { path, type, critical, apply(img), fail(), altPaths, label }
+function buildAssetManifest() {
+  const M = { common: [], chapter1: [], chapter2: [], orangeKingBoss: [] };
+  const img = (group, path, critical, label, apply, fail, altPaths) => M[group].push({ path, type: 'image', critical, label, apply, fail: fail || (() => {}), altPaths: altPaths || [] });
+  // ── common：主角（不含王權劍）
+  Object.entries(ADVENTURE_HERO_ASSETS).forEach(([key, path]) => {
+    if (ROYAL_SWORD_HERO_KEYS.includes(key)) return;
+    img('common', path, true, 'hero:' + key, im => { adventureImages[key] = im; adventureHeroLoaded = true; });
+  });
+  HAMMER_ATTACK_ASSETS.forEach((path, i) => img('common', path, true, 'hammer:' + (i + 1), im => { hammerAttackImgs[i] = im; hammerAttackReady = true; }));
+  // 共用道具 + 通用過關旗
+  Object.entries(ADVENTURE_ITEM_ICON_PATHS).forEach(([key, path]) => img('common', path, true, 'item:' + key,
+    im => { adventureItemIconImgs[key] = im; adventureItemIconStatus[key] = 'ok'; },
+    () => { adventureItemIconStatus[key] = 'error'; }));
+  // 蠍子（normal + heavy；同時填舊的全域快取）
+  Object.entries(SCORPION_SKIN_ASSETS).forEach(([skin, a]) => {
+    const cache = () => (scorpionSkinImgs[skin] = scorpionSkinImgs[skin] || { walk: [], walkReady: false, hurt: null, hurtReady: false });
+    a.walk.forEach((path, i) => img('common', path, true, skin + ':walk' + (i + 1), im => {
+      const c = cache(); c.walk[i] = im; c.walkReady = true;
+      if (skin === 'scorpion_normal') { scorpionWalkImgs[i] = im; scorpionWalkReady = true; }
+    }));
+    if (a.hurt) img('common', a.hurt, true, skin + ':hurt', im => {
+      const c = cache(); c.hurt = im; c.hurtReady = true;
+      if (skin === 'scorpion_normal') { scorpionHurtImg = im; scorpionHurtReady = true; }
+    });
+  });
+  // ── chapter1：第一章 1-1～1-3 的橘子怪（基本款）
+  Object.entries(ORANGE_ENEMY_ASSETS).forEach(([key, path]) => img('chapter1', path, true, 'orange:' + key, im => {
+    orangeEnemyImgs[key] = im;
+    orangeEnemyCoreReady = ORANGE_CORE_KEYS.every(k => orangeEnemyImgs[k]);
+  }));
+  // ── chapter2：背景 / 地形 / 平台（critical）；前景與凹洞裝飾（optional）
+  const ch2Critical = ['far', 'mid', 'near', 'groundTile', 'platformShort', 'platformLong'];
+  Object.entries(CHAPTER2_BG_ASSETS).forEach(([key, path]) => img('chapter2', path, ch2Critical.includes(key), 'ch2:' + key,
+    im => { chapter2BgImgs[key] = im; chapter2BgImgStatus[key] = 'ok'; },
+    () => { chapter2BgImgStatus[key] = 'error'; }));
+  Object.entries(CHIMNEY_ORANGE_ASSETS).forEach(([key, path]) => img('chapter2', path, true, 'chimney:' + key, im => {
+    chimneyOrangeImgs[key] = im;
+    chimneyOrangeCoreReady = Object.keys(CHIMNEY_ORANGE_ASSETS).every(k => chimneyOrangeImgs[k]);
+  }));
+  Object.entries(CHIMNEY_ORANGE_OIL_ASSETS).forEach(([key, path]) => img('chapter2', path, true, 'chimneyOil:' + key, im => { chimneyOrangeOilImgs[key] = im; chimneyOrangeOilReady = true; }));
+  Object.entries(DUAL_ORANGE_ASSETS).forEach(([key, path]) => img('chapter2', path, true, 'dual:' + key,
+    im => { if (!dualOrangeImgs[key]) dualOrangeLoadedCount++; dualOrangeImgs[key] = im; dualOrangeLoadStatus[key] = 'LOADED'; },
+    () => { dualOrangeLoadStatus[key] = 'ERROR'; }));
+  Object.entries(PROJECTILE_ORANGE_ASSETS).forEach(([key, path]) => img('chapter2', path, true, 'projectile:' + key,
+    im => { projectileOrangeImgs[key] = im; projectileOrangeLoadStatus[key] = 'LOADED'; projectileOrangeResolvedSrc[key] = im.src; },
+    () => { projectileOrangeLoadStatus[key] = 'ERROR'; }));
+  M.chapter2.push({ path: CHAPTER2_BGM_PATH, type: 'audio', critical: false, soft: true, label: 'bgm:chapter2',
+    start: () => initChapter2Bgm(), status: () => chapter2BgmStatus });
+  // ── orangeKingBoss
+  Object.entries(ORANGE_KING_BOSS_ASSETS).forEach(([key, path]) => img('orangeKingBoss', path, true, 'boss:' + key,
+    im => { orangeKingBossImgs[key] = im; orangeKingBossImgStatus[key] = 'ok'; },
+    () => { orangeKingBossImgStatus[key] = 'error'; },
+    (ORANGE_KING_BOSS_ASSET_FALLBACKS[key] || [])));
+  ROYAL_SWORD_HERO_KEYS.forEach(key => img('orangeKingBoss', ADVENTURE_HERO_ASSETS[key], true, 'royal:' + key, im => { adventureImages[key] = im; }));
+  M.orangeKingBoss.push({ path: ORANGE_KING_BGM_PATH, type: 'audio', critical: false, soft: true, label: 'bgm:orangeKing',
+    start: () => initOrangeKingBgm(), status: () => (orangeKingBgmStatus === 'ok(備用路徑)' ? 'ok' : orangeKingBgmStatus) });
+  M.orangeKingBoss.push({ path: ORANGE_KING_VICTORY_JINGLE_PATH, type: 'audio', critical: false, soft: true, label: 'sfx:victoryJingle',
+    start: () => initOrangeKingVictoryJingle(), status: () => orangeKingJingleStatus });
+  return M;
+}
+let ASSET_MANIFEST = null;
+function getAssetManifest() { if (!ASSET_MANIFEST) ASSET_MANIFEST = buildAssetManifest(); return ASSET_MANIFEST; }
+
+function getAssetSourceCandidates(path, altPaths) {
+  const q = '?v=' + encodeURIComponent(GAME_VERSION);
+  const out = [];
+  [path].concat(altPaths || []).forEach(p => {
+    out.push({ src: 'pages', url: resolveAdventureAssetSrc(p) + q });
+    try { if (typeof location !== 'undefined' && location.href) out.push({ src: 'relative', url: new URL(p, location.href).href + q }); } catch (e) {}
+    out.push({ src: 'raw', url: ASSET_RAW_BASE + p.replace(/^\//, '') + q });
+  });
+  return out.filter((c, i) => out.findIndex(x => x.url === c.url) === i);
+}
+function getAssetRecord(entry) {
+  let r = ASSET_REGISTRY[entry.path];
+  if (!r) r = ASSET_REGISTRY[entry.path] = { path: entry.path, type: entry.type, label: entry.label, critical: false, groups: [], status: 'idle', url: '', source: '', w: 0, h: 0, tried: [], img: null, entries: [], promise: null, applied: false };
+  if (!r.entries.includes(entry)) r.entries.push(entry);
+  if (entry.critical) r.critical = true;
+  return r;
+}
+function applyAssetRecord(r) {
+  if (r.applied || !r.img) return;
+  r.applied = true;
+  r.entries.forEach(e => { try { e.apply && e.apply(r.img); } catch (err) { console.warn('[AssetPreload] apply 失敗', r.path, err); } });
+}
+// 載好的圖片：gate 進行中 / 尚未開始遊玩 → 立即套用；遊玩中才到 → 暫存，下次關卡開始才套用（避免中途跳圖）
+function onAssetImageReady(r) {
+  if (assetGateActive || !assetBootReady) applyAssetRecord(r);
+  else if (!ASSET_PENDING_APPLIES.includes(r)) ASSET_PENDING_APPLIES.push(r);
+}
+function flushPendingAssetApplies() {
+  while (ASSET_PENDING_APPLIES.length) applyAssetRecord(ASSET_PENDING_APPLIES.shift());
+}
+function loadImageRecord(r) {
+  if (r.promise) return r.promise;
+  r.status = 'loading';
+  const cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
+  r.promise = new Promise(resolve => {
+    const tryAt = (i) => {
+      if (i >= cands.length) {
+        r.status = 'failed';
+        r.entries.forEach(e => { try { e.fail && e.fail(); } catch (err) {} });
+        console.error('[AssetPreload] ❌ 載入失敗' + (r.critical ? '（critical）' : '（optional）') + '：' + r.path + '\n'
+          + r.tried.map(t => '   ' + t.result + '  ' + t.url).join('\n'));
+        resolve(r); return;
+      }
+      const c = cands[i];
+      r.current = c.url;
+      let done = false;
+      const im = new Image();
+      const timer = setTimeout(() => { if (done) return; done = true; r.tried.push({ url: c.url, result: 'timeout' }); try { im.src = ''; } catch (e) {} tryAt(i + 1); }, ASSET_SOURCE_TIMEOUT_MS);
+      im.onload = () => {
+        if (done) return; done = true; clearTimeout(timer);
+        if (!im.naturalWidth) { r.tried.push({ url: c.url, result: 'error（naturalWidth 0）' }); tryAt(i + 1); return; }
+        Object.assign(r, { status: 'loaded', img: im, url: c.url, source: c.src, w: im.naturalWidth, h: im.naturalHeight });
+        r.tried.push({ url: c.url, result: 'ok' });
+        if (r.label && r.label.startsWith('item:')) { // 保留 v0.3.50-fix-1 的 debugItemIcons 資訊
+          const k = r.label.slice(5);
+          adventureItemIconInfo[k] = { status: 'ok', url: c.url, w: im.naturalWidth, h: im.naturalHeight, tried: r.tried.slice() };
+        }
+        onAssetImageReady(r);
+        resolve(r);
+      };
+      im.onerror = () => { if (done) return; done = true; clearTimeout(timer); r.tried.push({ url: c.url, result: 'error' }); tryAt(i + 1); };
+      try { im.src = c.url; } catch (e) { done = true; clearTimeout(timer); r.tried.push({ url: c.url, result: 'exception' }); tryAt(i + 1); }
+    };
+    tryAt(0);
+  });
+  return r.promise;
+}
+// 音訊：沿用原本的 Audio 物件（initChapter2Bgm / initOrangeKingBgm / initOrangeKingVictoryJingle），等到 ok / error / timeout
+function loadAudioRecord(r, entry) {
+  if (r.promise) return r.promise;
+  r.status = 'loading';
+  r.promise = new Promise(resolve => {
+    try { entry.start(); } catch (e) {}
+    const t0 = Date.now();
+    const poll = () => {
+      const st = entry.status();
+      if (st === 'ok') { r.status = 'loaded'; r.url = r.path; return resolve(r); }
+      if (st === 'error') { r.status = 'failed'; console.warn('[AssetPreload] 音訊載入失敗（soft-critical，不擋進關）：' + r.path); return resolve(r); }
+      if (Date.now() - t0 > ASSET_AUDIO_TIMEOUT_MS) { r.status = 'loaded'; r.note = 'timeout（繼續在背景載入）'; return resolve(r); }
+      setTimeout(poll, 100);
+    };
+    poll();
+  });
+  return r.promise;
+}
+
+// 1. preloadAssetGroup(groupName, options) → Promise<summary>
+function preloadAssetGroup(groupName, options) {
+  const opts = options || {};
+  const st = ASSET_GROUP_STATE[groupName] || (ASSET_GROUP_STATE[groupName] = { promise: null, settled: false, summary: null });
+  if (st.promise && !opts.force) return st.promise;
+  const entries = getAssetManifest()[groupName] || [];
+  if (opts.force) entries.forEach(e => { const r = ASSET_REGISTRY[e.path]; if (r && r.status === 'failed') { r.promise = null; r.tried = []; r.status = 'idle'; r.applied = false; } });
+  const recs = entries.map(e => { const r = getAssetRecord(e); if (!r.groups.includes(groupName)) r.groups.push(groupName); return { r, e }; });
+  st.settled = false;
+  st.promise = Promise.all(recs.map(({ r, e }) => {
+    const p = e.type === 'audio' ? loadAudioRecord(r, e) : loadImageRecord(r);
+    return p.then(() => { if (opts.onProgress) opts.onProgress(groupName); });
+  })).then(() => {
+    const sum = summarizeAssetGroup(groupName);
+    st.settled = true; st.summary = sum;
+    console.info('[AssetPreload] 群組完成：' + groupName + '　' + sum.loaded + '/' + sum.total + ' 載入，' + sum.failed + ' 失敗（critical 失敗 ' + sum.criticalFailed + '）');
+    return sum;
+  });
+  return st.promise;
+}
+function summarizeAssetGroup(groupName) {
+  const entries = getAssetManifest()[groupName] || [];
+  const recs = entries.map(e => ASSET_REGISTRY[e.path]).filter(Boolean);
+  const s = { group: groupName, total: entries.length, loaded: 0, failed: 0, pending: 0, criticalFailed: 0, criticalFailedPaths: [] };
+  entries.forEach(e => {
+    const r = ASSET_REGISTRY[e.path];
+    const st = r ? r.status : 'idle';
+    if (st === 'loaded') s.loaded++;
+    else if (st === 'failed') { s.failed++; if (e.critical) { s.criticalFailed++; s.criticalFailedPaths.push(e.path); } }
+    else s.pending++;
+  });
+  return s;
+}
+// 4. isAssetGroupReady(groupName)：群組已載完，且 critical 全部成功
+function isAssetGroupReady(groupName) {
+  const st = ASSET_GROUP_STATE[groupName];
+  return !!(st && st.settled && st.summary && st.summary.criticalFailed === 0);
+}
+function isAssetGroupSettled(groupName) { const st = ASSET_GROUP_STATE[groupName]; return !!(st && st.settled); }
+// 3. getAssetStatus(path 或 key) → loading / loaded / failed / skipped
+function getAssetStatus(pathOrKey) {
+  let r = ASSET_REGISTRY[pathOrKey];
+  if (!r) r = Object.values(ASSET_REGISTRY).find(x => x.label === pathOrKey || (x.label || '').endsWith(':' + pathOrKey) || x.path.endsWith('/' + pathOrKey));
+  if (!r || r.status === 'idle') return 'skipped';
+  return r.status;
+}
+// 關卡 → 需要的群組
+function getAssetGroupsForLevel(levelIndex) {
+  const lv = LEVELS[levelIndex];
+  if (!lv) return ['common', 'chapter1'];
+  if (lv.isBossStage) return ['common', 'chapter2', 'orangeKingBoss'];
+  if (lv.chapterId === 2) return ['common', 'chapter1', 'chapter2'];
+  return ['common', 'chapter1'];
+}
+function getAssetGateTitleForLevel(levelIndex) {
+  const lv = LEVELS[levelIndex] || {};
+  if (lv.isBossStage) return '橘子王 Boss 戰準備中...';
+  if (lv.chapterId === 2) return '第二章素材載入中...';
+  return '派對島準備中...';
+}
+// 2. ensureAssetsForStage(stageId) → Promise<{ ok, groups, summaries, criticalFailedPaths }>
+function ensureAssetsForStage(stageIdOrIndex, onProgress) {
+  const idx = typeof stageIdOrIndex === 'number' ? stageIdOrIndex : LEVELS.findIndex(l => l.stageId === stageIdOrIndex);
+  return ensureAssetGroups(getAssetGroupsForLevel(idx), onProgress);
+}
+function ensureAssetGroups(groups, onProgress, force) {
+  return Promise.all(groups.map(g => preloadAssetGroup(g, { onProgress, force }))).then(sums => {
+    const failed = sums.reduce((a, s) => a.concat(s.criticalFailedPaths), []);
+    return { ok: failed.length === 0, groups, summaries: sums, criticalFailedPaths: failed };
+  });
+}
+function getAssetGateProgress() {
+  const groups = assetGateProgress.groups || [];
+  let total = 0, loaded = 0, failed = 0; let current = '';
+  const audio = [];
+  groups.forEach(g => {
+    (getAssetManifest()[g] || []).forEach(e => {
+      total++;
+      const r = ASSET_REGISTRY[e.path];
+      const st = r ? r.status : 'idle';
+      if (st === 'loaded') loaded++; else if (st === 'failed') failed++; else if (!current) current = e.path.split('/').pop();
+      if (e.type === 'audio') audio.push(e.path.split('/').pop() + '：' + (st === 'loaded' ? (r && r.note ? '背景載入中' : '✓') : st === 'failed' ? '✗（不影響遊玩）' : '載入中'));
+    });
+  });
+  return Object.assign(assetGateProgress, { total, loaded, failed, current, audio: audio.join('　') });
+}
+
+// ── Loading 畫面（HTML overlay，蓋在結算頁 / 小V的家 / 暫停畫面之上）──
+let assetLoadingEl = null, assetLoadingTimer = 0, assetLoadingTipIdx = 0;
+function ensureAssetLoadingOverlay() {
+  if (assetLoadingEl || typeof document === 'undefined' || !document.createElement || !document.body) return assetLoadingEl;
+  const d = document.createElement('div');
+  d.id = 'asset-loading-overlay';
+  d.setAttribute('style', 'position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;'
+    + 'background:rgba(20,14,40,0.94);font-family:sans-serif;color:#f4ecff;padding:16px;box-sizing:border-box');
+  d.innerHTML = '<div style="width:min(520px,100%);text-align:center">'
+    + '<div data-k="title" style="font-size:22px;font-weight:bold;margin-bottom:14px">派對島準備中...</div>'
+    + '<div style="height:14px;border-radius:7px;background:rgba(255,255,255,0.15);overflow:hidden"><div data-k="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#ffb347,#ffe066);transition:width .15s"></div></div>'
+    + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px;opacity:.9"><span data-k="count">0 / 0</span><span data-k="pct">0%</span></div>'
+    + '<div data-k="file" style="font-size:12px;opacity:.65;margin-top:6px;word-break:break-all;min-height:16px"></div>'
+    + '<div data-k="audio" style="font-size:12px;opacity:.65;margin-top:4px;min-height:16px"></div>'
+    + '<div data-k="err" style="display:none;margin-top:14px;padding:10px;border-radius:8px;background:rgba(255,80,80,0.18);font-size:13px;text-align:left"></div>'
+    + '<div data-k="tip" style="font-size:13px;margin-top:18px;color:#ffe9a8;line-height:1.5"></div>'
+    + '</div>';
+  document.body.appendChild(d);
+  assetLoadingEl = d;
+  return d;
+}
+function updateAssetLoadingOverlay() {
+  const el = assetLoadingEl;
+  if (!el) return;
+  const p = getAssetGateProgress();
+  const done = p.loaded + p.failed;
+  const pct = p.total ? Math.floor(done / p.total * 100) : 0;
+  const q = k => el.querySelector('[data-k="' + k + '"]');
+  q('title').textContent = p.title;
+  q('bar').style.width = pct + '%';
+  q('count').textContent = '已載入 ' + done + ' / ' + p.total + (p.failed ? '（失敗 ' + p.failed + '）' : '');
+  q('pct').textContent = pct + '%';
+  q('file').textContent = p.current ? '正在載入：' + p.current : '';
+  q('audio').textContent = p.audio ? '音樂：' + p.audio : '';
+}
+function showAssetLoadingOverlay(title, groups) {
+  // 進度只算這次真的要載的群組（已載好的群組不重複計入）
+  const fresh = groups.filter(g => !isAssetGroupSettled(g));
+  assetGateProgress.title = title; assetGateProgress.groups = fresh.length ? fresh : groups;
+  const el = ensureAssetLoadingOverlay();
+  if (!el) return;
+  el.querySelector('[data-k="err"]').style.display = 'none';
+  el.querySelector('[data-k="tip"]').textContent = '💡 ' + ASSET_LOADING_TIPS[assetLoadingTipIdx++ % ASSET_LOADING_TIPS.length];
+  el.style.display = 'flex';
+  updateAssetLoadingOverlay();
+  clearInterval(assetLoadingTimer);
+  assetLoadingTimer = setInterval(updateAssetLoadingOverlay, 120);
+}
+function hideAssetLoadingOverlay() {
+  clearInterval(assetLoadingTimer);
+  if (assetLoadingEl) assetLoadingEl.style.display = 'none';
+}
+function showAssetLoadingError(result, onRetry, onContinue) {
+  const el = assetLoadingEl;
+  if (!el) { onContinue(); return; }
+  clearInterval(assetLoadingTimer); updateAssetLoadingOverlay();
+  const box = el.querySelector('[data-k="err"]');
+  const list = result.criticalFailedPaths.slice(0, 8).map(p => '・' + p.split('/').pop()).join('<br>') + (result.criticalFailedPaths.length > 8 ? '<br>…共 ' + result.criticalFailedPaths.length + ' 個' : '');
+  box.innerHTML = '<b>⚠️ 有 ' + result.criticalFailedPaths.length + ' 個必要素材載入失敗</b>（完整網址已列在 console）<br>' + list
+    + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+    + '<button data-k="retry" style="flex:1;padding:8px;border-radius:6px;border:0;background:#ffe066;font-weight:bold">重新載入</button>'
+    + '<button data-k="cont" style="flex:1;padding:8px;border-radius:6px;border:0;background:#ccc">' + (ADVENTURE_TEST_TOOLS_ENABLED ? '測試版：用 fallback 繼續' : '仍要繼續（部分畫面會簡化）') + '</button></div>';
+  box.style.display = 'block';
+  box.querySelector('[data-k="retry"]').onclick = () => { box.style.display = 'none'; onRetry(); };
+  box.querySelector('[data-k="cont"]').onclick = () => { console.warn('[AssetPreload] 使用者選擇以 fallback 繼續，缺少：', result.criticalFailedPaths); onContinue(); };
+}
+// 5. drawLoadingScreen(progress)：canvas 版（開機 gate 時畫在遊戲畫面上）
+function drawLoadingScreen(progress) {
+  const p = progress || getAssetGateProgress();
+  const done = p.loaded + p.failed, pct = p.total ? done / p.total : 0;
+  ctx.save();
+  ctx.fillStyle = '#1a1230'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f4ecff'; ctx.font = 'bold 24px sans-serif';
+  ctx.fillText(p.title || '派對島準備中...', CANVAS_W / 2, CANVAS_H / 2 - 50);
+  const bw = 440, bx = (CANVAS_W - bw) / 2, by = CANVAS_H / 2 - 20;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(bx, by, bw, 14);
+  ctx.fillStyle = '#ffd36b'; ctx.fillRect(bx, by, bw * pct, 14);
+  ctx.font = '14px sans-serif'; ctx.fillStyle = 'rgba(244,236,255,0.9)';
+  ctx.fillText('已載入 ' + done + ' / ' + p.total + '　' + Math.floor(pct * 100) + '%', CANVAS_W / 2, by + 36);
+  ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(244,236,255,0.6)';
+  if (p.current) ctx.fillText('正在載入：' + p.current, CANVAS_W / 2, by + 56);
+  ctx.fillStyle = '#ffe9a8'; ctx.font = '13px sans-serif';
+  ctx.fillText('💡 ' + ASSET_LOADING_TIPS[0], CANVAS_W / 2, by + 96);
+  ctx.restore();
+}
+
+// 進關閘門：該關 critical 素材 ready 才執行 fn；沒 ready → loading 畫面 → 載完才開始（不會先 fallback 再跳圖）
+let assetGateBusy = false;
+function runWithAssetGate(groups, title, fn) {
+  if (typeof globalThis !== 'undefined' && globalThis.__ASSET_GATE_BYPASS) { fn(); return; } // 只給無頭測試用
+  if (groups.every(isAssetGroupSettled) && groups.every(g => !ASSET_GROUP_STATE[g].needsRetry)) { flushPendingAssetApplies(); fn(); return; }
+  if (assetGateBusy) { console.warn('[AssetPreload] 已在載入中，忽略重複的進關要求'); return; }
+  assetGateBusy = true; assetGateActive = true;
+  showAssetLoadingOverlay(title, groups);
+  const attempt = (force) => ensureAssetGroups(groups, null, force).then(res => {
+    if (!res.ok) {
+      groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = true; });
+      showAssetLoadingError(res, () => { clearInterval(assetLoadingTimer); assetLoadingTimer = setInterval(updateAssetLoadingOverlay, 120); attempt(true); },
+        () => { groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = false; }); finish(); });
+      return;
+    }
+    groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = false; });
+    finish();
+  });
+  const finish = () => {
+    flushPendingAssetApplies();
+    hideAssetLoadingOverlay();
+    assetGateBusy = false;
+    try { fn(); } finally { assetGateActive = false; }
+  };
+  attempt(false);
+}
+
+// ── debug 指令 ──
+function debugAssetGroup(groupName) {
+  const rows = (getAssetManifest()[groupName] || []).map(e => {
+    const r = ASSET_REGISTRY[e.path] || {};
+    return { file: e.path.split('/').pop(), critical: e.critical ? 'critical' : (e.soft ? 'soft' : 'optional'), status: r.status || 'skipped',
+             source: r.source || '', size: r.w ? r.w + '×' + r.h : '', url: r.url || '', note: r.note || '' };
+  });
+  try { console.table(rows); } catch (e) { console.log(rows); }
+  return rows;
+}
+function debugAssetPreload() {
+  const lv = LEVELS[currentLevelIndex] || {};
+  const rows = Object.keys(getAssetManifest()).map(g => {
+    const s = summarizeAssetGroup(g), st = ASSET_GROUP_STATE[g];
+    return { group: g, requested: !!st, ready: isAssetGroupReady(g), total: s.total, loaded: s.loaded, failed: s.failed, pending: s.pending, criticalFailed: s.criticalFailed };
+  });
+  console.log('[AssetPreload] 目前關卡 ' + (lv.stageId || '?') + ' 需要群組：' + getAssetGroupsForLevel(currentLevelIndex).join(' + '));
+  try { console.table(rows); } catch (e) { console.log(rows); }
+  const sources = {};
+  Object.values(ASSET_REGISTRY).forEach(r => { if (r.source) sources[r.source] = (sources[r.source] || 0) + 1; });
+  console.log('[AssetPreload] 實際成功來源統計：', sources, '　待套用（下次關卡開始）：', ASSET_PENDING_APPLIES.length);
+  return rows;
+}
+if (typeof window !== 'undefined') {
+  Object.assign(window, { debugAssetPreload, debugAssetGroup, preloadAssetGroup, ensureAssetsForStage, getAssetStatus, isAssetGroupReady });
+}
+
 // ── Game loop ─────────────────────────────────
 function loop(timestamp) {
   const dtMs = lastTime ? Math.min(timestamp - lastTime, 50) : 16.667;
@@ -15937,6 +16380,12 @@ function loop(timestamp) {
   // v0.3.12-test-2：核心素材尚未就緒時，只繪製等待畫面，不跑 update/draw，
   // 避免 hero / 蠍子在幾何 fallback 與正式圖片之間閃爍
   if (!isAdventureCoreArtReady()) {
+    // v0.3.51：開機載入中 → 畫 loading 畫面（進度條 / 百分比 / 檔名 / tips），HTML overlay 同時顯示
+    drawLoadingScreen(getAssetGateProgress());
+    requestAnimationFrame(loop);
+    return;
+  }
+  if (false) {
     if (_artReadyStartMs === 0) _artReadyStartMs = performance.now();
     ctx.fillStyle = '#1a1230';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -15990,16 +16439,11 @@ function ensurePlayerProfileSaved() {
 // ── 初始化並啟動 ────────────────────────────
 playerProfile = loadPlayerProfile(); // 初始化玩家身份
 ensurePlayerProfileSaved();           // 確保 localStorage 有落地
-initAdventureHeroArt();               // 非阻塞地嘗試載入 hero 美術素材
-initScorpionWalkArt();                // 非阻塞地嘗試載入蠍子 walk 素材
-initScorpionHurtArt();                // 非阻塞地嘗試載入蠍子受傷圖
-initScorpionSkinArt();                // v0.3.15-test-2：預載各 skin variant 圖片
-initHammerAttackArt();                // 非阻塞地嘗試載入 hammer attack 素材
-initOrangeEnemyArt();                 // 非阻塞地嘗試載入橘子怪 skin 素材
-initChimneyOrangeArt();              // v0.3.22：煙囟橘子正式素材（非阻塞，fallback 幾何）
-initChimneyOrangeOilArt();           // v0.3.24：煙囟橘子油柱正式圖（非阻塞，fallback canvas overlay）
-initDualOrangeArt();                 // v0.3.25：雙噴嘴橘子全套美術（非阻塞，fallback 幾何）
-initProjectileOrangeArt();           // v0.3.26：飛行油彈橘子美術測試（非阻塞，fallback 幾何）
+// v0.3.51：開機只載 common + chapter1（第二章 / Boss 素材留到進關前才載）
+//   原本的 initAdventureHeroArt / initScorpion* / initHammerAttackArt / initOrangeEnemyArt / initChimney* / initDualOrangeArt /
+//   initProjectileOrangeArt / initOrangeKingBossArt / initChapter2BgArt / initAdventureItemIcons 不再於開機時呼叫，
+//   全部改由 asset manifest + preloadAssetGroup() 控制；載好的圖片會放進原本的快取，原有的 getXXXImg() 照常使用
+runWithAssetGate(['common', 'chapter1'], '派對島準備中...', () => { assetBootReady = true; });
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
