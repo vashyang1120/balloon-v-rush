@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.54-chapter1-ground-spike-near-frame-test-1';
-const BUILD_TIME   = '2026-10-15 01:00';
+const GAME_VERSION = 'adventure-v0.3.54-chapter1-ground-spike-stage-fix-1';
+const BUILD_TIME   = '2026-10-15 02:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -11584,7 +11584,13 @@ function drawChapter2BgCalibOverlay() {
 
 // ══ v0.3.52：第一章正式背景（1-1～1-3）— far / mid / near 三層 parallax + 地面裝飾小物件 ══
 // 素材由 preloadAssetGroup('chapter1') 在開機 / 進關前載好（3 層背景 critical、4 個小物件 optional）
-const CHAPTER1_BG_STAGE_IDS = ['1-1', '1-2', '1-3'];
+// v0.3.54-fix-1：正式第一章流程的「第 2 節」是 stageId '1-2b'（氣球小狗尋寶，見 CHAPTER1_FLOW_LEVEL_INDICES），
+//   之前只寫了 '1-2'（舊的橘子果園關，不在正式流程裡）→ 玩家玩到的 1-2 沒套到第一章美術 / BGM
+const CHAPTER1_BG_STAGE_IDS = ['1-1', '1-2', '1-2b', '1-3'];
+// 第一章正式關卡（流程表裡的 1-1 / 1-2b / 1-3，加上舊 1-2）；不含 1-4、測試關、第二章、Boss
+function isChapter1MainStage(stageId) {
+  return CHAPTER1_BG_STAGE_IDS.includes(stageId);
+}
 const CHAPTER1_BG_ASSETS = {
   far:  'assets/adventure/backgrounds/chapter1/chapter1_bg_far.png',   // 1774×887 不透明
   mid:  'assets/adventure/backgrounds/chapter1/chapter1_bg_mid.png',   // 1774×887 透明（有畫面 y 148～744）
@@ -11697,9 +11703,45 @@ const CHAPTER1_TILE_DEFAULTS = {
   pitEdgeScale: 0.32, pitEdgeOffsetY: 0,
   pitShadowAlpha: 0.75,
   spikeWidthScale: 1.9, spikeOffsetY: 8,     // 尖刺圖寬 = hitbox 寬 × 1.9（40 → 76px，尖端高約 50px），底座往地面壓 8px（藏進草皮）
-  spikeGlowAlpha: 1, spikeGlowBlur: 9,   // 第一章尖刺用「紅色」危險外光（綠色底座在花草地面上才看得出來）
+  spikeGlowAlpha: 1, spikeGlowBlur: 9,       // （v0.3.54 舊參數；fix-1 起改用 CHAPTER1_SPIKE_DRAW）   // 第一章尖刺用「紅色」危險外光（綠色底座在花草地面上才看得出來）
 };
 const CHAPTER1_TILE = Object.assign({}, CHAPTER1_TILE_DEFAULTS);
+// v0.3.54-fix-1：尖刺可讀性（只是畫面效果，hitbox / 傷害判定不變）
+//   ① 底部紅橘色 warning halo（半透明橢圓，寬 = 尖刺圖寬 × 1.35、高 = 寬 × 0.45）
+//   ② 白色細描邊（剪影往 8 個方向偏 1.5px）→ 從花草背景裡跳出來
+//   ③ 紅橘色 glow（shadowBlur 14）
+const CHAPTER1_SPIKE_DRAW = {
+  glowEnabled: 1,
+  glowColor: 'rgba(255,70,40,0.55)',
+  glowBlur: 14,
+  warningAuraEnabled: 1,
+  warningAuraColor: 'rgba(255,60,40,0.22)',
+  warningAuraScaleX: 1.35,
+  warningAuraScaleY: 0.45,
+  outlineEnabled: 1,
+  outlineColor: 'rgba(255,255,255,0.95)',
+  outlineWidth: 1.5,
+  pulse: 0.15, // halo 透明度輕微呼吸（±15%）
+};
+const chapter1SpikeSilhouetteCache = {};
+function getChapter1SpikeSilhouette(img, w, h, color) {
+  const k = Math.round(w) + 'x' + Math.round(h) + '|' + color;
+  if (chapter1SpikeSilhouetteCache[k]) return chapter1SpikeSilhouetteCache[k];
+  let out = null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
+    out = c;
+  } catch (e) { out = null; }
+  Object.keys(chapter1SpikeSilhouetteCache).forEach(kk => { if (kk.split('|')[1] === color && kk !== k) delete chapter1SpikeSilhouetteCache[kk]; });
+  chapter1SpikeSilhouetteCache[k] = out;
+  return out;
+}
 let chapter1Bgm = null, chapter1BgmStatus = '-', chapter1BgmWantRestart = false, chapter1BgmBlocked = false;
 let chapter1FrontPropDebug = false; // F4 → B：前景物件外框 / 透明狀態
 // 每關配置（x = 世界座標中心）：避開地面高度的金幣 ±25、260 / 圓氣球 ±30、尖刺 ±50、小怪巡邏範圍 ±30、
@@ -11707,6 +11749,9 @@ let chapter1FrontPropDebug = false; // F4 → B：前景物件外框 / 透明狀
 // v0.3.53：layer 'back' = 小V後方（場景豐富度）、'front' = 小V前方（立體感，小V靠近時半透明）
 const CHAPTER1_FG_PROPS = {
   '1-1': [{ type: 'flowerHill', x: 1852, layer: 'front' }, { type: 'balloonRabbit', x: 3512, layer: 'back' }, { type: 'flowerHill', x: 4700, layer: 'back' }, { type: 'arrowSign', x: 5962, layer: 'front' }],
+  // v0.3.54-fix-1：正式流程的第 2 節（1-2b，長 5200、終點 5000）— 同樣的避讓規則（另避開寶物點 2380 ±150）
+  '1-2b': [{ type: 'flowerHill', x: 955, layer: 'front' }, { type: 'giftPile', x: 1700, layer: 'back' }, { type: 'flowerHill', x: 2150, layer: 'back' },
+           { type: 'balloonRabbit', x: 2605, layer: 'back' }, { type: 'flowerHill', x: 3670, layer: 'front' }, { type: 'arrowSign', x: 4600, layer: 'front' }],
   '1-2': [{ type: 'flowerHill', x: 1635, layer: 'front' }, { type: 'giftPile', x: 2612, layer: 'back' }, { type: 'flowerHill', x: 4027, s: 0.9, layer: 'back' }, { type: 'flowerHill', x: 5610, layer: 'front' }, { type: 'arrowSign', x: 5912, layer: 'front' }],
   '1-3': [{ type: 'flowerHill', x: 690, layer: 'back' }, { type: 'giftPile', x: 1287, layer: 'back' }, { type: 'balloonRabbit', x: 2028, layer: 'back' }, { type: 'flowerHill', x: 2450, layer: 'front' }, { type: 'arrowSign', x: 6128, s: 0.9, layer: 'front' }],
 };
@@ -11719,7 +11764,7 @@ let chapter1BgDrawn = false;
 
 function isChapter1ParallaxStage() {
   const lv = LEVELS[currentLevelIndex];
-  return !!(lv && !lv.isBossStage && CHAPTER1_BG_STAGE_IDS.includes(lv.stageId));
+  return !!(lv && !lv.isBossStage && lv.chapterId === 1 && isChapter1MainStage(lv.stageId));
 }
 function getChapter1BgImg(key) {
   const img = chapter1BgImgs[key];
@@ -11942,10 +11987,20 @@ function getChapter1PlatformKind(p) {
   if (!m || m.list !== platforms || !m.kinds.has(p)) {
     m = { list: platforms, kinds: new Map() };
     const shorts = [];
+    // v0.3.54-fix-1：上下疊在一起的兩層平台（水平有重疊、站立面上下差 < 110px，例如 1-3 的 3 組雙層路線）
+    //   短平台圖（木橋 / 雲朵）往下垂 45～75px、木樁氣球往上冒 27px → 上下兩張會疊在一起
+    //   → 這種平台一律用「長平台圖」（草皮土塊只往下 ≈ 36px、上面不冒東西），上下之間留出約 30px 空隙
+    const stacked = new Set();
+    platforms.forEach(a => platforms.forEach(b => {
+      if (a === b || a.y >= GROUND_Y || b.y >= GROUND_Y) return;
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      if (ox > 0 && Math.abs(a.y - b.y) < 110) { stacked.add(a); stacked.add(b); }
+    }));
     platforms.forEach(q => {
-      if (q.w >= CHAPTER1_PLATFORM_LONG_MIN_W) m.kinds.set(q, 'long');
+      if (q.w >= CHAPTER1_PLATFORM_LONG_MIN_W || stacked.has(q)) m.kinds.set(q, 'long');
       else shorts.push(q);
     });
+    m.stacked = stacked;
     const score = q => chapter1Hash01(sid + ':' + q.x + ':' + q.y) + (q.y <= 335 ? 0 : 1); // 高的平台（y ≤ 335）一律優先當雲朵，其餘依雜湊補滿 40%
     const sorted = shorts.slice().sort((a, b) => score(a) - score(b));
     const nCloud = Math.round(shorts.length * CHAPTER1_PLATFORM_CLOUD_RATIO);
@@ -12076,12 +12131,35 @@ function drawChapter1SpikeArt(sx, s) {
   if (!chapter1BgDrawn) return false;
   const img = getChapter1BgImg('spike');
   if (!img) return false;
-  const g = getChapter1SpikeGeom(sx, s), T = CHAPTER1_TILE;
+  const g = getChapter1SpikeGeom(sx, s), D = CHAPTER1_SPIKE_DRAW, S = CHAPTER1_TILE_SRC.spike;
   ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; // 不吃外層的白光設定，下面自己控制
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  if (T.spikeGlowAlpha > 0) { ctx.shadowColor = 'rgba(255,40,40,' + T.spikeGlowAlpha + ')'; ctx.shadowBlur = T.spikeGlowBlur; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+  const artW = (S.x1 - S.x0) * g.sc;
+  // ① warning halo（地面上的紅橘色橢圓光）
+  if (D.warningAuraEnabled) {
+    const cxh = sx + s.w / 2, cyh = s.y + s.h - 2;
+    const rx = artW * D.warningAuraScaleX / 2, ry = artW * D.warningAuraScaleY / 2;
+    const k = 1 + D.pulse * Math.sin((typeof frameCount !== 'undefined' ? frameCount : 0) * 0.08);
+    ctx.save();
+    ctx.translate(cxh, cyh); ctx.scale(1, ry / rx);
+    const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    gr.addColorStop(0, D.warningAuraColor); gr.addColorStop(0.65, D.warningAuraColor); gr.addColorStop(1, 'rgba(255,60,40,0)');
+    ctx.globalAlpha = Math.max(0, Math.min(1, k));
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // ② 白色描邊（剪影 8 方向偏移）＋ ③ 紅橘 glow（只加在描邊那一層，尖刺本體保持原色）
+  if (D.outlineEnabled) {
+    const sil = getChapter1SpikeSilhouette(img, g.w, g.h, D.outlineColor);
+    if (sil) {
+      if (D.glowEnabled) { ctx.shadowColor = D.glowColor; ctx.shadowBlur = D.glowBlur; }
+      const o = D.outlineWidth;
+      [[-o, 0], [o, 0], [0, -o], [0, o], [-o, -o], [o, -o], [-o, o], [o, o]].forEach(([dx, dy]) => ctx.drawImage(sil, g.x + dx, g.y + dy, g.w, g.h));
+      ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0;
+    }
+  } else if (D.glowEnabled) { ctx.shadowColor = D.glowColor; ctx.shadowBlur = D.glowBlur; }
   ctx.drawImage(img, g.x, g.y, g.w, g.h);
-  if (T.spikeGlowAlpha > 0) ctx.drawImage(img, g.x, g.y, g.w, g.h); // 第二次疊畫：外光更明顯（圖本身不變）
   ctx.restore();
   return true;
 }
@@ -12101,7 +12179,7 @@ function debugChapter1Platforms() {
   const st = k => chapter1BgImgStatus['plat_' + k] || (getChapter1BgImg('plat_' + k) ? 'ok' : '-');
   const rows = platforms.map((p, i) => {
     const g = getChapter1PlatformArtGeom(p);
-    return { i, kind: g.kind, hitbox: [p.x, p.y, p.w, p.h].join(','), drawRect: [g.x, g.y, g.w, g.h].map(v => Math.round(v)).join(','),
+    return { i, kind: g.kind, stackedPair: !!(chapter1PlatformKindCache[sid] && chapter1PlatformKindCache[sid].stacked && chapter1PlatformKindCache[sid].stacked.has(p)), hitbox: [p.x, p.y, p.w, p.h].join(','), drawRect: [g.x, g.y, g.w, g.h].map(v => Math.round(v)).join(','),
              scale: Math.round(g.sx * 10000) / 10000 + (g.sy !== g.sx ? '/' + Math.round(g.sy * 10000) / 10000 : ''),
              offsetY: CHAPTER1_PLATFORM_DRAW[g.kind + 'OffsetY'], art: (isChapter1ParallaxStage() && CHAPTER1_PLATFORM_DRAW.enabled && g.img) ? 'image' : 'fallback 舊矩形' };
   });
@@ -14044,6 +14122,10 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.54-fix：chapter1-ground-spike-stage-fix-N → ch1-stage-fix-N
+  if (GAME_VERSION.includes('chapter1-ground-spike-stage-fix')) {
+    tPart = 'ch1-stage-fix-' + (GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1');
+  } else
   // v0.3.54+：chapter1-ground-spike-near-frame → ch1-ground-near（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('chapter1-ground-spike-near-frame')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15177,6 +15259,9 @@ function bringDogNextLevel() {
     nextBringDog
   });
   if (!dog.present) { console.warn('no dog'); return; }
+  // v0.3.54-fix-1：已經安排過 → 不再扣 260（之前小V的家「下一步」區塊的按鈕沒刷新，可以一直按、一直扣）
+  if (nextBringDog) { showHint('✅ 已安排帶狗出發', 120); refreshDogTripUi(); return; }
+  if ((dog.turnsLeft || 0) <= 0) { showHint('氣球小狗已消氣，無法帶出門', 160); return; }
   if ((playerInventory.balloon260 || 0) < 1) {
     // v0.3.11-test-2：第一章流程下，260 不足不能讓玩家卡死在「帶狗出發」這一步。
     // 用既有 chapter1Flow.forcedDogTripDone 旗標，限定補發一次 260 作狗繩費用。
@@ -15202,6 +15287,12 @@ function bringDogNextLevel() {
     populateResultPanel();
   }
   if (typeof updateNextLevelButton === 'function') updateNextLevelButton();
+  refreshDogTripUi(); // v0.3.54-fix-1：小V的家（含從結算頁進來的 Shopping）也立刻刷新
+}
+// v0.3.54-fix-1：帶狗出發後，所有相關 UI 一起刷新（下一步區塊 / 出發按鈕 / 狗狗卡 / 背包數量）
+function refreshDogTripUi() {
+  const fns = ['renderHomeNextStage', 'renderHomeDog', 'renderHomeInventory', 'renderHomeInventorySummary', 'renderHomeSupply', 'renderHomeShop', 'refreshResultDog', 'refreshResultBag'];
+  fns.forEach(n => { try { const f = (typeof window !== 'undefined' && window[n]) || (typeof globalThis !== 'undefined' && globalThis[n]); if (typeof f === 'function') f(); } catch (e) {} });
 }
 
 
@@ -15910,6 +16001,7 @@ function homeBringDog() {
     renderHomeInventory();  // 更新 260 氣球數量
     refreshResultDog();     // 同步結算畫面狗區塊
     refreshResultBag();     // 同步背包 260 數量
+    renderHomeNextStage();  // v0.3.54-fix-1：「請先帶狗出發」→ 立刻變成「前往第 2 節」
   }
 }
 
