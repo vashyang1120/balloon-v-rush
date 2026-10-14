@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.53-chapter1-platforms-bgm-near-fg-depth-test-1';
-const BUILD_TIME   = '2026-10-14 23:30';
+const GAME_VERSION = 'adventure-v0.3.53-chapter1-opacity-depth-fix-1';
+const BUILD_TIME   = '2026-10-14 23:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -11616,25 +11616,27 @@ const CHAPTER1_BG_DEFAULTS = {
   //   （6400 長的關卡 ≈ 0.068；要真的到 0.10 需要 nearScale ≥ 0.85，上下會被裁掉更多樹冠 / 籬笆）
   nearParallax: 0.10, nearScale: 0.75, nearOffsetY: -60, nearFrameMode: 1,
   // 濾鏡（快取圖塊時套用一次）：blur 全部 0（避免整片糊）
-  farAlpha: 1,     farBlur: 0, farSaturation: 0.95, farBrightness: 1,
-  midAlpha: 0.82,  midBlur: 0, midSaturation: 0.78, midBrightness: 0.98,
-  nearAlpha: 0.82, nearBlur: 0, nearSaturation: 0.72, nearBrightness: 0.96,
+  // v0.3.53-fix-1：三層都不再整張變淡 / 降飽和（畫面恢復飽和、明亮），退後只靠很輕的暖白霧幕 + 玩法物件外光
+  farAlpha: 1,  farBlur: 0, farSaturation: 1,    farBrightness: 1,
+  midAlpha: 1,  midBlur: 0, midSaturation: 0.95, midBrightness: 1,
+  nearAlpha: 1, nearBlur: 0, nearSaturation: 1,    nearBrightness: 1,
   // 可讀性霧幕（暖白 rgba(255,245,230, α)，只蓋到地面線 GROUND_Y）
-  veilEnabled: 1, veilAlpha: 0.16,
+  veilEnabled: 1, veilAlpha: 0.06, // v0.3.53-fix-1：0.16 → 0.06（建議上限 0.10）
   // near 上緣淡出：fix-1 關閉（0，避免上方被挖空的感覺）；需要時可用 console：setChapter1Bg({ nearTopFade: 0.1 })
   nearTopFade: 0,
   // 地面小物件：behind（背景之後、玩法物件之前）＋ front（小V / 敵人 / 道具之後、HUD 之前）；底部壓進地面線 groundOffsetY px
   // foregroundParallax：fix-1 改 1.0（和地面同速）。實測 0.88 時物件會在地面上「滑動」，捲動中會滑到金幣 / 尖刺 / 蠍子後面；
   //   1.0 時 1-1～1-3 全程 0 重疊（以畫面中心為基準計算，可在 F4 4 → A D 或 setChapter1Bg 改回 0.88）
-  fgEnabled: 1, foregroundParallax: 1.0, fgGroundOffsetY: 10, fgGlobalScale: 0.85, fgAlpha: 0.80,
-  // 實際高度（× 全域 0.85）：花叢 ≈ 74px、兔 ≈ 69px、禮物 ≈ 67px、箭牌 ≈ 75px（小V 約 160px）
+  fgEnabled: 1, foregroundParallax: 1.0, fgGroundOffsetY: 10, fgGlobalScale: 1, fgAlpha: 1,
+  // 實際高度（全域 ×1）：花叢 ≈ 86px、兔 ≈ 81px、禮物 ≈ 78px、箭牌 ≈ 88px（前方物件再 ×1.12）；小V 約 160px
   fgFlowerHillScale: 0.075,
   fgBalloonRabbitScale: 0.070,
   fgGiftPileScale: 0.070,
   fgArrowSignScale: 0.075,
   // v0.3.53：前景（front）物件 — 比後方物件大一點、底部更低（更靠近鏡頭），小V靠近 / 重疊時平滑半透明
   fgFrontScale: 1.12, fgFrontGroundOffsetY: 22,
-  fgFrontAlpha: 0.88, fgFrontNearAlpha: 0.62, fgFrontOverlapAlpha: 0.40, fgFrontObjectAlpha: 0.55,
+  // v0.3.53-fix-1：前方物件平常完全不透明，只有小V靠近 / 重疊才變淡
+  frontPropBaseAlpha: 1, frontPropNearPlayerAlpha: 0.75, frontPropOverlapPlayerAlpha: 0.45, fgFrontObjectAlpha: 0.75,
   fgFrontNearDist: 60, fgFrontFadeSpeed: 0.15,
   // v0.3.53：第一章 BGM 音量（原檔約 -17.8 dBFS，和第二章 -18.0 dBFS 接近 → 0.24 略小於第二章 0.26）
   chapter1BgmVolume: 0.24,
@@ -11836,11 +11838,12 @@ function chapter1RectOverlap(a, b, pad) {
   pad = pad || 0;
   return a.x - pad < b.x + b.w && a.x + a.w + pad > b.x && a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
 }
-// 前方物件目標透明度：與小V重疊 → 0.40、靠近 → 0.62、與敵人 / 金幣 / 氣球 / 尖刺 / 終點旗重疊 → 0.55、其他 → 0.88
+// 前方物件目標透明度（fix-1）：與小V重疊 → 0.45、靠近（60px 內）→ 0.75、其他 → 1
+//   保險：若移動中的敵人 / 道具剛好和前方物件重疊 → 0.75（目前擺位實測 0 重疊，平常不會觸發）
 function getChapter1FrontPropTargetAlpha(box) {
   const A = CHAPTER1_BG, cx = cameraX;
   const pr = getChapter1PlayerScreenRect();
-  if (chapter1RectOverlap(box, pr)) return { a: A.fgFrontOverlapAlpha, why: 'player' };
+  if (chapter1RectOverlap(box, pr)) return { a: A.frontPropOverlapPlayerAlpha, why: 'player' };
   let objHit = false;
   const hit = (x, y, w, h) => { if (!objHit && chapter1RectOverlap(box, { x: x - cx, y, w, h })) objHit = true; };
   enemies.forEach(e => { if (e.active !== false) hit(e.x, e.y, e.w, e.h); });
@@ -11851,8 +11854,8 @@ function getChapter1FrontPropTargetAlpha(box) {
   spikes.forEach(sp => hit(sp.x, sp.y, sp.w, sp.h));
   hit(FINISH_X - 20, GROUND_Y - 140, 120, 140);
   if (objHit) return { a: A.fgFrontObjectAlpha, why: 'object' };
-  if (chapter1RectOverlap(box, pr, A.fgFrontNearDist)) return { a: A.fgFrontNearAlpha, why: 'near' };
-  return { a: A.fgFrontAlpha, why: '' };
+  if (chapter1RectOverlap(box, pr, A.fgFrontNearDist)) return { a: A.frontPropNearPlayerAlpha, why: 'near' };
+  return { a: A.frontPropBaseAlpha, why: '' };
 }
 // 前方小物件（drawWorldInner 最後：小V / 敵人 / 道具之後，HUD 之前）
 function drawChapter1FrontForegroundProps() {
@@ -11867,7 +11870,7 @@ function drawChapter1FrontForegroundProps() {
     const g = getChapter1FgPropGeom(sid, i, prop);
     const img = getChapter1BgImg(g.key);
     if (!img) return;
-    if (g.drawX > CANVAS_W + 20 || g.drawX + g.drawW < -20) { prop._fade = A.fgFrontAlpha; prop._why = ''; return; }
+    if (g.drawX > CANVAS_W + 20 || g.drawX + g.drawW < -20) { prop._fade = A.frontPropBaseAlpha; prop._why = ''; return; }
     const t = getChapter1FrontPropTargetAlpha(g.box);
     prop._why = t.why;
     prop._fade = prop._fade == null ? t.a : prop._fade + (t.a - prop._fade) * Math.max(0.01, Math.min(1, A.fgFrontFadeSpeed)); // 平滑，不閃爍
@@ -12052,7 +12055,7 @@ function debugChapter1Bg() {
     propsThisStage: (CHAPTER1_FG_PROPS[sid] || []).map((p, i) => {
       const g = getChapter1FgPropGeom(sid, i, p);
       return { i, type: p.type, layer: p.layer || 'back',
-               fadingForPlayer: p.layer === 'front' ? (p._why === 'player' || p._why === 'near') : '-', alphaNow: p.layer === 'front' ? Math.round((p._fade == null ? A.fgFrontAlpha : p._fade) * 100) / 100 : A.fgAlpha,
+               fadingForPlayer: p.layer === 'front' ? (p._why === 'player' || p._why === 'near') : '-', alphaNow: p.layer === 'front' ? Math.round((p._fade == null ? A.frontPropBaseAlpha : p._fade) * 100) / 100 : A.fgAlpha,
                worldX: p.x + ((chapter1FgOverrides[sid + ':' + i] || {}).dx || 0), loaded: !!getChapter1BgImg(g.key),
                screenX: Math.round(g.box.x), screenY: Math.round(g.box.y), w: Math.round(g.box.w), h: Math.round(g.box.h), scale: Math.round(g.sc * 10000) / 10000,
                onScreen: g.box.x < CANVAS_W && g.box.x + g.box.w > 0 };
@@ -12415,7 +12418,10 @@ function drawWorldInner() {
     if (!e.active) return;
     const sx = e.x - cx;
     if (sx > CANVAS_W + 10 || sx + e.w < -10) return;
+    // v0.3.53-fix-1：第一章背景恢復飽和後，小怪加白色外光（粉紅蠍子在粉紅氣球前也看得清楚；hitbox 不變）
+    if (chapter1BgDrawn) { ctx.save(); ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 10; }
     drawEnemy(sx, e.y, e.w, e.h, e.hitFlash > 0, e.vx, e); // v0.3.15：pass e for variant/tier
+    if (chapter1BgDrawn) ctx.restore();
   });
 
   // 隱藏寶物（只在帶狗或寶物快找到時才顯示）
@@ -12492,7 +12498,9 @@ function drawWorldInner() {
   orangeNemeses.forEach(o => {
     const sx = o.x - cx;
     if (sx > CANVAS_W + 60 || sx + o.w < -CONFIG.ORANGE_SPRAY_W) return;
+    if (chapter1BgDrawn) { ctx.save(); ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 10; } // v0.3.53-fix-1：第一章橘子怪外光
     drawOrangeNemesis(sx, o);
+    if (chapter1BgDrawn) ctx.restore();
   });
 
   // Projectiles
@@ -13881,6 +13889,10 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.53-fix：chapter1-opacity-depth-fix-N → ch1-opacity-fix-N
+  if (GAME_VERSION.includes('chapter1-opacity-depth-fix')) {
+    tPart = 'ch1-opacity-fix-' + (GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1');
+  } else
   // v0.3.53+：chapter1-platforms-bgm-near-fg-depth → ch1-platform-bgm-depth（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('chapter1-platforms-bgm-near-fg-depth')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
