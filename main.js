@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.54-chapter1-ground-spike-stage-fix-1';
-const BUILD_TIME   = '2026-10-15 02:30';
+const GAME_VERSION = 'adventure-v0.3.55-dog-animation-heal-feedback-test-1';
+const BUILD_TIME   = '2026-10-15 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -12755,16 +12755,15 @@ function drawWorldInner() {
   // v0.3.35：2-4 橘子王（預警線 / 油漬 / 金色油管環 / 本體，畫在小V之前）
   if (orangeKingBoss) drawOrangeKingBack(cx);
 
+  // v0.3.55：氣球狗改成正式動作圖，固定在小V後方腳邊同步跟隨（畫在小V之前 → 在小V後面）；舊的飄在旁邊的畫法已移除
+  if (bringBalloonDog) {
+    try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
+  }
+  // v0.3.55：補血光暈畫在小V後面（不會把小V洗白），愛心 / 數字畫在小V前面
+  try { drawHealFx(cx, 'back'); } catch (e) {}
   // Player
   drawPlayer(cx);
-  // 氣球狗（跟隨玩家）
-  if (bringBalloonDog) {
-    try {
-      const dogX = player.x - cx - 30;
-      const dogY = player.y + player.h * 0.5;
-      drawBalloonDog(dogX, dogY);
-    } catch(e) {}
-  }
+  try { drawHealFx(cx, 'front'); } catch (e) {}
 
   // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
   orangeNemeses.forEach(o => {
@@ -13390,6 +13389,125 @@ function drawTreasurePickupEffects(cx) { // cx 保留參數名相容呼叫端，
 // 鼻子顏色：4 段（dogNoseLevel 0-3）
 const DOG_NOSE_COLORS = ['#555555', '#ffe080', '#ffaa00', '#ff4400'];
 
+// ══ v0.3.55：氣球小狗正式動作圖（idle + run 01～04）══
+// 實際檔案：idle 512×512；run_01 448×448、run_02 434×434、run_03 446×446、run_04 480×480（畫布大小不同，但狗本身像素比例相同）
+// 量自原圖（每格的穩定錨點）：collar = 黃色蝴蝶結中心 x、feet = 最低的腳底 y、nose = 粉紅鼻子中心
+//   → 每格都以「蝴蝶結 x + 腳底 y」對齊，同一個顯示倍率，換格時狗不會忽大忽小或左右跳動
+const DOG_ART_ASSETS = {
+  idle: 'assets/adventure/companions/dog/dog_idle.png',
+  run1: 'assets/adventure/companions/dog/dog_run_01.png',
+  run2: 'assets/adventure/companions/dog/dog_run_02.png',
+  run3: 'assets/adventure/companions/dog/dog_run_03.png',
+  run4: 'assets/adventure/companions/dog/dog_run_04.png',
+};
+const DOG_ART_SRC = {
+  idle: { collarX: 324, feetY: 460, noseX: 397, noseY: 267 },
+  run1: { collarX: 308, feetY: 384, noseX: 399, noseY: 205 },
+  run2: { collarX: 267, feetY: 390, noseX: 367, noseY: 214 },
+  run3: { collarX: 307, feetY: 389, noseX: 396, noseY: 194 },
+  run4: { collarX: 347, feetY: 402, noseX: 431, noseY: 214 },
+};
+const DOG_ART = {
+  scale: 0.20,          // 原圖像素 × 0.20：站姿約 74×64px、跑姿約 85×63px（小V 約 160px 高 → 到小V膝蓋～腰）
+  behindX: 58,          // 蝴蝶結距離小V中心（往後方）58px → 狗在小V的左後方 / 右後方、靠近腳邊
+  footOffsetY: 2,       // 腳底比小V腳底再低 2px（貼地）
+  runFrameMs: 105,      // 跑步 4 格循環，每格 105ms（整圈 0.42 秒）
+  jumpFrame: 'run1',    // 跳躍上升：暫用 run_01（停止跑步循環）
+  fallFrame: 'run2',    // 下落：暫用 run_02（四腳收在身體下方，準備落地）
+  attackFrame: 'idle',  // 攻擊：暫用 idle（之後換 dog_angry）
+};
+const dogArtImgs = {}, dogArtStatus = {};
+let dogArtModeLock = null;   // 'sprite' | 'vector'：每關開始時決定一次（遊玩中不換圖）
+let dogRunAnimStart = 0, dogWasRunning = false, dogLastDraw = null;
+function getDogArtImg(key) { const im = dogArtImgs[key]; return (im && im.complete !== false && im.naturalWidth > 0) ? im : null; }
+function isDogArtReady() { return Object.keys(DOG_ART_ASSETS).every(k => getDogArtImg(k)); }
+function dogNowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+// 小V目前狀態 → 小狗動作
+function getDogPoseKey() {
+  const heroKey = (typeof _heroLastArtKey === 'string') ? _heroLastArtKey : '';
+  if (heroKey.startsWith('swordAttack') || heroKey.startsWith('hammerAttack')) { dogWasRunning = false; return { key: DOG_ART.attackFrame, state: 'attack' }; }
+  if (!player.onGround) { dogWasRunning = false; return player.vy < 0 ? { key: DOG_ART.jumpFrame, state: 'jump' } : { key: DOG_ART.fallFrame, state: 'fall' }; }
+  const moving = Math.abs(player.vx || 0) > 0.1;
+  if (!moving) { dogWasRunning = false; return { key: 'idle', state: 'idle' }; }
+  const now = dogNowMs();
+  if (!dogWasRunning) { dogWasRunning = true; dogRunAnimStart = now; } // 從 01 開始
+  const idx = Math.floor((now - dogRunAnimStart) / Math.max(30, DOG_ART.runFrameMs)) % 4;
+  return { key: 'run' + (idx + 1), state: 'run', frame: idx + 1 };
+}
+// 小狗位置：由小V「世界座標」推算，最後才統一減 cameraX（不會因鏡頭捲動漂移）
+function getDogWorldAnchor() {
+  const right = player.facingRight !== false;
+  const cxWorld = player.x + player.w / 2 + (right ? -DOG_ART.behindX : DOG_ART.behindX);
+  return { x: cxWorld, y: player.y + player.h + DOG_ART.footOffsetY, right };
+}
+// 每關開始時決定用正式圖或舊的向量小狗（不會一關裡新舊混用、也不會中途換圖）
+function getDogArtMode() {
+  if (!dogArtModeLock) {
+    // 載入畫面 / 結算畫面背後（還沒真的開始玩）：圖沒好就先不畫、也不鎖定，等關卡真正開始再決定
+    if (!isDogArtReady() && (gameState !== 'playing' || (typeof assetGateActive !== 'undefined' && assetGateActive))) return 'none';
+    dogArtModeLock = isDogArtReady() ? 'sprite' : 'vector';
+    if (dogArtModeLock === 'vector') console.warn('[DogArt] 小狗正式圖沒有全部載好 → 本關使用舊的小狗畫法（fallback）', JSON.stringify(dogArtStatus));
+  }
+  return dogArtModeLock;
+}
+function drawCompanionDog(cx) {
+  const a = getDogWorldAnchor();
+  const mode = getDogArtMode();
+  if (mode === 'none') return;
+  if (mode !== 'sprite') { // fallback：原本的向量小狗（同樣跟在小V腳邊）
+    drawBalloonDog(a.x - cx, a.y - 12);
+    dogLastDraw = { mode: 'vector', x: a.x - cx, y: a.y };
+    return;
+  }
+  const pose = getDogPoseKey();
+  const img = getDogArtImg(pose.key), S = DOG_ART_SRC[pose.key], k = DOG_ART.scale;
+  const sx = a.x - cx, sy = a.y;
+  const w = img.naturalWidth * k, h = img.naturalHeight * k;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.translate(sx, sy);
+  if (!a.right) ctx.scale(-1, 1); // 原圖朝右；小V向左時整張翻轉
+  ctx.drawImage(img, -S.collarX * k, -S.feetY * k, w, h);
+  ctx.restore();
+  // 鼻子位置（螢幕座標，含翻轉）
+  const nx = sx + (a.right ? 1 : -1) * (S.noseX - S.collarX) * k;
+  const ny = sy + (S.noseY - S.feetY) * k;
+  drawDogNoseGlow(nx, ny);
+  dogLastDraw = { mode: 'sprite', pose: pose.key, state: pose.state, x: Math.round(sx), y: Math.round(sy), w: Math.round(w), h: Math.round(h), noseX: Math.round(nx), noseY: Math.round(ny), facingRight: a.right };
+}
+// 原本的三段式鼻子發光（門檻 / 等級不變，只把位置改到新圖的鼻子上）
+function drawDogNoseGlow(nx, ny) {
+  const level = dogNoseLevel || 0;
+  if (level <= 0) return; // 0 級：不發光（正式圖本身就有粉紅鼻子）
+  const isFlash = level === 3;
+  const flashVis = !isFlash || (Math.floor(frameCount / 6) % 2 === 0);
+  ctx.save();
+  if (level >= 2 && flashVis) {
+    const haloR = 8 + (level - 2) * 6;
+    ctx.fillStyle = level === 3 ? 'rgba(255,80,0,0.45)' : 'rgba(255,200,0,0.3)';
+    ctx.beginPath(); ctx.arc(nx, ny, haloR, 0, Math.PI * 2); ctx.fill();
+  }
+  if (flashVis) {
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = DOG_NOSE_COLORS[level];
+    ctx.beginPath(); ctx.arc(nx, ny, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('L' + level, nx, ny + 12);
+  ctx.restore();
+}
+function debugDog() {
+  const info = { bringBalloonDog, nextBringDog, dog: playerInventory.balloonDog, mode: dogArtModeLock || '(本關尚未畫過)', allLoaded: isDogArtReady(),
+    images: Object.fromEntries(Object.keys(DOG_ART_ASSETS).map(k => { const im = getDogArtImg(k); return [k, (dogArtStatus[k] || '-') + (im ? ' ' + im.naturalWidth + '×' + im.naturalHeight : '')]; })),
+    settings: Object.assign({}, DOG_ART), lastDraw: dogLastDraw, noseLevel: dogNoseLevel };
+  console.log('[DogArt] 模式 ' + info.mode + '　圖片全部載好 ' + info.allLoaded + '　' + JSON.stringify(info.images));
+  console.log(info);
+  return info;
+}
+if (typeof window !== 'undefined') window.debugDog = debugDog;
+
 function drawBalloonDog(x, y) {
   // 依全域 dogNoseLevel 決定鼻子顏色
   const level     = dogNoseLevel || 0;
@@ -13983,10 +14101,11 @@ function drawHUD() {
   // ── 左上：HP 心心條 ──
   const heartY = 26;
   const heartSize = 18;
+  const _healBounce = getHealHudBounceScale(); // v0.3.55：補血時心心短暫放大回彈
   for (let i = 0; i < player.maxHp; i++) {
     const hx  = pad + i * (heartSize + 4);
     const fill = player.hp - i;
-    ctx.font = heartSize + 'px sans-serif';
+    ctx.font = Math.round(heartSize * _healBounce) + 'px sans-serif';
     if (fill >= 1)      ctx.globalAlpha = 1.0;     // 全心
     else if (fill > 0)  ctx.globalAlpha = 0.6;     // 半心（淡色）
     else                ctx.globalAlpha = 0.18;    // 空心
@@ -14122,6 +14241,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.55+：dog-animation-heal-feedback → dog-heal（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('dog-animation-heal-feedback')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dog-heal' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.54-fix：chapter1-ground-spike-stage-fix-N → ch1-stage-fix-N
   if (GAME_VERSION.includes('chapter1-ground-spike-stage-fix')) {
     tPart = 'ch1-stage-fix-' + (GAME_VERSION.match(/-fix-(\d+)/)?.[1] || '1');
@@ -15012,6 +15136,12 @@ const BANDAGE_PRICE = 20;
 const BANDAGE_HEAL  = 1;
 
 function buyBandage() {
+  const _hpBefore = player.hp; // v0.3.55：愛心貼布（結算補給）成功才播演出
+  buyBandageCore();
+  const gained = player.hp - _hpBefore;
+  if (gained > 0) { try { playHealFeedbackDom(gained, false); } catch (e) {} }
+}
+function buyBandageCore() {
   if (player.hp >= player.maxHp) return;
   if (currentRunStats.usedHeartPatch) return;        // 每關限一次
   if (playerInventory.coins < BANDAGE_PRICE) return;
@@ -15109,7 +15239,167 @@ function buyShopItem(itemId) {
   showHint(item.icon + ' ' + item.name + ' 購買成功！', 180);
 }
 
+// ══ v0.3.55：補血成功演出（只在 HP 真的增加之後觸發；不改補血數值 / 道具消耗）══
+let healFx = null; // 冒險中：{ strong, amount, start(ms 或 null = 等回到遊戲才開始) }
+const HEAL_FX_MS = 900;
+function formatHealAmount(v) { const r = Math.round(v * 100) / 100; return (r % 1 === 0 ? String(r) : String(r)); }
+function triggerAdventureHealFx(amount, strong) {
+  if (!(amount > 0)) return;
+  healFx = { strong: !!strong, amount, start: null, seed: Math.random() * 1000 }; // 暫停背包裡使用 → 回到遊戲畫面時才開始播
+}
+function drawCanvasHeart(x, y, size, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.translate(x, y); ctx.scale(size / 16, size / 16);
+  ctx.beginPath();
+  ctx.moveTo(0, 5);
+  ctx.bezierCurveTo(-8, -1, -8, -9, -2, -9);
+  ctx.bezierCurveTo(0, -9, 0, -7, 0, -6);
+  ctx.bezierCurveTo(0, -7, 0, -9, 2, -9);
+  ctx.bezierCurveTo(8, -9, 8, -1, 0, 5);
+  ctx.fill();
+  ctx.restore();
+}
+function getHealFxProgress() {
+  if (!healFx) return -1;
+  if (healFx.start == null) {
+    if (gameState !== 'playing') return -1;
+    healFx.start = dogNowMs();
+  }
+  const t = (dogNowMs() - healFx.start) / HEAL_FX_MS;
+  if (t >= 1) { healFx = null; return -1; }
+  return t;
+}
+function drawHealFx(cx, layer) {
+  const t = getHealFxProgress();
+  if (t < 0) return;
+  const f = healFx, strong = f.strong;
+  const px = player.x - cx + player.w / 2, py = player.y + player.h / 2;
+  ctx.save();
+  if (layer === 'back') {
+  // 恢復光暈（繃帶：淡粉紅；急救包：粉紅 + 淡綠，較強）
+  const ga = Math.sin(Math.min(1, t) * Math.PI) * (strong ? 0.75 : 0.5);
+  const R = (strong ? 70 : 52) * (0.85 + t * 0.3);
+  const gr = ctx.createRadialGradient(px, py, 4, px, py, R);
+  gr.addColorStop(0, strong ? 'rgba(255,170,210,' + ga + ')' : 'rgba(255,190,220,' + ga + ')');
+  gr.addColorStop(0.55, strong ? 'rgba(170,255,190,' + (ga * 0.55) + ')' : 'rgba(255,200,225,' + (ga * 0.4) + ')');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(px, py, R, 0, Math.PI * 2); ctx.fill();
+  // 急救包：往外擴散的光圈（短暫的正向恢復動畫）
+  if (strong) {
+    ctx.strokeStyle = 'rgba(140,255,170,' + (0.8 * (1 - t)) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(px, py, 20 + t * 60, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+  return;
+  }
+  // 往上飄的愛心（繃帶 4 顆、急救包 7 顆）
+  const n = strong ? 7 : 4;
+  for (let i = 0; i < n; i++) {
+    const delay = (i / n) * 0.35;
+    const tt = (t - delay) / (1 - delay);
+    if (tt <= 0) continue;
+    const ox = Math.sin(f.seed + i * 2.3) * (strong ? 34 : 24) + Math.sin(tt * 6 + i) * 4;
+    const hy = py + 10 - tt * (strong ? 95 : 75);
+    const size = (strong ? 15 : 13) * (0.75 + 0.25 * Math.sin(i * 1.7 + 1));
+    drawCanvasHeart(px + ox, hy, size, i % 3 === 2 && strong ? '#7dffa0' : '#ff5f9a', Math.max(0, 1 - tt * tt));
+  }
+  // 實際恢復量
+  ctx.globalAlpha = Math.max(0, Math.min(1, (1 - t) * 1.6));
+  ctx.font = 'bold ' + (strong ? 18 : 16) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(80,0,40,0.75)'; ctx.fillStyle = '#ffd6e8';
+  const txt = '+' + formatHealAmount(f.amount) + ' ❤️';
+  const ty = player.y - 34 - t * 22;
+  ctx.strokeText(txt, px, ty); ctx.fillText(txt, px, ty);
+  ctx.restore();
+}
+// HUD 心心回彈（補血演出前段 0.35 秒放大 → 回彈）
+function getHealHudBounceScale() {
+  if (!healFx || healFx.start == null) return 1;
+  const t = (dogNowMs() - healFx.start) / 350;
+  if (t < 0 || t >= 1) return 1;
+  return 1 + Math.sin(t * Math.PI) * (healFx.strong ? 0.35 : 0.25);
+}
+// ── 結算頁 / 小V的家 / 暫停背包：DOM 愛心 + 局部震動 + 生命回彈 ──
+function ensureHealFxStyles() {
+  if (typeof document === 'undefined' || document.getElementById('hv-heal-fx-style')) return;
+  const st = document.createElement('style');
+  st.id = 'hv-heal-fx-style';
+  st.textContent =
+    '@keyframes hvHealFloat{0%{transform:translate(0,0) scale(.6);opacity:0}15%{opacity:1;transform:translate(0,-8px) scale(1)}100%{transform:translate(var(--dx),-70px) scale(.9);opacity:0}}'
+    + '@keyframes hvHealShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-3px)}40%{transform:translateX(3px)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}}'
+    + '@keyframes hvHealBounce{0%{transform:scale(1)}40%{transform:scale(1.18)}70%{transform:scale(.96)}100%{transform:scale(1)}}'
+    + '@keyframes hvHealText{0%{opacity:0;transform:translate(-50%,6px)}20%{opacity:1;transform:translate(-50%,0)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-26px)}}'
+    + '.hv-heal-fx{position:fixed;pointer-events:none;z-index:100500;font-size:20px;line-height:1;animation:hvHealFloat .95s ease-out forwards}'
+    + '.hv-heal-fx-text{position:fixed;pointer-events:none;z-index:100501;font:bold 16px sans-serif;color:#fff;background:rgba(255,80,140,.92);padding:4px 10px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap;animation:hvHealText 1.1s ease-out forwards}'
+    + '.hv-heal-shake{animation:hvHealShake .2s ease-in-out 1}'
+    + '.hv-heal-bounce{display:inline-block;animation:hvHealBounce .38s ease-out 1}';
+  document.head.appendChild(st);
+}
+function clearHealFxDom() {
+  if (typeof document === 'undefined' || !document.querySelectorAll) return;
+  document.querySelectorAll('.hv-heal-fx, .hv-heal-fx-text').forEach(e => { try { e.remove(); } catch (er) {} });
+}
+function isElVisible(el) {
+  if (!el || !el.getBoundingClientRect) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && el.offsetParent !== null;
+}
+function findHealAnchorEl() {
+  const ids = ['rp-supply-hp-row', 'supply-hp', 'home-supply-body', 'home-heal-items', 'pause-bag-panel'];
+  for (const id of ids) { const el = document.getElementById(id); if (isElVisible(el)) return el; }
+  const ae = document.activeElement; // 剛按下的按鈕（例如其他分頁裡的「使用」）
+  if (ae && ae !== document.body && isElVisible(ae)) return ae;
+  return null;
+}
+function playHealFeedbackDom(amount, strong, anchorEl) {
+  if (typeof document === 'undefined' || !document.body || !(amount > 0)) return;
+  ensureHealFxStyles();
+  const el = anchorEl || findHealAnchorEl();
+  const r = el ? el.getBoundingClientRect() : { left: window.innerWidth / 2 - 40, top: window.innerHeight / 2, width: 80, height: 20 };
+  const n = strong ? 7 : 5;
+  for (let i = 0; i < n; i++) {
+    const h = document.createElement('div');
+    h.className = 'hv-heal-fx';
+    h.textContent = (strong && i % 3 === 2) ? '💚' : '💖';
+    h.style.left = (r.left + Math.min(r.width, 160) * (0.15 + 0.7 * (i / Math.max(1, n - 1)))) + 'px';
+    h.style.top = (r.top + r.height / 2 - 10) + 'px';
+    h.style.setProperty('--dx', (Math.round((Math.random() - 0.5) * 30)) + 'px');
+    h.style.animationDelay = (i * 0.06) + 's';
+    document.body.appendChild(h);
+    setTimeout(() => { try { h.remove(); } catch (e) {} }, 1300);
+  }
+  const tx = document.createElement('div');
+  tx.className = 'hv-heal-fx-text';
+  tx.textContent = '💗 恢復 +' + formatHealAmount(amount) + ' ❤️';
+  tx.style.left = (r.left + Math.min(r.width, 200) / 2) + 'px';
+  tx.style.top = (r.top - 30) + 'px';
+  document.body.appendChild(tx);
+  setTimeout(() => { try { tx.remove(); } catch (e) {} }, 1300);
+  // 生命數字回彈 + 補血區局部震動（2～3px、200ms）
+  if (el) {
+    const num = el.querySelector ? (el.querySelector('#supply-hp, .rp-supply-hp-num, .result-red') || el) : el;
+    num.classList.remove('hv-heal-bounce'); void num.offsetWidth; num.classList.add('hv-heal-bounce');
+    setTimeout(() => { try { num.classList.remove('hv-heal-bounce'); } catch (e) {} }, 450);
+    const box = (el.closest && el.closest('.rp-section, .home-section, .home-card, #home-supply-body, #pause-bag-panel')) || el.parentElement || el;
+    box.classList.remove('hv-heal-shake'); void box.offsetWidth; box.classList.add('hv-heal-shake');
+    setTimeout(() => { try { box.classList.remove('hv-heal-shake'); } catch (e) {} }, 260);
+  }
+}
 function useHealingItem(itemId) {
+  const _hpBefore = player.hp; // v0.3.55：成功（HP 真的增加）才播演出
+  useHealingItemCore(itemId);
+  const gained = player.hp - _hpBefore;
+  if (gained > 0) {
+    const strong = !!(SHOP_ITEMS[itemId] && SHOP_ITEMS[itemId].healFull);
+    triggerAdventureHealFx(gained, strong);
+    try { playHealFeedbackDom(gained, strong, document.getElementById('pause-bag-panel')); } catch (e) {}
+  }
+}
+function useHealingItemCore(itemId) {
   const item = SHOP_ITEMS[itemId];
   if (!item) return;
   ensureInventoryItems();
@@ -15476,6 +15766,7 @@ function renderHomePlayer() {
 }
 
 function openHomeScreen(from) {
+  try { clearHealFxDom(); } catch (e) {} // v0.3.55
   homeEntryMode = from || 'normal';
   // 初始化 V幣資料（Phase 3A）
   loadPlayerWallet();
@@ -15543,6 +15834,7 @@ function openHomeScreen(from) {
 }
 
 function closeHomeScreen() {
+  try { clearHealFxDom(); } catch (e) {} // v0.3.55
   document.getElementById('home-screen').style.display = 'none';
 }
 
@@ -15713,6 +16005,13 @@ function buildResultSupplyHpRowHtml() {
 
 // 結算頁 / 小V的家使用繃帶、急救包（冒險中仍走暫停背包 useHealingItem）
 function useHealingItemOutOfAdventure(itemId) {
+  const _hpBefore = player.hp; // v0.3.55：真的補到血（HP 增加）才播愛心 / 震動
+  const ok = useHealingItemOutOfAdventureCore(itemId);
+  const gained = player.hp - _hpBefore;
+  if (ok && gained > 0) { try { playHealFeedbackDom(gained, !!(SHOP_ITEMS[itemId] && SHOP_ITEMS[itemId].healFull)); } catch (e) {} }
+  return ok;
+}
+function useHealingItemOutOfAdventureCore(itemId) {
   const item = SHOP_ITEMS[itemId];
   if (!item) return false;
   ensureInventoryItems();
@@ -15895,10 +16194,13 @@ function renderHomeSupply() {
 }
 
 function homeUseBandage() {
-  if (typeof buyBandage === 'function') {
-    buyBandage(); // 共用現有邏輯
+  if (typeof buyBandageCore === 'function') {
+    const _hpBefore = player.hp;
+    buyBandageCore(); // 共用現有邏輯
     renderHomeSupply();     // 更新補給區
     renderHomeInventory();  // 更新背包金幣
+    const gained = player.hp - _hpBefore; // v0.3.55：重畫之後再播（愛心 / 回彈作用在新的元素上）
+    if (gained > 0) { try { playHealFeedbackDom(gained, false, document.getElementById('home-supply-body')); } catch (e) {} }
   }
 }
 
@@ -16445,6 +16747,8 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 // ── Restart ───────────────────────────────────
 function restart(opts) {
   try { if (typeof flushPendingAssetApplies === 'function') flushPendingAssetApplies(); } catch (e) {} // v0.3.51：關卡開始時才套用晚到的素材
+  dogArtModeLock = null; dogWasRunning = false; // v0.3.55：每關重新決定小狗用正式圖或 fallback
+  healFx = null; try { clearHealFxDom(); } catch (e) {} // v0.3.55：補血演出不帶到下一關
   const keepHp          = opts && opts.keepHp;
   const preserveBringDog = opts && opts.preserveBringDog;
   // 若要保留帶狗狀態，從穩定記錄還原
@@ -16964,7 +17268,10 @@ const ASSET_LOADING_TIPS = [
 function assetCap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // 建立 manifest：每筆 { path, type, critical, apply(img), fail(), altPaths, label }
 function buildAssetManifest() {
-  const M = { common: [], chapter1: [], chapter2: [], orangeKingBoss: [] };
+  const M = { common: [], chapter1: [], chapter2: [], orangeKingBoss: [], dog: [] };
+  // v0.3.55：氣球小狗動作圖（optional：載入失敗不擋進關 → 本關用舊小狗畫法；只有帶狗出發的關卡才會等它）
+  Object.entries(DOG_ART_ASSETS).forEach(([key, path]) => M.dog.push({ path, type: 'image', critical: false, label: 'dog:' + key,
+    apply: im => { dogArtImgs[key] = im; dogArtStatus[key] = 'ok'; }, fail: () => { dogArtStatus[key] = 'error'; }, altPaths: [] }));
   const img = (group, path, critical, label, apply, fail, altPaths) => M[group].push({ path, type: 'image', critical, label, apply, fail: fail || (() => {}), altPaths: altPaths || [] });
   // ── common：主角（不含王權劍）
   Object.entries(ADVENTURE_HERO_ASSETS).forEach(([key, path]) => {
@@ -17177,6 +17484,12 @@ function getAssetStatus(pathOrKey) {
 }
 // 關卡 → 需要的群組
 function getAssetGroupsForLevel(levelIndex) {
+  const base = getAssetGroupsForLevelBase(levelIndex);
+  // v0.3.55：有帶狗出發 → 進關前也確保小狗動作圖已載好（沒帶狗就不等）
+  if ((typeof nextBringDog !== 'undefined' && nextBringDog) || (typeof bringBalloonDog !== 'undefined' && bringBalloonDog)) return base.concat(['dog']);
+  return base;
+}
+function getAssetGroupsForLevelBase(levelIndex) {
   const lv = LEVELS[levelIndex];
   if (!lv) return ['common', 'chapter1'];
   if (lv.isBossStage) return ['common', 'chapter2', 'orangeKingBoss'];
@@ -17429,7 +17742,11 @@ ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 //   原本的 initAdventureHeroArt / initScorpion* / initHammerAttackArt / initOrangeEnemyArt / initChimney* / initDualOrangeArt /
 //   initProjectileOrangeArt / initOrangeKingBossArt / initChapter2BgArt / initAdventureItemIcons 不再於開機時呼叫，
 //   全部改由 asset manifest + preloadAssetGroup() 控制；載好的圖片會放進原本的快取，原有的 getXXXImg() 照常使用
-runWithAssetGate(['common', 'chapter1'], '派對島準備中...', () => { assetBootReady = true; });
+runWithAssetGate(['common', 'chapter1'], '派對島準備中...', () => {
+  assetBootReady = true;
+  // v0.3.55：開機完成後在背景預載小狗動作圖（不擋開機；晚到的圖照規則等下一次進關才套用）
+  try { setTimeout(() => { try { preloadAssetGroup('dog'); } catch (e) {} }, 1500); } catch (e) {}
+});
 loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
