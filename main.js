@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.56-dog-polish-lollipop-craft-feedback-test-1';
-const BUILD_TIME   = '2026-10-15 23:00';
+const GAME_VERSION = 'adventure-v0.3.57-mobile-timing-ui-pause-dog-test-1';
+const BUILD_TIME   = '2026-10-15 23:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2727,7 +2727,14 @@ const keys = {};
 const mobileBtn = { left: false, right: false, jump: false, attack: false };
 
 window.addEventListener('keydown', e => {
+  // v0.3.57：開始冒險前，鍵盤不操作遊戲（Enter / 空白鍵 = 開始冒險，需已在橫向）
+  if (isGameStartGateActive()) {
+    if ((e.code === 'Enter' || e.code === 'Space') && getStartGateStep() === 'start') { startAdventureFromGate(); e.preventDefault(); }
+    return;
+  }
   if (e.code === 'Escape') {
+    // v0.3.57：秘笈從暫停選單開啟 → ESC 關秘笈、回到暫停選單
+    if (typeof isGuidebookOpen === 'function' && isGuidebookOpen()) { closeGuidebook(); e.preventDefault(); return; }
     // v0.3.33：最上層是發現物品視窗 → ESC 等同「收進背包，繼續冒險」
     if (isDiscoveryItemModalOpen()) { closeDiscoveryItemModal(); return; }
     // v0.3.29-fix-1：ESC 先關最上層 overlay — 暫停背包開著時只關背包，回到暫停選單
@@ -3081,7 +3088,8 @@ const RECIPES = [
   {
     id:         'balloonLollipop',
     name:       '氣球棒棒糖',
-    effect:     '可愛的氣球點心。做好後放在背包裡，需要時使用：回復 ❤️ +0.5（不會超過生命上限；製作時不會自動補血）。',
+    effect:     '現做現吃！做好的當下小V就會吃掉，立刻回復 ❤️ +0.5（不會超過生命上限；生命已滿時不能製作，避免浪費材料）。',
+    eatOnCraft: true, // v0.3.57：正式定案「現做現吃」，不再增加庫存
     durability: 0,
     cost:       { balloon260: 2 },
     emoji:      '🍭',
@@ -3166,6 +3174,23 @@ function craftItem(recipeId) {
 // 製作道具（一般）
   const recipe = RECIPES.find(r => r.id === recipeId);
   if (!recipe) return false;
+  // v0.3.57：氣球棒棒糖「現做現吃」— 生命已滿不能製作；成功扣材料並立刻 +0.5（不增加庫存）
+  if (recipe.eatOnCraft) {
+    const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+    if (player.hp >= maxHp) { showHint('生命已經滿了，不用吃棒棒糖！', 160); return false; }
+    for (const [mat, qty] of Object.entries(recipe.cost)) { if ((playerInventory[mat] || 0) < qty) return false; }
+    for (const [mat, qty] of Object.entries(recipe.cost)) { playerInventory[mat] -= qty; }
+    player.hp = Math.min(maxHp, player.hp + LOLLIPOP_HEAL);
+    saveInventory();
+    // 失敗畫面做的 → 重試帶著補好的血；材料也要真的扣掉（重試會還原進關快照，避免「補了血、材料又退回」）
+    if ((gameState === 'failed' || gameState === 'gameover') && levelStartSnapshot) {
+      for (const mat of Object.keys(recipe.cost)) { if (typeof levelStartSnapshot[mat] === 'number') levelStartSnapshot[mat] = playerInventory[mat]; }
+    }
+    if (typeof syncOutOfAdventureHpToRetry === 'function') syncOutOfAdventureHpToRetry();
+    refreshAllHpDisplays();
+    if (typeof renderHomeSupply === 'function') renderHomeSupply();
+    return true;
+  }
 
   // 檢查材料是否足夠
   for (const [mat, qty] of Object.entries(recipe.cost)) {
@@ -10495,8 +10520,111 @@ function startOrangeKingBossTestLevel__impl() {
 }
 
 
+// ══ v0.3.57：手機開始流程（載入 → 橫向 + 全螢幕 → 按「開始冒險」才真的開始）══
+// 手機 / 觸控裝置：開機載入完成後先停在「準備畫面」，遊戲邏輯完全不推進（loop 不呼叫 update）
+// 桌機：維持原本習慣（載入完成直接開始）
+function isTouchPlayDevice() {
+  try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) && (navigator.maxTouchPoints || 0) > 0; } catch (e) { return false; }
+}
+function isPortraitNow() { try { return window.innerHeight > window.innerWidth; } catch (e) { return false; } }
+function isFullscreenNow() { try { return !!(document.fullscreenElement || document.webkitFullscreenElement); } catch (e) { return false; } }
+function isFullscreenSupported() {
+  try { const el = document.documentElement; return !!(el.requestFullscreen || el.webkitRequestFullscreen) && (document.fullscreenEnabled !== false || document.webkitFullscreenEnabled); } catch (e) { return false; }
+}
+let gameStartGateActive = (typeof window !== 'undefined') ? isTouchPlayDevice() : false;
+let gameStartFsAttempted = false; // 按過「進入全螢幕」但瀏覽器不給（例如 iPhone Safari）→ 允許直接開始
+function isGameStartGateActive() { return !!gameStartGateActive; }
+function getStartGateStep() {
+  if (isPortraitNow()) return 'rotate';
+  if (!isFullscreenNow() && isFullscreenSupported() && !gameStartFsAttempted) return 'fullscreen';
+  return 'start';
+}
+function requestGameFullscreen() {
+  gameStartFsAttempted = false;
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { const p = req.call(el); if (p && p.catch) p.catch(() => { gameStartFsAttempted = true; renderStartGate(); }); }
+    else gameStartFsAttempted = true;
+  } catch (e) { gameStartFsAttempted = true; }
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  // 1.2 秒後還沒進入全螢幕（瀏覽器不支援 / 被拒絕）→ 讓玩家可以直接開始
+  setTimeout(() => { if (!isFullscreenNow()) gameStartFsAttempted = true; renderStartGate(); }, 1200);
+}
+function renderStartGate() {
+  if (typeof document === 'undefined' || !document.body) return;
+  let el = document.getElementById('start-gate-overlay');
+  if (!gameStartGateActive || !assetBootReady) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'start-gate-overlay';
+    el.className = 'hv-ui-overlay';
+    document.body.appendChild(el);
+  }
+  const step = getStartGateStep();
+  const lv = LEVELS[currentLevelIndex] || {};
+  let inner = '<div class="hv-ui-card start-gate-card"><div class="start-gate-title">🎈 氣球小V：派對島大作戰</div>'
+    + '<div class="start-gate-stage">' + (typeof getChapterDisplayTitle === 'function' ? getChapterDisplayTitle(currentLevelIndex) : (lv.name || '')) + '</div>';
+  if (step === 'rotate') {
+    inner += '<div class="start-gate-icon">📱↔️</div><div class="start-gate-msg">請把手機轉成<b>橫向</b></div>'
+      + '<div class="start-gate-sub">轉好之前，冒險不會開始、也不會計時</div>';
+  } else if (step === 'fullscreen') {
+    inner += '<div class="start-gate-msg">先進入全螢幕，畫面會更大更好玩！</div>'
+      + '<button class="hv-ui-btn hv-ui-btn--primary" id="btn-start-gate-fs">⛶ 進入全螢幕</button>'
+      + '<div class="start-gate-sub">準備好之前，冒險不會開始、也不會計時</div>';
+  } else {
+    inner += '<div class="start-gate-msg">準備好了嗎？</div>'
+      + '<button class="hv-ui-btn hv-ui-btn--primary hv-ui-btn--big" id="btn-start-gate-go">▶ 開始冒險</button>'
+      + (isFullscreenNow() ? '' : '<div class="start-gate-sub">（這個瀏覽器不支援全螢幕，也可以直接開始）</div>');
+  }
+  inner += '</div>';
+  el.innerHTML = inner;
+  el.style.display = 'flex';
+  const fsb = document.getElementById('btn-start-gate-fs');
+  if (fsb) fsb.onclick = (e) => { e.preventDefault(); requestGameFullscreen(); };
+  const go = document.getElementById('btn-start-gate-go');
+  if (go) go.onclick = (e) => { e.preventDefault(); startAdventureFromGate(); };
+}
+function startAdventureFromGate() {
+  if (!gameStartGateActive) return;
+  if (isTouchPlayDevice() && isPortraitNow()) { renderStartGate(); return; }
+  gameStartGateActive = false;
+  lastTime = 0; fixedStepAccumulator = 0;
+  if (gameState === 'paused') resumeGame();
+  const el = document.getElementById('start-gate-overlay');
+  if (el) el.style.display = 'none';
+  console.log('[StartGate] 開始冒險（從這一刻起才開始計時）');
+}
+if (typeof window !== 'undefined') window.startAdventureFromGate = startAdventureFromGate;
+// ── 自動暫停：切到背景 / 鎖螢幕 / 來電 / 離開全螢幕 / 轉回直向 → 停在暫停選單，回來時由玩家按「繼續冒險」──
+let lastKnownFullscreen = false;
+function autoPauseGame(reason) {
+  if (gameStartGateActive) { renderStartGate(); return; }
+  if (gameState !== 'playing') return;
+  if (typeof isDiscoveryItemModalOpen === 'function' && isDiscoveryItemModalOpen()) return;
+  pauseGame();
+  console.log('[AutoPause] ' + reason);
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) autoPauseGame('切到背景 / 鎖螢幕'); else { lastTime = 0; fixedStepAccumulator = 0; } });
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+    const fs = isFullscreenNow();
+    if (lastKnownFullscreen && !fs) autoPauseGame('離開全螢幕');
+    lastKnownFullscreen = fs;
+    renderStartGate();
+  }));
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('pagehide', () => autoPauseGame('離開頁面'));
+  window.addEventListener('blur', () => { if (isTouchPlayDevice()) autoPauseGame('切到其他 App'); });
+  const onOrient = () => { if (isTouchPlayDevice() && isPortraitNow()) autoPauseGame('轉成直向'); renderStartGate(); };
+  window.addEventListener('resize', onOrient);
+  window.addEventListener('orientationchange', () => setTimeout(onOrient, 200));
+}
+
 // ── Pause / Resume ────────────────────────────
 function pauseGame() {
+  if (gameStartGateActive) return; // v0.3.57：還沒開始冒險，不需要暫停
   if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
   gameState = 'paused';
   const el = document.getElementById('pause-overlay');
@@ -10505,7 +10633,11 @@ function pauseGame() {
 
 function resumeGame() {
   if (gameState !== 'paused') return;
+  // v0.3.57：手機直向時不恢復（先轉回橫向）；秘笈 / 背包開著時先關掉
+  if (isTouchPlayDevice() && isPortraitNow()) { showHint('請先把手機轉回橫向再繼續冒險', 160); return; }
+  if (typeof closeGuidebook === 'function') { guidebookFromPause = false; closeGuidebook(); }
   gameState = 'playing';
+  fixedStepAccumulator = 0;
   const el = document.getElementById('pause-overlay');
   if (el) el.style.display = 'none';
   closePauseBag(); // v0.3.29-fix-1：保險 — 遊戲繼續時暫停背包一定不留在畫面上
@@ -10772,9 +10904,11 @@ function updateNextLevelButton() {
 
 // ── Draw ──────────────────────────────────────
 function draw() {
+  if (!isGameStartGateActive()) { // v0.3.57：按「開始冒險」之前不播 BGM
   try { syncOrangeKingBgm(); } catch (e) {} // v0.3.43：2-4 Boss BGM（依目前狀態播放 / 暫停 / 停止）
   try { syncChapter1Bgm(); } catch (e) {}   // v0.3.53：1-1～1-3 第一章 BGM（離開第一章立刻停止，不疊播）
   try { syncChapter2Bgm(); } catch (e) {}   // v0.3.49：2-1～2-3 第二章 BGM（和 Boss BGM 互斥，不疊播）
+  }
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   if (gameState === 'playing') {
@@ -12758,13 +12892,18 @@ function drawWorldInner() {
   if (orangeKingBoss) drawOrangeKingBack(cx);
 
   // v0.3.55：氣球狗改成正式動作圖，固定在小V後方腳邊同步跟隨（畫在小V之前 → 在小V後面）；舊的飄在旁邊的畫法已移除
-  if (bringBalloonDog) {
+  // v0.3.57：小狗改畫在小V「上面」；只有小V揮劍 / 揮槌時才畫在後面，武器和攻擊動畫不會被擋住
+  const _heroAtk = (typeof _heroLastArtKey === 'string') && (_heroLastArtKey.startsWith('swordAttack') || _heroLastArtKey.startsWith('hammerAttack'));
+  if (bringBalloonDog && _heroAtk) {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
   // v0.3.55：補血光暈畫在小V後面（不會把小V洗白），愛心 / 數字畫在小V前面
   try { drawHealFx(cx, 'back'); } catch (e) {}
   // Player
   drawPlayer(cx);
+  if (bringBalloonDog && !_heroAtk) {
+    try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
+  }
   try { drawHealFx(cx, 'front'); } catch (e) {}
 
   // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
@@ -13404,7 +13543,9 @@ const DOG_ART_ASSETS = {
   // v0.3.56：跳躍上升 / 下落（repo 實際檔名；兩張都是 448×448）
   jumpUp:   'assets/adventure/companions/dog/dog_jump_up.png',
   jumpFall: 'assets/adventure/companions/dog/dog_jump_fall.png',
-  // 未來：sad: 'assets/adventure/companions/dog/dog_sad.png'（加上這行 + DOG_ART_SRC.sad + DOG_ART.hurtFrame = 'sad' 即可）
+  // v0.3.57：受傷 / 攻擊助威（repo 實際檔名；兩張都是 448×448）
+  sad:   'assets/adventure/companions/dog/dog_sad.png',
+  angry: 'assets/adventure/companions/dog/dog_angry.png',
 };
 const DOG_ART_SRC = {
   idle: { collarX: 324, feetY: 460, noseX: 397, noseY: 267 },
@@ -13415,19 +13556,26 @@ const DOG_ART_SRC = {
   // v0.3.56：量自 dog_jump_up.png / dog_jump_fall.png（蝴蝶結中心、最低腳底、粉紅鼻子中心）
   jumpUp:   { collarX: 320, feetY: 409, noseX: 382, noseY: 160 },
   jumpFall: { collarX: 246, feetY: 395, noseX: 371, noseY: 265 },
+  // v0.3.57：量自 dog_sad.png（蜷縮、雙眼緊閉）/ dog_angry.png（前腳伸直、屁股抬高、呲牙）
+  sad:   { collarX: 275, feetY: 375, noseX: 360, noseY: 274 },
+  angry: { collarX: 273, feetY: 396, noseX: 375, noseY: 222, angerX: 410, angerY: 110 },
 };
+// v0.3.57：每張圖頭頂的高度（量自原圖最上緣，用來放尋寶 L3 的驚嘆號）
+const DOG_ART_HEAD_TOP = { idle: 142, run1: 68, run2: 72, run3: 54, run4: 77, jumpUp: 43, jumpFall: 86, sad: 109, angry: 70 };
 // v0.3.56：使用者實測後的建議初值（測試版可用 ` 鍵開「狗狗校準」即時調整）
 const DOG_ART_DEFAULTS = {
   scale: 0.16,          // 原圖像素 × 0.16：站姿約 60×51px、跑姿約 68×51px
   behindX: 45,          // 蝴蝶結距離小V中心（往後方）45px
-  footOffsetY: 2,       // 腳底比小V腳底再低 2px（貼地）
+  footOffsetY: 6,       // v0.3.57：2 → 6，腳底稍微壓進草皮（實測 2px 看起來有點浮空）；另外加貼地陰影
   runFrameMs: 150,      // 跑步 4 格循環，每格 150ms（整圈 0.6 秒）
 };
 const DOG_ART = Object.assign({}, DOG_ART_DEFAULTS, {
   jumpFrame: 'jumpUp',    // v0.3.56：跳躍上升 → dog_jump_up
   fallFrame: 'jumpFall',  // v0.3.56：下落 → dog_jump_fall
-  attackFrame: 'idle',    // 攻擊：暫用 idle（之後換 dog_angry）
-  hurtFrame: 'idle',      // v0.3.56：小V受傷時的反應圖（dog_sad.png 還沒有 → 暫用 idle）
+  attackFrame: 'angry',   // v0.3.57：小V揮劍 / 揮槌 → dog_angry（助威，沒有攻擊判定）
+  hurtFrame: 'sad',       // v0.3.57：小V受傷 → dog_sad（蜷縮、雙眼緊閉）
+  hurtShakeFrames: 20,    // 受傷後前 20 步（約 0.33 秒）狗狗左右抖動（只影響畫面）
+  hurtShakePx: 2,
 });
 const DOG_ART_LS_KEY = 'balloonV_dogArtCalib__' + GAME_VERSION; // 只存狗狗視覺校準 4 個數字（測試版）
 const dogArtImgs = {}, dogArtStatus = {};
@@ -13486,41 +13634,115 @@ function drawCompanionDog(cx) {
     return;
   }
   const img = getDogArtImg(pose.key), S = DOG_ART_SRC[pose.key], k = DOG_ART.scale;
-  const sx = a.x - cx, sy = a.y;
+  const dir = a.right ? 1 : -1;
+  // v0.3.57：受傷剛發生時短暫抖動（只是畫面，狗狗跟隨位置 / 小V座標 / 碰撞都不變）
+  const hurtAge = 90 - (player.invincible || 0);
+  const shake = (pose.state === 'hurt' && hurtAge >= 0 && hurtAge < DOG_ART.hurtShakeFrames) ? ((frameCount % 4 < 2) ? 1 : -1) * DOG_ART.hurtShakePx : 0;
+  const sx = a.x - cx + shake, sy = a.y;
   const w = img.naturalWidth * k, h = img.naturalHeight * k;
   ctx.save();
+  // 貼地陰影（站在地上時才畫，讓腳底看起來踩在地面）
+  if (player.onGround) {
+    ctx.fillStyle = 'rgba(40,20,10,0.28)';
+    ctx.beginPath(); ctx.ellipse(sx + dir * 4 * (k / 0.16), sy - 1, 26 * (k / 0.16), 4.5 * (k / 0.16), 0, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.translate(sx, sy);
   if (!a.right) ctx.scale(-1, 1); // 原圖朝右；小V向左時整張翻轉
   ctx.drawImage(img, -S.collarX * k, -S.feetY * k, w, h);
   ctx.restore();
-  // 鼻子位置（螢幕座標，含翻轉）
-  const nx = sx + (a.right ? 1 : -1) * (S.noseX - S.collarX) * k;
+  // 鼻子 / 頭頂位置（螢幕座標，含翻轉）
+  const nx = sx + dir * (S.noseX - S.collarX) * k;
   const ny = sy + (S.noseY - S.feetY) * k;
-  drawDogNoseGlow(nx, ny);
-  dogLastDraw = { mode: 'sprite', pose: pose.key, state: pose.state, x: Math.round(sx), y: Math.round(sy), w: Math.round(w), h: Math.round(h), noseX: Math.round(nx), noseY: Math.round(ny), facingRight: a.right };
+  const headTopY = sy + ((DOG_ART_HEAD_TOP[pose.key] != null ? DOG_ART_HEAD_TOP[pose.key] : S.noseY - 120) - S.feetY) * k;
+  // v0.3.57：生氣記號（程式動態繪製在頭部附近，會抖動 / 轉動，跟著左右翻轉）
+  if (pose.state === 'attack' && S.angerX != null) {
+    drawDogAngerMark(sx + dir * (S.angerX - S.collarX) * k, sy + (S.angerY - S.feetY) * k, 15 * (k / 0.16));
+  }
+  drawDogNoseGlow(nx, ny, headTopY, k);
+  dogLastDraw = { mode: 'sprite', pose: pose.key, state: pose.state, x: Math.round(sx), y: Math.round(sy), w: Math.round(w), h: Math.round(h), noseX: Math.round(nx), noseY: Math.round(ny), facingRight: a.right, shake };
 }
-// 原本的三段式鼻子發光（門檻 / 等級不變，只把位置改到新圖的鼻子上）
-function drawDogNoseGlow(nx, ny) {
-  const level = dogNoseLevel || 0;
-  if (level <= 0) return; // 0 級：不發光（正式圖本身就有粉紅鼻子）
-  const isFlash = level === 3;
-  const flashVis = !isFlash || (Math.floor(frameCount / 6) % 2 === 0);
+// v0.3.57：生氣記號（漫畫常見的紅色「十字青筋」— 四個弧形角），會輕微抖動 / 轉動
+function drawDogAngerMark(x, y, size) {
+  const t = dogNowMs() / 1000;
+  const rot = Math.sin(t * 9) * 0.18;
+  const sc = 1 + Math.sin(t * 13) * 0.08;
   ctx.save();
-  if (level >= 2 && flashVis) {
-    const haloR = 8 + (level - 2) * 6;
-    ctx.fillStyle = level === 3 ? 'rgba(255,80,0,0.45)' : 'rgba(255,200,0,0.3)';
-    ctx.beginPath(); ctx.arc(nx, ny, haloR, 0, Math.PI * 2); ctx.fill();
+  ctx.translate(x + Math.sin(t * 23) * 0.8, y + Math.cos(t * 19) * 0.8);
+  ctx.rotate(rot); ctx.scale(sc, sc);
+  const r = size / 2;
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.strokeStyle = pass === 0 ? 'rgba(255,255,255,0.95)' : '#e8132f';
+    ctx.lineWidth = pass === 0 ? size * 0.34 : size * 0.18;
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate(i * Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(r * 0.22, -r * 0.95);
+      ctx.quadraticCurveTo(r * 0.22, -r * 0.22, r * 0.95, -r * 0.22);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
-  if (flashVis) {
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = DOG_NOSE_COLORS[level];
-    ctx.beginPath(); ctx.arc(nx, ny, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// v0.3.57：尋寶鼻子提示（方案 B）— 距離門檻 / 等級判定完全沿用原本的 dogNoseLevel，只改畫法
+//   L0 無提示｜L1 明顯金黃光圈｜L2 更強光圈 + 緩慢脈動 + 星光｜L3 最強光圈 + 明顯脈動閃爍 + 頭頂驚嘆號
+//   （只提示「附近有寶物」，不指出寶物的精確位置）
+function drawDogSparkle(x, y, r, rot, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y); ctx.rotate(rot);
+  ctx.fillStyle = '#fff6c0';
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const rr = i % 2 === 0 ? r : r * 0.32; const a = i * Math.PI / 4; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawDogNoseGlow(nx, ny, headTopY, k) {
+  const level = dogNoseLevel || 0;
+  if (level <= 0) return; // L0：不發光
+  const z = (k || DOG_ART.scale) / 0.16;
+  const t = dogNowMs() / 1000;
+  ctx.save();
+  let R, a;
+  if (level === 1) { R = 13; a = 0.75; }
+  else if (level === 2) { R = 17 + Math.sin(t * 3) * 2.5; a = 0.85 + Math.sin(t * 3) * 0.1; }
+  else { const p = 0.5 + 0.5 * Math.sin(t * 10); R = 21 + p * 5; a = 0.75 + p * 0.25; }
+  R *= z;
+  const g = ctx.createRadialGradient(nx, ny, 1, nx, ny, R);
+  g.addColorStop(0, 'rgba(255,255,220,' + a + ')');
+  g.addColorStop(0.35, 'rgba(255,215,60,' + (a * 0.85) + ')');
+  g.addColorStop(1, 'rgba(255,170,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(nx, ny, R, 0, Math.PI * 2); ctx.fill();
+  // 金色光圈線
+  ctx.strokeStyle = 'rgba(255,220,80,' + Math.min(1, a + 0.1) + ')';
+  ctx.lineWidth = (level === 3 ? 2.6 : level === 2 ? 2.2 : 1.8) * z;
+  ctx.beginPath(); ctx.arc(nx, ny, R * 0.62, 0, Math.PI * 2); ctx.stroke();
+  // L2 / L3：星光繞著鼻子轉
+  if (level >= 2) {
+    const n = level === 3 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const ang = t * (level === 3 ? 2.6 : 1.6) + i * Math.PI * 2 / n;
+      drawDogSparkle(nx + Math.cos(ang) * R * 0.95, ny + Math.sin(ang) * R * 0.75, (level === 3 ? 5 : 4) * z, ang, 0.9);
+    }
   }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
-  ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('L' + level, nx, ny + 12);
+  // L3：頭頂驚嘆號（尋寶專用，不是受傷）
+  if (level === 3 && headTopY != null) {
+    const bob = Math.sin(t * 8) * 2;
+    const ex = nx - 6 * z, ey = headTopY - 10 * z + bob;
+    ctx.font = 'bold ' + Math.round(20 * z) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4 * z; ctx.strokeStyle = 'rgba(120,40,0,0.85)'; ctx.fillStyle = '#ffd23a';
+    ctx.strokeText('!', ex, ey); ctx.fillText('!', ex, ey);
+  }
+  // 測試版才顯示等級文字
+  if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) {
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('L' + level, nx, ny + 14 * z);
+  }
   ctx.restore();
 }
 // ── v0.3.56：狗狗視覺校準（測試版限定；` 鍵開關；只存 4 個數字到 DOG_ART_LS_KEY）──
@@ -14158,6 +14380,34 @@ function drawHeroDebugPanel() {
   ctx.restore();
 }
 
+// v0.3.57：HUD 愛心（canvas）— full 紅心、half 左半紅 + 右半空心框、empty 空心框
+function drawHudHeart(cx, cy, size, kind) {
+  const s = size / 24;
+  const heartPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(12, 21);
+    ctx.bezierCurveTo(4.5, 16.4, 0.6, 11.8, 2.2, 8.4);
+    ctx.bezierCurveTo(3.4, 5.6, 6.1, 4.1, 8, 4.1);
+    ctx.bezierCurveTo(9.6, 4.1, 11, 5, 12, 7.2);
+    ctx.bezierCurveTo(13, 5, 14.4, 4.1, 16, 4.1);
+    ctx.bezierCurveTo(17.9, 4.1, 20.6, 5.6, 21.8, 8.4);
+    ctx.bezierCurveTo(23.4, 11.8, 19.5, 16.4, 12, 21);
+    ctx.closePath();
+  };
+  ctx.save();
+  ctx.translate(cx - 12 * s, cy - 12 * s); ctx.scale(s, s);
+  heartPath();
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill();
+  if (kind !== 'empty') {
+    ctx.save();
+    if (kind === 'half') { ctx.beginPath(); ctx.rect(0, 0, 12, 24); ctx.clip(); }
+    heartPath(); ctx.fillStyle = '#ff3d6e'; ctx.fill();
+    ctx.restore();
+  }
+  heartPath();
+  ctx.lineWidth = 1.6; ctx.strokeStyle = kind === 'full' ? '#ffd0dc' : '#ff8fb0'; ctx.stroke();
+  ctx.restore();
+}
 function drawHUD() {
   const timeLeft = Math.max(0, LEVEL_DURATION - Math.floor(elapsedSec));
   const pad = 10;
@@ -14177,23 +14427,19 @@ function drawHUD() {
   ctx.textBaseline = 'middle';
 
   // ── 左上：HP 心心條 ──
-  const heartY = 26;
-  const heartSize = 18;
+  // v0.3.57：HUD 愛心改成清楚的滿心 / 半心 / 空心（和結算頁、小V的家同一套規則），數字放大
+  const heartY = 22;
+  const heartSize = 22;
   const _healBounce = getHealHudBounceScale(); // v0.3.55：補血時心心短暫放大回彈
-  for (let i = 0; i < player.maxHp; i++) {
-    const hx  = pad + i * (heartSize + 4);
-    const fill = player.hp - i;
-    ctx.font = Math.round(heartSize * _healBounce) + 'px sans-serif';
-    if (fill >= 1)      ctx.globalAlpha = 1.0;     // 全心
-    else if (fill > 0)  ctx.globalAlpha = 0.6;     // 半心（淡色）
-    else                ctx.globalAlpha = 0.18;    // 空心
-    ctx.fillText('❤️', hx, heartY);
-  }
+  const _kinds = getHeartKinds(Math.max(0, Math.min(player.maxHp, Number(player.hp) || 0)), player.maxHp);
+  _kinds.forEach((kind, i) => drawHudHeart(pad + 11 + i * (heartSize + 5), heartY, heartSize * _healBounce, kind));
   ctx.globalAlpha = 1.0;
-  // HP 數字（半心時特別標出）
-  ctx.font = 'bold 10px monospace';
-  ctx.fillStyle = player.hp % 1 > 0 ? '#FDCB6E' : 'rgba(255,255,255,0.5)';
-  ctx.fillText(player.hp + '/' + player.maxHp, pad, 44);
+  ctx.font = 'bold 13px sans-serif';
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillStyle = player.hp % 1 > 0 ? '#FDCB6E' : '#ffd6e2';
+  const _hpTxt = (Number(player.hp) || 0) + ' / ' + player.maxHp;
+  const _hpX = pad + _kinds.length * (heartSize + 5) + 6;
+  ctx.strokeText(_hpTxt, _hpX, heartY); ctx.fillText(_hpTxt, _hpX, heartY);
 
   // ── 右上：收集資料（金幣、氣球） ──
   ctx.textAlign = 'right';
@@ -14319,6 +14565,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.57+：mobile-timing-ui-pause-dog → mobile-pause-dog（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('mobile-timing-ui-pause-dog')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'mobile-pause-dog' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.56+：dog-polish-lollipop-craft-feedback → dog-candy-craft（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('dog-polish-lollipop-craft-feedback')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15062,7 +15313,7 @@ function populateResultPanel() {
   // 【第二層】目前背包（預設收合）—— onclick 用 data-target，避免字串引號衝突
   const bagHtml = '<div class="rp-fold-card" id="rp-inventory-section">'
     + '<div class="rp-fold-btn" data-target="rp-inventory-body" onclick="rpToggle(this)">'
-    + '<span class="rp-fold-icon">🎒</span><span>目前背包</span><span class="rp-toggle-arrow">▶</span></div>'
+    + '<span class="rp-fold-icon">🎒</span><span>背包明細</span><span class="rp-toggle-arrow">▶</span></div>'
     + '<div id="rp-inventory-body" style="display:none">' + makeTable(buildBagRows()) + '</div></div>';
 
   // 【第三層】詳細紀錄（預設收合）
@@ -15073,8 +15324,9 @@ function populateResultPanel() {
 
   // 【第四層】補給（預設收合；v0.3.34：受傷且背包有繃帶 / 急救包時自動展開）
   const _healItems     = playerInventory.items || {};
-  const supplyAutoOpen = player.hp < player.maxHp
-    && ((_healItems.bandage || 0) > 0 || (_healItems.firstAidKit || 0) > 0);
+  // v0.3.57：補給是重點資訊 → 受傷時就展開（不論有沒有補血道具，愛心貼布也在這裡）
+  const supplyAutoOpen = player.hp < player.maxHp;
+  void _healItems;
   const supplyHtml = '<div class="rp-fold-card" id="supply-section">'
     + '<div class="rp-fold-btn" data-target="rp-supply-body" onclick="rpToggle(this)">'
     + '<span class="rp-fold-icon">🏥</span><span>補給</span><span class="rp-toggle-arrow">' + (supplyAutoOpen ? '▼' : '▶') + '</span></div>'
@@ -15112,6 +15364,9 @@ function populateResultPanel() {
     html += '<div class="rp-level-display-name">' + chapterTitle + '</div>';
     html += '<div class="rp-clear-sub">本關帶回這些派對材料！</div>';
   }
+  // v0.3.57：重要獎勵（新秘笈 / 寶箱 / 小狗療癒 / V幣）放在標題下面，一眼看到
+  if (badgesHtml) html += '<div class="rp-awards rp-awards--top">' + badgesHtml + '</div>';
+  html += '<div id="rp-vcoin-section" style="display:none"></div>';
   // v0.3.34：置頂狀態列（血量 + 背包）— 往下滑時釘在結算內容區頂部
   html += '<div id="rp-sticky-status" class="sticky-status">' + buildStickyStatusBarHtml() + '</div>';
   // v0.3.29：目前背包總量（v0.3.34：加入血量）
@@ -15169,22 +15424,22 @@ function populateResultPanel() {
   html += guideBookHint;
   html += lowHpRescueHint;
 
-  // 第一層：重點收穫
-  html += '<div class="rp-hero-section" id="rp-hero-section">'
-    + '<div class="rp-reward-grid">' + mainTiles + '</div>'
-    + (badgesHtml ? '<div class="rp-awards">' + badgesHtml + '</div>' : '')
-    + '</div>';
-  // V幣獎勵 section（Phase 3A，earned > 0 才顯示）
-  html += '<div id="rp-vcoin-section" style="display:none"></div>';
-
-  // 隱藏發現（槌子解鎖 / 秘笈 / 受傷提醒已移到上方提醒區）
+  // v0.3.57：結算資訊減量 — 先看重要的（下一關準備 / 小狗 / 補給），明細預設收合
   html += treasureHint;
-  // 氣球小狗
+  // 氣球小狗（帶狗出發）
   html += dogSectionHtml;
-  // 可收合的三層
+  // 補給（受傷時自動展開）
+  html += supplyHtml;
+  // 本關獲取明細（預設收合）
+  html += '<div class="rp-fold-card" id="rp-hero-fold">'
+    + '<div class="rp-fold-btn" data-target="rp-hero-section" onclick="rpToggle(this)">'
+    + '<span class="rp-fold-icon">📦</span><span>本關獲取明細</span><span class="rp-toggle-arrow">▶</span></div>'
+    + '<div class="rp-hero-section" id="rp-hero-section" style="display:none">'
+    + '<div class="rp-reward-grid">' + mainTiles + '</div>'
+    + '</div></div>';
+  // 背包明細 / 詳細紀錄（預設收合）
   html += bagHtml;
   html += detailHtml;
-  html += supplyHtml;
   // 氣球小知識
   html += '<div class="rp-trivia-card"><span class="rp-trivia-icon">💡</span><span>' + trivia + '</span></div>';
 
@@ -15237,8 +15492,7 @@ function buyBandageCore() {
   saveInventory();
 
   // 更新補給區目前生命
-  const supplyHp = document.getElementById('supply-hp');
-  if (supplyHp) supplyHp.textContent = `${player.hp} / ${player.maxHp}`;
+  refreshAllHpDisplays(); // v0.3.57：數字 + 愛心一起更新（之前只改數字，愛心沒跟著變）
   if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
   // 更新目前背包（金幣減少）
   refreshResultBag();
@@ -15298,6 +15552,10 @@ function ensureInventoryItems() {
 function buyShopItem(itemId) {
   const item = SHOP_ITEMS[itemId];
   if (!item) return;
+  // v0.3.57：同一次點擊 / 快速連點只買一次（不重複扣金幣、不重複發物品）
+  const _now = Date.now();
+  if (_now - (buyShopItem._lastAt || 0) < 350) return;
+  buyShopItem._lastAt = _now;
   ensureInventoryItems();
   const coins   = playerInventory.coins || 0;
   const have    = playerInventory.items[itemId] || 0;
@@ -15322,7 +15580,13 @@ function buyShopItem(itemId) {
   renderHomeShop();
   if (typeof renderHomeInventory === 'function') renderHomeInventory();
   if (typeof renderHomeSupply    === 'function') renderHomeSupply();
+  if (typeof refreshInventorySummary === 'function') refreshInventorySummary();
   showHint(item.icon + ' ' + item.name + ' 購買成功！', 180);
+  // v0.3.57：交易真正成功後才播購買演出（卡片已被重畫 → 套在新卡片上）
+  try {
+    const card = document.querySelector('#home-shop-body .home-shop-card[data-shop-id="' + itemId + '"]');
+    playCraftSuccessFx(card, { name: item.name, emoji: item.icon, shopBuy: true });
+  } catch (e) {}
 }
 
 // ══ v0.3.55：補血成功演出（只在 HP 真的增加之後觸發；不改補血數值 / 道具消耗）══
@@ -15531,7 +15795,7 @@ function renderHomeShop() {
     const canBuy   = coins >= item.priceCoins && have < item.maxCarry;
     const btnCls   = canBuy ? 'home-btn home-btn--blue' : 'home-btn home-btn--blue home-btn--disabled';
     const btnDisbl = canBuy ? '' : 'disabled';
-    html += '<div class="home-shop-card" style="background:rgba(255,255,255,0.06);border-radius:10px;padding:10px 12px">';
+    html += '<div class="home-shop-card" data-shop-id="' + item.id + '" style="background:rgba(255,255,255,0.06);border-radius:10px;padding:10px 12px">';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
     html += '<span style="font-size:1.5em">' + item.icon + '</span>';
     html += '<span style="font-weight:bold;font-size:1.05em">' + item.name + '</span>';
@@ -15539,7 +15803,7 @@ function renderHomeShop() {
     html += '</div>';
     html += '<div style="color:#aaa;font-size:0.88em;margin-bottom:6px">' + item.description + '</div>';
     html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-    html += '<span style="font-size:0.9em;color:#ccc">持有：<b>' + have + ' / ' + item.maxCarry + '</b></span>';
+    html += '<span style="font-size:0.9em;color:#ccc;white-space:nowrap;flex-shrink:0">持有：<b>' + have + ' / ' + item.maxCarry + '</b></span>';
     html += '<button class="' + btnCls + '" ' + btnDisbl + ' style="padding:5px 14px;font-size:0.92em" '
           + 'onclick="buyShopItem(\'' + item.id + '\')">購買</button>';
     html += '</div>';
@@ -15983,21 +16247,59 @@ function ensureInventorySummaryStyles() {
 //  v0.3.34：置頂狀態列（血量 + 背包）
 //  血量唯一來源：player.hp / player.maxHp（跨關 restart({keepHp:true}) 也是讀這個）
 // ════════════════════════════════════════════════
+// v0.3.57：所有畫面共用同一套愛心（SVG：滿心 / 半心 / 空心），和數字一定一致
+//   之前用 ❤️ emoji + clip-path 切半，半心和下一顆心會疊在一起 → 1.5 → 2.5 看起來像只補了半顆
+function getHeartKinds(hp, maxHp) {
+  const out = [];
+  for (let i = 0; i < maxHp; i++) out.push(hp >= i + 1 ? 'full' : (hp >= i + 0.5 ? 'half' : 'empty'));
+  return out;
+}
+function buildHeartSvg(kind) {
+  const path = 'M12 21s-7.5-4.6-9.8-9.2C0.6 8.4 2.4 4.5 6.1 4.1c2.2-.2 4 1 5.9 3.1 1.9-2.1 3.7-3.3 5.9-3.1 3.7.4 5.5 4.3 3.9 7.7C19.5 16.4 12 21 12 21z';
+  const empty = '<path d="' + path + '" fill="rgba(255,255,255,0.10)" stroke="#ff8fb0" stroke-width="1.6"/>';
+  if (kind === 'full') return '<svg class="hv-heart hv-heart--full" viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '" fill="#ff3d6e" stroke="#ffd0dc" stroke-width="1.2"/></svg>';
+  if (kind === 'half') return '<svg class="hv-heart hv-heart--half" viewBox="0 0 24 24" aria-hidden="true">' + empty
+    + '<path d="' + path + '" fill="#ff3d6e" clip-path="inset(0 50% 0 0)" style="clip-path:inset(0 50% 0 0)"/></svg>';
+  return '<svg class="hv-heart hv-heart--empty" viewBox="0 0 24 24" aria-hidden="true">' + empty + '</svg>';
+}
 function buildHpHeartsHtml() {
   const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
   const hp    = Math.max(0, Math.min(maxHp, Number(player.hp) || 0));
-  let html = '';
-  for (let i = 0; i < maxHp; i++) {
-    const cls = hp >= i + 1 ? 'ss-heart--full' : (hp >= i + 0.5 ? 'ss-heart--half' : 'ss-heart--empty');
-    html += '<span class="ss-heart ' + cls + '">❤️</span>';
-  }
-  return html;
+  return '<span class="hv-hearts" data-hp="' + hp + '">' + getHeartKinds(hp, maxHp).map(buildHeartSvg).join('') + '</span>';
+}
+// v0.3.57：所有 DOM 上的生命顯示一起刷新（結算補給列 / 小V的家補給 / 暫停背包 / 置頂卡 / 背包大卡片）
+function refreshAllHpDisplays() {
+  if (typeof document === 'undefined') return;
+  try {
+    const row = document.getElementById('rp-supply-hp-row');
+    if (row) row.outerHTML = buildResultSupplyHpRowHtml();
+    const hs = document.getElementById('home-supply-hp');
+    if (hs) hs.innerHTML = buildHpHeartsHtml() + ' <b>' + formatHpText() + '</b>';
+    const pb = document.getElementById('pause-bag-hp');
+    if (pb) pb.innerHTML = buildHpHeartsHtml() + '<b>' + formatHpText() + '</b>';
+    if (typeof refreshInventorySummary === 'function') refreshInventorySummary();
+    if (typeof refreshResultHpStatus === 'function') { const el = document.getElementById('rp-hp-status'); if (el) el.outerHTML = buildResultHpHtml(); }
+  } catch (e) {}
 }
 function formatHpText() {
   const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
   return (Number(player.hp) || 0) + ' / ' + maxHp;
 }
 function buildStickyStatusBarHtml() {
+  const others = getInventoryOtherItems();
+  const low    = (Number(player.hp) || 0) <= 1;
+  // v0.3.57：置頂時也用「大卡片」風格（標題列 + 生命 + 3 張數字卡），不再縮成一排小 emoji
+  return '<div class="sticky-status__bar sticky-card">'
+    + '<div class="sticky-card__top"><span class="sticky-card__title">🎒 目前背包</span>'
+    +   '<span class="sticky-card__hp' + (low ? ' sticky-card__hp--low' : '') + '">' + buildHpHeartsHtml() + '<b>' + formatHpText() + '</b></span></div>'
+    + '<div class="sticky-card__grid">'
+    +   '<div class="sticky-card__cell"><span class="sticky-card__lbl">' + itemIconHtml('coin', '🪙') + ' 金幣</span><b>' + Number(playerInventory.coins || 0) + '</b></div>'
+    +   '<div class="sticky-card__cell"><span class="sticky-card__lbl">' + itemIconHtml('b260', '🎈') + ' 260</span><b>×' + Number(playerInventory.balloon260 || 0) + '</b></div>'
+    +   '<div class="sticky-card__cell"><span class="sticky-card__lbl">' + itemIconHtml('round', '⚪') + ' 圓氣球</span><b>×' + Number(playerInventory.roundBalloon || 0) + '</b></div>'
+    +   '<div class="sticky-card__cell"><span class="sticky-card__lbl">📦 其他</span><b>' + others.length + '</b></div>'
+    + '</div></div>';
+}
+function buildStickyStatusBarHtml_legacy() {
   const others = getInventoryOtherItems();
   const low    = (Number(player.hp) || 0) <= 1;
   return '<div class="sticky-status__bar">'
@@ -16124,21 +16426,20 @@ function useBalloonLollipopOutOfAdventure() {
 }
 function buildLollipopRowHtml(ctx) {
   const have = getLollipopCount();
-  const unlocked = !!(playerInventory.unlockedRecipes && playerInventory.unlockedRecipes.balloonLollipop);
-  if (have <= 0 && !unlocked) return '';
+  if (have <= 0) return ''; // v0.3.57：棒棒糖改成現做現吃，只剩舊版庫存才顯示（用完自然消失）
   const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
   const isFull = player.hp >= maxHp;
   const disable = have <= 0 || isFull;
   const label = have <= 0 ? '沒有棒棒糖' : isFull ? '生命已滿' : '使用';
   if (ctx === 'home') {
     return '<div class="home-supply-item heal-item-row">'
-      + '<div><span class="home-row-label">🍭 氣球棒棒糖 ×' + have + '</span>'
+      + '<div><span class="home-row-label">🍭 氣球棒棒糖（舊庫存）×' + have + '</span>'
       + '<span style="color:#888;font-size:11px;margin-left:6px">+' + LOLLIPOP_HEAL + ' ❤️</span></div>'
       + '<button id="btn-home-use-lollipop" class="home-btn ' + (disable ? 'home-btn--dim' : 'home-btn--red') + '" '
       + (disable ? 'disabled' : '') + ' onclick="useBalloonLollipopOutOfAdventure()">' + label + '</button></div>';
   }
   return '<div class="rp-supply-bandage-row heal-item-row"><div class="rp-supply-bandage-info">'
-    + '<span class="rp-supply-name">🍭 氣球棒棒糖 ×' + have + '</span>'
+    + '<span class="rp-supply-name">🍭 氣球棒棒糖（舊庫存）×' + have + '</span>'
     + '<span class="rp-supply-price">+' + LOLLIPOP_HEAL + ' ❤️</span></div>'
     + '<button id="btn-result-use-lollipop" class="rp-supply-btn rp-supply-btn--' + (disable ? 'disabled' : 'active') + '" '
     + (disable ? 'disabled' : '') + ' onclick="useBalloonLollipopOutOfAdventure()">' + label + '</button></div>';
@@ -16193,6 +16494,7 @@ function syncOutOfAdventureHpToRetry() {
 }
 
 function refreshAfterOutOfAdventureHeal() {
+  refreshAllHpDisplays(); // v0.3.57
   // 結算頁
   const rpHeal = document.getElementById('rp-heal-items');
   if (rpHeal) rpHeal.innerHTML = buildHealingItemRowsHtml('result');
@@ -16251,11 +16553,21 @@ function buildInventorySummaryHtml(options = {}) {
     + '</div></div>';
 }
 
+// v0.3.57：小V的家「背包」功能卡和最上方的背包大卡片重複 → 隱藏功能卡，改在大卡片下方放「查看完整背包」
+function openHomeFullInventory() {
+  const card = document.getElementById('hcard-inv');
+  if (card) card.click();
+  const sec = document.getElementById('home-inventory-section');
+  if (sec && sec.scrollIntoView) setTimeout(() => { try { sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} }, 50);
+}
+if (typeof window !== 'undefined') window.openHomeFullInventory = openHomeFullInventory;
 // 小V的家最上方的背包摘要
 function renderHomeInventorySummary() {
   const el = document.getElementById('home-inventory-summary');
   if (!el) return;
-  el.innerHTML = buildInventorySummaryHtml({ showHp: true }); // v0.3.34：含血量
+  try { const c = document.getElementById('hcard-inv'); if (c) c.style.display = 'none'; } catch (e) {}
+  el.innerHTML = buildInventorySummaryHtml({ showHp: true }) // v0.3.34：含血量
+    + '<button class="inv-sum__more" onclick="openHomeFullInventory()">查看完整背包 ▸</button>';
 }
 
 // 結算頁置頂的背包摘要（populateResultPanel 會先建立容器）
@@ -16325,8 +16637,8 @@ function renderHomeSupply() {
     || (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST);
 
   el.innerHTML =
-    '<div class="home-row"><span class="home-row-label">❤️ 目前生命</span>'
-    + '<span class="home-row-val result-red">' + player.hp + ' / ' + player.maxHp + '</span></div>'
+    '<div class="home-row"><span class="home-row-label">目前生命</span>'
+    + '<span class="home-row-val result-red hv-hp-inline" id="home-supply-hp">' + buildHpHeartsHtml() + ' <b>' + formatHpText() + '</b></span></div>'
     + '<div class="home-supply-item">'
     + '<div><span class="home-row-label">🩹 愛心貼布</span>'
     + '<span style="color:#888;font-size:11px;margin-left:6px">20 ' + itemIconHtml('coin', '🪙') + ' +1 ❤️</span></div>'
@@ -16443,8 +16755,7 @@ function homeMakeDog() {
     if (typeof populateResultPanel === 'function' && document.getElementById('result-panel-body')) {
       populateResultPanel();
     }
-    const supplyHp = document.getElementById('supply-hp');
-    if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
+    refreshAllHpDisplays(); // v0.3.57
     if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
   } else {
     showCraftMessage('260 氣球不足，無法製作氣球小狗');
@@ -16861,14 +17172,17 @@ function openPauseBag() {
   if (getLollipopCount() > 0) {
     healHtml += '<div class="pause-bag-heal-item" style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:7px 10px;background:rgba(255,255,255,0.06);border-radius:8px">'
       + '<span style="font-size:1.3em">🍭</span>'
-      + '<span style="flex:1"><b>氣球棒棒糖</b> x' + getLollipopCount()
+      + '<span style="flex:1"><b>氣球棒棒糖（舊庫存）</b> x' + getLollipopCount()
       + '<span style="color:#aaa;font-size:0.85em;display:block">效果：回復 ' + LOLLIPOP_HEAL + ' 心</span></span>'
       + '<button style="padding:4px 12px;border-radius:6px;background:#4caf7d;color:#fff;border:none;cursor:pointer;font-size:0.9em" '
       + 'onclick="useBalloonLollipop()">使用</button></div>';
   }
 
+  // v0.3.57：暫停背包最上方顯示目前生命（和其他畫面同一套愛心），可直接使用補血道具
+  const hpHtml = '<div class="pause-bag-hp" id="pause-bag-hp">' + buildHpHeartsHtml() + '<b>' + formatHpText() + '</b></div>';
+  if (!healHtml) healHtml = '<div style="color:#aaa;font-size:0.85em;padding:4px 2px">目前沒有補血道具（可以在小V的家商店購買繃帶、急救包）</div>';
   const body = document.getElementById('pause-bag-body');
-  body.innerHTML = (items.length
+  body.innerHTML = hpHtml + (items.length
     ? '<div class="inv-grid">' + items.map(i =>
         '<div class="inv-item ' + i.cls + '">'
         + '<div class="inv-item__icon">' + i.e + '</div>'
@@ -17227,10 +17541,30 @@ function openGuidebook() {
   if (el) el.style.display = 'flex';
 }
 
+// v0.3.57：暫停選單 → 氣球秘笈（遊戲維持暫停；關閉秘笈回到暫停選單，不會直接恢復冒險）
+var guidebookFromPause = false;
+function openGuidebookFromPause() {
+  if (gameState === 'playing') pauseGame();
+  if (gameState !== 'paused') return;
+  guidebookFromPause = true;
+  if (typeof closePauseBag === 'function') closePauseBag();
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) pauseEl.style.display = 'none';
+  openGuidebook();
+}
+function isGuidebookOpen() {
+  const el = document.getElementById('guidebook-overlay');
+  return !!(el && el.style.display && el.style.display !== 'none');
+}
 function closeGuidebook() {
   const el = document.getElementById('guidebook-overlay');
   if (el) el.style.display = 'none';
+  if (guidebookFromPause) {
+    guidebookFromPause = false;
+    if (gameState === 'paused') { const pauseEl = document.getElementById('pause-overlay'); if (pauseEl) pauseEl.style.display = 'flex'; }
+  }
 }
+if (typeof window !== 'undefined') window.openGuidebookFromPause = openGuidebookFromPause;
 
 function renderGuidebook() {
   const list = document.getElementById('guidebook-recipe-list');
@@ -17274,13 +17608,16 @@ function renderGuidebook() {
     let craftBtnText = canCraft ? '製作' : '材料不足';
     let craftDisabled = !canCraft;
     if (recipe.maxOne && owned >= 1)  { craftBtnText = '已在小V的家'; craftDisabled = true; }
+    if (recipe.eatOnCraft && canCraft && player.hp >= (player.maxHp || 3)) { craftBtnText = '生命已滿'; craftDisabled = true; } // v0.3.57
     if (recipe.comingSoon)            { craftBtnText = '即將開放'; craftDisabled = true; }
 
     const durLine = recipe.durability > 0
       ? `<div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>` : '';
     const ownedLabel = isDog
       ? (owned > 0 ? '<span class="recipe-card__owned">已在小V的家</span>' : '')
-      : (owned > 0 ? `<span class="recipe-card__owned">已擁有 ${owned} 把</span>` : '');
+      : recipe.eatOnCraft
+        ? (owned > 0 ? `<span class="recipe-card__owned">背包舊庫存 ${owned} 支</span>` : '') // v0.3.57：舊版做的棒棒糖仍可在背包使用
+        : (owned > 0 ? `<span class="recipe-card__owned">已擁有 ${owned} 把</span>` : '');
 
     card.innerHTML = `
       <div class="recipe-card__header">
@@ -17299,7 +17636,7 @@ function renderGuidebook() {
 
     // 製作按鈕事件
     const btn = card.querySelector('.recipe-card__btn');
-    if (btn && canCraft) {
+    if (btn && !craftDisabled) {
       ['click', 'touchstart'].forEach(ev =>
         btn.addEventListener(ev, e => {
           e.preventDefault();
@@ -17312,6 +17649,7 @@ function renderGuidebook() {
           if (ok) {
             let craftMsg = `成功製作 ${recipe.name}！`;
             if (recipe.id === 'balloonDog') craftMsg = '🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5';
+            if (recipe.eatOnCraft) craftMsg = '🍭 氣球棒棒糖完成！小V開心地吃掉了棒棒糖！💗 生命恢復 +' + formatHealAmount(player.hp - _hpBeforeCraft); // v0.3.57
             showCraftMessage(craftMsg);
             // 製作 basicHammer 後提示如何使用
             if (recipe.id === 'basicHammer' && !stageFlowHints.hammerCraftHintShown) {
@@ -17329,8 +17667,7 @@ function renderGuidebook() {
             renderGuidebook();
             refreshResultBag();
             // 更新生命顯示
-            const supplyHp = document.getElementById('supply-hp');
-            if (supplyHp) supplyHp.textContent = player.hp + ' / ' + player.maxHp;
+            refreshAllHpDisplays(); // v0.3.57
             if (recipe.id === 'balloonDog') {
               refreshResultDog();      // 結算畫面狗區塊
               if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus(); // 結算主 HP
@@ -17345,7 +17682,8 @@ function renderGuidebook() {
             try {
               const newBtn = document.querySelector('#guidebook-recipe-list .recipe-card__btn[data-id="' + recipe.id + '"]');
               playCraftSuccessFx(newBtn ? newBtn.closest('.recipe-card') : null, recipe);
-              const healed = player.hp - _hpBeforeCraft; // 氣球小狗：原本就有的製作療癒 +0.5（不重複補）
+              const healed = player.hp - _hpBeforeCraft; // 氣球小狗：原本就有的製作療癒 +0.5／棒棒糖：現做現吃 +0.5（不重複補）
+              if (healed > 0 && gameState === 'paused' && typeof triggerAdventureHealFx === 'function') triggerAdventureHealFx(healed, false); // 暫停中做的 → 回到冒險時小V身上也播
               // 補血愛心從秘笈上方的訊息列飄出（和製作成功的星星分開，不疊在一起）
               if (healed > 0) setTimeout(() => { try { const cm = document.getElementById('craft-message'); playHealFeedbackDom(healed, false, (cm && isElVisible(cm)) ? cm : null); } catch (er) {} }, 250);
             } catch (er) {}
@@ -17381,17 +17719,17 @@ function clearCraftFxDom() {
 function playCraftSuccessFx(cardEl, recipe) {
   if (typeof document === 'undefined' || !document.body) return;
   ensureCraftFxStyles();
-  const el = (cardEl && isElVisible(cardEl)) ? cardEl : document.getElementById('guidebook-recipe-list');
+  const el = (cardEl && isElVisible(cardEl)) ? cardEl : document.getElementById((recipe && recipe.shopBuy) ? 'home-shop-body' : 'guidebook-recipe-list');
   const r0 = el ? el.getBoundingClientRect() : { left: window.innerWidth / 2 - 100, top: window.innerHeight / 2, width: 200, height: 60 };
   // 卡片若在捲動區外（被捲走），演出位置夾在秘笈清單看得到的範圍內，不會跑到面板外
-  const list = document.getElementById('guidebook-recipe-list');
+  const list = (recipe && recipe.shopBuy) ? null : document.getElementById('guidebook-recipe-list');
   const lb = (list && isElVisible(list)) ? list.getBoundingClientRect() : null;
   const r = { left: r0.left, width: r0.width, height: Math.min(r0.height, 120),
               top: lb ? Math.max(lb.top + 10, Math.min(r0.top, lb.bottom - 70)) : r0.top };
   // 卡片回彈 + 柔光
   if (cardEl) { cardEl.classList.remove('hv-craft-pop'); void cardEl.offsetWidth; cardEl.classList.add('hv-craft-pop'); setTimeout(() => { try { cardEl.classList.remove('hv-craft-pop'); } catch (e) {} }, 950); }
   // 製作區局部震動（2～3px、0.2 秒）
-  const box = document.getElementById('guidebook-recipe-list');
+  const box = (recipe && recipe.shopBuy) ? document.getElementById('home-shop-body') : document.getElementById('guidebook-recipe-list');
   if (box) { box.classList.remove('hv-heal-shake'); void box.offsetWidth; box.classList.add('hv-heal-shake'); setTimeout(() => { try { box.classList.remove('hv-heal-shake'); } catch (e) {} }, 260); }
   // 星星 / 氣球 / 亮點往上飄（固定位置的動畫層，不受卡片重建影響）
   const icons = ['⭐', '🎈', '✨', '🎈', '⭐', '✨', '🎈'];
@@ -17410,7 +17748,7 @@ function playCraftSuccessFx(cardEl, recipe) {
   });
   const tx = document.createElement('div');
   tx.className = 'hv-craft-fx-text';
-  tx.textContent = '🎈 製作成功！' + (recipe ? (recipe.emoji || '') + ' ' + recipe.name : '');
+  tx.textContent = (recipe && recipe.shopBuy) ? ('🛒 購買成功！' + (recipe.emoji || '') + ' ' + recipe.name) : (recipe && recipe.eatOnCraft) ? '🍭 氣球棒棒糖完成！小V開心地吃掉了！' : ('🎈 製作成功！' + (recipe ? (recipe.emoji || '') + ' ' + recipe.name : ''));
   tx.style.left = (r.left + w / 2) + 'px';
   tx.style.top = Math.max(4, r.top - 30) + 'px';
   document.body.appendChild(tx);
@@ -17920,9 +18258,16 @@ if (typeof window !== 'undefined') {
 }
 
 // ── Game loop ─────────────────────────────────
+// v0.3.57：固定時間步長（fixed timestep）— 遊戲邏輯一律以 1/60 秒為一步推進：
+//   很多系統（鏡頭前進、敵人移動、攻擊冷卻、無敵時間、受傷閃爍、投射物…）原本是「每幀 +固定值」，
+//   在 90 / 120Hz 螢幕上會變快 1.5～2 倍。改成依真實經過時間累積，每滿 16.67ms 才跑一次 update(1, 16.667)，
+//   60 / 90 / 120Hz 裝置的遊戲速度完全一致。回到前景時最多補 5 步（約 83ms），避免 dt 太大造成瞬移。
+const FIXED_STEP_MS = 1000 / 60;
+const FIXED_MAX_STEPS = 5;
+let fixedStepAccumulator = 0;
+let fixedStepCount = 0; // debug：累計邏輯步數
 function loop(timestamp) {
-  const dtMs = lastTime ? Math.min(timestamp - lastTime, 50) : 16.667;
-  const dt   = dtMs / 16.667; // frame multiplier for physics (1.0 at 60fps)
+  const rawDelta = lastTime ? (timestamp - lastTime) : FIXED_STEP_MS;
   lastTime   = timestamp;
 
   // v0.3.12-test-2：核心素材尚未就緒時，只繪製等待畫面，不跑 update/draw，
@@ -17960,13 +18305,22 @@ function loop(timestamp) {
     return;
   }
 
-  if (!screenFreezeForTest) {
-    update(dt, dtMs); // 測試版 F8 凍結時跳過 update（不扣時間/不推進動畫）
+  fixedStepAccumulator += Math.max(0, Math.min(rawDelta, 250));
+  let steps = 0;
+  // 容許 1ms 誤差：60Hz 螢幕的 rAF 間隔在 16.6～16.8ms 之間跳動，不會出現「這幀 0 步、下幀 2 步」的抖動
+  while (fixedStepAccumulator >= FIXED_STEP_MS - 1 && steps < FIXED_MAX_STEPS) {
+    // v0.3.57：手機「開始冒險」之前不推進遊戲（不扣時間、鏡頭不前進、敵人不動、不會受傷）
+    if (!screenFreezeForTest && !isGameStartGateActive()) update(1, FIXED_STEP_MS); // 測試版 F8 凍結時跳過 update
+    fixedStepAccumulator -= FIXED_STEP_MS;
+    steps++; fixedStepCount++;
   }
-  draw();  // 保留 draw，讓畫面可截圖
+  if (steps >= FIXED_MAX_STEPS) fixedStepAccumulator = 0; // 落後太多（切回前景 / 卡頓）→ 直接丟掉，不追趕
+  // 有推進邏輯才重畫（畫面內也有依幀推進的動畫計時，120Hz 不會因為多畫一次而變快）
+  if (steps > 0) draw();
 
   requestAnimationFrame(loop);
 }
+if (typeof window !== 'undefined') window.debugTiming = () => { const o = { fixedStepMs: FIXED_STEP_MS, steps: fixedStepCount, accumulator: fixedStepAccumulator, startGate: isGameStartGateActive(), gameState }; console.log('[Timing]', o); return o; };
 
 
 // ── ensurePlayerProfileSaved：若 localStorage 無 profile，保存預設值 ──
@@ -17993,6 +18347,7 @@ ensurePlayerProfileSaved();           // 確保 localStorage 有落地
 //   全部改由 asset manifest + preloadAssetGroup() 控制；載好的圖片會放進原本的快取，原有的 getXXXImg() 照常使用
 runWithAssetGate(['common', 'chapter1'], '派對島準備中...', () => {
   assetBootReady = true;
+  try { renderStartGate(); } catch (e) {} // v0.3.57：手機 → 顯示「橫向 / 全螢幕 / 開始冒險」準備畫面（遊戲邏輯還沒開始）
   // v0.3.55：開機完成後在背景預載小狗動作圖（不擋開機；晚到的圖照規則等下一次進關才套用）
   try { setTimeout(() => { try { preloadAssetGroup('dog'); } catch (e) {} }, 1500); } catch (e) {}
 });

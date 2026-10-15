@@ -2831,3 +2831,133 @@ html, body {
   border-color: rgba(255, 160, 60, 0.55) !important;
   background: rgba(160, 80, 10, 0.18) !important;
 }
+
+/* ═════════════════════════════════════════════════════════
+   v0.3.57：手機開始流程 / 愛心 / 置頂大卡片 / 暫停選單統一風格
+   （只新增，不改舊規則的意義）
+   ═════════════════════════════════════════════════════════ */
+/* 手機開始畫面（橫向 → 全螢幕 → 開始冒險） */
+.hv-ui-overlay {
+  position: fixed; inset: 0; z-index: 13000;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(40,28,90,0.92) 0%, rgba(8,6,30,0.97) 75%);
+  padding: 16px; box-sizing: border-box;
+  font-family: var(--font-home, 'Nunito', sans-serif);
+}
+.hv-ui-card {
+  background: linear-gradient(160deg, rgba(26,24,64,0.98) 0%, rgba(17,13,48,0.98) 100%);
+  border: 1.5px solid rgba(162,155,254,0.45);
+  border-radius: 20px;
+  box-shadow: 0 0 36px rgba(162,155,254,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+  color: #fff; text-align: center;
+  padding: 22px 26px; max-width: 420px; width: 100%; box-sizing: border-box;
+}
+.start-gate-title { font-size: 20px; font-weight: 900; color: #FFE27A; margin-bottom: 4px; }
+.start-gate-stage { font-size: 14px; color: #C8C0FF; margin-bottom: 14px; }
+.start-gate-icon  { font-size: 40px; margin: 6px 0; }
+.start-gate-msg   { font-size: 16px; font-weight: 800; margin: 6px 0 12px; }
+.start-gate-msg b { color: #FFE27A; }
+.start-gate-sub   { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 10px; }
+.hv-ui-btn {
+  display: inline-block; padding: 12px 26px; border-radius: 14px;
+  border: 1.5px solid rgba(162,155,254,0.4); background: rgba(162,155,254,0.12);
+  color: #fff; font-size: 15px; font-weight: 900; cursor: pointer;
+  font-family: inherit; -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s cubic-bezier(.34,1.56,.64,1);
+}
+.hv-ui-btn:active { transform: scale(0.96); }
+.hv-ui-btn--primary {
+  background: linear-gradient(135deg, #55EFC4, #74B9FF); color: #0F0E2B;
+  border-color: transparent; box-shadow: 0 4px 16px rgba(85,239,196,0.4);
+}
+.hv-ui-btn--big { font-size: 19px; padding: 15px 40px; }
+@media (max-height: 420px) {
+  .hv-ui-card { padding: 14px 20px; }
+  .start-gate-title { font-size: 17px; }
+  .start-gate-icon { font-size: 30px; }
+  .start-gate-msg { margin: 4px 0 8px; }
+}
+
+/* 愛心（滿 / 半 / 空）— 所有畫面同一套 SVG，不再用 emoji 裁切 */
+.hv-hearts { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.hv-heart  { width: 20px; height: 20px; flex: 0 0 auto; display: block; }
+.inv-sum__hp .hv-heart   { width: 20px; height: 20px; }
+.rp-supply-hp-row .hv-heart { width: 24px; height: 24px; }
+#home-supply-hp .hv-heart { width: 22px; height: 22px; }
+#home-supply-hp { display: inline-flex; align-items: center; gap: 6px; }
+#home-supply-hp b, .inv-sum__hp b { color: #ff9fb0; }
+.inv-sum__hp { display: inline-flex; align-items: center; gap: 4px; }
+
+/* 暫停背包：目前生命 */
+.pause-bag-hp {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 8px; border-radius: 12px;
+  background: rgba(255,90,140,0.10); border: 1px solid rgba(255,140,170,0.3);
+}
+.pause-bag-hp .hv-heart { width: 24px; height: 24px; }
+.pause-bag-hp b { color: #ff9fb0; font-size: 16px; }
+
+/* 置頂狀態：大卡片版（取代小 emoji 列），與上緣保留 12px 安全距離 */
+.sticky-status { top: 12px; }
+.sticky-status__bar::before { display: none; }
+.sticky-status__bar.sticky-card {
+  display: block; white-space: normal;
+  border: 1.5px solid rgba(162,155,254,0.5); border-radius: 14px;
+  background: linear-gradient(160deg, #1d1a4a 0%, #120f36 100%);
+  box-shadow: 0 0 18px rgba(162,155,254,0.25), 0 6px 14px rgba(0,0,0,0.5);
+  padding: 8px 12px 10px;
+}
+.sticky-card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.sticky-card__title { font-weight: 900; color: #D4C8FF; font-size: 14px; }
+.sticky-card__hp { display: inline-flex; align-items: center; gap: 6px; }
+.sticky-card__hp b { color: #ff9fb0 !important; font-size: 15px; }
+.sticky-card__hp--low b { color: #ff5c5c !important; }
+.sticky-card__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.sticky-card__cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.06); border-radius: 10px; padding: 5px 4px;
+}
+.sticky-card__lbl { font-size: 11.5px; color: #C8C0FF; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.sticky-card__lbl img { width: 16px; height: 16px; }
+.sticky-card__cell b { font-size: 16px; color: #ffd84a; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .sticky-status { top: 12px; }
+  .sticky-status__bar.sticky-card { padding: 6px 10px 7px; }
+  .sticky-card__top { margin-bottom: 4px; }
+  .sticky-card__cell { flex-direction: row; justify-content: center; gap: 6px; padding: 4px; }
+  .sticky-card__cell b { font-size: 14px; }
+  .sticky-card__hp .hv-heart { width: 18px; height: 18px; }
+}
+@media (max-width: 420px) {
+  .sticky-card__grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* 小V的家：背包摘要底部「查看完整背包」 */
+.inv-sum__more {
+  display: block; width: 100%; margin-top: 10px; padding: 10px 12px;
+  border-radius: 12px; border: 1.5px solid rgba(162,155,254,0.45);
+  background: rgba(162,155,254,0.12); color: #D4C8FF;
+  font-size: 14px; font-weight: 900; cursor: pointer; font-family: inherit;
+}
+.inv-sum__more:active { transform: scale(0.98); }
+
+/* 結算頁：獎章移到標題下方 */
+.rp-awards--top { margin: 6px 0 10px; justify-content: center; }
+
+/* 暫停選單：與結算頁 / 小V的家同一套深紫圓角卡片 + 發光邊框（只整理，不大改） */
+#pause-panel {
+  border: 1.5px solid rgba(162,155,254,0.5);
+  box-shadow: 0 0 36px rgba(162,155,254,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
+  max-width: 340px;
+}
+#pause-title { font-size: 20px; color: #FFE27A; }
+.pause-btn { font-size: 15px; padding: 13px 20px; }
+.pause-bag-inner {
+  border: 1.5px solid rgba(162,155,254,0.5) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 0 30px rgba(162,155,254,0.25) !important;
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #pause-title { font-size: 15px; }
+  .pause-btn { padding: 8px 16px; font-size: 13px; }
+}
