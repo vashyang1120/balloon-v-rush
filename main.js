@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.55-dog-animation-heal-feedback-test-1';
-const BUILD_TIME   = '2026-10-15 21:00';
+const GAME_VERSION = 'adventure-v0.3.56-dog-polish-lollipop-craft-feedback-test-1';
+const BUILD_TIME   = '2026-10-15 23:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2750,6 +2750,8 @@ window.addEventListener('keydown', e => {
     else showHint('尚未擁有基礎氣球槌', 150);
     return;
   }
+  // v0.3.56：測試版 ` 鍵 → 狗狗視覺校準面板
+  if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'Backquote') { toggleDogCalibPanel(); e.preventDefault(); return; }
   // 測試版：F3 開 / 關 projectile orange hitbox debug 紅框（不與 F7 / F9 / F10 互斥）
   if (ADVENTURE_TEST_TOOLS_ENABLED && e.code === 'F3') {
     projectileOrangeHitboxDebugVisible = !projectileOrangeHitboxDebugVisible;
@@ -3079,7 +3081,7 @@ const RECIPES = [
   {
     id:         'balloonLollipop',
     name:       '氣球棒棒糖',
-    effect:     '可愛的氣球點心（未來可作為補血道具）',
+    effect:     '可愛的氣球點心。做好後放在背包裡，需要時使用：回復 ❤️ +0.5（不會超過生命上限；製作時不會自動補血）。',
     durability: 0,
     cost:       { balloon260: 2 },
     emoji:      '🍭',
@@ -13399,6 +13401,10 @@ const DOG_ART_ASSETS = {
   run2: 'assets/adventure/companions/dog/dog_run_02.png',
   run3: 'assets/adventure/companions/dog/dog_run_03.png',
   run4: 'assets/adventure/companions/dog/dog_run_04.png',
+  // v0.3.56：跳躍上升 / 下落（repo 實際檔名；兩張都是 448×448）
+  jumpUp:   'assets/adventure/companions/dog/dog_jump_up.png',
+  jumpFall: 'assets/adventure/companions/dog/dog_jump_fall.png',
+  // 未來：sad: 'assets/adventure/companions/dog/dog_sad.png'（加上這行 + DOG_ART_SRC.sad + DOG_ART.hurtFrame = 'sad' 即可）
 };
 const DOG_ART_SRC = {
   idle: { collarX: 324, feetY: 460, noseX: 397, noseY: 267 },
@@ -13406,16 +13412,24 @@ const DOG_ART_SRC = {
   run2: { collarX: 267, feetY: 390, noseX: 367, noseY: 214 },
   run3: { collarX: 307, feetY: 389, noseX: 396, noseY: 194 },
   run4: { collarX: 347, feetY: 402, noseX: 431, noseY: 214 },
+  // v0.3.56：量自 dog_jump_up.png / dog_jump_fall.png（蝴蝶結中心、最低腳底、粉紅鼻子中心）
+  jumpUp:   { collarX: 320, feetY: 409, noseX: 382, noseY: 160 },
+  jumpFall: { collarX: 246, feetY: 395, noseX: 371, noseY: 265 },
 };
-const DOG_ART = {
-  scale: 0.20,          // 原圖像素 × 0.20：站姿約 74×64px、跑姿約 85×63px（小V 約 160px 高 → 到小V膝蓋～腰）
-  behindX: 58,          // 蝴蝶結距離小V中心（往後方）58px → 狗在小V的左後方 / 右後方、靠近腳邊
+// v0.3.56：使用者實測後的建議初值（測試版可用 ` 鍵開「狗狗校準」即時調整）
+const DOG_ART_DEFAULTS = {
+  scale: 0.16,          // 原圖像素 × 0.16：站姿約 60×51px、跑姿約 68×51px
+  behindX: 45,          // 蝴蝶結距離小V中心（往後方）45px
   footOffsetY: 2,       // 腳底比小V腳底再低 2px（貼地）
-  runFrameMs: 105,      // 跑步 4 格循環，每格 105ms（整圈 0.42 秒）
-  jumpFrame: 'run1',    // 跳躍上升：暫用 run_01（停止跑步循環）
-  fallFrame: 'run2',    // 下落：暫用 run_02（四腳收在身體下方，準備落地）
-  attackFrame: 'idle',  // 攻擊：暫用 idle（之後換 dog_angry）
+  runFrameMs: 150,      // 跑步 4 格循環，每格 150ms（整圈 0.6 秒）
 };
+const DOG_ART = Object.assign({}, DOG_ART_DEFAULTS, {
+  jumpFrame: 'jumpUp',    // v0.3.56：跳躍上升 → dog_jump_up
+  fallFrame: 'jumpFall',  // v0.3.56：下落 → dog_jump_fall
+  attackFrame: 'idle',    // 攻擊：暫用 idle（之後換 dog_angry）
+  hurtFrame: 'idle',      // v0.3.56：小V受傷時的反應圖（dog_sad.png 還沒有 → 暫用 idle）
+});
+const DOG_ART_LS_KEY = 'balloonV_dogArtCalib__' + GAME_VERSION; // 只存狗狗視覺校準 4 個數字（測試版）
 const dogArtImgs = {}, dogArtStatus = {};
 let dogArtModeLock = null;   // 'sprite' | 'vector'：每關開始時決定一次（遊玩中不換圖）
 let dogRunAnimStart = 0, dogWasRunning = false, dogLastDraw = null;
@@ -13423,10 +13437,16 @@ function getDogArtImg(key) { const im = dogArtImgs[key]; return (im && im.comple
 function isDogArtReady() { return Object.keys(DOG_ART_ASSETS).every(k => getDogArtImg(k)); }
 function dogNowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
 // 小V目前狀態 → 小狗動作
+// v0.3.56：和小V完全相同的受傷判定（damagePlayer 設的 player.invincible；Boss 勝利保護不使用它）
+function isPlayerHurtFlashing() { return player.invincible > 0; }
+function isPlayerHurtBlinkHidden() { return player.invincible > 0 && frameCount % 6 < 3; } // 和 drawPlayer 同一條閃爍規則
+function getDogFrameKey(key) { return DOG_ART_ASSETS[key] && DOG_ART_SRC[key] ? key : 'idle'; }
 function getDogPoseKey() {
   const heroKey = (typeof _heroLastArtKey === 'string') ? _heroLastArtKey : '';
-  if (heroKey.startsWith('swordAttack') || heroKey.startsWith('hammerAttack')) { dogWasRunning = false; return { key: DOG_ART.attackFrame, state: 'attack' }; }
-  if (!player.onGround) { dogWasRunning = false; return player.vy < 0 ? { key: DOG_ART.jumpFrame, state: 'jump' } : { key: DOG_ART.fallFrame, state: 'fall' }; }
+  // 受傷閃爍優先於跑步 / 跳躍 / 攻擊；閃爍結束立刻回到正確動作
+  if (isPlayerHurtFlashing()) { dogWasRunning = false; return { key: getDogFrameKey(DOG_ART.hurtFrame), state: 'hurt' }; }
+  if (heroKey.startsWith('swordAttack') || heroKey.startsWith('hammerAttack')) { dogWasRunning = false; return { key: getDogFrameKey(DOG_ART.attackFrame), state: 'attack' }; }
+  if (!player.onGround) { dogWasRunning = false; return player.vy < 0 ? { key: getDogFrameKey(DOG_ART.jumpFrame), state: 'jump' } : { key: getDogFrameKey(DOG_ART.fallFrame), state: 'fall' }; }
   const moving = Math.abs(player.vx || 0) > 0.1;
   if (!moving) { dogWasRunning = false; return { key: 'idle', state: 'idle' }; }
   const now = dogNowMs();
@@ -13455,11 +13475,16 @@ function drawCompanionDog(cx) {
   const mode = getDogArtMode();
   if (mode === 'none') return;
   if (mode !== 'sprite') { // fallback：原本的向量小狗（同樣跟在小V腳邊）
+    if (isPlayerHurtBlinkHidden()) return; // v0.3.56：fallback 也同步閃爍
     drawBalloonDog(a.x - cx, a.y - 12);
     dogLastDraw = { mode: 'vector', x: a.x - cx, y: a.y };
     return;
   }
   const pose = getDogPoseKey();
+  if (pose.state === 'hurt' && isPlayerHurtBlinkHidden()) { // 小V閃爍消失的那幾幀，狗也一起消失
+    dogLastDraw = { mode: 'sprite', pose: pose.key, state: 'hurt', hiddenBlink: true };
+    return;
+  }
   const img = getDogArtImg(pose.key), S = DOG_ART_SRC[pose.key], k = DOG_ART.scale;
   const sx = a.x - cx, sy = a.y;
   const w = img.naturalWidth * k, h = img.naturalHeight * k;
@@ -13498,10 +13523,63 @@ function drawDogNoseGlow(nx, ny) {
   ctx.fillText('L' + level, nx, ny + 12);
   ctx.restore();
 }
+// ── v0.3.56：狗狗視覺校準（測試版限定；` 鍵開關；只存 4 個數字到 DOG_ART_LS_KEY）──
+function loadDogArtCalib() {
+  try {
+    const raw = localStorage.getItem(DOG_ART_LS_KEY); if (!raw) return;
+    const d = JSON.parse(raw);
+    Object.keys(DOG_ART_DEFAULTS).forEach(k => { if (d && typeof d[k] === 'number' && isFinite(d[k])) DOG_ART[k] = d[k]; });
+  } catch (e) {}
+}
+function saveDogArtCalib() {
+  try { const o = {}; Object.keys(DOG_ART_DEFAULTS).forEach(k => { o[k] = DOG_ART[k]; }); localStorage.setItem(DOG_ART_LS_KEY, JSON.stringify(o)); } catch (e) {}
+}
+if (typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED) loadDogArtCalib();
+const DOG_CALIB_FIELDS = [
+  { k: 'scale',       label: '狗狗大小 scale',      min: 0.08, max: 0.30, step: 0.005 },
+  { k: 'behindX',     label: '與小V距離 behindX',  min: 0,    max: 100,  step: 1 },
+  { k: 'footOffsetY', label: '腳底上下 footOffsetY', min: -20, max: 20,   step: 1 },
+  { k: 'runFrameMs',  label: '跑步每格 ms',          min: 60,   max: 300,  step: 5 },
+];
+function getDogArtCalibText() {
+  return 'const DOG_ART_DEFAULTS = { scale: ' + DOG_ART.scale + ', behindX: ' + DOG_ART.behindX + ', footOffsetY: ' + DOG_ART.footOffsetY + ', runFrameMs: ' + DOG_ART.runFrameMs + ' };';
+}
+function toggleDogCalibPanel(force) {
+  if (typeof ADVENTURE_TEST_TOOLS_ENABLED === 'undefined' || !ADVENTURE_TEST_TOOLS_ENABLED) return false; // 正式版不顯示
+  let el = document.getElementById('dog-calib-panel');
+  const show = (force != null) ? !!force : !(el && el.style.display !== 'none');
+  if (!show) { if (el) el.style.display = 'none'; return true; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dog-calib-panel';
+    el.style.cssText = 'position:fixed;top:8px;right:8px;z-index:100200;width:250px;max-width:70vw;background:rgba(10,8,30,.9);color:#fff;'
+      + 'font:12px/1.4 sans-serif;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);box-shadow:0 4px 14px rgba(0,0,0,.4)';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
+  el.innerHTML = '<div style="font-weight:bold;color:#ffe066;margin-bottom:4px">🐶 狗狗校準（測試版，` 鍵關閉）</div>'
+    + DOG_CALIB_FIELDS.map(f => '<div style="margin:4px 0"><div style="display:flex;justify-content:space-between"><span>' + f.label + '</span><b id="dogcal-v-' + f.k + '">' + DOG_ART[f.k] + '</b></div>'
+      + '<input type="range" id="dogcal-' + f.k + '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + DOG_ART[f.k] + '" style="width:100%"></div>').join('')
+    + '<div style="display:flex;gap:6px;margin-top:6px"><button id="dogcal-reset" style="flex:1">回復預設</button><button id="dogcal-copy" style="flex:1">複製參數</button></div>'
+    + '<div id="dogcal-msg" style="color:#9ff;margin-top:4px;min-height:14px"></div>';
+  DOG_CALIB_FIELDS.forEach(f => {
+    const inp = document.getElementById('dogcal-' + f.k);
+    inp.addEventListener('input', () => { DOG_ART[f.k] = Number(inp.value); document.getElementById('dogcal-v-' + f.k).textContent = DOG_ART[f.k]; saveDogArtCalib(); });
+    ['keydown', 'keyup'].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation())); // 方向鍵調滑桿時不要讓小V移動
+  });
+  document.getElementById('dogcal-reset').onclick = () => { Object.assign(DOG_ART, DOG_ART_DEFAULTS); try { localStorage.removeItem(DOG_ART_LS_KEY); } catch (e) {} toggleDogCalibPanel(true); };
+  document.getElementById('dogcal-copy').onclick = () => {
+    const t = getDogArtCalibText(); console.log('[DogArtCalib] ' + t);
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(() => {}); } catch (e) {}
+    const m = document.getElementById('dogcal-msg'); if (m) m.textContent = '已複製（也印在 console）';
+  };
+  return true;
+}
+if (typeof window !== 'undefined') { window.toggleDogCalibPanel = toggleDogCalibPanel; window.openDogCalib = () => toggleDogCalibPanel(true); }
 function debugDog() {
   const info = { bringBalloonDog, nextBringDog, dog: playerInventory.balloonDog, mode: dogArtModeLock || '(本關尚未畫過)', allLoaded: isDogArtReady(),
     images: Object.fromEntries(Object.keys(DOG_ART_ASSETS).map(k => { const im = getDogArtImg(k); return [k, (dogArtStatus[k] || '-') + (im ? ' ' + im.naturalWidth + '×' + im.naturalHeight : '')]; })),
-    settings: Object.assign({}, DOG_ART), lastDraw: dogLastDraw, noseLevel: dogNoseLevel };
+    settings: Object.assign({}, DOG_ART), lastDraw: dogLastDraw, noseLevel: dogNoseLevel, hurtFlashing: isPlayerHurtFlashing() };
   console.log('[DogArt] 模式 ' + info.mode + '　圖片全部載好 ' + info.allLoaded + '　' + JSON.stringify(info.images));
   console.log(info);
   return info;
@@ -14241,6 +14319,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.56+：dog-polish-lollipop-craft-feedback → dog-candy-craft（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('dog-polish-lollipop-craft-feedback')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'dog-candy-craft' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.55+：dog-animation-heal-feedback → dog-heal（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('dog-animation-heal-feedback')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -14915,12 +14998,15 @@ function populateResultPanel() {
     // 這裡只在「下一步」沒有顯示帶狗行動時才補完整的提示+按鈕（例如已經安排好帶狗、
     // 或不在第一章流程內但仍有 hiddenTreasure 的情況），避免同一個按鈕重複出現兩次
     const nextStepAlreadyHandlesBringDog = nextStepInfo && nextStepInfo.kind === 'bringDog';
-    if (nextLvHasTreasure && !nextStepAlreadyHandlesBringDog) { // v0.3.33-fix-2：重新製作的小狗也能安排
+    // v0.3.56：帶狗出發不再綁定「下一關有沒有隱藏寶物」— 有狗、沒消氣、還有下一關就能自由選擇；寶物只是額外提示
+    if (dogTurns > 0 && nextLvIndex < LEVELS.length && !nextStepAlreadyHandlesBringDog) {
       dogInner += '<div class="rp-supply-hp" style="color:#ffe080">'
-        + '氣球小狗好像聞到了什麼……下一關也許有隱藏寶物，記得帶牠一起去！'
+        + (nextLvHasTreasure
+          ? '🐶 氣球小狗好像聞到了什麼……下一關也許藏著寶物！'
+          : '🐶 帶氣球小狗一起冒險！通關時牠還會療癒 ❤️ +' + CONFIG.DOG_HEAL_AMOUNT + '。')
         + '</div>';
       if (!nextBringDog) {
-        const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '氣球不足';
+        const btnLabel  = canBringDog ? '帶狗出發 -1 🎈' : '260 氣球不足';
         const btnDisStr = canBringDog ? '' : 'disabled';
         const btnCls    = canBringDog ? '' : 'rp-supply-btn--disabled';
         dogInner += '<div class="rp-supply-item" style="margin-top:6px">'
@@ -15341,7 +15427,7 @@ function ensureHealFxStyles() {
 }
 function clearHealFxDom() {
   if (typeof document === 'undefined' || !document.querySelectorAll) return;
-  document.querySelectorAll('.hv-heal-fx, .hv-heal-fx-text').forEach(e => { try { e.remove(); } catch (er) {} });
+  document.querySelectorAll('.hv-heal-fx, .hv-heal-fx-text, .hv-craft-fx, .hv-craft-fx-text').forEach(e => { try { e.remove(); } catch (er) {} }); // v0.3.56：製作演出一起清
 }
 function isElVisible(el) {
   if (!el || !el.getBoundingClientRect) return false;
@@ -15995,9 +16081,68 @@ function buildHealingItemRowsHtml(ctx) {
       + '<button id="' + btnId + '" class="rp-supply-btn rp-supply-btn--' + (disable ? 'disabled' : 'active') + '" '
       + (disable ? 'disabled' : '') + ' onclick="useHealingItemOutOfAdventure(\'' + id + '\')">'
       + label + '</button></div>';
-  }).join('');
+  }).join('') + buildLollipopRowHtml(ctx); // v0.3.56：氣球棒棒糖
 }
 
+// ── v0.3.56：氣球棒棒糖（氣球秘笈製作的物品；數量沿用 playerInventory.craftedItems.balloonLollipop）──
+const LOLLIPOP_HEAL = 0.5;
+function getLollipopCount() { return (playerInventory.craftedItems && playerInventory.craftedItems.balloonLollipop) || 0; }
+// 成功才扣 1 個、HP 才增加；回傳實際恢復量（0 = 沒用掉）
+function useBalloonLollipopCore() {
+  const have = getLollipopCount();
+  if (have <= 0) { showHint('沒有氣球棒棒糖，可以到氣球秘笈製作！', 160); return 0; }
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  if (player.hp >= maxHp) { showHint('生命已經滿了！', 140); return 0; } // 不消耗
+  const before = player.hp;
+  player.hp = Math.min(maxHp, player.hp + LOLLIPOP_HEAL);
+  playerInventory.craftedItems.balloonLollipop = have - 1;
+  saveInventory();
+  showHint('🍭 吃了氣球棒棒糖，回復 ' + formatHealAmount(player.hp - before) + ' 顆心！', 200);
+  return player.hp - before;
+}
+// 冒險中（暫停背包）
+function useBalloonLollipop() {
+  const gained = useBalloonLollipopCore();
+  if (gained > 0) {
+    openPauseBag(); // 刷新背包數量
+    triggerAdventureHealFx(gained, false);
+    try { playHealFeedbackDom(gained, false, document.getElementById('pause-bag-panel')); } catch (e) {}
+  }
+  return gained > 0;
+}
+// 結算頁 / 失敗畫面 / 小V的家
+function useBalloonLollipopOutOfAdventure() {
+  const gained = useBalloonLollipopCore();
+  if (gained > 0) {
+    syncOutOfAdventureHpToRetry(); // 失敗 / 時間到 → 重試時帶著補好的血量（不被舊快照倒回）
+    refreshAfterOutOfAdventureHeal();
+    try { playHealFeedbackDom(gained, false); } catch (e) {}
+  } else {
+    refreshAfterOutOfAdventureHeal();
+  }
+  return gained > 0;
+}
+function buildLollipopRowHtml(ctx) {
+  const have = getLollipopCount();
+  const unlocked = !!(playerInventory.unlockedRecipes && playerInventory.unlockedRecipes.balloonLollipop);
+  if (have <= 0 && !unlocked) return '';
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  const isFull = player.hp >= maxHp;
+  const disable = have <= 0 || isFull;
+  const label = have <= 0 ? '沒有棒棒糖' : isFull ? '生命已滿' : '使用';
+  if (ctx === 'home') {
+    return '<div class="home-supply-item heal-item-row">'
+      + '<div><span class="home-row-label">🍭 氣球棒棒糖 ×' + have + '</span>'
+      + '<span style="color:#888;font-size:11px;margin-left:6px">+' + LOLLIPOP_HEAL + ' ❤️</span></div>'
+      + '<button id="btn-home-use-lollipop" class="home-btn ' + (disable ? 'home-btn--dim' : 'home-btn--red') + '" '
+      + (disable ? 'disabled' : '') + ' onclick="useBalloonLollipopOutOfAdventure()">' + label + '</button></div>';
+  }
+  return '<div class="rp-supply-bandage-row heal-item-row"><div class="rp-supply-bandage-info">'
+    + '<span class="rp-supply-name">🍭 氣球棒棒糖 ×' + have + '</span>'
+    + '<span class="rp-supply-price">+' + LOLLIPOP_HEAL + ' ❤️</span></div>'
+    + '<button id="btn-result-use-lollipop" class="rp-supply-btn rp-supply-btn--' + (disable ? 'disabled' : 'active') + '" '
+    + (disable ? 'disabled' : '') + ' onclick="useBalloonLollipopOutOfAdventure()">' + label + '</button></div>';
+}
 function buildResultSupplyHpRowHtml() {
   return '<div class="rp-supply-hp-row" id="rp-supply-hp-row">' + buildHpHeartsHtml()
     + '<span class="rp-supply-hp-num" id="supply-hp">' + formatHpText() + '</span></div>';
@@ -16274,8 +16419,18 @@ function renderHomeDog() {
 
 
 function homeMakeDog() {
+  const _hpBeforeCraft = player.hp;
   const ok = craftItem('balloonDog');
   if (ok) {
+    // v0.3.56：製作成功演出（+ 原本就有的製作療癒，HP 真的增加才播愛心）
+    setTimeout(() => {
+      try {
+        const anchor = document.getElementById('home-dog-body');
+        playCraftSuccessFx(anchor, RECIPES.find(r => r.id === 'balloonDog'));
+        const healed = player.hp - _hpBeforeCraft;
+        if (healed > 0) playHealFeedbackDom(healed, false, anchor);
+      } catch (er) {}
+    }, 0);
     showCraftMessage('🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5');
     renderHomeDog();
     renderHomeInventory();
@@ -16402,6 +16557,20 @@ function renderHomeNextStage() {
       secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物……帶氣球小狗一起去找找！</div>'
         + '<button class="rp-next-step-btn" style="margin-top:8px" '
         + (canBring ? '' : 'disabled ')
+        + 'onclick="homeBringDog(); renderHomeNextStage();">'
+        + (canBring ? '🐾 帶狗出發 -1 🎈' : '🐾 帶狗出發（260 氣球不足）') + '</button>';
+    }
+  }
+  // v0.3.56：下一關沒有隱藏寶物也能帶狗（自由選擇陪伴；寶物提示只是額外資訊）
+  if (!secretHtml) {
+    const dog    = playerInventory.balloonDog || {};
+    const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
+    if (hasDog && nextBringDog) {
+      secretHtml = '<div class="hns-badge hns-badge--clear" style="margin-top:6px">✅ 氣球小狗已安排出發</div>';
+    } else if (hasDog) {
+      const canBring = canBringDogNextLevel();
+      secretHtml = '<div class="hns-hint" style="margin-top:6px">🐶 帶氣球小狗一起冒險</div>'
+        + '<button class="rp-next-step-btn" style="margin-top:8px" ' + (canBring ? '' : 'disabled ')
         + 'onclick="homeBringDog(); renderHomeNextStage();">'
         + (canBring ? '🐾 帶狗出發 -1 🎈' : '🐾 帶狗出發（260 氣球不足）') + '</button>';
     }
@@ -16688,6 +16857,15 @@ function openPauseBag() {
       + 'onclick="useHealingItem(\'' + item.id + '\')">使用</button>'
       + '</div>';
   });
+  // v0.3.56：氣球棒棒糖（氣球秘笈製作，數量在 craftedItems）
+  if (getLollipopCount() > 0) {
+    healHtml += '<div class="pause-bag-heal-item" style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:7px 10px;background:rgba(255,255,255,0.06);border-radius:8px">'
+      + '<span style="font-size:1.3em">🍭</span>'
+      + '<span style="flex:1"><b>氣球棒棒糖</b> x' + getLollipopCount()
+      + '<span style="color:#aaa;font-size:0.85em;display:block">效果：回復 ' + LOLLIPOP_HEAL + ' 心</span></span>'
+      + '<button style="padding:4px 12px;border-radius:6px;background:#4caf7d;color:#fff;border:none;cursor:pointer;font-size:0.9em" '
+      + 'onclick="useBalloonLollipop()">使用</button></div>';
+  }
 
   const body = document.getElementById('pause-bag-body');
   body.innerHTML = (items.length
@@ -17125,6 +17303,11 @@ function renderGuidebook() {
       ['click', 'touchstart'].forEach(ev =>
         btn.addEventListener(ev, e => {
           e.preventDefault();
+          // v0.3.56：同一次點擊（touchstart + click）/ 快速連點只製作一次
+          const nowT = Date.now();
+          if (nowT - (renderGuidebook._lastCraftAt || 0) < 400) return;
+          renderGuidebook._lastCraftAt = nowT;
+          const _hpBeforeCraft = player.hp;
           const ok = craftItem(recipe.id);
           if (ok) {
             let craftMsg = `成功製作 ${recipe.name}！`;
@@ -17158,6 +17341,14 @@ function renderGuidebook() {
               renderHomeSupply(); // 生命更新
               if (recipe.id === 'balloonDog') renderHomeDog();
             }
+            // v0.3.56：製作成功演出（卡片已被 renderGuidebook 重建 → 套在新卡片 + 固定位置的動畫層）
+            try {
+              const newBtn = document.querySelector('#guidebook-recipe-list .recipe-card__btn[data-id="' + recipe.id + '"]');
+              playCraftSuccessFx(newBtn ? newBtn.closest('.recipe-card') : null, recipe);
+              const healed = player.hp - _hpBeforeCraft; // 氣球小狗：原本就有的製作療癒 +0.5（不重複補）
+              // 補血愛心從秘笈上方的訊息列飄出（和製作成功的星星分開，不疊在一起）
+              if (healed > 0) setTimeout(() => { try { const cm = document.getElementById('craft-message'); playHealFeedbackDom(healed, false, (cm && isElVisible(cm)) ? cm : null); } catch (er) {} }, 250);
+            } catch (er) {}
           }
         })
       );
@@ -17167,6 +17358,64 @@ function renderGuidebook() {
   });
 }
 
+// ── v0.3.56：氣球秘笈製作成功演出（卡片回彈 + 柔光 + 星星 / 氣球往上飄 + 局部震動 + 「🎈 製作成功！」）──
+function ensureCraftFxStyles() {
+  ensureHealFxStyles();
+  if (document.getElementById('hv-craft-fx-style')) return;
+  const st = document.createElement('style');
+  st.id = 'hv-craft-fx-style';
+  st.textContent =
+    '@keyframes hvCraftPop{0%{transform:scale(1)}35%{transform:scale(1.06)}65%{transform:scale(.985)}100%{transform:scale(1)}}'
+    + '@keyframes hvCraftGlow{0%{box-shadow:0 0 0 rgba(255,220,120,0)}30%{box-shadow:0 0 18px 4px rgba(255,220,120,.85)}100%{box-shadow:0 0 0 rgba(255,220,120,0)}}'
+    + '@keyframes hvCraftFloat{0%{transform:translate(0,0) scale(.5) rotate(0);opacity:0}15%{opacity:1}100%{transform:translate(var(--dx),-80px) scale(1) rotate(var(--rot));opacity:0}}'
+    + '.hv-craft-pop{animation:hvCraftPop .45s ease-out 1, hvCraftGlow .9s ease-out 1}'
+    + '.hv-craft-fx{position:fixed;pointer-events:none;z-index:100500;font-size:18px;line-height:1;animation:hvCraftFloat .9s ease-out forwards}'
+    + '.hv-craft-fx-text{position:fixed;pointer-events:none;z-index:100501;font:bold 15px sans-serif;color:#3a2200;background:linear-gradient(#fff3a8,#ffd25e);padding:5px 12px;border-radius:14px;'
+    + 'box-shadow:0 2px 10px rgba(0,0,0,.35);white-space:nowrap;animation:hvHealText 1.1s ease-out forwards}';
+  document.head.appendChild(st);
+}
+function clearCraftFxDom() {
+  if (typeof document === 'undefined' || !document.querySelectorAll) return;
+  document.querySelectorAll('.hv-craft-fx, .hv-craft-fx-text').forEach(e => { try { e.remove(); } catch (er) {} });
+}
+function playCraftSuccessFx(cardEl, recipe) {
+  if (typeof document === 'undefined' || !document.body) return;
+  ensureCraftFxStyles();
+  const el = (cardEl && isElVisible(cardEl)) ? cardEl : document.getElementById('guidebook-recipe-list');
+  const r0 = el ? el.getBoundingClientRect() : { left: window.innerWidth / 2 - 100, top: window.innerHeight / 2, width: 200, height: 60 };
+  // 卡片若在捲動區外（被捲走），演出位置夾在秘笈清單看得到的範圍內，不會跑到面板外
+  const list = document.getElementById('guidebook-recipe-list');
+  const lb = (list && isElVisible(list)) ? list.getBoundingClientRect() : null;
+  const r = { left: r0.left, width: r0.width, height: Math.min(r0.height, 120),
+              top: lb ? Math.max(lb.top + 10, Math.min(r0.top, lb.bottom - 70)) : r0.top };
+  // 卡片回彈 + 柔光
+  if (cardEl) { cardEl.classList.remove('hv-craft-pop'); void cardEl.offsetWidth; cardEl.classList.add('hv-craft-pop'); setTimeout(() => { try { cardEl.classList.remove('hv-craft-pop'); } catch (e) {} }, 950); }
+  // 製作區局部震動（2～3px、0.2 秒）
+  const box = document.getElementById('guidebook-recipe-list');
+  if (box) { box.classList.remove('hv-heal-shake'); void box.offsetWidth; box.classList.add('hv-heal-shake'); setTimeout(() => { try { box.classList.remove('hv-heal-shake'); } catch (e) {} }, 260); }
+  // 星星 / 氣球 / 亮點往上飄（固定位置的動畫層，不受卡片重建影響）
+  const icons = ['⭐', '🎈', '✨', '🎈', '⭐', '✨', '🎈'];
+  const w = Math.min(r.width, 260);
+  icons.forEach((ic, i) => {
+    const p = document.createElement('div');
+    p.className = 'hv-craft-fx';
+    p.textContent = ic;
+    p.style.left = (r.left + w * (0.1 + 0.8 * (i / (icons.length - 1)))) + 'px';
+    p.style.top = (r.top + Math.min(r.height, 120) * 0.45) + 'px';
+    p.style.setProperty('--dx', Math.round((Math.random() - 0.5) * 40) + 'px');
+    p.style.setProperty('--rot', Math.round((Math.random() - 0.5) * 60) + 'deg');
+    p.style.animationDelay = (i * 0.05) + 's';
+    document.body.appendChild(p);
+    setTimeout(() => { try { p.remove(); } catch (e) {} }, 1300);
+  });
+  const tx = document.createElement('div');
+  tx.className = 'hv-craft-fx-text';
+  tx.textContent = '🎈 製作成功！' + (recipe ? (recipe.emoji || '') + ' ' + recipe.name : '');
+  tx.style.left = (r.left + w / 2) + 'px';
+  tx.style.top = Math.max(4, r.top - 30) + 'px';
+  document.body.appendChild(tx);
+  setTimeout(() => { try { tx.remove(); } catch (e) {} }, 1300);
+}
 function showCraftMessage(msg) {
   const el = document.getElementById('craft-message');
   if (!el) return;
