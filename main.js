@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.57-mobile-timing-ui-pause-dog-test-1';
-const BUILD_TIME   = '2026-10-15 23:30';
+const GAME_VERSION = 'adventure-v0.3.58-gameplay-logic-polish-test-1';
+const BUILD_TIME   = '2026-10-16 13:50';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3181,6 +3181,10 @@ function craftItem(recipeId) {
     for (const [mat, qty] of Object.entries(recipe.cost)) { if ((playerInventory[mat] || 0) < qty) return false; }
     for (const [mat, qty] of Object.entries(recipe.cost)) { playerInventory[mat] -= qty; }
     player.hp = Math.min(maxHp, player.hp + LOLLIPOP_HEAL);
+    // v0.3.58：冒險中（暫停開秘笈）現做現吃 → 材料是真的用掉了，回滾到進關快照時也不退回
+    if ((gameState === 'playing' || gameState === 'paused') && levelStartSnapshot) {
+      for (const [mat, qty] of Object.entries(recipe.cost)) { if (typeof levelStartSnapshot[mat] === 'number') levelStartSnapshot[mat] = Math.max(0, levelStartSnapshot[mat] - qty); }
+    }
     saveInventory();
     // 失敗畫面做的 → 重試帶著補好的血；材料也要真的扣掉（重試會還原進關快照，避免「補了血、材料又退回」）
     if ((gameState === 'failed' || gameState === 'gameover') && levelStartSnapshot) {
@@ -3396,7 +3400,9 @@ function updateFailedPanelInfo() {
     + '<div class="fi-hp-row">' + hearts
     + '<span class="fi-hp-num">本關開始 ' + hp + ' / 3</span></div>'
     + dogLine
-    + '<div class="fi-hint">重試會回到本關開始狀態</div>';
+    + (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()
+      ? '<div class="fi-hint">↩ 返回整備：回到' + getChapterDisplayTitle(prepCheckpoint.fromLevelIndex) + '過關後的準備，可以補血、購物、製作，再重新出發</div>'
+      : '<div class="fi-hint">重試會回到本關開始狀態</div>');
 }
 
 function updateChallengeOnRetry() {
@@ -4987,6 +4993,12 @@ var activeSlot = 'sword'; // 預設劍
 var currentHiddenTreasure = null;
 // ── 進關前快照（死亡時 rollback 用）──
 var levelStartSnapshot = null;
+// v0.3.58：失敗 / 時間到時已經把本關暫時成果回滾到快照 → 之後在失敗畫面做的合法交易（補血 / 購買 / 製作）
+//          不可再被「重試 / 返回整備」二次還原（否則會退回金幣、材料，形成免費資源）
+var levelRolledBackForRetry = false;
+// v0.3.58：返回整備節點（上一關正常通關 → 從結算 / 小V的家出發進入下一關時建立；只存在記憶體，重新整理網頁即失效）
+//   { fromLevelIndex, toLevelIndex, runStats(JSON), elapsedSec, playerStats, playerKey, armed, active }
+var prepCheckpoint = null;
 
 // =============================================
 //  Snapshot 函式（Phase 1 整理）
@@ -10627,6 +10639,7 @@ function pauseGame() {
   if (gameStartGateActive) return; // v0.3.57：還沒開始冒險，不需要暫停
   if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
   gameState = 'paused';
+  updatePrepReturnButtons(); // v0.3.58
   const el = document.getElementById('pause-overlay');
   if (el) el.style.display = 'flex';
 }
@@ -10651,6 +10664,7 @@ function resumeGame() {
 function triggerFailed() {
   // 用進關前快照完整還原（含隱藏秘笈/寶箱/材料）
   restoreLevelStartSnapshot();
+  levelRolledBackForRetry = true; // v0.3.58：已回滾；失敗畫面之後的合法交易要保留
   bringBalloonDog = levelStartBringDog;
   console.log('[FAILED]', {
     hp:          player.hp,
@@ -10668,8 +10682,9 @@ function triggerFailed() {
   updateChallengeOnRetry(); // 重試次數 +1
 
   // 更新失敗畫面顯示本關資訊
-  updateFailedPanelInfo();
   gameState = 'failed';
+  updateFailedPanelInfo();
+  updatePrepReturnButtons(); // v0.3.58
   showFailedOverlay();
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
 }
@@ -10685,9 +10700,18 @@ function hideFailedOverlay() {
 
 function triggerGameOver() {
   // 時間到：同樣回滾本局材料（沒成功帶走）
-  playerInventory.coins        = Math.max(0, playerInventory.coins        - currentRunStats.coins);
-  playerInventory.balloon260   = Math.max(0, playerInventory.balloon260   - currentRunStats.balloon260);
-  playerInventory.roundBalloon = Math.max(0, playerInventory.roundBalloon - currentRunStats.roundBalloon);
+  // v0.3.58：改成和「挑戰失敗」同一套 — 直接回到進關快照（原本只扣本關金幣 / 材料，之後重試時又整包還原快照，
+  //          導致在時間到畫面花掉的金幣 / 材料在重試時被退回）。最終重試狀態和以前相同。
+  if (levelStartSnapshot) {
+    restoreLevelStartSnapshot();
+    bringBalloonDog = levelStartBringDog;
+    if (player.hp <= 0) player.hp = levelStartHp > 0 ? levelStartHp : player.maxHp;
+    levelRolledBackForRetry = true;
+  } else {
+    playerInventory.coins        = Math.max(0, playerInventory.coins        - currentRunStats.coins);
+    playerInventory.balloon260   = Math.max(0, playerInventory.balloon260   - currentRunStats.balloon260);
+    playerInventory.roundBalloon = Math.max(0, playerInventory.roundBalloon - currentRunStats.roundBalloon);
+  }
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   saveInventory();
   gameState = 'gameover';
@@ -10700,6 +10724,8 @@ function triggerGameOver() {
 
 function triggerClear() {
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
+  prepCheckpoint = null; // v0.3.58：本關已通關 → 不能再返回上一關的整備
+  levelRolledBackForRetry = false;
 
   // v0.3.11：basicHammer 不再於 1-3（index 2）通關時自動解鎖。
   // 解鎖職責已移轉到 Chapter1-2 狗狗尋寶關（見下方 dogHammerStageIndex 區塊）。
@@ -10894,9 +10920,11 @@ function updateNextLevelButton() {
     btn.disabled = bossGate; // v0.3.35-fix-1：沒有武器時「下一關」直接 disabled（不會誤觸再玩一次）
   } else {
     btn.disabled = false;
-    btn.childNodes[0].textContent = '再玩一次';
+    // v0.3.58：時間到且有整備節點 → 「返回整備」
+    const toPrep = gameState === 'gameover' && typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint();
+    btn.childNodes[0].textContent = toPrep ? '↩ 返回整備' : '再玩一次';
     const sub = btn.querySelector('.result-btn-sub');
-    if (sub) sub.textContent = 'Play Again';
+    if (sub) sub.textContent = toPrep ? 'Back to Prep' : 'Play Again';
     btn._nextLevel = false;
     btn.style.opacity = '';
   }
@@ -12891,17 +12919,14 @@ function drawWorldInner() {
   // v0.3.35：2-4 橘子王（預警線 / 油漬 / 金色油管環 / 本體，畫在小V之前）
   if (orangeKingBoss) drawOrangeKingBack(cx);
 
-  // v0.3.55：氣球狗改成正式動作圖，固定在小V後方腳邊同步跟隨（畫在小V之前 → 在小V後面）；舊的飄在旁邊的畫法已移除
-  // v0.3.57：小狗改畫在小V「上面」；只有小V揮劍 / 揮槌時才畫在後面，武器和攻擊動畫不會被擋住
-  const _heroAtk = (typeof _heroLastArtKey === 'string') && (_heroLastArtKey.startsWith('swordAttack') || _heroLastArtKey.startsWith('hammerAttack'));
-  if (bringBalloonDog && _heroAtk) {
-    try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
-  }
+  // v0.3.55：氣球狗改成正式動作圖，固定在小V後方腳邊同步跟隨
+  // v0.3.58：所有動作（idle / run / jump / sad / angry）小狗一律畫在小V「上面」；取消 v0.3.57 揮劍 / 揮槌時躲到後面的例外
+  //          小狗位在小V背後腳邊，劍 / 槌 / 王權劍都往面向的前方揮，兩者不重疊 → 武器不會被擋（實測截圖確認）
   // v0.3.55：補血光暈畫在小V後面（不會把小V洗白），愛心 / 數字畫在小V前面
   try { drawHealFx(cx, 'back'); } catch (e) {}
   // Player
   drawPlayer(cx);
-  if (bringBalloonDog && !_heroAtk) {
+  if (bringBalloonDog) {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
   try { drawHealFx(cx, 'front'); } catch (e) {}
@@ -13558,7 +13583,7 @@ const DOG_ART_SRC = {
   jumpFall: { collarX: 246, feetY: 395, noseX: 371, noseY: 265 },
   // v0.3.57：量自 dog_sad.png（蜷縮、雙眼緊閉）/ dog_angry.png（前腳伸直、屁股抬高、呲牙）
   sad:   { collarX: 275, feetY: 375, noseX: 360, noseY: 274 },
-  angry: { collarX: 273, feetY: 396, noseX: 375, noseY: 222, angerX: 410, angerY: 110 },
+  angry: { collarX: 273, feetY: 396, noseX: 375, noseY: 222, angerX: 318, angerY: 88 }, // v0.3.58：怒氣符號移到頭頂（原本在頭的前上方，會壓到小V揮劍時的手 / 劍柄）
 };
 // v0.3.57：每張圖頭頂的高度（量自原圖最上緣，用來放尋寶 L3 的驚嘆號）
 const DOG_ART_HEAD_TOP = { idle: 142, run1: 68, run2: 72, run3: 54, run4: 77, jumpUp: 43, jumpFall: 86, sad: 109, angry: 70 };
@@ -13576,6 +13601,8 @@ const DOG_ART = Object.assign({}, DOG_ART_DEFAULTS, {
   hurtFrame: 'sad',       // v0.3.57：小V受傷 → dog_sad（蜷縮、雙眼緊閉）
   hurtShakeFrames: 20,    // 受傷後前 20 步（約 0.33 秒）狗狗左右抖動（只影響畫面）
   hurtShakePx: 2,
+  attackBackX: 14,        // v0.3.58：小狗改畫在小V上層後，揮劍（含王權劍）時 dog_angry 往小V背後多退 14px（只是畫面位置，跟隨 / 碰撞不變），讓開劍柄與揮劍的手
+  attackBackXHammer: 8,   // v0.3.58：揮槌時退 8px（槌子舉高時會往後揮，退太多反而壓到槌子；實測 8px 最少重疊）
 });
 const DOG_ART_LS_KEY = 'balloonV_dogArtCalib__' + GAME_VERSION; // 只存狗狗視覺校準 4 個數字（測試版）
 const dogArtImgs = {}, dogArtStatus = {};
@@ -13638,7 +13665,8 @@ function drawCompanionDog(cx) {
   // v0.3.57：受傷剛發生時短暫抖動（只是畫面，狗狗跟隨位置 / 小V座標 / 碰撞都不變）
   const hurtAge = 90 - (player.invincible || 0);
   const shake = (pose.state === 'hurt' && hurtAge >= 0 && hurtAge < DOG_ART.hurtShakeFrames) ? ((frameCount % 4 < 2) ? 1 : -1) * DOG_ART.hurtShakePx : 0;
-  const sx = a.x - cx + shake, sy = a.y;
+  const backX = (pose.state === 'attack') ? ((typeof _heroLastArtKey === 'string' && _heroLastArtKey.startsWith('hammerAttack')) ? (DOG_ART.attackBackXHammer || 0) : (DOG_ART.attackBackX || 0)) : 0; // v0.3.58
+  const sx = a.x - cx + shake - dir * backX, sy = a.y;
   const w = img.naturalWidth * k, h = img.naturalHeight * k;
   ctx.save();
   // 貼地陰影（站在地上時才畫，讓腳底看起來踩在地面）
@@ -13700,38 +13728,50 @@ function drawDogSparkle(x, y, r, rot, alpha) {
   ctx.closePath(); ctx.fill();
   ctx.restore();
 }
+// v0.3.58：鼻子閃爍參數（距離門檻不變，只改畫法）
+//   hz 閃爍頻率；r0→r1 光圈半徑（暗→亮）；a0→a1 光暈透明度；s0 描邊最暗透明度；w0+w1 描邊粗細
+const DOG_NOSE_BLINK = {
+  1: { hz: 1.1, r0: 10, r1: 16, a0: 0.15, a1: 0.95, s0: 0.10, w0: 1.2, w1: 1.6 },
+  2: { hz: 1.8, r0: 13, r1: 22, a0: 0.10, a1: 1.00, s0: 0.05, w0: 1.4, w1: 2.0 },
+  3: { hz: 2.6, r0: 17, r1: 29, a0: 0.10, a1: 1.00, s0: 0.05, w0: 1.6, w1: 2.6 },
+};
 function drawDogNoseGlow(nx, ny, headTopY, k) {
   const level = dogNoseLevel || 0;
   if (level <= 0) return; // L0：不發光
-  const z = (k || DOG_ART.scale) / 0.16;
+  // v0.3.58：三個等級都會「亮—暗」閃爍（亮度 / 透明度 / 光圈描邊一起變），越近越大、越快、亮暗差越大
+  //   L1 1.1 次/秒、L2 1.8 次/秒、L3 2.6 次/秒（都低於 3 次/秒，避免刺眼的高頻閃光）
+  //   小狗縮小時光圈仍保有最小像素大小，亮暗變化看得出來
+  const z = Math.max(0.85, (k || DOG_ART.scale) / 0.16);
   const t = dogNowMs() / 1000;
+  const spec = DOG_NOSE_BLINK[level] || DOG_NOSE_BLINK[3];
+  const wave = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * spec.hz); // 0～1
+  const p = Math.pow(wave, 1.6);                                  // 亮的時間短、暗的時間長 → 看起來是「一閃一閃」
   ctx.save();
-  let R, a;
-  if (level === 1) { R = 13; a = 0.75; }
-  else if (level === 2) { R = 17 + Math.sin(t * 3) * 2.5; a = 0.85 + Math.sin(t * 3) * 0.1; }
-  else { const p = 0.5 + 0.5 * Math.sin(t * 10); R = 21 + p * 5; a = 0.75 + p * 0.25; }
-  R *= z;
+  const R = (spec.r0 + (spec.r1 - spec.r0) * p) * z;
+  const a = spec.a0 + (spec.a1 - spec.a0) * p;
   const g = ctx.createRadialGradient(nx, ny, 1, nx, ny, R);
-  g.addColorStop(0, 'rgba(255,255,220,' + a + ')');
-  g.addColorStop(0.35, 'rgba(255,215,60,' + (a * 0.85) + ')');
-  g.addColorStop(1, 'rgba(255,170,0,0)');
+  g.addColorStop(0, 'rgba(255,255,225,' + a + ')');
+  g.addColorStop(0.35, 'rgba(255,212,50,' + (a * 0.85) + ')');
+  g.addColorStop(1, 'rgba(255,165,0,0)');
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(nx, ny, R, 0, Math.PI * 2); ctx.fill();
-  // 金色光圈線
-  ctx.strokeStyle = 'rgba(255,220,80,' + Math.min(1, a + 0.1) + ')';
-  ctx.lineWidth = (level === 3 ? 2.6 : level === 2 ? 2.2 : 1.8) * z;
+  // 金色光圈線（亮的時候更粗更亮，暗的時候幾乎看不見 → 明顯的閃爍）
+  ctx.strokeStyle = 'rgba(255,215,70,' + Math.min(1, spec.s0 + (1 - spec.s0) * p) + ')';
+  ctx.lineWidth = (spec.w0 + spec.w1 * p) * z;
   ctx.beginPath(); ctx.arc(nx, ny, R * 0.62, 0, Math.PI * 2); ctx.stroke();
+  // 亮點（鼻尖小白光，亮的時候才出現）
+  if (p > 0.35) { ctx.fillStyle = 'rgba(255,255,255,' + ((p - 0.35) / 0.65 * 0.95) + ')'; ctx.beginPath(); ctx.arc(nx, ny, (1.6 + level * 0.5) * z, 0, Math.PI * 2); ctx.fill(); }
   // L2 / L3：星光繞著鼻子轉
   if (level >= 2) {
     const n = level === 3 ? 3 : 2;
     for (let i = 0; i < n; i++) {
       const ang = t * (level === 3 ? 2.6 : 1.6) + i * Math.PI * 2 / n;
-      drawDogSparkle(nx + Math.cos(ang) * R * 0.95, ny + Math.sin(ang) * R * 0.75, (level === 3 ? 5 : 4) * z, ang, 0.9);
+      drawDogSparkle(nx + Math.cos(ang) * R * 0.95, ny + Math.sin(ang) * R * 0.75, (level === 3 ? 5 : 4) * z, ang, 0.45 + 0.5 * p);
     }
   }
   // L3：頭頂驚嘆號（尋寶專用，不是受傷）
   if (level === 3 && headTopY != null) {
-    const bob = Math.sin(t * 8) * 2;
+    const bob = Math.sin(t * Math.PI * 2 * 1.3) * 2;
     const ex = nx - 6 * z, ey = headTopY - 10 * z + bob;
     ctx.font = 'bold ' + Math.round(20 * z) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 4 * z; ctx.strokeStyle = 'rgba(120,40,0,0.85)'; ctx.fillStyle = '#ffd23a';
@@ -14565,6 +14605,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.58+：gameplay-logic-polish → logic-polish（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('gameplay-logic-polish')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'logic-polish' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.57+：mobile-timing-ui-pause-dog → mobile-pause-dog（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('mobile-timing-ui-pause-dog')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15335,7 +15380,7 @@ function populateResultPanel() {
     + '<div id="rp-heal-items">' + buildHealingItemRowsHtml('result') + '</div>'
     + '<div class="rp-supply-bandage-row"><div class="rp-supply-bandage-info"><span class="rp-supply-name">🩹 愛心貼布</span><span class="rp-supply-price">−20 ' + itemIconHtml('coin', '🪙') + '　+1 ❤️</span></div>'
     + '<button id="btn-buy-bandage" class="rp-supply-btn rp-supply-btn--'
-    + (player.hp>=player.maxHp||currentRunStats.usedHeartPatch||(playerInventory.coins||0)<BANDAGE_PRICE ? 'disabled' : 'active')
+    + (player.hp>=player.maxHp||(playerInventory.coins||0)<BANDAGE_PRICE ? 'disabled' : 'active')
     + '" onclick="buyBandage()">' + bandageBtnText + '</button></div>'
     + '<div id="bandage-msg" class="rp-supply-msg"></div>'
     + '</div></div>';
@@ -15483,13 +15528,18 @@ function buyBandage() {
   if (gained > 0) { try { playHealFeedbackDom(gained, false); } catch (e) {} }
 }
 function buyBandageCore() {
+  // v0.3.58：取消「每關限一次」— 只要生命未滿、金幣足夠就能再買再用
   if (player.hp >= player.maxHp) return;
-  if (currentRunStats.usedHeartPatch) return;        // 每關限一次
   if (playerInventory.coins < BANDAGE_PRICE) return;
+  const _now = Date.now(); // 手機 touchstart + click / 快速連點：同一次點擊只交易一次
+  if (_now - (buyBandageCore._lastAt || 0) < 350) return;
+  buyBandageCore._lastAt = _now;
   playerInventory.coins -= BANDAGE_PRICE;
   player.hp = Math.min(player.maxHp, player.hp + BANDAGE_HEAL);
-  currentRunStats.usedHeartPatch = true;
+  currentRunStats.usedHeartPatch = true; // 只當統計紀錄（本關有用過），不再限制購買
   saveInventory();
+  if (typeof syncOutOfAdventureHpToRetry === 'function') syncOutOfAdventureHpToRetry(); // 失敗 / 時間到畫面補的血，重試時保留
+  try { refreshAfterOutOfAdventureHeal(); } catch (e) {}
 
   // 更新補給區目前生命
   refreshAllHpDisplays(); // v0.3.57：數字 + 愛心一起更新（之前只改數字，愛心沒跟著變）
@@ -15514,10 +15564,6 @@ function updateBandageBtn() {
   if (!btn) return;
   if (player.hp >= player.maxHp) {
     btn.textContent = '生命已滿';
-    btn.disabled = true;
-    btn.classList.add('rp-supply-btn--disabled');
-  } else if (currentRunStats.usedHeartPatch) {
-    btn.textContent = '本關已使用';
     btn.disabled = true;
     btn.classList.add('rp-supply-btn--disabled');
   } else if (playerInventory.coins < BANDAGE_PRICE) {
@@ -16398,6 +16444,10 @@ function useBalloonLollipopCore() {
   const before = player.hp;
   player.hp = Math.min(maxHp, player.hp + LOLLIPOP_HEAL);
   playerInventory.craftedItems.balloonLollipop = have - 1;
+  // v0.3.58：冒險中（暫停背包）吃掉的舊庫存，返回整備 / 失敗回滾後也不會再冒出來（和繃帶、急救包同規則）
+  if ((gameState === 'playing' || gameState === 'paused') && levelStartSnapshot && levelStartSnapshot.craftedItems) {
+    levelStartSnapshot.craftedItems.balloonLollipop = Math.max(0, (levelStartSnapshot.craftedItems.balloonLollipop || 0) - 1);
+  }
   saveInventory();
   showHint('🍭 吃了氣球棒棒糖，回復 ' + formatHealAmount(player.hp - before) + ' 顆心！', 200);
   return player.hp - before;
@@ -16629,11 +16679,9 @@ function renderHomeSupply() {
   if (!el) return;
 
   const bandageBtnText = player.hp >= player.maxHp  ? '生命已滿'
-    : currentRunStats.usedHeartPatch                 ? '本關已使用'
     : (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST ? '金幣不足'
     : '購買並使用 -' + CONFIG.HEART_PATCH_COST + ' 🪙';
   const bandageDisabled = (player.hp >= player.maxHp
-    || currentRunStats.usedHeartPatch
     || (playerInventory.coins || 0) < CONFIG.HEART_PATCH_COST);
 
   el.innerHTML =
@@ -16780,14 +16828,14 @@ function renderHomeNextStage() {
   const btn = document.getElementById('btn-home-next-level');
   if (!el) return;
 
-  if (homeEntryMode === 'failed') {
+  if (homeEntryMode === 'failed' || gameState === 'failed' || gameState === 'gameover') { // v0.3.58：時間到 / 失敗不論從哪個入口進來都不能前往下一關
     const lv = LEVELS[currentLevelIndex];
     // v0.3.11-test-2：不顯示工程用 stageId，改用章節標題（橘子果園等非第一章流程關卡仍 fallback 原名稱）
     el.innerHTML =
       '<div class="hns-badge hns-badge--warn">本關尚未完成</div>'
       + '<div class="hns-name">' + getChapterDisplayTitle(currentLevelIndex) + '</div>'
       + '<div class="hns-hint">擊退所有挑戰，帶著收穫回家吧！</div>';
-    if (btn) { btn.textContent = '↺ 重試本關'; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
+    if (btn) { btn.textContent = (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) ? '↩ 返回整備' : '↺ 重試本關'; btn.disabled = false; btn.className = btn.className.replace('home-btn--green','home-btn--red'); }
     return;
   }
 
@@ -17002,9 +17050,114 @@ function refreshResultHpStatus() {
   refreshInventorySummary(); // v0.3.34：置頂狀態列的血量一起刷新
 }
 
+// ══ v0.3.58：返回整備（回到上一節「過關後、出發前」的準備階段）══
+// ・節點：上一節正常通關 → 按「下一關 / 出發冒險」時 armPrepCheckpoint()，下一關 restart() 時正式生效
+// ・返回：本關暫時成果回滾到進關快照（＝離開整備那一刻的背包 / HP / 裝備，含整備時合法的購買、製作、帶狗）
+//         再顯示上一節「原本的」結算內容；不重新執行 triggerClear() → 通關獎勵 / V幣 / 成就 / 隱藏寶物都不會再發
+// ・沒有有效節點（1-1、測試入口、重新整理網頁後）→ 維持原本的「重試本關」
+function armPrepCheckpoint(nextIdx) {
+  try {
+    if (gameState !== 'clear') { prepCheckpoint = null; return; }
+    prepCheckpoint = {
+      fromLevelIndex: currentLevelIndex,
+      toLevelIndex:   nextIdx,
+      runStats:       JSON.stringify(currentRunStats),
+      elapsedSec:     elapsedSec,
+      playerStats:    { coinsCollected: player.coinsCollected, balloonsCollected: player.balloonsCollected, enemiesDefeated: player.enemiesDefeated, x: player.x, y: player.y, facingRight: player.facingRight },
+      cameraX:        cameraX,
+      playerKey:      (getPlayerIdentityForResult() || {}).playerKey || null,
+      armed:          true,
+      active:         false,
+    };
+    console.log('[Prep] 建立返回整備節點', LEVELS[currentLevelIndex] && LEVELS[currentLevelIndex].stageId, '→', LEVELS[nextIdx] && LEVELS[nextIdx].stageId);
+  } catch (e) { prepCheckpoint = null; }
+}
+function hasValidPrepCheckpoint() {
+  const pc = prepCheckpoint;
+  if (!pc || !pc.active || pc.armed) return false;
+  if (pc.toLevelIndex !== currentLevelIndex) return false;
+  if (!LEVELS[pc.fromLevelIndex] || getNextLevelIndex(pc.fromLevelIndex) !== pc.toLevelIndex) return false;
+  try { if (pc.playerKey && (getPlayerIdentityForResult() || {}).playerKey !== pc.playerKey) return false; } catch (e) { return false; }
+  return ['playing', 'paused', 'failed', 'gameover'].includes(gameState);
+}
+function updatePrepReturnButtons() {
+  const ok = hasValidPrepCheckpoint();
+  const a = document.getElementById('btn-pause-restart');
+  if (a) a.textContent = ok ? '↩ 返回整備' : '↺ 重試本關';
+  const b = document.getElementById('btn-retry');
+  if (b) b.textContent = ok ? '↩ 返回整備' : '↺ 重試本關';
+}
+// 所有「重試本關」入口共用：有整備節點 → 返回整備；沒有 → 原本的重試本關
+function retryOrReturnToPrep(source) {
+  const now = Date.now(); // 手機 touchstart + click（同一個按鈕）只執行一次
+  const last = retryOrReturnToPrep._last || (retryOrReturnToPrep._last = {});
+  if (now - (last[source] || 0) < 400) return;
+  last[source] = now;
+  if (hasValidPrepCheckpoint()) { returnToPrep(source); return; }
+  if (gameState === 'paused') gameState = 'playing'; // 原本暫停選單的寫法：先設回 playing 讓 restart() 不被擋
+  retryCurrentLevelFromStart();
+}
+function returnToPrep(source, opts) {
+  if (!hasValidPrepCheckpoint()) { console.warn('[Prep] 沒有有效的整備節點，改用重試本關'); retryCurrentLevelFromStart(); return false; }
+  const pc = prepCheckpoint;
+  // 1. 本關暫時成果回滾到進關快照（失敗 / 時間到已回滾過 → 不重複，保留失敗畫面上的合法交易）
+  if (!levelRolledBackForRetry) restoreLevelStartSnapshot();
+  if (!(player.hp > 0)) player.hp = levelStartHp > 0 ? levelStartHp : player.maxHp;
+  // 2. 出發前已付費的「帶狗同行」安排帶回整備（不重複扣 260，也不會退回）
+  const dog = playerInventory.balloonDog || {};
+  const paidDog = levelStartBringDog === true && !!dog.present && (dog.turnsLeft || 0) > 0;
+  bringBalloonDog = false;
+  nextBringDog = paidDog;
+  // 3. 關掉關卡中的畫面
+  try { if (typeof closePauseBag === 'function') closePauseBag(); } catch (e) {}
+  try { guidebookFromPause = false; const g = document.getElementById('guidebook-overlay'); if (g) g.style.display = 'none'; } catch (e) {}
+  ['pause-overlay', 'failed-overlay'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  try { if (typeof stopOrangeKingVictoryJingle === 'function') stopOrangeKingVictoryJingle(); } catch (e) {}
+  healFx = null; try { clearHealFxDom(); } catch (e) {}
+  // 4. 回到上一節（只換回場景與結算資料，不重跑通關結算）
+  currentLevelIndex = pc.fromLevelIndex;
+  loadLevel(pc.fromLevelIndex); // 會清掉 2-4 橘子王
+  try {
+    const rs = JSON.parse(pc.runStats);
+    Object.keys(currentRunStats).forEach(k => { if (!(k in rs)) delete currentRunStats[k]; });
+    Object.assign(currentRunStats, rs);
+  } catch (e) {}
+  elapsedSec = pc.elapsedSec || 0;
+  Object.assign(player, { coinsCollected: pc.playerStats.coinsCollected, balloonsCollected: pc.playerStats.balloonsCollected, enemiesDefeated: pc.playerStats.enemiesDefeated,
+    x: pc.playerStats.x, y: pc.playerStats.y, facingRight: pc.playerStats.facingRight, vx: 0, vy: 0, invincible: 0 });
+  cameraX = pc.cameraX || 0;
+  dogArtModeLock = null; dogNoseLevel = 0;
+  levelStartSnapshot = null;      // 和通關後一樣：快照在出發時重新建立
+  levelRolledBackForRetry = false;
+  prepCheckpoint = null;          // 再次出發時重新建立（同一個上一節）
+  gameState = 'clear';
+  saveInventory();
+  populateResultPanel();
+  // 結算畫面最上方提示：這是返回的整備，不是新的結算
+  try {
+    const body = document.getElementById('result-panel-body');
+    if (body) {
+      const note = document.createElement('div');
+      note.className = 'rp-prep-return-note';
+      note.innerHTML = '↩ 已返回 <b>' + getChapterDisplayTitle(pc.fromLevelIndex) + '</b> 過關後的整備<br><span>本節獎勵先前已領取，不會重複發放。準備好再出發吧！</span>';
+      body.insertBefore(note, body.firstChild);
+      body.scrollTop = 0;
+    }
+  } catch (e) {}
+  updateNextLevelButton();
+  showResultButtons();
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+  console.log('[Prep] 返回整備', { from: LEVELS[pc.fromLevelIndex].stageId, to: LEVELS[pc.toLevelIndex].stageId, source, hp: player.hp, coins: playerInventory.coins, b260: playerInventory.balloon260, nextBringDog });
+  if (opts && opts.toHome && typeof openHomeScreen === 'function') openHomeScreen('clear');
+  return true;
+}
+if (typeof window !== 'undefined') { window.returnToPrep = returnToPrep; window.retryOrReturnToPrep = retryOrReturnToPrep; window.hasValidPrepCheckpoint = hasValidPrepCheckpoint; }
+
 function retryCurrentLevelFromStart() {
   // 1. restore snapshot
-  if (typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+  // v0.3.58：失敗 / 時間到時已經回滾過 → 不再二次還原（保留失敗畫面上合法的補血 / 購買 / 製作 / 消耗）
+  if (!levelRolledBackForRetry && typeof restoreLevelStartSnapshot === 'function') restoreLevelStartSnapshot();
+  else if (levelRolledBackForRetry && levelStartSnapshot) levelStartSnapshot.hp = player.hp > 0 ? player.hp : levelStartSnapshot.hp;
 
   // 2. 取得 retryHp
   let retryHp = 0;
@@ -17070,18 +17223,20 @@ function homeGoBack() {
     const resultEl = document.getElementById('result-overlay');
     if (resultEl) resultEl.style.display = 'flex';
   } else if (prevMode === 'failed') {
-    const failedEl = document.getElementById('failed-overlay');
-    if (failedEl) failedEl.style.display = 'flex';
+    // v0.3.58：時間到（gameover）的結算畫面進來 → 回到結算畫面
+    const backEl = document.getElementById(gameState === 'gameover' ? 'result-overlay' : 'failed-overlay');
+    if (backEl) backEl.style.display = 'flex';
   }
 }
 
 function homeGoNextLevel() {
   try {
     // 失敗模式：只能重試本關，不能前往下一關
-    if (homeEntryMode === 'failed') {
+    if (homeEntryMode === 'failed' || gameState === 'failed' || gameState === 'gameover') {
+      if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { closeHomeScreen(); returnToPrep('home-failed', { toHome: true }); return; }
       closeHomeScreen();
       if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-      retryCurrentLevelFromStart();
+      retryOrReturnToPrep('home-failed'); // v0.3.58：與失敗畫面同一套判斷
       return;
     }
     // 通關模式：正常前往下一關，保留 HP
@@ -17101,8 +17256,10 @@ function homeGoNextLevel() {
     if (!checkChapter1ProgressionGate(nextIdx)) {
       return;
     }
+    if (gameState !== 'clear') { console.warn('[Home] 不是通關狀態，不能前往下一關', gameState); return; } // v0.3.58：時間到 / 失敗時不能跳關
     bringBalloonDog = (nextBringDog === true);
     nextBringDog    = false;
+    armPrepCheckpoint(nextIdx); // v0.3.58：建立「返回整備」節點
     closeHomeScreen();
     if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
     // v0.3.51：下一關的 critical 素材載好才開始
@@ -17340,6 +17497,12 @@ function restart(opts) {
   // 穩定備份（雙重保險）
   levelStartBringDog = bringBalloonDog;
   levelStartHp       = player.hp;
+  levelRolledBackForRetry = false; // v0.3.58：新的一次挑戰開始
+  // v0.3.58：返回整備節點 — 正常「出發下一關」才啟用；同一關的重試 / 返回後再出發保留；其他入口（測試跳關等）一律作廢
+  if (prepCheckpoint) {
+    if (prepCheckpoint.armed && currentLevelIndex === prepCheckpoint.toLevelIndex) { prepCheckpoint.armed = false; prepCheckpoint.active = true; }
+    else if (!(prepCheckpoint.active && !prepCheckpoint.armed && currentLevelIndex === prepCheckpoint.toLevelIndex && keepHp)) { prepCheckpoint = null; }
+  }
   console.log('snapshot created: bringBalloonDog=' + bringBalloonDog + ' hp=' + player.hp);
 
   gameState  = 'playing';
@@ -17447,6 +17610,7 @@ function hideResultButtons() {
               }
               bringBalloonDog = (nextBringDog === true);
               nextBringDog    = false;
+              armPrepCheckpoint(nextIdx); // v0.3.58：建立「返回整備」節點
               // v0.3.51：下一關的 critical 素材載好才開始（第二章 / Boss 素材在這時才載）
               runWithAssetGate(getAssetGroupsForLevel(nextIdx), getAssetGateTitleForLevel(nextIdx), () => {
                 console.log('BEFORE loadLevel', nextIdx);
@@ -17458,7 +17622,10 @@ function hideResultButtons() {
               });
             } else if (gameState === 'gameover') {
               // Game Over 再玩一次：走同一套穩定還原流程（含 HP / 狗 / 背包）
-              if (typeof retryCurrentLevelFromStart === 'function') {
+              // v0.3.58：有返回整備節點 → 返回上一節的整備；沒有 → 原本的重試
+              if (typeof retryOrReturnToPrep === 'function') {
+                retryOrReturnToPrep('gameover');
+              } else if (typeof retryCurrentLevelFromStart === 'function') {
                 retryCurrentLevelFromStart();
               } else {
                 // fallback
@@ -17526,8 +17693,7 @@ function hideResultButtons() {
     ['click', 'touchstart'].forEach(ev =>
       btnRestart.addEventListener(ev, e => {
         e.preventDefault();
-        gameState = 'playing'; // 先設回 playing 讓 restart() 不被擋
-        retryCurrentLevelFromStart();
+        retryOrReturnToPrep('pause'); // v0.3.58：有整備節點 → 返回整備；沒有 → 原本的重試本關
       })
     );
   }

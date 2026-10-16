@@ -2961,3 +2961,12 @@ html, body {
   #pause-title { font-size: 15px; }
   .pause-btn { padding: 8px 16px; font-size: 13px; }
 }
+
+/* v0.3.58：返回整備提示（結算畫面最上方一行；沿用深紫卡片風格，不改版型） */
+.rp-prep-return-note {
+  margin: 0 0 10px; padding: 8px 12px; border-radius: 12px;
+  background: rgba(85,239,196,0.12); border: 1.5px solid rgba(85,239,196,0.45);
+  color: #c9fff0; font-size: 13px; line-height: 1.5; text-align: center;
+}
+.rp-prep-return-note b { color: #FFE27A; }
+.rp-prep-return-note span { color: rgba(255,255,255,0.7); font-size: 12px; }

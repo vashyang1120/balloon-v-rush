@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.57-mobile-timing-ui-pause-dog-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.58-gameplay-logic-polish-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -221,7 +221,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.57-mobile-timing-ui-pause-dog-test-1 · 2026-10-15
+        adventure-v0.3.58-gameplay-logic-polish-test-1 · 2026-10-16
       </div>
 
     </div><!-- /#home-panel -->
@@ -360,7 +360,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.57-mobile-timing-ui-pause-dog-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.58-gameplay-logic-polish-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
@@ -462,7 +462,9 @@
   function handleRetry(e) {
     e.preventDefault();
     if (gameState !== 'failed') return;
-    if (typeof retryCurrentLevelFromStart === 'function') retryCurrentLevelFromStart();
+    // v0.3.58：有返回整備節點 → 返回整備；沒有 → 原本的重試本關
+    if (typeof retryOrReturnToPrep === 'function') retryOrReturnToPrep('failed');
+    else if (typeof retryCurrentLevelFromStart === 'function') retryCurrentLevelFromStart();
   }
   const btnRetry = document.getElementById('btn-retry');
   if (btnRetry) {
@@ -476,6 +478,8 @@
     ['click','touchstart'].forEach(ev =>
       btnGoHomeFailed.addEventListener(ev, e => {
         e.preventDefault();
+        // v0.3.58：有返回整備節點 → 直接回到上一節過關後的小V的家（整備）；沒有 → 原本的失敗模式小V的家
+        if (gameState === 'failed' && typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('failed-home', { toHome: true }); return; }
         openHomeScreen('failed');
       })
     );
@@ -487,6 +491,11 @@
     ['click','touchstart'].forEach(ev =>
       btnGoHome.addEventListener(ev, e => {
         e.preventDefault();
+        // v0.3.58：時間到（gameover）不是通關 → 小V的家用「未完成」模式（之前會變成可以直接前往下一關）
+        if (gameState === 'gameover') {
+          if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('gameover-home', { toHome: true }); return; }
+          openHomeScreen('failed'); return;
+        }
         openHomeScreen('clear');
       })
     );
