@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.58-gameplay-logic-polish-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.59-rpg-dialogue-v1-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -221,7 +221,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.58-gameplay-logic-polish-test-1 · 2026-10-16
+        adventure-v0.3.59-rpg-dialogue-v1-test-1 · 2026-10-17
       </div>
 
     </div><!-- /#home-panel -->
@@ -245,6 +245,7 @@
           <button id="btn-pause-bag" class="pause-btn pause-btn--secondary" onclick="openPauseBag()">🎒 背包／補血</button>
           <button id="btn-pause-guidebook" class="pause-btn pause-btn--secondary" onclick="openGuidebookFromPause()">📖 氣球秘笈</button>
           <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重試本關</button>
+          <button id="btn-pause-rpg-mode" class="pause-btn pause-btn--secondary" onclick="rpgCycleMode()">💬 對話提示：僅首次顯示</button>
           <!-- 測試版限定：重新開始測試（由 main.js 控制顯示）-->
           <button id="btn-pause-reset-test" class="pause-btn pause-btn--danger" style="display:none">🔄 重新開始測試</button>
           <!-- 測試版限定：跳第 3 關（由 main.js 控制顯示）-->
@@ -360,7 +361,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.58-gameplay-logic-polish-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.59-rpg-dialogue-v1-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
@@ -437,6 +438,7 @@
       return;
     }
     if (typeof isGameStartGateActive === 'function' && isGameStartGateActive()) return; // v0.3.57：還沒開始冒險
+    if (typeof rpgIsActive === 'function' && rpgIsActive()) return; // v0.3.59：RPG 對話中不開 / 不關暫停選單
     if (gameState === 'playing')     pauseGame();
     else if (gameState === 'paused') resumeGame();
   }
