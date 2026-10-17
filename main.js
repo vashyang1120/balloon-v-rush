@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.59-rpg-dialogue-v1-test-1';
-const BUILD_TIME   = '2026-10-17 21:10';
+const GAME_VERSION = 'adventure-v0.3.60-rpg-dialogue-polish-test-1';
+const BUILD_TIME   = '2026-10-17 22:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -3171,6 +3171,8 @@ function craftItem(recipeId) {
     if (typeof refreshResultHpStatus === 'function') refreshResultHpStatus();
     if (typeof renderHomeSupply === 'function') renderHomeSupply();
     refreshAdventureProgressAfterCraft();
+    // v0.3.60：材料已扣、小狗已建立 → 狗狗開心汪汪（等製作成功演出先播一下）
+    try { if (typeof rpgRequestUi === 'function') rpgRequestUi('rpg012_dog_crafted', 650); } catch (e) {}
     return true;
   }
 // 製作道具（一般）
@@ -3216,6 +3218,8 @@ function craftItem(recipeId) {
   saveInventory();
   // v0.3.35-fix-1：做出劍 / 槌後，結算頁與小V的家的「下一關」狀態要立刻解鎖（2-4 武器檢查）
   if (recipeId === 'basicSword' || recipeId === 'basicHammer') refreshAdventureProgressAfterCraft();
+  // v0.3.60：氣球槌真的做好、已加入物品資料 → 星靈教學（一般三段模式）
+  if (recipeId === 'basicHammer') { try { if (typeof rpgRequestUi === 'function') rpgRequestUi('rpg011_hammer_crafted', 800); } catch (e) {} }
   return true;
 }
 
@@ -8296,7 +8300,9 @@ function collectOrangeKingRing() {
   b.ringAuraMs = 1400; // 小V身上的金色光圈
   // v0.3.46：只顯示一句（取代原本的「武器實體化」提示，不重複）
   orangeKingFloatText('👑', player.x + player.w / 2, player.y - 10, '#ffe066');
-  showHint('小V的氣球劍變成「橙煌王權劍」了！', 230);
+  // v0.3.60：狀態更新完成後才請星靈說明（播 RPG 時不重複跳同內容的提示）
+  const rpgRing = (typeof rpgRequest === 'function') && rpgRequest('rpg013_golden_ring', () => !!orangeKingBoss && orangeKingBoss.ringActive);
+  if (!rpgRing) showHint('小V的氣球劍變成「橙煌王權劍」了！', 230);
   b.pendingHint = { msg: '💡 等橘子王連續攻擊後喘氣，再靠近反擊！', delayMs: 3500 };
 }
 
@@ -9430,7 +9436,7 @@ function syncOrangeKingBgm() {
   const a = orangeKingBgm;
   if (!a || orangeKingBgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopOrangeKingBgm(); return; }
-  if (gameState !== 'playing') { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause，不重開
+  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause，不重開（v0.3.60：RPG 對話中照常播放）
   if (orangeKingBgmWantRestart) {
     orangeKingBgmWantRestart = false;
     try { a.currentTime = 0; } catch (e) {}
@@ -10621,7 +10627,7 @@ if (typeof window !== 'undefined') window.startAdventureFromGate = startAdventur
 let lastKnownFullscreen = false;
 function autoPauseGame(reason) {
   if (gameStartGateActive) { renderStartGate(); return; }
-  if (typeof rpgIsActive === 'function' && rpgIsActive()) { rpgPauseAfterClose = true; return; } // v0.3.59：對話中切背景 → 對話結束後停在暫停選單
+  if (typeof rpgIsActive === 'function' && rpgIsActive() && !rpgActive.ui) { rpgPauseAfterClose = true; return; } // v0.3.59：對話中切背景 → 對話結束後停在暫停選單
   if (gameState !== 'playing') return;
   if (typeof isDiscoveryItemModalOpen === 'function' && isDiscoveryItemModalOpen()) return;
   pauseGame();
@@ -10901,6 +10907,8 @@ function triggerClear() {
   updateChallengeOnClear(); // 累積跨關挑戰資料
   clearLevelStartSnapshot(); // 通關後快照可清除
   if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+  // v0.3.60：小狗陪伴次數在這次結算正式用完而離開 → 存檔與結算畫面都完成後，再由星靈提醒（一生一次）
+  if (currentRunStats.dogGoneThisClear) { try { if (typeof rpgRequestUi === 'function') rpgRequestUi('rpg010_dog_left', 500); } catch (e) {} }
 }
 
 // 更新結算畫面「再玩一次」按鈕的文字與功能
@@ -11409,7 +11417,7 @@ function syncChapter2Bgm() {
   const a = chapter2Bgm;
   if (!a || chapter2BgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter2Bgm(); return; }
-  if (gameState !== 'playing') { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause
+  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause（v0.3.60：RPG 對話中照常播放）
   if (chapter2BgmWantRestart) { chapter2BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
   try { a.volume = Math.max(0, Math.min(1, CHAPTER2_BG.chapter2BgmVolume)); } catch (e) {}
   if (a.paused && !chapter2BgmBlocked) {
@@ -12393,7 +12401,7 @@ function syncChapter1Bgm() {
   const a = chapter1Bgm;
   if (!a || chapter1BgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter1Bgm(); return; }
-  if (gameState !== 'playing') { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause
+  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause（v0.3.60：RPG 對話中照常播放）
   if (chapter1BgmWantRestart) { chapter1BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
   try { a.volume = Math.max(0, Math.min(1, CHAPTER1_BG.chapter1BgmVolume)); } catch (e) {}
   if (a.paused && !chapter1BgmBlocked) {
@@ -14620,6 +14628,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.60+：rpg-dialogue-polish → rpg-polish（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('rpg-dialogue-polish')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'rpg-polish' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.59+：rpg-dialogue-v1 → rpg-v1（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('rpg-dialogue-v1')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -18044,7 +18057,7 @@ function assetCap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function buildAssetManifest() {
   const M = { common: [], chapter1: [], chapter2: [], orangeKingBoss: [], dog: [], rpgBoot: [], rpg: [] };
   // v0.3.59：RPG 對話立繪（optional：載入失敗不擋進關；對話框會顯示可辨識的錯誤訊息與路徑）
-  Object.entries(RPG_ASSETS).forEach(([key, path]) => M[RPG_BOOT_ASSET_KEYS.includes(key) ? 'rpgBoot' : 'rpg'].push({ path, type: 'image', critical: false, label: 'rpg:' + key,
+  Object.entries(RPG_ASSETS).filter(([key]) => !RPG_EXTERNAL_ASSET_KEYS.includes(key)).forEach(([key, path]) => M[RPG_BOOT_ASSET_KEYS.includes(key) ? 'rpgBoot' : 'rpg'].push({ path, type: 'image', critical: false, label: 'rpg:' + key,
     apply: im => { rpgImgs[key] = im; rpgImgStatus[key] = 'ok'; }, fail: () => { rpgImgStatus[key] = 'error'; }, altPaths: [] }));
   // v0.3.55：氣球小狗動作圖（optional：載入失敗不擋進關 → 本關用舊小狗畫法；只有帶狗出發的關卡才會等它）
   Object.entries(DOG_ART_ASSETS).forEach(([key, path]) => M.dog.push({ path, type: 'image', critical: false, label: 'dog:' + key,
@@ -18560,7 +18573,11 @@ const RPG_ASSETS = {
   star_spirit_angry:  'assets/adventure/rpg/portraits/star-spirit/star_spirit_angry.png',
   dog_treasure_alert: 'assets/adventure/rpg/portraits/dog/dog_treasure_alert.png',
   balloon_recipe_book:'assets/adventure/rpg/objects/balloon_recipe_book.png',
+  // v0.3.60：橘子王登場互嗆 — 先直接用遊戲裡既有的 Boss 圖（2-4 進關前就已載好，不另外下載）
+  //   之後若提供專用立繪 assets/adventure/rpg/portraits/boss/orange_king_taunt.png，只要改這一行路徑
+  orange_king:        'assets/bosses/orange-king/orange_king_idle_01.png',
 };
+const RPG_EXTERNAL_ASSET_KEYS = ['orange_king']; // 由原本的 Boss 素材群組載入，不放進 RPG 預載群組
 const RPG_BOOT_ASSET_KEYS = ['star_spirit_normal']; // 1-1 一開場就要用 → 跟開機一起載；其他立繪開機後在背景載
 const rpgImgs = {}, rpgImgStatus = {};
 // dog_treasure_alert.png 鼻子位置（量自原圖 1254×1254：粉紅鼻子中心 x 262, y 433）
@@ -18570,6 +18587,7 @@ const RPG_SPEAKERS = {
   spirit:   { name: '星靈',    side: 'right' },
   dog:      { name: '氣球小狗', side: 'right' },
   book:     { name: '氣球秘笈', side: 'right' },
+  king:     { name: '橘子王',   side: 'right' },
 };
 // 003：武器碰到天敵爆裂 — 依「危險類型」區分首次教學（不依劍 / 槌區分）
 //   name / danger 只填目前規格已確認的內容；其他危險類型請先確認台詞再加入
@@ -18581,12 +18599,37 @@ const RPG_RECIPE_LINES = {
   balloonLollipop: [
     { sp: 'balloonv', face: 'balloonv_happy',    text: '咦？！這裡竟然藏著一本氣球秘笈！' },
     { sp: 'balloonv', face: 'balloonv_thinking', text: '太好了，現在我能用260氣球做棒棒糖了！' },
-    { sp: 'balloonv', face: 'balloonv_thinking', text: '它的功用是……做出來就能馬上吃掉，恢復0.5點HP！' },
+    { sp: 'balloonv', face: 'balloonv_happy',    text: '它的功用是……做出來就能馬上吃掉，恢復0.5點HP！' }, // v0.3.60：第三頁改開心
   ],
 };
 // 008：資源寶箱的簡短反應（未來不同資源可對應不同台詞）
 const RPG_CHEST_LINES = {
   goldChest: [{ sp: 'balloonv', face: 'balloonv_happy', text: '哇！！找到金幣寶箱！！' }],
+};
+// ── v0.3.60：可調整的台詞資料（集中在這裡，之後換正式台詞只改這一段）──
+const RPG_TEXT = {
+  dogWoofTreasure: '汪！汪汪！',
+  dogWoofCrafted:  '汪！汪汪～！',
+  dogLeft: [
+    '小V！你有沒有發現，氣球小狗不見了？',
+    '氣球小狗只能陪你冒險一定的次數，次數用完就會離開喔！',
+    '這次我先提醒你！以後要自己注意狗狗還在不在身邊喔！',
+  ],
+  // 本輪暫用教學文字（使用者指定，之後可再調整）
+  hammerCrafted: [
+    '小V！你做出氣球槌了耶！',
+    '氣球槌不只能攻擊，還可以把氣球蠍子打飛喔！',
+  ],
+  goldenRing: [
+    '小V！金色油管環的力量能讓你的氣球劍變成王權劍！不過其他氣球武器可沒有這種保護喔！',
+  ],
+  // DRAFT：橘子王互嗆測試草稿（正式台詞尚未定案）— 每頁一位角色
+  bossTauntDraft: [
+    { sp: 'king',     face: 'orange_king',        text: '哼！帶著氣球也敢來挑戰本王？' },
+    { sp: 'balloonv', face: 'balloonv_thinking',  text: '喂！你可別小看氣球啊！' },
+    { sp: 'king',     face: 'orange_king',        text: '哈哈哈！本王可不是那麼好對付的！' },
+    { sp: 'balloonv', face: 'balloonv_happy',     text: '那就試試看吧！' },
+  ],
 };
 // 場景定義：pages = [{ sp, face, text, left?, right? }]；left / right 指定當頁兩側要顯示的立繪（沿用到下一頁）
 function rpgBuildScene(id, extra) {
@@ -18610,6 +18653,23 @@ function rpgBuildScene(id, extra) {
       { sp: 'balloonv', face: 'balloonv_confused', text: '咦？怎麼了？你的鼻子好像在發光耶！' },
       { sp: 'balloonv', face: 'balloonv_confused', text: '難道……附近藏著什麼寶物嗎？' } ] },
   };
+  // ── v0.3.60 新增 ──
+  Object.assign(S, {
+    // 006B：之後每次重新感應寶物 → 一樣用完整對話框，只有狗狗一頁，點一下就關（不受顯示模式限制、不寫歷史）
+    'rpg006b_dog_woof': { title: '小狗尋寶提醒', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: null, right: 'dog_treasure_alert', dogAlert: true, pages: [
+      { sp: 'dog', face: 'dog_treasure_alert', text: RPG_TEXT.dogWoofTreasure } ] },
+    // 成功製作氣球小狗（每次真的做出來都播；愛心、不發光；點一下就關）
+    'rpg012_dog_crafted': { title: '氣球小狗做好了', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: null, right: 'dog_treasure_alert', dogHeart: true, pages: [
+      { sp: 'dog', face: 'dog_treasure_alert', text: RPG_TEXT.dogWoofCrafted } ] },
+    // 狗狗陪伴次數用完離隊 → 星靈一生只提醒一次（顯示模式「全部關閉」也會提醒）
+    'rpg010_dog_left': { title: '氣球小狗離開了', policy: 'oncePerPlayer', saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.dogLeft.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
+    // 1-2：真的做出氣球槌（一般教學，三段模式）
+    'rpg011_hammer_crafted': { title: '做出氣球槌', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.hammerCrafted.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
+    // 2-4：撿到金色油管環、變成王權劍之後（一般教學，三段模式）
+    'rpg013_golden_ring': { title: '金色油管環', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.goldenRing.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
+    // 2-4：橘子王登場互嗆（DRAFT 台詞；重要 Boss 登場：僅首次 = 一生一次、完整提示 = 每次開啟網頁一次、全部關閉 = 不播）
+    'rpg014_boss_taunt': { title: '橘子王登場', policy: 'bossIntro', saveHistory: true, left: 'balloonv_thinking', right: 'orange_king', pages: RPG_TEXT.bossTauntDraft.map(l => Object.assign({}, l)) },
+  });
   if (S[id]) return Object.assign({ id }, S[id]);
   if (id.startsWith('rpg003_weapon_pop:')) {
     const key = id.split(':')[1]; const t = RPG_POP_TARGETS[key]; if (!t) return null;
@@ -18649,7 +18709,7 @@ function rpgGetMode() { return rpgLoad().mode; }
 function rpgSetMode(m) { if (!['full', 'first', 'off'].includes(m)) return; rpgLoad().mode = m; rpgSave(); rpgRefreshModeButton(); console.log('[RPG] 顯示模式 →', m); }
 const RPG_MODE_LABEL = { full: '完整提示', first: '僅首次顯示', off: '全部關閉' };
 function rpgCycleMode() { const order = ['first', 'full', 'off']; const m = rpgGetMode(); rpgSetMode(order[(order.indexOf(m) + 1) % order.length]); }
-function rpgRefreshModeButton() { const b = document.getElementById('btn-pause-rpg-mode'); if (b) b.textContent = '💬 對話提示：' + RPG_MODE_LABEL[rpgGetMode()]; }
+function rpgRefreshModeButton() { const b = document.getElementById('btn-pause-rpg-mode'); if (b) b.textContent = '💬 目前模式：' + RPG_MODE_LABEL[rpgGetMode()] + ' ⇄'; } // v0.3.60：顯示「目前」狀態
 function rpgIsSeen(id) { return !!rpgLoad().seen[id]; }
 function rpgMarkSeen(id, how) {
   const d = rpgLoad(); const now = Date.now();
@@ -18677,8 +18737,16 @@ function rpgOnAttemptStart() {
   rpgHideDogFloat(true);
 }
 function rpgIsActive() { return !!rpgActive; }
+const rpgSessionShown = new Set(); // 本次開啟網頁已播過的場景（Boss 登場「完整提示」用）
 function rpgShouldShowScene(scene) {
   if (!scene) return false;
+  if (scene.policy === 'oncePerPlayer') return !rpgIsSeen(scene.id);              // 一生一次，不受顯示模式影響
+  if (scene.policy === 'bossIntro') {
+    const m = rpgGetMode();
+    if (m === 'off') return false;
+    if (m === 'first') return !rpgIsSeen(scene.id);
+    return !rpgSessionShown.has(scene.id);                                          // 完整提示：每次開網頁一次，死亡重試不強制重播
+  }
   if (!scene.modeControlled) return true;
   const m = rpgGetMode();
   if (m === 'off') return false;
@@ -18687,12 +18755,40 @@ function rpgShouldShowScene(scene) {
 }
 // 要求播放：回傳 true = 會播放（呼叫端可以省略被取代的舊提示）
 function rpgRequest(id, valid, extra) {
-  if (rpgAttempt.shown.has(id) || rpgAttempt.queued.has(id)) return rpgAttempt.queued.has(id);
+  if (rpgAttempt.queued.has(id)) return true;
   const scene = rpgBuildScene(id, extra);
+  if (!scene) return false;
+  if (rpgAttempt.shown.has(id) && !scene.repeatable) return false;
   if (!rpgShouldShowScene(scene)) return false;
+  if (extra && typeof extra.target === 'function') scene.targetFn = extra.target;
   rpgAttempt.queued.add(id);
   rpgQueue.push({ scene, valid: valid || (() => true), at: Date.now() });
   return true;
+}
+// v0.3.60：非冒險畫面（小V的家 / 結算 / 秘笈）觸發的對話 — 蓋在最上層，不改 gameState，關閉後回到原畫面
+let rpgUiQueue = [];
+function rpgRequestUi(id, delayMs) {
+  const scene = rpgBuildScene(id);
+  if (!scene || !rpgShouldShowScene(scene)) return false;
+  if (rpgUiQueue.some(q => q.scene.id === id) && !scene.repeatable) return true;
+  const q = { scene, at: Date.now() + (delayMs || 0), deadline: Date.now() + (delayMs || 0) + 6000 };
+  rpgUiQueue.push(q);
+  rpgPumpUiQueue();
+  return true;
+}
+let rpgUiPumpTimer = 0;
+function rpgPumpUiQueue() {
+  clearTimeout(rpgUiPumpTimer);
+  if (!rpgUiQueue.length) return;
+  const q = rpgUiQueue[0];
+  const wait = () => { rpgUiPumpTimer = setTimeout(rpgPumpUiQueue, 120); };
+  if (Date.now() < q.at || rpgActive) return wait();
+  if (!rpgSceneAssetsSettled(q.scene) && Date.now() < q.deadline) return wait(); // 等立繪；最多 6 秒，之後顯示錯誤訊息版
+  rpgUiQueue.shift();
+  // 這時玩家已經回到冒險中（例如很快按了下一關）→ 改用一般冒險對話（暫停遊戲）
+  if (gameState === 'playing') rpgOpen(q.scene);
+  else rpgOpen(q.scene, { ui: true });
+  if (rpgUiQueue.length) wait();
 }
 function rpgWasShownThisAttempt(id) { return rpgAttempt.shown.has(id) || rpgAttempt.queued.has(id); }
 
@@ -18700,7 +18796,9 @@ function rpgWasShownThisAttempt(id) { return rpgAttempt.shown.has(id) || rpgAtte
 function rpgAssetState(key) {
   if (rpgImgs[key]) return 'loaded';
   const r = (typeof ASSET_REGISTRY !== 'undefined') ? ASSET_REGISTRY[RPG_ASSETS[key]] : null;
+  if (r && r.status === 'loaded' && r.img) return 'loaded'; // 例如橘子王：已由 Boss 素材群組載好
   if (rpgImgStatus[key] === 'error' || (r && r.status === 'failed')) return 'failed';
+  if (RPG_EXTERNAL_ASSET_KEYS.includes(key) && !r) return 'failed'; // 不在任何群組裡 → 不要無限等待
   return 'pending';
 }
 function rpgSceneAssetKeys(scene) {
@@ -18716,7 +18814,10 @@ function rpgSceneAssetsSettled(scene) {
   }
   return true;
 }
-function rpgImgUrl(key) { const im = rpgImgs[key]; return im ? im.src : ''; }
+function rpgImgUrl(key) {
+  const im = rpgImgs[key] || (((typeof ASSET_REGISTRY !== 'undefined') && ASSET_REGISTRY[RPG_ASSETS[key]]) || {}).img;
+  return im ? im.src : '';
+}
 
 // ── 觸發檢查（每次 update 最後、仍在 playing 時呼叫）──
 function rpgEntityAheadOnScreen(x, w, maxAhead) {
@@ -18734,32 +18835,43 @@ function rpgUpdate() {
   // 002：第一次看到尖刺（實際尖刺出現在畫面上、在小V前方 420px 內）
   if (!rpgWasShownThisAttempt('rpg002_first_spike')) {
     const sp = spikes.find(s => rpgEntityAheadOnScreen(s.x, s.w, 420));
-    if (sp) rpgRequest('rpg002_first_spike', () => spikes.some(s => rpgEntityAheadOnScreen(s.x, s.w, 480)));
+    if (sp) rpgRequest('rpg002_first_spike', () => spikes.some(s => rpgEntityAheadOnScreen(s.x, s.w, 480)),
+      { target: () => spikes.find(s => rpgEntityAheadOnScreen(s.x, s.w, 480)) }); // v0.3.60：開啟時指向真正在畫面上的那個尖刺
   }
   // 004：第一次看到蠍子（實際活著的蠍子出現在畫面上、在小V前方 520px 內）
   if (!rpgWasShownThisAttempt('rpg004_first_scorpion')) {
     const isScorp = e => e.active && (!e.type || e.type === 'scorpion');
     if (enemies.some(e => isScorp(e) && rpgEntityAheadOnScreen(e.x, e.w, 520)))
-      rpgRequest('rpg004_first_scorpion', () => enemies.some(e => isScorp(e) && rpgEntityAheadOnScreen(e.x, e.w, 600)));
+      rpgRequest('rpg004_first_scorpion', () => enemies.some(e => isScorp(e) && rpgEntityAheadOnScreen(e.x, e.w, 600)),
+        { target: () => enemies.filter(e => isScorp(e) && rpgEntityAheadOnScreen(e.x, e.w, 600)).sort((a, b) => a.x - b.x)[0] });
   }
   // 005：第一次看到橘子怪（實際橘子怪出現在畫面上、在小V前方 560px 內）
   if (!rpgWasShownThisAttempt('rpg005_first_orange')) {
     if (orangeNemeses.some(o => rpgEntityAheadOnScreen(o.x, o.w, 560)))
-      rpgRequest('rpg005_first_orange', () => orangeNemeses.some(o => rpgEntityAheadOnScreen(o.x, o.w, 640)));
+      rpgRequest('rpg005_first_orange', () => orangeNemeses.some(o => rpgEntityAheadOnScreen(o.x, o.w, 640)),
+        { target: () => orangeNemeses.filter(o => rpgEntityAheadOnScreen(o.x, o.w, 640)).sort((a, b) => a.x - b.x)[0] });
   }
   // 006：小狗尋寶（沿用 dogNoseLevel：L1 = 400px 內就觸發）
   const sensing = bringBalloonDog && dogNoseLevel >= 1 && !!currentHiddenTreasure && !currentHiddenTreasure.found;
   if (sensing && !rpgAttempt.dogInRange) {
     rpgAttempt.dogInRange = true; // 進入感應範圍（同一次停留只觸發一次）
-    const willFull = !rpgWasShownThisAttempt('rpg006a_dog_treasure') && rpgRequest('rpg006a_dog_treasure', () => bringBalloonDog && dogNoseLevel >= 1 && !!currentHiddenTreasure && !currentHiddenTreasure.found);
-    if (!willFull) rpgShowDogFloat();
+    const stillSensing = () => bringBalloonDog && dogNoseLevel >= 1 && !!currentHiddenTreasure && !currentHiddenTreasure.found;
+    const willTutorial = !rpgWasShownThisAttempt('rpg006a_dog_treasure') && rpgRequest('rpg006a_dog_treasure', stillSensing);
+    // v0.3.60：之後的感應 → 完整對話框的狗狗汪汪一頁（取代 v0.3.59 的小型浮動提示；不受顯示模式限制）
+    if (!willTutorial) rpgRequest('rpg006b_dog_woof', stillSensing);
   } else if (!sensing && rpgAttempt.dogInRange) {
     rpgAttempt.dogInRange = false; // 離開範圍 → 下次重新進入可以再提示
-    if (rpgAttempt.queued.has('rpg006a_dog_treasure') && !rpgAttempt.shown.has('rpg006a_dog_treasure')) {
-      // 還沒開始播就離開了 → 不算看過
-      rpgAttempt.queued.delete('rpg006a_dog_treasure');
-      rpgQueue = rpgQueue.filter(q => q.scene.id !== 'rpg006a_dog_treasure');
-    }
+    ['rpg006a_dog_treasure', 'rpg006b_dog_woof'].forEach(id => {
+      if (rpgAttempt.queued.has(id)) { // 還沒開始播就離開了 → 取消（不算看過）
+        rpgAttempt.queued.delete(id);
+        rpgQueue = rpgQueue.filter(q => q.scene.id !== id);
+      }
+    });
+  }
+  // v0.3.60：2-4 橘子王登場互嗆 — 橘子王落地吼叫（introRoar）時、正式開打之前
+  if (typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive() && orangeKingBoss
+      && orangeKingBoss.phase === 'introRoar' && orangeKingBoss.phaseMs >= 300 && !rpgWasShownThisAttempt('rpg014_boss_taunt')) {
+    rpgRequest('rpg014_boss_taunt', () => !!orangeKingBoss && orangeKingBoss.phase === 'introRoar');
   }
   // 依序播放佇列（素材還沒載好就等；條件已不成立就取消，且不記成已觀看）
   while (rpgQueue.length) {
@@ -18797,7 +18909,8 @@ function rpgEnsureDom() {
   ov.innerHTML =
       '<div class="rpg-mask"></div>'
     + '<div class="rpg-side rpg-side--left"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div></div>'
-    + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div></div>'
+    + '<div class="rpg-target" style="display:none"><div class="rpg-target-glow"></div><div class="rpg-target-arrow">▼</div></div>'
+    + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div><div class="rpg-dog-heart">💗</div></div>'
     + '<div class="rpg-topbtns"><button type="button" class="rpg-btn" data-act="log">📜 對話紀錄</button><button type="button" class="rpg-btn" data-act="skip">⏭ 略過</button></div>'
     + '<div class="rpg-box"><div class="rpg-name"></div><div class="rpg-text"></div><button type="button" class="rpg-next" data-act="next">繼續 ▼</button></div>'
     + '<div class="rpg-log" style="display:none"><div class="rpg-log-panel"><div class="rpg-log-head"><span>📜 對話紀錄</span><button type="button" class="rpg-btn" data-act="logclose">✕ 關閉</button></div><div class="rpg-log-body"></div></div></div>';
@@ -18810,8 +18923,60 @@ function rpgEnsureDom() {
   ['touchstart', 'touchend', 'pointerdown', 'mousedown'].forEach(ev => ov.addEventListener(ev, e => { e.stopPropagation(); }, { passive: true }));
   return ov;
 }
+// v0.3.60：介面模式（小V的家 / 結算 / 秘笈之上）— 對話框改成固定在整個畫面置中的 16:9 區塊，背後加一層擋住點擊的遮罩
+function rpgSetUiMode(on) {
+  const ov = document.getElementById('rpg-overlay'); if (!ov) return;
+  let bl = document.getElementById('rpg-ui-blocker');
+  if (on) {
+    if (!bl) {
+      bl = document.createElement('div'); bl.id = 'rpg-ui-blocker'; document.body.appendChild(bl);
+      bl.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); rpgHandleAction('next'); });
+      ['touchstart', 'touchend', 'pointerdown', 'mousedown'].forEach(ev => bl.addEventListener(ev, e => e.stopPropagation(), { passive: true }));
+    }
+    if (ov.parentNode !== document.body) document.body.appendChild(ov);
+    ov.classList.add('rpg--ui'); bl.style.display = 'block';
+  } else {
+    if (bl) bl.style.display = 'none';
+    ov.classList.remove('rpg--ui');
+    const wrap = document.getElementById('game-wrapper');
+    if (wrap && ov.parentNode !== wrap) wrap.appendChild(ov);
+    ov.style.left = ov.style.top = ov.style.width = ov.style.height = '';
+  }
+}
+// v0.3.60：場景目標提示 — 用觸發當下的「實際物件世界座標」換成畫面座標；被對話框擋住時在對話框上開一個透明小窗
+function rpgSetTargetHighlight(t) {
+  const ov = document.getElementById('rpg-overlay'); if (!ov) return;
+  const el = ov.querySelector('.rpg-target'), box = ov.querySelector('.rpg-box');
+  if (!el || !box) return;
+  if (!t || typeof t.x !== 'number') {
+    el.style.display = 'none';
+    box.style.webkitMaskImage = box.style.maskImage = '';
+    ov.dataset.target = '';
+    return;
+  }
+  const sx = t.x + (t.w || 40) / 2 - cameraX, sy = t.y + (t.h || 40) / 2;
+  const r = Math.max(t.w || 40, t.h || 40) * 0.72 + 16;
+  el.style.display = 'block';
+  el.style.setProperty('--tx', sx); el.style.setProperty('--ty', sy); el.style.setProperty('--tr', r);
+  // 對話框位置（960×540 座標）：left 20、top 540-14-150 = 376 → 目標若落在框內，就在框上挖一個漸層透明窗讓真正的目標看得到
+  const bx = 20, by = CANVAS_H - 14 - 150;
+  const inBox = sy + r > by;
+  const k = parseFloat(getComputedStyle(ov).getPropertyValue('--rk')) || 1;
+  if (inBox) {
+    const g = 'radial-gradient(circle at ' + ((sx - bx) * k) + 'px ' + ((sy - by) * k) + 'px, transparent ' + (r * k) + 'px, #000 ' + ((r + 14) * k) + 'px)';
+    box.style.webkitMaskImage = g; box.style.maskImage = g;
+  } else { box.style.webkitMaskImage = box.style.maskImage = ''; }
+  ov.dataset.target = Math.round(sx) + ',' + Math.round(sy);
+}
 function rpgFitScale() {
   const ov = document.getElementById('rpg-overlay');
+  if (ov && ov.classList.contains('rpg--ui')) { // 介面模式：以整個視窗置中一個 16:9 區塊
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = Math.min(vw, vh * CANVAS_W / CANVAS_H), h = w * CANVAS_H / CANVAS_W;
+    ov.style.left = ((vw - w) / 2) + 'px'; ov.style.top = ((vh - h) / 2) + 'px'; ov.style.width = w + 'px'; ov.style.height = h + 'px';
+    ov.style.setProperty('--rk', Math.max(0.3, w / CANVAS_W));
+    return;
+  }
   const wrap = document.getElementById('game-wrapper');
   const w = (wrap && wrap.clientWidth) || CANVAS_W;
   const k = Math.max(0.3, w / CANVAS_W);
@@ -18847,17 +19012,24 @@ function rpgSetSide(sideEl, key, active) {
   if (on && on !== next) on.classList.remove('rpg-pimg--on');
 }
 let rpgPageIdx = 0, rpgTypeStart = 0, rpgTypeDone = false, rpgRaf = 0, rpgOpenedAt = 0, rpgCurLeft = null, rpgCurRight = null;
-function rpgOpen(scene) {
-  if (gameState !== 'playing' || rpgActive) return false;
+function rpgOpen(scene, opts) {
+  const ui = !!(opts && opts.ui);
+  if (rpgActive) return false;
+  if (!ui && gameState !== 'playing') return false;
   rpgActive = scene;
+  scene.ui = ui;
   rpgAttempt.shown.add(scene.id);
   rpgAttempt.queued.delete(scene.id);
-  gameState = 'paused';                      // 真的暫停玩法（不開暫停選單）
+  rpgSessionShown.add(scene.id);
+  if (!ui) gameState = 'paused';             // 冒險中：真的暫停玩法（不開暫停選單）；介面中：不動 gameState
   Object.keys(keys).forEach(k => { keys[k] = false; });
   Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; });
   rpgHideDogFloat(true);
   const ov = rpgEnsureDom();
+  rpgSetUiMode(ui);
   rpgFitScale();
+  ov.classList.toggle('rpg--dog-heart', !!scene.dogHeart);
+  rpgSetTargetHighlight(scene.targetFn ? (() => { try { return scene.targetFn(); } catch (e) { return null; } })() : null);
   ov.querySelector('.rpg-log').style.display = 'none';
   ov.classList.toggle('rpg--dog-alert', !!scene.dogAlert);
   const sides = ov.querySelectorAll('.rpg-side');
@@ -18906,6 +19078,7 @@ function rpgHandleAction(act) {
   if (document.querySelector('#rpg-overlay .rpg-log').style.display !== 'none') return; // 紀錄開著時點背景不前進
   if (act === 'skip') { rpgClose('skipped'); return; }
   if (performance.now() - rpgOpenedAt < 250) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
+  if (rpgActive.oneClick) { rpgClose('finished'); return; } // v0.3.60：狗狗汪汪一頁 → 點一下就關（不用先補完文字）
   // 第一次點：補完本頁；第二次點：下一頁
   if (!rpgTypeDone) {
     cancelAnimationFrame(rpgRaf); rpgTypeDone = true;
@@ -18921,14 +19094,17 @@ function rpgClose(how) {
   const scene = rpgActive; if (!scene) return;
   cancelAnimationFrame(rpgRaf);
   if (how === 'finished' || how === 'skipped') {      // 看完 / 主動略過 → 才算已觀看；被中斷（reset）不算
-    if (scene.modeControlled) rpgMarkSeen(scene.id, how);
+    if (scene.modeControlled || scene.policy) rpgMarkSeen(scene.id, how);
     if (scene.saveHistory) rpgPushHistory(scene, how, how === 'finished' ? scene.pages.length : rpgPageIdx + 1);
   }
   rpgActive = null;
   const ov = document.getElementById('rpg-overlay');
   if (ov) { ov.style.display = 'none'; ov.classList.remove('rpg--show'); }
+  rpgSetTargetHighlight(null);   // 對話結束：光暈與箭頭立即消失
+  rpgSetUiMode(false);
   Object.keys(keys).forEach(k => { keys[k] = false; });
   Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; });
+  if (scene.ui) { console.log('[RPG] 結束對話', scene.id, how, '(介面)'); setTimeout(rpgPumpUiQueue, 50); return; } // 介面對話：回到原本畫面，不動 gameState
   if (how !== 'reset' && gameState === 'paused') {
     gameState = 'playing';
     lastTime = 0; fixedStepAccumulator = 0;           // 恢復時不讓時間差暴增
@@ -19010,7 +19186,14 @@ function rpgDebugPlay(id) { // 測試版：立刻播指定場景（不檢查觸�
   return rpgOpen(scene);
 }
 function rpgResetSeen() { const d = rpgLoad(); d.seen = {}; rpgSave(); console.log('[RPG] 已清除觀看紀錄（只清 RPG 自己的 key）'); }
-if (typeof window !== 'undefined') Object.assign(window, { debugRpg, rpgDebugPlay, rpgResetSeen, rpgSetMode, rpgCycleMode, rpgOnWeaponPopped });
+// v0.3.60：BGM 規則 — 冒險中的 RPG 對話只暫停玩法，關卡 / Boss BGM 繼續播放（不重開、不重建音訊）
+function isRpgDialogKeepingBgm() {
+  if (!rpgActive || rpgActive.ui) return false;
+  if (typeof document !== 'undefined' && document.hidden) return false; // 切到背景仍照原本規則
+  if (rpgPauseAfterClose) return false;                                  // 對話中曾切背景 → 照暫停規則
+  return gameState === 'paused';
+}
+if (typeof window !== 'undefined') Object.assign(window, { debugRpg, rpgDebugPlay, rpgResetSeen, rpgSetMode, rpgCycleMode, rpgOnWeaponPopped, rpgRequestUi });
 
 runWithAssetGate(['common', 'chapter1', 'rpgBoot'], '派對島準備中...', () => {
   assetBootReady = true;
