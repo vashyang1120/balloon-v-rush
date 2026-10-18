@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.61-rpg-dialogue-and-boss-polish-test-1';
-const BUILD_TIME   = '2026-10-18 01:40';
+const GAME_VERSION = 'adventure-v0.3.62-rpg-dialogue-fixes-test-1';
+const BUILD_TIME   = '2026-10-18 03:35';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -4536,20 +4536,20 @@ const LEVELS = [
     hiddenTreasure: {
       type:        'bossNote',
       id:          'orangeKingWeaknessNote01',
-      name:        '橘子王弱點筆記',
-      displayName: '橘子王弱點筆記',
+      name:        '橘子王觀察筆記', // v0.3.62：玩家看到的名稱（ID 不變）
+      displayName: '橘子王觀察筆記',
       x:           5200,
       y:           GROUND_Y - 70,
       found:       false,
-      emoji:       '📓',
-      title:       '橘子王弱點筆記 01',
+      emoji:       '📜',
+      title:       '橘子王觀察筆記',
       // v0.3.35：改成 2-4 Boss 戰的完整攻略（renderDiscoveryItemModal 以「。」分段顯示）
       // v0.3.61：和正式筆記圖一致的四項情報（使用者確認）；不寫弱點部位，也不提前揭露金色油管環 / 王權劍
       noteText:    '橘子王年紀大了，體力不好，動兩下就要休息。休息時是攻擊的好機會！'
                  + '他身上似乎有神秘的寶物，常常因為亂衝亂撞掉在地上。'
                  + '橘子王每次攻擊前，會先透露攻擊目標和攻擊方式。'
                  + '好好觀察，抓準攻擊和閃避的時機！',
-      foundMsg:    '氣球小狗找到橘子王弱點筆記！',
+      foundMsg:    '氣球小狗找到橘子王觀察筆記！',
       hintText:    '這可能是前往 2-4 Boss 關的重要線索……', // v0.3.33：發現物品視窗底部提示
     },
   },
@@ -5005,6 +5005,7 @@ var activeSlot = 'sword'; // 預設劍
 var currentHiddenTreasure = null;
 // ── 進關前快照（死亡時 rollback 用）──
 var levelStartSnapshot = null;
+var rpgDogDepartPending = false; // v0.3.62：只有從結算 / 小V的家按「出發」且帶狗時才為 true，下一次 restart() 取用後清掉
 // v0.3.58：失敗 / 時間到時已經把本關暫時成果回滾到快照 → 之後在失敗畫面做的合法交易（補血 / 購買 / 製作）
 //          不可再被「重試 / 返回整備」二次還原（否則會退回金幣、材料，形成免費資源）
 var levelRolledBackForRetry = false;
@@ -7525,6 +7526,26 @@ function openDiscoveryItemModal(item, options = {}) {
 }
 
 // v0.3.33-fix-1：閱讀模式入口（結算頁 / 小V的家）— 只讀取資料，不加入背包、不存檔、不改 gameState
+// v0.3.62：玩家看到的名稱統一為「橘子王觀察筆記」（內部 ID orangeKingWeaknessNote01 不變，舊存檔照常讀取）
+const KEY_ITEM_DISPLAY = { orangeKingWeaknessNote01: { name: '橘子王觀察筆記', emoji: '📜' } };
+function keyItemDisplayName(k) { return (k && KEY_ITEM_DISPLAY[k.id] && KEY_ITEM_DISPLAY[k.id].name) || (k && (k.name || k.id)) || ''; }
+function keyItemDisplayEmoji(k) { return (k && KEY_ITEM_DISPLAY[k.id] && KEY_ITEM_DISPLAY[k.id].emoji) || (k && k.emoji) || '📓'; }
+// 暫停背包「閱讀」：暫時取得（本關找到、還沒通關）或正式取得都打開同一張筆記圖；關閉後回到暫停背包
+function openObservationNoteFromBag() {
+  const id = 'orangeKingWeaknessNote01';
+  const has = !!((playerInventory.keyItems || {})[id] || (currentRunStats.pendingKeyItems || {})[id]);
+  if (!has) return;
+  if (typeof rpgAssetState === 'function' && rpgAssetState('orange_king_weakness_note') === 'loaded' && !rpgIsActive()) {
+    const sc = rpgBuildScene('rpg016_king_note_show'); sc.next = null;
+    const lv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
+    sc.fallbackText = lv ? lv.hiddenTreasure.noteText : '';
+    rpgOpen(sc, { ui: true }); return;
+  }
+  // 圖片沒載好 → 文字版
+  const lv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
+  if (lv) openDiscoveryItemModal({ id, type: 'bossNote', emoji: '📜', name: '橘子王觀察筆記', title: '', noteText: lv.hiddenTreasure.noteText, hintText: '' }, { mode: 'read' });
+}
+if (typeof window !== 'undefined') window.openObservationNoteFromBag = openObservationNoteFromBag;
 function getKeyItemDisplayData(id) {
   const k = (playerInventory.keyItems || {})[id];
   if (!k) return null;
@@ -7538,8 +7559,8 @@ function getKeyItemDisplayData(id) {
   const srcLv = LEVELS.find(l => l.hiddenTreasure && l.hiddenTreasure.id === id);
   const latestNote = srcLv && srcLv.hiddenTreasure.noteText;
   return {
-    id: k.id, type: k.type, emoji: k.emoji || '📓', name: k.name || k.id,
-    title: k.title || '', noteText: latestNote || k.noteText || '', hintText,
+    id: k.id, type: k.type, emoji: keyItemDisplayEmoji(k), name: keyItemDisplayName(k),
+    title: (srcLv && srcLv.hiddenTreasure.title) || k.title || '', /* v0.3.62：舊存檔的舊標題改用目前名稱 */ noteText: latestNote || k.noteText || '', hintText,
   };
 }
 function openKeyItemReadModal(id) {
@@ -7596,8 +7617,8 @@ function checkHiddenTreasure() {
         notifTitle    = '🎁 獲得金幣寶箱！';
         notifSubtitle = '金幣 +' + (t.rewardCoins || 30);
       } else if (t.type === 'bossNote') {
-        notifTitle    = (t.emoji || '📓') + ' 找到' + (t.name || 'Boss 弱點筆記') + '！';
-        notifSubtitle = '已收進背包「其他物品」';
+        notifTitle    = (t.emoji || '📓') + ' 找到' + (t.name || 'Boss 觀察筆記') + '！';
+        notifSubtitle = '暫時放進背包（通關後才正式帶回）'; // v0.3.62
       } else {
         notifTitle    = '找到隱藏寶藏！';
         notifSubtitle = '';
@@ -7640,28 +7661,30 @@ function checkHiddenTreasure() {
       currentRunStats.pendingKeyItems[noteId] = {
         id:         noteId,
         type:       'bossNote',
-        name:       t.name || 'Boss 弱點筆記',
+        name:       t.name || 'Boss 觀察筆記',
         emoji:      t.emoji || '📓',
-        title:      t.title || t.name || 'Boss 弱點筆記',
+        title:      t.title || t.name || 'Boss 觀察筆記',
         noteText:   t.noteText || '',
         hintText:   t.hintText || '',
       };
-      currentRunStats.foundHiddenTreasureName = t.name || 'Boss 弱點筆記';
+      currentRunStats.foundHiddenTreasureName = t.name || 'Boss 觀察筆記';
       currentRunStats.foundBossNote = {
-        id: noteId, name: t.name || 'Boss 弱點筆記', title: t.title || '', noteText: t.noteText || '',
+        id: noteId, name: t.name || 'Boss 觀察筆記', title: t.title || '', noteText: t.noteText || '',
       };
       console.log('boss note found (pending until clear):', noteId);
-      showHint(t.foundMsg || ('找到' + (t.name || 'Boss 弱點筆記') + '！'), 320);
+      showHint(t.foundMsg || ('找到' + (t.name || 'Boss 觀察筆記') + '！'), 320);
       // v0.3.61：橘子王觀察筆記 → 畫面正中央展示正式筆記圖，接著小V反應（只展示；正式取得仍等通關）
+      // v0.3.62：先小V「咦！？這是什麼？」（依顯示模式）→ 中央展示（一定會有）→ 讀完反應（依顯示模式）
       const rpgNoteShow = isNewNote && noteId === 'orangeKingWeaknessNote01' && (typeof rpgRequest === 'function')
-        && rpgAssetState('orange_king_weakness_note') !== 'failed' && rpgRequest('rpg016_king_note_show', () => true);
+        && rpgAssetState('orange_king_weakness_note') !== 'failed'
+        && (rpgRequest('rpg019_king_note_find', () => true) || rpgRequest('rpg016_king_note_show', () => true));
       // v0.3.33：重要發現物品 → 展示視窗（資料已先存好，視窗只負責展示）— 有中央展示時不再疊第二個視窗
       if (!rpgNoteShow && isNewNote && DISCOVERY_MODAL_TREASURE_TYPES.includes(t.type)) {
         openDiscoveryItemModal({
           id:       noteId,
           type:     t.type,
           emoji:    t.emoji || '📓',
-          name:     t.name || 'Boss 弱點筆記',
+          name:     t.name || 'Boss 觀察筆記',
           title:    t.title || '',
           noteText: t.noteText || '',
           hintText: t.hintText || '',
@@ -9803,9 +9826,12 @@ function drawOrangeKingBossArt(cx) {
     if (b.phaseMs < 350) squashY = 1 - 0.08 * (1 - b.phaseMs / 350);
   }
 
+  // v0.3.62：勝利淡出 — drawOne 原本直接設 ctx.globalAlpha = alpha，會蓋掉外層的淡出透明度 → 改成相乘
+  const victoryFade = (typeof getOrangeKingVictoryFade === 'function') ? getOrangeKingVictoryFade() : 1;
+  if (victoryFade <= 0) return true; // 完全淡出：不再畫本體（確認視窗後也不會再出現）
   const drawOne = (dx, alpha, comp) => {
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * victoryFade;
     if (comp) ctx.globalCompositeOperation = comp;
     ctx.translate(g.ax - cx + wobbleX + dx, g.ay + liftY + jitterY);
     if (rot) ctx.rotate(rot);
@@ -14717,6 +14743,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.62+：rpg-dialogue-fixes → rpg-fixes（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('rpg-dialogue-fixes')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'rpg-fixes' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.61+：rpg-dialogue-and-boss-polish → rpg-boss-polish（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('rpg-dialogue-and-boss-polish')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15148,7 +15179,7 @@ function buildDogGoneReminderHtml() {
     + '<div class="rp-guidebook-hint__title">🐶 氣球小狗消氣了</div>'
     + '<div class="rp-dog-gone-card__status">已消氣，下一關不會同行</div>'
     + '<div class="rp-guidebook-hint__body">'
-    + '小狗陪你完成最後一次冒險，已經消氣回家了。<br>'
+    + '小狗陪你完成最後一次冒險，已經消氣了。<br>'
     + '下一關不會自動同行。<br>'
     + '如果還想帶牠，請先重新製作小狗，再按「帶狗出發」。'
     + '</div></div>';
@@ -15285,7 +15316,7 @@ function populateResultPanel() {
   const bossNoteFirstLine = bossNoteFound ? String(bossNoteFound.noteText || '').split('。')[0] : '';
   const treasureHint = bossNoteFound
     ? ('<div class="rp-guidebook-hint" style="border-color:rgba(255,220,80,0.5);background:rgba(80,60,0,0.2)">'
-      + '<div class="rp-guidebook-hint__title">📓 找到 Boss 弱點筆記！</div>'
+      + '<div class="rp-guidebook-hint__title">📜 找到橘子王觀察筆記！</div>'
       + '<div class="rp-guidebook-hint__body">'
       + '氣球小狗找到了一張沾滿橘子油的筆記：<br>'
       + (bossNoteFirstLine ? '「' + bossNoteFirstLine + '。」<br>' : '')
@@ -15475,7 +15506,7 @@ function populateResultPanel() {
   if (currentRunStats.foundHiddenTreasureName === '氣球棒棒糖秘笈')
     foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📖</span>新秘笈發現！</div>');
   if (currentRunStats.foundBossNote) // v0.3.32
-    foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📓</span>Boss 弱點筆記！</div>');
+    foundBadges.push('<div class="rp-award-badge rp-award-badge--recipe"><span>📜</span>橘子王觀察筆記！</div>');
   if (currentRunStats.foundHiddenTreasureName === '金幣寶箱')
     foundBadges.push('<div class="rp-award-badge rp-award-badge--chest"><span>🎁</span>隱藏寶箱 +' + (currentRunStats.foundTreasureCoins || 30) + ' 🪙</div>');
   if (currentRunStats.dogHealed)
@@ -15566,8 +15597,8 @@ function populateResultPanel() {
     html += '<div class="rp-guidebook-hint rp-boss-next-card">'
       + '<div class="rp-guidebook-hint__title">👑 下一關：橘子王決戰！</div>'
       + '<div class="rp-guidebook-hint__body">出發前先補滿血量'
-      + (hasNote ? '，也可以再讀一次弱點筆記。' : '。') + '</div>'
-      + (hasNote ? '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openKeyItemReadModal(\'orangeKingWeaknessNote01\')">📖 閱讀弱點筆記</button>' : '')
+      + (hasNote ? '，也可以再讀一次觀察筆記。' : '。') + '</div>'
+      + (hasNote ? '<button class="rp-next-step-btn" style="margin-top:8px" onclick="openKeyItemReadModal(\'orangeKingWeaknessNote01\')">📖 閱讀觀察筆記</button>' : '')
       + '</div>';
   }
   // v0.3.34：重要提醒區（在「本關獲取」之前）— 小狗消氣
@@ -16386,7 +16417,7 @@ function getInventoryOtherItems() {
   if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
   // v0.3.32：重要物品（Boss 弱點筆記等），每個 id 一件
   Object.values(playerInventory.keyItems || {}).forEach(k => {
-    if (k && k.id) list.push({ icon: k.emoji || '📓', label: k.name || k.id, count: 1, readId: k.noteText ? k.id : null });
+    if (k && k.id) list.push({ icon: keyItemDisplayEmoji(k), label: keyItemDisplayName(k), count: 1, readId: k.noteText ? k.id : null });
   });
   return list;
 }
@@ -16782,7 +16813,7 @@ function renderHomeInventory() {
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
     // v0.3.32：重要物品（Boss 弱點筆記等）；v0.3.33-fix-1：可點擊閱讀
     ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
-      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null, readId: k.noteText ? k.id : null })),
+      ({ e: keyItemDisplayEmoji(k), v: 1, lbl: keyItemDisplayName(k), cls: 'inv-key', dur: null, readId: k.noteText ? k.id : null })),
   ].filter(i => i.v > 0);
   if (!items.length) { el.innerHTML = '<div class="inv-empty">背包空空如也 🎈</div>'; refreshInventorySummary(); return; }
   el.innerHTML = '<div class="inv-grid">'
@@ -17387,6 +17418,7 @@ function homeGoNextLevel() {
     bringBalloonDog = (nextBringDog === true);
     nextBringDog    = false;
     armPrepCheckpoint(nextIdx); // v0.3.58：建立「返回整備」節點
+              rpgDogDepartPending = (bringBalloonDog === true); // v0.3.62：真的帶狗出發
     closeHomeScreen();
     if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
     // v0.3.51：下一關的 critical 素材載好才開始
@@ -17423,8 +17455,8 @@ function openPauseBag() {
     { e:'🔨', v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
     { e:'🍭', v:ci.balloonLollipop||0,         lbl:'棒棒糖', cls:'inv-candy',   dur:null },
     // v0.3.32：重要物品
-    ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
-      ({ e: k.emoji || '📓', v: 1, lbl: k.name || k.id, cls: 'inv-key', dur: null })),
+    ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id && k.id !== 'orangeKingWeaknessNote01').map(k => /* v0.3.62：觀察筆記改用下方可閱讀的專用列 */
+      ({ e: keyItemDisplayEmoji(k), v: 1, lbl: keyItemDisplayName(k), cls: 'inv-key', dur: null })),
   ].filter(i => i.v > 0);
 
   const dog = playerInventory.balloonDog || {};
@@ -17477,10 +17509,22 @@ function openPauseBag() {
       ).join('') + '</div>'
     : '<div class="inv-empty">背包空空如也 🎈</div>')
     + (healHtml ? '<div style="margin-top:8px"><div style="color:#ffe080;font-size:0.85em;margin-bottom:4px">🩹 補血道具</div>' + healHtml + '</div>' : '')
-    + dogHtml;
+    + dogHtml
+    + buildPauseBagNoteHtml();
   panel.style.display = 'flex';
 }
 
+// v0.3.62：暫停背包的觀察筆記列（暫時取得 → 「（暫時取得）」；正式取得 → 一般名稱）— 點擊打開筆記圖
+function buildPauseBagNoteHtml() {
+  const id = 'orangeKingWeaknessNote01';
+  const owned = !!(playerInventory.keyItems || {})[id];
+  const pending = !owned && !!(currentRunStats.pendingKeyItems || {})[id];
+  if (!owned && !pending) return '';
+  return '<div class="pause-bag-note" id="pause-bag-note" onclick="openObservationNoteFromBag()" role="button">'
+    + '<span class="pause-bag-note__name">📜 橘子王觀察筆記' + (pending ? '（暫時取得）' : '') + '</span>'
+    + '<span class="pause-bag-note__btn">📖 閱讀</span></div>'
+    + (pending ? '<div class="pause-bag-note__hint">通關後才會正式帶回；失敗或返回整備要重新尋找。</div>' : '');
+}
 // 只關閉暫停背包，不改 gameState、不關閉暫停選單
 function closePauseBag() {
   const panel = document.getElementById('pause-bag-panel');
@@ -17557,6 +17601,7 @@ function restart(opts) {
   });
   try { rpgOnAttemptStart(); } catch (e) {} // v0.3.59：每次關卡嘗試重設 RPG 觸發狀態（不影響已觀看紀錄）
   try { hideOrangeKingVictoryConfirm(); } catch (e) {} // v0.3.61
+  try { if (rpgDogDepartPending) { rpgDogDepartPending = false; if (bringBalloonDog) rpgRequest('rpg018_dog_depart', () => bringBalloonDog === true); } } catch (e) {} // v0.3.62
   // Reset currentRunStats（本局歸零，inventory 不動）
   currentRunStats.coins                   = 0;
   currentRunStats.balloon260              = 0;
@@ -17740,6 +17785,7 @@ function hideResultButtons() {
               bringBalloonDog = (nextBringDog === true);
               nextBringDog    = false;
               armPrepCheckpoint(nextIdx); // v0.3.58：建立「返回整備」節點
+              rpgDogDepartPending = (bringBalloonDog === true); // v0.3.62：真的帶狗出發
               // v0.3.51：下一關的 critical 素材載好才開始（第二章 / Boss 素材在這時才載）
               runWithAssetGate(getAssetGroupsForLevel(nextIdx), getAssetGateTitleForLevel(nextIdx), () => {
                 console.log('BEFORE loadLevel', nextIdx);
@@ -18680,6 +18726,12 @@ const RPG_ASSETS = {
   orange_king_angry:  'assets/adventure/rpg/portraits/boss/orange_king_angry.png',
   orange_king_weakness_note: 'assets/adventure/rpg/objects/orange_king_weakness_note.png',
 };
+// v0.3.62：Boss 對話立繪專用比例（960×540 畫面座標）— size 立繪方框邊長、right / bottom 與畫面右下的距離（負數 = 超出畫面、被安全裁切）
+//   taunt：巨大、囂張；angry：更近、更有壓迫感。腳部藏到對話框後面，優先看到王冠、臉、白鬍子、拳頭、裝甲與油管炮
+const RPG_BOSS_PORTRAIT = {
+  orange_king_taunt: { size: 520, right: -40, bottom: 30 },
+  orange_king_angry: { size: 580, right: -70, bottom: -20 },
+};
 // v0.3.61：GitHub 上目前的檔名是 balloonv_angry.png.png（多了一個 .png）→ 先試正確檔名，找不到再試這個；改名後自動用正確檔名
 const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png.png'] };
 const RPG_EXTERNAL_ASSET_KEYS = []; // 由其他素材群組載入的立繪（目前沒有）
@@ -18706,7 +18758,23 @@ const RPG_POP_TARGETS = {
   orangeOil: { name: '橘子怪', danger: '橘子皮的油' },
 };
 // 007：秘笈台詞依配方區分（同一張書本圖）；沒有確認台詞的配方不播 RPG，維持原本通知
+// v0.3.62：判斷「現在是不是用手機觸控按鈕在玩」— 看手機操作鍵是否真的顯示在畫面上（不只看螢幕寬度）
+function rpgIsTouchControlsShown() {
+  try {
+    const mc = document.getElementById('mobile-controls'), b = document.getElementById('btn-switch-weapon');
+    if (!mc || !b) return false;
+    if (getComputedStyle(mc).display === 'none' || getComputedStyle(b).display === 'none' || getComputedStyle(b).visibility === 'hidden') return false;
+    const r = b.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  } catch (e) { return false; }
+}
 const RPG_RECIPE_LINES = {
+  basicHammer: [
+    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦？！這裡又藏著一本{g:氣球秘笈}！' },
+    { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來是{g:氣球槌}的製作秘笈啊！' },
+    // 第三頁依操作方式：電腦鍵盤 / 手機觸控（手機時圈出真正的換武器鍵）
+    { sp: 'balloonv', face: 'balloonv_happy', text: () => rpgIsTouchControlsShown() ? '原來按這裡就能使用槌子了!' : '原來做出來後按2就能使用槌子了!', focusSwitchBtn: true },
+  ],
   balloonLollipop: [
     { sp: 'balloonv', face: 'balloonv_happy',    text: '咦？！這裡竟然藏著一本{g:氣球秘笈}！' },
     { sp: 'balloonv', face: 'balloonv_thinking', text: '太好了，現在我能用{g:260氣球}做{g:棒棒糖}了！' },
@@ -18721,10 +18789,12 @@ const RPG_CHEST_LINES = {
 const RPG_TEXT = {
   dogWoofTreasure: '汪！汪汪！',
   dogWoofCrafted:  '汪！汪汪～！',
+  dogWoofDepart:   '汪！汪汪～！',
+  // v0.3.62：正式台詞（氣球會消氣，請好好珍惜）
   dogLeft: [
     '小V！你有沒有發現，氣球小狗不見了？',
-    '氣球小狗只能陪你冒險{b:一定的次數}，次數用完就會離開喔！',
-    '這次我先提醒你！以後要自己注意狗狗還在不在身邊喔！',
+    '氣球很有趣，但它會{b:消氣}，請好好珍惜！',
+    '這次我先提醒你，以後要自己注意狗狗還在不在身邊喔！',
   ],
   // 本輪暫用教學文字（使用者指定，之後可再調整）
   hammerCrafted: [
@@ -18741,9 +18811,11 @@ const RPG_TEXT = {
     { sp: 'king',     face: 'orange_king_angry', text: '哈哈哈！你的氣球碰到我的橘子油，可是會直接爆掉的！' },
     { sp: 'balloonv', face: 'balloonv_heroic',   text: '那我就想辦法，讓你知道氣球的厲害！' },
   ],
-  // v0.3.61：2-3 發現橘子王觀察筆記後，小V的反應（測試台詞，可再修改）
+  // v0.3.62：2-3 觀察筆記 — 先發現（一句）→ 中央展示 → 讀完的反應（兩句）
+  kingNoteFind: [
+    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！？這是什麼？' },
+  ],
   kingNoteReaction: [
-    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦？！這裡竟然有一張關於{g:橘子王}的觀察筆記！' },
     { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來如此……他的攻擊似乎都{b:有跡可循}！' },
     { sp: 'balloonv', face: 'balloonv_happy',     text: '太好了！這些情報說不定能派上用場！' },
   ],
@@ -18754,7 +18826,10 @@ function rpgBuildScene(id, extra) {
     'rpg001_stage11_intro': { title: '1-1 開場：星靈', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: [
       { sp: 'spirit', face: 'star_spirit_normal', text: '小V，你背包裡有一把{g:氣球劍}！' },
       { sp: 'spirit', face: 'star_spirit_normal', text: '在派對島的世界裡，{g:氣球武器}可是能拿來攻擊的喔！' },
-      { sp: 'spirit', face: 'star_spirit_normal', text: '不過，{b:氣球本身的特性}還是存在，所以使用的時候要多注意喔！' } ] },
+      { sp: 'spirit', face: 'star_spirit_normal', text: '不過，{b:氣球本身的特性}還是存在，所以使用的時候要多注意喔！' },
+      // v0.3.62：介紹一開始就有的氣球小狗
+      { sp: 'spirit', face: 'star_spirit_normal', text: '對了！你還有一隻{g:氣球小狗}喔！之後可以帶牠一起冒險！' },
+      { sp: 'spirit', face: 'star_spirit_normal', text: '有牠陪伴，每次通關都能{b:恢復 0.5 點 HP}，還能幫你發現{g:隱藏的寶物}！' } ] },
     'rpg002_first_spike': { title: '第一次看到尖刺', modeControlled: true, saveHistory: true, left: 'balloonv_surprised', right: null, pages: [
       { sp: 'balloonv', face: 'balloonv_surprised', text: '哇！前面有{r:尖刺}耶！' },
       { sp: 'balloonv', face: 'balloonv_thinking',  text: '嗯……氣球武器應該{r:沒辦法破壞}它……' },
@@ -18776,10 +18851,13 @@ function rpgBuildScene(id, extra) {
     'rpg006b_dog_woof': { title: '小狗尋寶提醒', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: null, right: 'dog_treasure_alert', dogAlert: true, pages: [
       { sp: 'dog', face: 'dog_treasure_alert', text: RPG_TEXT.dogWoofTreasure } ] },
     // 成功製作氣球小狗（每次真的做出來都播；愛心、不發光；點一下就關）
+    // v0.3.62：真的帶狗出發、冒險開始時 — 狗狗汪汪＋小肉球上飄（不發光；不受顯示模式限制；不寫歷史 / 筆記）
+    'rpg018_dog_depart': { title: '帶氣球小狗出發', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: null, right: 'dog_treasure_alert', dogPaw: true, pages: [
+      { sp: 'dog', face: 'dog_treasure_alert', text: RPG_TEXT.dogWoofDepart } ] },
     'rpg012_dog_crafted': { title: '氣球小狗做好了', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: null, right: 'dog_treasure_alert', dogHeart: true, pages: [
       { sp: 'dog', face: 'dog_treasure_alert', text: RPG_TEXT.dogWoofCrafted } ] },
-    // 狗狗陪伴次數用完離隊 → 星靈一生只提醒一次（顯示模式「全部關閉」也會提醒）
-    'rpg010_dog_left': { title: '氣球小狗離開了', policy: 'oncePerPlayer', saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.dogLeft.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
+    // 狗狗陪伴次數用完、消氣 → 星靈一生只提醒一次（顯示模式「全部關閉」也會提醒）（事件 ID 沿用，保護舊觀看紀錄）
+    'rpg010_dog_left': { title: '氣球小狗消氣了', policy: 'oncePerPlayer', saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.dogLeft.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
     // 1-2：真的做出氣球槌（一般教學，三段模式）
     'rpg011_hammer_crafted': { title: '做出氣球槌', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.hammerCrafted.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
     // 2-4：撿到金色油管環、變成王權劍之後（一般教學，三段模式）
@@ -18789,7 +18867,8 @@ function rpgBuildScene(id, extra) {
     // v0.3.61：2-3 橘子王觀察筆記 — 畫面正中央展示（必要的發現演出，不受顯示模式限制）→ 接著小V反應
     'rpg016_king_note_show': { title: '橘子王觀察筆記', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, showcase: 'orange_king_weakness_note', next: 'rpg017_king_note_reaction', pages: [
       { sp: 'note', face: 'orange_king_weakness_note', text: '' } ] },
-    'rpg017_king_note_reaction': { title: '發現橘子王觀察筆記', modeControlled: true, saveHistory: true, left: 'balloonv_surprised', right: null, pages: RPG_TEXT.kingNoteReaction.map(l => Object.assign({}, l)) },
+    'rpg019_king_note_find': { title: '咦！？這是什麼？', modeControlled: true, saveHistory: true, left: 'balloonv_surprised', right: null, next: 'rpg016_king_note_show', pages: RPG_TEXT.kingNoteFind.map(l => Object.assign({}, l)) },
+    'rpg017_king_note_reaction': { title: '讀完橘子王觀察筆記', modeControlled: true, saveHistory: true, left: 'balloonv_thinking', right: null, pages: RPG_TEXT.kingNoteReaction.map(l => Object.assign({}, l)) },
   });
   if (S[id]) return Object.assign({ id }, S[id]);
   if (id.startsWith('rpg003_weapon_pop:')) {
@@ -18837,26 +18916,32 @@ const RPG_NOTE_DEFS = {
   orangeOil:     { title: '橘子怪', summary: '橘子皮的油會讓氣球破掉，氣球武器不要隨便碰到牠，想辦法繞過去。', from: ['rpg005_first_orange'] },
   dogNose:       { title: '氣球小狗尋寶', summary: '帶氣球小狗出發時，牠的鼻子會發光提醒附近藏著寶物；越靠近越亮。', from: ['rpg006a_dog_treasure'] },
   lollipop:      { title: '氣球棒棒糖', summary: '用 260 氣球製作，做出來就馬上吃掉，恢復 0.5 點 HP。', from: ['rpg007_recipe:balloonLollipop'] },
-  dogTurns:      { title: '狗狗陪伴次數', summary: '氣球小狗只能陪你冒險一定的次數，次數用完就會離開；要自己留意狗狗還在不在身邊。', from: ['rpg010_dog_left'] },
+  dogTurns:      { title: '氣球小狗會消氣', summary: '氣球小狗會隨著冒險逐漸耗損、消氣。要留意陪伴次數，好好珍惜牠！', from: ['rpg010_dog_left'] },
+  dogStart:      { title: '氣球小狗', summary: '你一開始就有一隻氣球小狗，可以帶牠一起冒險；有牠陪伴，每次通關都能恢復 0.5 點 HP，還能幫你發現隱藏的寶物。', from: ['rpg001_stage11_intro'] },
+  hammerSwitch:  { title: '使用氣球槌', summary: '找到氣球槌秘笈、做出氣球槌後：電腦按 2，手機按換武器鍵（🔁），就能切換成槌子。', from: ['rpg007_recipe:basicHammer'] },
   hammer:        { title: '氣球槌', summary: '氣球槌不只能攻擊，還可以把氣球蠍子打飛。', from: ['rpg011_hammer_crafted'] },
   royalSword:    { title: '王權劍', summary: '金色油管環的力量能讓氣球劍變成王權劍；其他氣球武器（例如氣球槌）沒有這種保護。', from: ['rpg013_golden_ring'] },
   popOrangeOil:  { title: '武器碰到橘子怪', summary: '橘子怪的橘子皮油會把氣球武器弄爆。', from: ['rpg003_weapon_pop:orangeOil'] },
 };
-const RPG_STORY_EVENTS = ['rpg014_boss_taunt', 'rpg017_king_note_reaction']; // 純劇情 / 反應：只留劇情紀錄，不算玩法知識
-function rpgNoteIdForEvent(eventId) { return Object.keys(RPG_NOTE_DEFS).find(k => RPG_NOTE_DEFS[k].from.includes(eventId)) || null; }
+const RPG_STORY_EVENTS = ['rpg014_boss_taunt', 'rpg019_king_note_find', 'rpg017_king_note_reaction']; // 純劇情 / 反應：只留劇情紀錄，不算玩法知識
+function rpgNoteIdsForEvent(eventId) { return Object.keys(RPG_NOTE_DEFS).filter(k => RPG_NOTE_DEFS[k].from.includes(eventId)); }
+function rpgNoteIdForEvent(eventId) { return rpgNoteIdsForEvent(eventId)[0] || null; }
 function rpgGrantNote(eventId, at, stageId) {
-  const d = rpgLoad(); const nid = rpgNoteIdForEvent(eventId);
-  if (!nid || d.notes[nid]) return false;
-  const def = RPG_NOTE_DEFS[nid];
-  d.notes[nid] = { id: nid, title: def.title, summary: def.summary, firstAt: at || Date.now(), sourceEventId: eventId, stageId: stageId || '', category: 'tip' };
-  return true;
+  const d = rpgLoad(); let changed = false;
+  rpgNoteIdsForEvent(eventId).forEach(nid => {
+    if (d.notes[nid]) return;
+    const def = RPG_NOTE_DEFS[nid];
+    d.notes[nid] = { id: nid, title: def.title, summary: def.summary, firstAt: at || Date.now(), sourceEventId: eventId, stageId: stageId || '', category: 'tip' };
+    changed = true;
+  });
+  return changed;
 }
 function rpgLearnFromScene(scene, how) {
   const d = rpgLoad(); const now = Date.now(); const sid = (LEVELS[currentLevelIndex] || {}).stageId || '';
   let changed = rpgGrantNote(scene.id, now, sid);
   if (RPG_STORY_EVENTS.includes(scene.id) && !d.story[scene.id]) {
     d.story[scene.id] = { id: scene.id, title: scene.title || scene.id, firstAt: now, stageId: sid,
-      lines: scene.pages.map(p => ({ speaker: RPG_SPEAKERS[p.sp].name, text: rpgPlainText(p.text) })) };
+      lines: scene.pages.map(p => ({ speaker: RPG_SPEAKERS[p.sp].name, text: rpgPlainText(rpgPageText(p)) })) };
     changed = true;
   }
   if (changed) rpgSave();
@@ -18874,10 +18959,11 @@ function rpgMigrateV1(d) {
   d.v = 2; d.__migrated = true;
 }
 function rpgGrantNoteRaw(d, eventId, at, stageId) {
-  const nid = rpgNoteIdForEvent(eventId);
-  if (!nid || d.notes[nid]) return;
-  const def = RPG_NOTE_DEFS[nid];
-  d.notes[nid] = { id: nid, title: def.title, summary: def.summary, firstAt: at || Date.now(), sourceEventId: eventId, stageId: stageId || '', category: 'tip' };
+  rpgNoteIdsForEvent(eventId).forEach(nid => {
+    if (d.notes[nid]) return;
+    const def = RPG_NOTE_DEFS[nid];
+    d.notes[nid] = { id: nid, title: def.title, summary: def.summary, firstAt: at || Date.now(), sourceEventId: eventId, stageId: stageId || '', category: 'tip' };
+  });
 }
 // 重點字標示：{g:金色道具} {r:紅色危險} {b:藍色提示}（逐字速度照算可見字數；用 DOM 文字節點，不用 innerHTML）
 function rpgParseMarkup(text) {
@@ -18891,6 +18977,37 @@ function rpgParseMarkup(text) {
   if (last < str.length) out.push({ cls: '', chars: Array.from(str.slice(last)) });
   return out;
 }
+function rpgPageText(p) { return (p && typeof p.text === 'function') ? p.text() : (p ? p.text : ''); }
+// v0.3.62：在對話上層圈出真正的按鈕（量按鈕當下的實際畫面位置；複製外觀，不會真的觸發按鈕功能）
+let rpgFocusBtnId = null;
+function rpgSetButtonFocus(btnId) {
+  const ov = document.getElementById('rpg-overlay'); if (!ov) return;
+  let el = ov.querySelector('.rpg-btnfocus');
+  rpgFocusBtnId = btnId || null;
+  if (!btnId) { if (el) el.style.display = 'none'; return; }
+  const btn = document.getElementById(btnId); if (!btn) return;
+  if (!el) {
+    el = document.createElement('div'); el.className = 'rpg-btnfocus';
+    el.innerHTML = '<div class="rpg-btnfocus-glow"></div><div class="rpg-btnfocus-clone"></div><div class="rpg-btnfocus-arrow">▼</div>';
+    ov.appendChild(el);
+  }
+  const holder = el.querySelector('.rpg-btnfocus-clone');
+  while (holder.firstChild) holder.removeChild(holder.firstChild);
+  const cl = btn.cloneNode(true); cl.removeAttribute('id'); cl.removeAttribute('onclick'); cl.tabIndex = -1; cl.setAttribute('aria-hidden', 'true');
+  holder.appendChild(cl);
+  rpgPositionButtonFocus();
+  el.style.display = 'block';
+}
+function rpgPositionButtonFocus() {
+  if (!rpgFocusBtnId) return;
+  const ov = document.getElementById('rpg-overlay'); const btn = document.getElementById(rpgFocusBtnId);
+  const el = ov && ov.querySelector('.rpg-btnfocus'); if (!el || !btn) return;
+  const r = btn.getBoundingClientRect(), o = ov.getBoundingClientRect();
+  el.style.left = (r.left - o.left) + 'px'; el.style.top = (r.top - o.top) + 'px';
+  el.style.width = r.width + 'px'; el.style.height = r.height + 'px';
+  const cl = el.querySelector('.rpg-btnfocus-clone > *'); if (cl) { cl.style.width = r.width + 'px'; cl.style.height = r.height + 'px'; cl.style.margin = '0'; }
+}
+if (typeof window !== 'undefined') ['resize', 'orientationchange', 'fullscreenchange'].forEach(ev => (ev === 'fullscreenchange' ? document : window).addEventListener(ev, () => setTimeout(() => { try { rpgPositionButtonFocus(); } catch (e) {} }, 120)));
 function rpgPlainText(text) { return String(text || '').replace(/\{[grb]:([^}]*)\}/g, '$1'); }
 function rpgRenderMarkup(el, segs, n) {
   if (!el) return;
@@ -19160,10 +19277,10 @@ function rpgEnsureDom() {
       '<div class="rpg-mask"></div>'
     + '<div class="rpg-side rpg-side--left"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div></div>'
     + '<div class="rpg-target" style="display:none"><div class="rpg-target-glow"></div><div class="rpg-target-arrow">▼</div></div>'
-    + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div><div class="rpg-dog-heart">💗</div></div>'
+    + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div><div class="rpg-dog-heart">💗</div><div class="rpg-dog-paws"><span>🐾</span><span>🐾</span><span>🐾</span></div></div>'
     + '<div class="rpg-topbtns"><button type="button" class="rpg-btn" data-act="log">📖 冒險提示筆記</button><button type="button" class="rpg-btn" data-act="skip">⏭ 略過</button></div>'
     + '<div class="rpg-box"><div class="rpg-box-bg"></div><div class="rpg-name"></div><div class="rpg-text"></div><button type="button" class="rpg-next" data-act="next">繼續 ▼</button></div>'
-    + '<div class="rpg-showcase" style="display:none"><img class="rpg-showcase-img" alt=""><div class="rpg-showcase-err"></div><div class="rpg-showcase-hint">點一下畫面繼續</div></div>'
+    + '<div class="rpg-showcase" style="display:none"><img class="rpg-showcase-img" alt=""><div class="rpg-showcase-err"></div><button type="button" class="hv-ui-btn hv-ui-btn--primary rpg-showcase-done" data-act="showcasedone">看完了</button></div>'
     + '<div class="rpg-log" style="display:none"><div class="rpg-log-panel"><div class="rpg-log-head"><span>📜 對話紀錄</span><button type="button" class="rpg-btn" data-act="logclose">✕ 關閉</button></div><div class="rpg-log-body"></div></div></div>';
   wrap.appendChild(ov);
   ov.addEventListener('click', e => {
@@ -19246,6 +19363,10 @@ function rpgSetSide(sideEl, key, active) {
   if (sideEl.dataset.key === key) return;
   sideEl.dataset.key = key;
   sideEl.classList.toggle('rpg-side--book', key === 'balloon_recipe_book');
+  const bp = RPG_BOSS_PORTRAIT[key]; // v0.3.62：Boss 立繪用大型比例
+  sideEl.classList.toggle('rpg-side--boss', !!bp);
+  if (bp) { sideEl.style.width = sideEl.style.height = 'calc(' + bp.size + 'px * var(--rk))'; sideEl.style.right = 'calc(' + bp.right + 'px * var(--rk))'; sideEl.style.bottom = 'calc(' + bp.bottom + 'px * var(--rk))'; }
+  else { sideEl.style.width = sideEl.style.height = sideEl.style.right = sideEl.style.bottom = ''; }
   sideEl.classList.toggle('rpg-side--dog', key === 'dog_treasure_alert');
   // v0.3.61：這張表情載入失敗 → 改用同一角色已載好的表情（測試版角落標示失敗的檔案）
   const useKey = rpgResolveFace(key);
@@ -19289,6 +19410,7 @@ function rpgOpen(scene, opts) {
   rpgSetUiMode(ui);
   rpgFitScale();
   ov.classList.toggle('rpg--dog-heart', !!scene.dogHeart);
+  ov.classList.toggle('rpg--dog-paw', !!scene.dogPaw);
   rpgSetTargetHighlight(scene.targetFn ? (() => { try { return scene.targetFn(); } catch (e) { return null; } })() : null);
   ov.querySelector('.rpg-log').style.display = 'none';
   ov.classList.toggle('rpg--dog-alert', !!scene.dogAlert);
@@ -19337,7 +19459,8 @@ function rpgShowPage(i) {
   rpgTypeStart = performance.now(); rpgTypeDone = false;
   ov.querySelector('.rpg-box').classList.remove('rpg-box--done');
   cancelAnimationFrame(rpgRaf);
-  const segs = rpgParseMarkup(p.text);
+  const segs = rpgParseMarkup(rpgPageText(p));
+  rpgSetButtonFocus(p.focusSwitchBtn && rpgIsTouchControlsShown() ? 'btn-switch-weapon' : null); // v0.3.62：只在這一頁圈出換武器鍵
   const total = segs.reduce((a, sg) => a + sg.chars.length, 0);
   const tick = () => {
     if (!rpgActive) return;
@@ -19355,13 +19478,15 @@ function rpgHandleAction(act) {
   if (document.querySelector('#rpg-overlay .rpg-log').style.display !== 'none') return; // 紀錄開著時點背景不前進
   if (rpgNotesOpen()) return; // 提示筆記開著時，點擊不讓對話前進
   if (act === 'skip') { rpgClose('skipped'); return; }
-  if (performance.now() - rpgOpenedAt < 250) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
+  if (rpgActive.showcase && (act === 'showcasedone' || act === 'key')) { rpgClose('finished'); return; }
+  if (performance.now() - rpgOpenedAt < 250 && !rpgActive.showcase) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
+  if (rpgActive.showcase) { if (act === 'showcasedone' || act === 'key') rpgClose('finished'); return; } // v0.3.62：觀察筆記由玩家按「看完了」才關（點畫面其他地方不會誤關）
   if (rpgActive.oneClick) { rpgClose('finished'); return; } // v0.3.60：狗狗汪汪一頁 → 點一下就關（不用先補完文字）
   // 第一次點：補完本頁；第二次點：下一頁
   if (!rpgTypeDone) {
     cancelAnimationFrame(rpgRaf); rpgTypeDone = true;
     const ov = document.getElementById('rpg-overlay');
-    rpgRenderMarkup(ov.querySelector('.rpg-text'), rpgParseMarkup(rpgActive.pages[rpgPageIdx].text), Infinity);
+    rpgRenderMarkup(ov.querySelector('.rpg-text'), rpgParseMarkup(rpgPageText(rpgActive.pages[rpgPageIdx])), Infinity);
     ov.querySelector('.rpg-box').classList.add('rpg-box--done');
     return;
   }
@@ -19382,6 +19507,7 @@ function rpgClose(how) {
   const ov = document.getElementById('rpg-overlay');
   if (ov) { ov.style.display = 'none'; ov.classList.remove('rpg--show', 'rpg--showcase'); const sc = ov.querySelector('.rpg-showcase'); if (sc) sc.style.display = 'none'; }
   rpgSetTargetHighlight(null);   // 對話結束：光暈與箭頭立即消失
+  rpgSetButtonFocus(null);       // v0.3.62：按鈕引導也立即消失
   rpgSetUiMode(false);
   Object.keys(keys).forEach(k => { keys[k] = false; });
   Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; });
@@ -19412,13 +19538,13 @@ function rpgOpenNotes() {
   const notes = Object.values(d.notes).sort((a, b) => a.firstAt - b.firstAt);
   body.appendChild(add('div', 'rpg-notes-sec', '💡 玩法提示'));
   if (!notes.length) body.appendChild(add('div', 'rpg-notes-empty', '還沒有提示。冒險中看完（或略過）教學後，重點會記在這裡。'));
-  notes.forEach(n => { const c = add('div', 'rpg-note'); c.appendChild(add('div', 'rpg-note-title', n.title)); c.appendChild(add('div', 'rpg-note-sum', n.summary)); body.appendChild(c); });
+  notes.forEach(n => { const def = RPG_NOTE_DEFS[n.id] || n; const c = add('div', 'rpg-note'); c.appendChild(add('div', 'rpg-note-title', def.title)); c.appendChild(add('div', 'rpg-note-sum', def.summary)); body.appendChild(c); }); // v0.3.62：以目前版本的文字顯示（例如「離開」→「消氣」）
   const story = Object.values(d.story).sort((a, b) => a.firstAt - b.firstAt);
   if (story.length) {
     body.appendChild(add('div', 'rpg-notes-sec', '🎭 劇情紀錄'));
     story.forEach(st => { const c = add('div', 'rpg-note rpg-note--story'); c.appendChild(add('div', 'rpg-note-title', st.title));
       // 以目前版本的正式台詞顯示（例如舊版存的是互嗆草稿 → 顯示定稿）；找不到場景才用存下來的內容
-      let cur = null; try { const sc = rpgBuildScene(st.id); if (sc && sc.pages) cur = sc.pages.map(p => ({ speaker: RPG_SPEAKERS[p.sp].name, text: rpgPlainText(p.text) })); } catch (e) {}
+      let cur = null; try { const sc = rpgBuildScene(st.id); if (sc && sc.pages) cur = sc.pages.map(p => ({ speaker: RPG_SPEAKERS[p.sp].name, text: rpgPlainText(rpgPageText(p)) })); } catch (e) {}
       (cur || st.lines || []).forEach(l => { const ln = add('div', 'rpg-note-line'); ln.appendChild(add('b', '', l.speaker)); ln.appendChild(document.createTextNode(l.text)); c.appendChild(ln); }); body.appendChild(c); });
   }
   el.style.display = 'flex';
@@ -19451,9 +19577,10 @@ function rpgHandleKey(e) {
   if (e.code === 'Escape') {
     const log = document.querySelector('#rpg-overlay .rpg-log');
     if (log && log.style.display !== 'none') { log.style.display = 'none'; return true; }
+    if (rpgActive.showcase) { rpgHandleAction('key'); return true; } // 展示中按 Esc = 看完了
     rpgHandleAction('skip'); return true;
   }
-  if (['Enter', 'Space', 'KeyZ', 'ArrowRight', 'NumpadEnter'].includes(e.code)) rpgHandleAction('next');
+  if (['Enter', 'Space', 'KeyZ', 'ArrowRight', 'NumpadEnter'].includes(e.code)) rpgHandleAction(rpgActive.showcase ? 'key' : 'next');
   return true;
 }
 
