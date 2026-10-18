@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.63-adventure-final-results-test-1';
-const BUILD_TIME   = '2026-10-18 12:05';
+const GAME_VERSION = 'adventure-v0.3.64-sfx-and-scoring-fixes-test-1';
+const BUILD_TIME   = '2026-10-19 02:55';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -5579,6 +5579,7 @@ function updateCamera() {
 }
 
 function updatePlayer(dt) {
+  try { sfxOnPlayerFrameStart(); } catch (e) {} // v0.3.64
   // Horizontal movement
   let moving = false;
   if (inp('left'))  { player.vx = -PLAYER_SPEED; player.facingRight = false; moving = true; }
@@ -5593,6 +5594,7 @@ function updatePlayer(dt) {
   if (inp('jump') && player.onGround) {
     player.vy = -JUMP_FORCE;
     player.onGround = false;
+    try { sfxPlay('jump'); } catch (e) {} // v0.3.64：真的起跳才播一次
   }
 
   // Gravity
@@ -5636,6 +5638,7 @@ function updatePlayer(dt) {
       player.onGround = true;
     }
   });
+  try { sfxOnPlayerFrameEnd(); } catch (e) {} // v0.3.64：從空中落地
 
   // Attack
   if (player.attackCooldown > 0) player.attackCooldown--;
@@ -5663,12 +5666,14 @@ function updatePlayer(dt) {
       player.hammerAnimTimer    = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR;
       player.hammerSwingId      = (player.hammerSwingId || 0) + 1; // v0.3.18-fix-2：新槌擊 ID
       player.hammerHit          = false;
+      try { sfxOnAttackStart('hammer'); } catch (e) {} // v0.3.64
     } else if (activeSlot === 'sword' && equippedSword && equippedSword.id === 'basicSword') {
       player.attackCooldown = CONFIG.BASIC_SWORD_ATTACK_COOLDOWN;
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
       player.meleeHit       = false;
       player.swordSwingId   = (player.swordSwingId || 0) + 1; // v0.3.18-test-2：新揮劍 ID
       player.swordAnimTimer = 30; // 視覺動畫獨立計時（30 幀）
+      try { sfxOnAttackStart('sword'); } catch (e) {} // v0.3.64
     } else {
       player.attackCooldown = 30;
       player.attackActive   = 12;
@@ -5757,6 +5762,7 @@ function damageScorpionEnemy(e, amount, source, onKillFn) {
 
   e.hp -= amount;
   e.hurtCooldown = SCORPION_HURT_COOLDOWN_FRAMES;
+  try { if (source === 'sword') sfxPlay('swordHit'); else if (source === 'hammer') sfxPlay('hammerHit'); } catch (er) {} // v0.3.64：真的打中才播
 
   if (e.hp <= 0) {
     e.hp = 0;
@@ -7625,6 +7631,7 @@ function checkHiddenTreasure() {
     t.found = true;
     currentRunStats.foundHiddenTreasure = true;
     try { advNoteExplore(t); } catch (e) {} // v0.3.63：本趟探索（和永久解鎖分開）
+    try { sfxPlay('secretDiscovered'); } catch (e) {} // v0.3.64：真的找到隱藏寶藏 / 秘笈（鼻子發光不播）
 
     // v0.3.12：取得瞬間最小視覺回饋（文字上飄 + 淡出，不影響任何取得邏輯）
     // 在這裡先 spawn，後面 showHint 和 pendingRecipe 邏輯不受影響
@@ -7877,6 +7884,7 @@ function checkHazards() {
 
 function damagePlayer() {
   const _hpBefore = player.hp;
+  try { sfxOnPlayerHurt(); } catch (e) {} // v0.3.64：實際受傷才播（呼叫端已檢查無敵影格）
   player.hp--;
   try { advNoteDamage(Math.max(0, _hpBefore - Math.max(0, player.hp))); } catch (e) {} // v0.3.63：最多記錄當時真正剩下的 HP
   player.invincible = 90; // 約 1.5 秒無敵（90 幀 @ 60fps）
@@ -8356,6 +8364,7 @@ function updateOrangeKingRing(dtMs, k) {
 
 function collectOrangeKingRing() {
   const b = orangeKingBoss;
+  try { sfxPlay('ringGet'); } catch (e) {} // v0.3.64
   b.ring.state = 'collected';
   b.ringActive = true;
   if (equippedSword && equippedSword.id) activeSlot = 'sword'; // v0.3.46：2-4 只限劍 → 撿到環就是王權劍
@@ -8470,11 +8479,13 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
   b[lockKey] = swingId;
   const fx = hr.x + 10, fy = Math.max(hr.y + 30, ay + ah / 2);
   if (!b.ringActive) {
+    try { sfxPlay('bossSwordBlock'); } catch (e) {} // v0.3.64：橘子王擋下氣球劍
     orangeKingFloatText('✦', fx, fy, '#cfe8ff');
     showHint('🎈 氣球武器還不能傷到橘子王！', 150);
     return;
   }
   if (b.phase !== 'cooldown' || b.invulnMs > 0) {
+    try { sfxPlay('bossSwordBlock'); } catch (e) {} // v0.3.64：橘子王擋下氣球劍
     orangeKingFloatText('✦ 鏘！', fx, fy, '#cfe8ff');
     if (b.phase !== 'cooldown') showHint('🛡️ 現在打不進去！等牠喘氣再攻擊！', 130);
     return;
@@ -8486,6 +8497,7 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
   b.hurtFlashMs = 260;
   b.invulnMs = ORANGE_KING.HURT_INVULN_MS;
   orangeKingFloatText('-' + dmg, fx, fy - 10, '#ff5c5c');
+  try { sfxPlay('swordHit'); } catch (e) {} // v0.3.64：劍真的打中橘子王
   for (let i = 0; i < 12; i++) { // 命中點金色火花
     const ang = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4;
     b.sparks.push({ x: fx, y: fy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, ms: 0 });
@@ -11014,8 +11026,10 @@ function triggerClear() {
   // 氣球狗結算：先回血，再扣回合（最後一回合仍回血）
   const dog = playerInventory.balloonDog || {};
   if (dog.present) {
+    const _hpBeforeDogHeal = player.hp;
     player.hp = Math.min(player.maxHp, player.hp + 0.5);
     currentRunStats.dogHealed = true;
+    try { sfxOnHeal(player.hp - _hpBeforeDogHeal); } catch (e) {} // v0.3.64：小狗通關療癒（滿血時不播）
     dog.turnsLeft = Math.max(0, (dog.turnsLeft || 1) - 1);
     if (dog.turnsLeft <= 0) {
       dog.present   = false;
@@ -14777,6 +14791,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.64+：sfx-and-scoring-fixes → sfx-scoring（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('sfx-and-scoring-fixes')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'sfx-scoring' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.63+：adventure-final-results → final-results（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('adventure-final-results')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15837,6 +15856,7 @@ let healFx = null; // 冒險中：{ strong, amount, start(ms 或 null = 等回�
 const HEAL_FX_MS = 900;
 function formatHealAmount(v) { const r = Math.round(v * 100) / 100; return (r % 1 === 0 ? String(r) : String(r)); }
 function triggerAdventureHealFx(amount, strong) {
+  try { sfxOnHeal(amount); } catch (e) {} // v0.3.64：實際恢復 HP（同一次補血的兩個演出只播一次）
   if (!(amount > 0)) return;
   healFx = { strong: !!strong, amount, start: null, seed: Math.random() * 1000 }; // 暫停背包裡使用 → 回到遊戲畫面時才開始播
 }
@@ -15949,6 +15969,7 @@ function findHealAnchorEl() {
   return null;
 }
 function playHealFeedbackDom(amount, strong, anchorEl) {
+  try { sfxOnHeal(amount); } catch (e) {} // v0.3.64
   if (typeof document === 'undefined' || !document.body || !(amount > 0)) return;
   ensureHealFxStyles();
   const el = anchorEl || findHealAnchorEl();
@@ -17291,12 +17312,13 @@ function retryOrReturnToPrep(source) {
   const last = retryOrReturnToPrep._last || (retryOrReturnToPrep._last = {});
   if (now - (last[source] || 0) < 400) return;
   last[source] = now;
+  if (source === 'pause') { try { advEndLiveAttempt('manualRetry'); } catch (e) {} } // v0.3.64：關卡進行中從暫停選單主動重新挑戰 → 主動重試 +1（戰敗後的畫面不會走到這裡）
   if (hasValidPrepCheckpoint()) { returnToPrep(source); return; }
   if (gameState === 'paused') gameState = 'playing'; // 原本暫停選單的寫法：先設回 playing 讓 restart() 不被擋
   retryCurrentLevelFromStart();
 }
 function returnToPrep(source, opts) {
-  try { advEndLiveAttempt('abandon'); } catch (e) {} // v0.3.63：關卡中從暫停選單返回整備 = 放棄這次嘗試（死亡後返回不會重複計算）
+  try { advEndLiveAttempt('discard'); } catch (e) {} // v0.3.64：暫停選單來的已在 retryOrReturnToPrep 記為主動重試；死亡後返回不會重複計算
   if (!hasValidPrepCheckpoint()) { console.warn('[Prep] 沒有有效的整備節點，改用重試本關'); retryCurrentLevelFromStart(); return false; }
   const pc = prepCheckpoint;
   // 1. 本關暫時成果回滾到進關快照（失敗 / 時間到已回滾過 → 不重複，保留失敗畫面上的合法交易）
@@ -17608,7 +17630,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart(opts) {
-  try { advEndLiveAttempt('abandon'); } catch (e) {} // v0.3.63：上一次嘗試沒有通關也沒有失敗就重新開始 → 算放棄一次
+  try { advEndLiveAttempt('discard'); } catch (e) {} // v0.3.64：其他原因重新開始（測試捷徑等）→ 不計次數，但已受傷害保留
   try { if (typeof flushPendingAssetApplies === 'function') flushPendingAssetApplies(); } catch (e) {} // v0.3.51：關卡開始時才套用晚到的素材
   dogArtModeLock = null; dogWasRunning = false; // v0.3.55：每關重新決定小狗用正式圖或 fallback
   healFx = null; try { clearHealFxDom(); } catch (e) {} // v0.3.55：補血演出不帶到下一關
@@ -17921,6 +17943,7 @@ function hideResultButtons() {
 
 // ── Guidebook (氣球秘笈) HTML overlay ────────
 function openGuidebook() {
+  try { sfxOnRecipeOpen(); } catch (e) {} // v0.3.64：開啟氣球秘笈（不是找到秘笈的音效）
   renderGuidebook();
   const el = document.getElementById('guidebook-overlay');
   if (el) el.style.display = 'flex';
@@ -18036,6 +18059,7 @@ function renderGuidebook() {
             if (recipe.id === 'balloonDog') craftMsg = '🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5';
             if (recipe.eatOnCraft) craftMsg = '🍭 氣球棒棒糖完成！小V開心地吃掉了棒棒糖！💗 生命恢復 +' + formatHealAmount(player.hp - _hpBeforeCraft); // v0.3.57
             showCraftMessage(craftMsg);
+            try { sfxStartCrafting(); } catch (e) {} // v0.3.64：製作音效跟著製作提示（提示消失就停）
             // 製作 basicHammer 後提示如何使用
             if (recipe.id === 'basicHammer' && !stageFlowHints.hammerCraftHintShown) {
               stageFlowHints.hammerCraftHintShown = true;
@@ -18664,6 +18688,7 @@ let fixedStepCount = 0; // debug：累計邏輯步數
 function loop(timestamp) {
   const rawDelta = lastTime ? (timestamp - lastTime) : FIXED_STEP_MS;
   lastTime   = timestamp;
+  try { sfxSyncFrame(); } catch (e) {} // v0.3.64：循環音效跟著目前狀態開 / 關
 
   // v0.3.12-test-2：核心素材尚未就緒時，只繪製等待畫面，不跑 update/draw，
   // 避免 hero / 蠍子在幾何 fallback 與正式圖片之間閃爍
@@ -18774,8 +18799,9 @@ const RPG_ASSETS = {
 //   taunt：巨大、囂張；angry：更近、更有壓迫感。腳部藏到對話框後面，優先看到王冠、臉、白鬍子、拳頭、裝甲與油管炮
 const RPG_BOSS_PORTRAIT = {
   // v0.3.63：再放大；立繪頂端對齊方框頂端，下半身由畫面下緣裁掉（王冠 / 臉 / 白鬍子 / 拳頭 / 油管保留）
-  orange_king_taunt: { size: 640, right: -80, bottom: -100 },
-  orange_king_angry: { size: 660, right: -100, bottom: -120 },
+  // v0.3.64：大小不變，只往上移（taunt 上移 55、angry 上移 70，960×540 座標）讓王冠 / 臉 / 白鬍子 / 拳頭 / 油管露在對話框上方
+  orange_king_taunt: { size: 640, right: -80, bottom: -45 },
+  orange_king_angry: { size: 660, right: -100, bottom: -50 },
 };
 // v0.3.61：GitHub 上目前的檔名是 balloonv_angry.png.png（多了一個 .png）→ 先試正確檔名，找不到再試這個；改名後自動用正確檔名
 const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png.png'] };
@@ -19465,6 +19491,7 @@ function rpgOpen(scene, opts) {
   ov.style.display = 'block';
   ov.classList.remove('rpg--show'); void ov.offsetWidth; ov.classList.add('rpg--show');
   rpgOpenedAt = performance.now();
+  try { sfxOnDialogOpen(scene); } catch (e) {} // v0.3.64：對話框真的彈出時播一次（翻頁不播）
   ov.classList.toggle('rpg--showcase', !!scene.showcase);
   if (scene.showcase) { rpgShowShowcase(scene); console.log('[RPG] 中央展示', scene.id); return true; }
   rpgShowPage(0);
@@ -19647,6 +19674,7 @@ function rpgShowDogFloat() {
   el.style.display = 'block';
   el.classList.remove('rpg-df--show'); void el.offsetWidth; el.classList.add('rpg-df--show');
   rpgDogFloatShows++;
+  try { sfxPlay('dogBark'); } catch (e) {} // v0.3.64：小狗「汪汪！」
   clearTimeout(rpgDogFloatTimer);
   rpgDogFloatTimer = setTimeout(() => rpgHideDogFloat(), 2800);
 }
@@ -19694,7 +19722,8 @@ if (typeof window !== 'undefined') Object.assign(window, { debugRpg, rpgDebugPla
 //  ・收集 / 探索 / 擊敗成果只在該關成功通關時提交；同一關重新通過 → 取代，不相加
 //  ・本機存檔依 playerKey 隔離，使用測試版專用鍵名，不碰背包 / 身份 / V幣 / RPG / Firebase
 // ════════════════════════════════════════════════════════════════════
-const ADV_SCORE_VERSION = 'adventure-score-v1-test';
+const ADV_SCORE_VERSION = 'adventure-score-v2-test'; // v0.3.64：圓氣球分母固定 9、挑戰表現改為「戰敗 −150 / 主動重試 −50」（v1 紀錄保留但不直接比較）
+const ADV_SCORE_VERSION_V1 = 'adventure-score-v1-test';
 const ADV_STORE_PREFIX  = 'balloonV_adventureChallenge_v1test__'; // 測試版專用鍵（正式版沒有這個鍵，不會互相覆寫）
 const ADV_STORE_DATA_V  = 1;
 const ADV_RECENT_LIMIT  = 10;   // 最近完成紀錄保留筆數
@@ -19716,7 +19745,7 @@ function advStageLabel(sid) { const s = OFFICIAL_ADVENTURE_STAGES.find(x => x.st
 
 // 計分資源目錄（依 v0.3.62 關卡資料實際盤點；advVerifyCatalog() 會在開機時和關卡產生器比對）
 //   coins / b260：buildCoins() / buildBalloons() 固定數量
-//   roundMax：buildRoundBalloons() 在背包圓氣球 = 0 時的最多生成數（實際分母 = 成功通關那次真正生成在地圖上的數量）
+//   roundMax：buildRoundBalloons() 在背包圓氣球 = 0 時的生成數 = 關卡配置數（v0.3.64：計分分母固定用這個總數 9，不隨玩家背包變化）
 //   normal / big：buildEnemies() 的一般蠍子 / 重甲（大型）蠍子
 //   explore：需要帶氣球小狗才會出現的隱藏物
 const ADV_RESOURCE_CATALOG = {
@@ -19739,7 +19768,8 @@ const ADV_SCORE_RULES = {
   collect:   { coins: 1200, b260: 1200, round: 600 },
   explore:   { treasure: 1000, recipe: 1000, note: 500 },
   combat:    { enemies: 1400, boss: 600, weight: { normal: 1, big: 4 } },
-  survival:  { damageMax: 600, perHp: 30, failureMax: 900, perFailure: 150 },
+  // v0.3.64：挑戰表現 = max(0, 900 − 戰敗 × 150 − 主動重試 × 50)；戰敗 = HP 歸零（以及 60 秒時間到）
+  survival:  { damageMax: 600, perHp: 30, challengeMax: 900, perDefeat: 150, perManualRetry: 50 },
   // 效率：各關「成功通關那一次」的有效秒數 → min(1, 基準 / 實際)，七關平均 × 1000
   //   confirmed = 已由玩家實測確認（不可擅自更改）；其他為測試版初始值（地圖長度 ÷ 小V最高速度 228px/秒 × 約 1.3）
   efficiencyTargets: {
@@ -19765,6 +19795,26 @@ function advRankFor(total) { return ADV_SCORE_RULES.ranks.find(r => total >= r.m
 function advPlayerKey() { try { return (getPlayerIdentityForResult() || {}).playerKey || 'guest'; } catch (e) { return 'guest'; } }
 function advStorageKey(pk) { return ADV_STORE_PREFIX + (pk || advPlayerKey()); }
 function advEmptyData() { return { v: ADV_STORE_DATA_V, active: null, best: {}, recent: [], archived: [] }; }
+// v0.3.64：進行中的 v1 挑戰 → v2。v1 每一筆失敗本來就記錄了類型，直接依類型轉換（不從合併次數猜測）：
+//   death → 戰敗、timeout → 時間到（戰敗）、abandon（v1 只在暫停選單重試 / 返回整備或測試捷徑時產生）→ 主動重試、interrupted → 不扣分
+//   已完成的 v1 成績（best / recent）完全不動
+function advMigrateRunToV2(run) {
+  if (!run || run.scoreVersion !== ADV_SCORE_VERSION_V1) return false;
+  if (run.status === 'completed' || run.status === 'abandoned') return false;
+  const c = { deaths: 0, timeouts: 0, manualRetries: 0, interruptions: 0 };
+  (run.failures || []).forEach(f => {
+    if (f.type === 'death') c.deaths++;
+    else if (f.type === 'timeout') c.timeouts++;
+    else if (f.type === 'abandon') { c.manualRetries++; f.type = 'manualRetry'; f.v1Type = 'abandon'; }
+    else if (f.type === 'interrupted') c.interruptions++;
+  });
+  Object.assign(run, c);
+  run.v1TotalFailures = run.totalFailures;
+  run.totalFailures = c.deaths + c.timeouts;
+  run.scoreVersion = ADV_SCORE_VERSION; run.migratedFrom = ADV_SCORE_VERSION_V1; run.updatedAt = Date.now();
+  console.log('[Score] 進行中的 v1 挑戰轉為 v2', run.challengeId, c);
+  return true;
+}
 function advLoad() {
   let d = null;
   try { d = JSON.parse(localStorage.getItem(advStorageKey()) || 'null'); } catch (e) { d = null; }
@@ -19774,6 +19824,7 @@ function advLoad() {
     d = advEmptyData();
   }
   if (!d.best) d.best = {}; if (!Array.isArray(d.recent)) d.recent = []; if (!Array.isArray(d.archived)) d.archived = [];
+  if (d.active && advMigrateRunToV2(d.active)) { try { localStorage.setItem(advStorageKey(), JSON.stringify(d)); } catch (e) {} }
   return d;
 }
 function advSave(d) { try { localStorage.setItem(advStorageKey(), JSON.stringify(d)); return true; } catch (e) { console.warn('[Score] 存檔失敗', e); return false; } }
@@ -19786,6 +19837,7 @@ function advNewRun(status, reason) {
     status: status || 'in_progress', taint: reason ? [reason] : [],
     createdAt: now, startedAt: now, updatedAt: now,
     stageResults: {}, totalFailures: 0, totalActualHpLost: 0, failedAttemptTime: 0, failures: [],
+    deaths: 0, timeouts: 0, manualRetries: 0, interruptions: 0, // v0.3.64：分開計數（totalFailures = 戰敗 = deaths + timeouts）
     currentStageId: null, lastAttemptCleared: false, live: null, resume: null,
     completedAt: null, finalScore: null, finalRank: null, snapshot: null,
   };
@@ -19869,25 +19921,37 @@ function advWithRun(fn) {
   fn(d, run);
 }
 // 失敗 / 中途放棄：在關卡回復「之前」呼叫；同一次嘗試只會提交一次
-//   type：death（HP 歸零）/ timeout（60 秒時間到）/ abandon（暫停選單重試、返回整備）/ interrupted（關閉網頁中斷）
+//   type：death（HP 歸零）/ timeout（60 秒時間到）/ manualRetry（暫停選單主動重新挑戰）/ discard（其他重新開始，不計次數）
 function advEndLiveAttempt(type) {
   if (!advAttempt || advAttempt.ended) return;
   const a = advAttempt; a.ended = true;
   const d = advLoad(); const run = d.active;
   if (!run || run.challengeId !== a.challengeId) { advAttempt = null; return; }
   const sec = +(elapsedSec || 0).toFixed(3);
-  if ((type === 'abandon' || type === 'interrupted') && sec < 1 && a.hpLost <= 0) { run.live = null; advSave(d); return; } // 還沒開始玩就離開：不算失敗
   advCommitFailure(run, { stageId: a.stageId, type, hpLost: a.hpLost, sec });
   run.live = null;
   advSave(d);
 }
+// v0.3.64：結束一次沒有通關的嘗試
+//   death（HP 歸零）/ timeout（60 秒時間到）→ 戰敗 +1
+//   manualRetry（暫停選單「重試本關 / 返回整備」）→ 主動重試 +1
+//   interrupted（關閉 / 重新整理網頁）、discard（測試捷徑等其他重新開始）→ 不加任何次數
+//   不論哪一種，這次嘗試已經受到的傷害與耗時都保留（不會因為重新整理而消失）
+function advEnsureCounters(run) {
+  ['deaths', 'timeouts', 'manualRetries', 'interruptions'].forEach(k => { if (typeof run[k] !== 'number') run[k] = 0; });
+}
 function advCommitFailure(run, f) {
-  run.totalFailures += 1;
+  advEnsureCounters(run);
+  if (f.type === 'death') run.deaths += 1;
+  else if (f.type === 'timeout') run.timeouts += 1;
+  else if (f.type === 'manualRetry') run.manualRetries += 1;
+  else if (f.type === 'interrupted') run.interruptions += 1;
+  run.totalFailures = run.deaths + run.timeouts;
   run.totalActualHpLost = +(run.totalActualHpLost + (f.hpLost || 0)).toFixed(2);
   run.failedAttemptTime = +(run.failedAttemptTime + (f.sec || 0)).toFixed(3);
   run.failures.push({ stageId: f.stageId, type: f.type, hpLost: f.hpLost || 0, sec: f.sec || 0, at: Date.now() });
   run.updatedAt = Date.now();
-  console.log('[Score] 失敗紀錄', f.type, f.stageId, '累計失敗', run.totalFailures, '累計損失 HP', run.totalActualHpLost);
+  console.log('[Score] 嘗試結束', f.type, f.stageId, '戰敗', run.totalFailures, '主動重試', run.manualRetries, '累計損失 HP', run.totalActualHpLost);
 }
 // triggerClear() 一開始呼叫：提交本關有效成果（取代同關舊成果，不相加）
 function advOnAttemptCleared() {
@@ -19998,7 +20062,7 @@ function advComputeScore(run) {
   // 收集
   const coins = { got: advSumStages(run, r => r.coins.length), total: advCatalogTotal('coins') };
   const b260  = { got: advSumStages(run, r => r.b260.length),  total: advCatalogTotal('b260') };
-  const round = { got: advSumStages(run, r => r.round.length), total: advSumStages(run, r => r.roundSpawned || 0), catalogMax: advCatalogTotal('roundMax') };
+  const round = { got: advSumStages(run, r => new Set(r.round).size), total: advCatalogTotal('roundMax'), spawned: advSumStages(run, r => r.roundSpawned || 0) }; // v0.3.64：分母固定 = 七關配置總數
   const collect = advWeighted(R.max.collect, [
     { key: 'coins', weight: R.collect.coins, got: coins.got, total: coins.total },
     { key: 'b260',  weight: R.collect.b260,  got: b260.got,  total: b260.total },
@@ -20023,9 +20087,12 @@ function advComputeScore(run) {
   const combatScore = Math.min(R.max.combat, enemyScore + (bossDefeated ? R.combat.boss : 0));
   // 生存
   const hpLost = +run.totalActualHpLost.toFixed(2);
+  advEnsureCounters(run);
+  const defeats = run.deaths + run.timeouts;
   const damageScore  = Math.max(0, R.survival.damageMax  - hpLost * R.survival.perHp);
-  const failureScore = Math.max(0, R.survival.failureMax - run.totalFailures * R.survival.perFailure);
-  const survivalScore = Math.min(R.max.survival, damageScore + failureScore);
+  const challengeScore = Math.max(0, R.survival.challengeMax - defeats * R.survival.perDefeat - run.manualRetries * R.survival.perManualRetry);
+  const failureScore = challengeScore; // 舊欄位名稱相容
+  const survivalScore = Math.min(R.max.survival, damageScore + challengeScore);
   // 效率
   const eff = OFFICIAL_ADVENTURE_STAGE_IDS.map(sid => {
     const r = run.stageResults[sid]; const target = R.efficiencyTargets[sid].sec;
@@ -20046,7 +20113,7 @@ function advComputeScore(run) {
     raw: {
       coins, b260, round, explore: { treasure: { got: exT.got, total: exT.total }, recipe: { got: exR.got, total: exR.total }, note: { got: exN.got, total: exN.total }, found: [...found] },
       combat: { normal, big, earnedWeight: earnedW, totalWeight: totalW, bossDefeated, otherEnemies: [] },
-      survival: { totalActualHpLost: hpLost, totalFailures: run.totalFailures, failures: run.failures, damageScore, failureScore },
+      survival: { totalActualHpLost: hpLost, totalFailures: defeats, deaths: run.deaths, timeouts: run.timeouts, manualRetries: run.manualRetries, interruptions: run.interruptions, failures: run.failures, damageScore, challengeScore, failureScore },
       efficiency: eff, failedAttemptTime: run.failedAttemptTime,
     },
     rawScores: raw, scores: rounded.parts, total, rank: rk.rank, rankTitle: rk.title,
@@ -20097,7 +20164,7 @@ let advLastSnapshot = null;
 
 // ── 開機：未完成的一趟冒險 → 詢問繼續或重新開始 ──
 function advRunHasProgress(run) {
-  return !!run && (Object.keys(run.stageResults).length > 0 || run.totalFailures > 0 || run.totalActualHpLost > 0
+  return !!run && (Object.keys(run.stageResults).length > 0 || run.totalFailures > 0 || (run.manualRetries || 0) > 0 || run.totalActualHpLost > 0
     || (run.live && (run.live.sec >= 1 || run.live.hpLost > 0)));
 }
 function advBoot() {
@@ -20105,10 +20172,10 @@ function advBoot() {
   const d = advLoad(); const run = d.active;
   if (run && run.status === 'test_only') { advArchiveRun(d, run, 'test_only'); d.active = null; advSave(d); }
   else if (run && run.status === 'in_progress') {
-    // 上次關閉網頁時還在關卡中 → 視同放棄那次嘗試（已受傷或已玩超過 1 秒才算失敗；恢復時 HP 會回到該關開始狀態）
+    // 上次關閉網頁時還在關卡中 → 那次嘗試結束（v0.3.64：不扣分；已受到的傷害保留；恢復時回到該關開始）
     if (run.live) {
       const L = run.live;
-      if (L.sec >= 1 || L.hpLost > 0) advCommitFailure(run, { stageId: L.stageId, type: 'interrupted', hpLost: L.hpLost || 0, sec: L.sec || 0 });
+      advCommitFailure(run, { stageId: L.stageId, type: 'interrupted', hpLost: L.hpLost || 0, sec: L.sec || 0 }); // v0.3.64：不加戰敗 / 重試次數，只保留傷害與耗時
       run.live = null; advSave(d);
     }
     if (advRunHasProgress(run)) { advShowResumePrompt(run); return; }
@@ -20124,8 +20191,8 @@ function advShowResumePrompt(run) {
   const where = r.atPrep ? (advStageLabel(r.stageId) + ' 過關後的整備') : ((r.stageId ? advStageLabel(r.stageId) : '1-1') + ' 開始');
   el.innerHTML = '<div class="adv-resume-card">'
     + '<div class="adv-resume-title">🎈 上一趟完整冒險還沒完成</div>'
-    + '<div class="adv-resume-stats">已通過 <b>' + cleared + ' / 7</b> 關　·　失敗 <b>' + run.totalFailures + '</b> 次　·　累計損失 <b>' + run.totalActualHpLost + '</b> HP</div>'
-    + '<div class="adv-resume-hint">繼續的話，會從「' + escapeHtml(where) + '」接著冒險，失敗次數和受傷紀錄都會保留。</div>'
+    + '<div class="adv-resume-stats">已通過 <b>' + cleared + ' / 7</b> 關　·　戰敗 <b>' + run.totalFailures + '</b> 次　·　主動重試 <b>' + (run.manualRetries || 0) + '</b> 次　·　累計損失 <b>' + run.totalActualHpLost + '</b> HP</div>'
+    + '<div class="adv-resume-hint">繼續的話，會從「' + escapeHtml(where) + '」接著冒險，戰敗、重試和受傷紀錄都會保留（重新整理不會額外扣分）。</div>'
     + '<div class="adv-resume-btns">'
     + '<button type="button" class="hv-ui-btn hv-ui-btn--primary" id="btn-adv-resume">▶ 繼續冒險</button>'
     + '<button type="button" class="hv-ui-btn" id="btn-adv-new">🆕 開始新的冒險</button>'
@@ -20234,6 +20301,8 @@ function advShowFinalResults(snap, best) {
     tie:   '<div class="adv-best-badge adv-best-badge--tie">⭐ 追平個人最佳！</div>',
     below: '', test: '',
   }[snap.bestState] || '';
+  let v1Best = null; try { v1Best = (advLoad().best || {})[ADV_SCORE_VERSION_V1] || null; } catch (e) {}
+  const v1Line = v1Best ? '<div class="adv-old-best">舊版計分規則（v1）最佳：' + advFmt(v1Best.total) + '（' + v1Best.rank + '）— 規則不同，不和本次比較</div>' : '';
   const bestLine = snap.testOnly
     ? (best ? '個人最佳：' + advFmt(best.total) + '（' + best.rank + '）' : '尚未有個人最佳紀錄')
     : (snap.bestState === 'below' ? '個人最佳：' + advFmt(best.total) + '（' + best.rank + '）' : '個人最佳：' + advFmt((best || snap).total) + '（' + (best || snap).rank + '）');
@@ -20257,7 +20326,7 @@ function advShowFinalResults(snap, best) {
     +     '<div class="adv-final-title">派對島大冒險完成！</div>'
     +     '<div class="adv-final-sub">第一章＋第二章｜完整冒險成績</div>'
     +     '<div class="adv-score-line"><span class="adv-score-total">' + advFmt(snap.total) + '</span><span class="adv-score-max"> / 10,000</span></div>'
-    +     '<div class="adv-best-line">' + bestBadge + '<span>' + bestLine + '</span></div>'
+    +     '<div class="adv-best-line">' + bestBadge + '<span>' + bestLine + '</span></div>' + v1Line
     +   '</div>'
     +   '<div class="adv-rank adv-rank--' + snap.rank + '"><div class="adv-rank-letter">' + snap.rank + '</div><div class="adv-rank-title">' + snap.rankTitle + '</div></div>'
     + '</div>'
@@ -20267,7 +20336,7 @@ function advShowFinalResults(snap, best) {
     + '<div class="adv-details">'
     +   '<div class="adv-card"><div class="adv-card-title">🪙 收集　' + advFmt(S.collect) + ' / 3,000</div>'
     +     row('金幣', xy(raw.coins)) + row('260 氣球', xy(raw.b260)) + row('圓氣球', xy(raw.round))
-    +     '<div class="adv-card-note">只算地圖上撿到的；商店購買、系統補發、寶箱金幣不算。圓氣球的分母是實際出現在地圖上的數量（背包已滿時不會出現）。</div></div>'
+    +     '<div class="adv-card-note">只算地圖上撿到的；商店購買、系統補發、寶箱金幣不算。圓氣球分母固定為七關配置的 9 顆（背包已滿時不會出現，就拿不到這幾顆）。</div></div>'
     +   '<div class="adv-card"><div class="adv-card-title">🗺️ 探索　' + advFmt(S.explore) + ' / 2,500</div>'
     +     row('隱藏寶物', xy(raw.explore.treasure)) + row('氣球秘笈', xy(raw.explore.recipe)) + row('重要筆記', xy(raw.explore.note))
     +     '<div class="adv-card-note">隱藏物需要帶氣球小狗才找得到。</div></div>'
@@ -20275,8 +20344,10 @@ function advShowFinalResults(snap, best) {
     +     row('一般蠍子（×1）', xy(raw.combat.normal)) + row('大型蠍子（×4）', xy(raw.combat.big)) + row('橘子王', raw.combat.bossDefeated ? '已擊敗 👑' : '未擊敗')
     +     '<div class="adv-card-note">橘子怪家族只能閃避，不列入擊敗率。</div></div>'
     +   '<div class="adv-card"><div class="adv-card-title">❤️ 生存　' + advFmt(S.survival) + ' / 1,500</div>'
-    +     row('累計實際損失 HP', raw.survival.totalActualHpLost) + row('失敗次數', raw.survival.totalFailures + ' 次')
-    +     row('受傷得分', advFmt(raw.survival.damageScore) + ' / 600') + row('失敗得分', advFmt(raw.survival.failureScore) + ' / 900') + '</div>'
+    +     row('累計實際損失 HP', raw.survival.totalActualHpLost)
+    +     row('戰敗（HP 歸零）', (raw.survival.deaths || 0) + ' 次') + row('時間到', (raw.survival.timeouts || 0) + ' 次') + row('主動重試', (raw.survival.manualRetries || 0) + ' 次')
+    +     row('受傷得分', advFmt(raw.survival.damageScore) + ' / 600') + row('挑戰表現', advFmt(raw.survival.challengeScore != null ? raw.survival.challengeScore : raw.survival.failureScore) + ' / 900')
+    +     '<div class="adv-card-note">戰敗（含時間到）每次 −150、暫停選單主動重試每次 −50；關閉或重新整理網頁不扣分。</div></div>'
     +   '<div class="adv-card adv-card--wide"><div class="adv-card-title">⏱️ 效率　' + advFmt(S.efficiency) + ' / 1,000</div>'
     +     '<div class="adv-eff-head"><span>關卡</span><span>成功通關時間</span><span>效率基準</span><span>表現</span></div>' + effRows
     +     '<div class="adv-card-note">只計算成功通關那一次的有效時間（暫停、對話、筆記、載入與勝利演出不計時）。</div></div>'
@@ -20341,8 +20412,263 @@ function onDogDepartArranged() {
   try { if (typeof rpgRequestUi === 'function') rpgRequestUi('rpg018_dog_depart', 900); } catch (e) {}
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.64：音效（SFX）— 集中式路徑表 + 播放器
+//  ──────────────────────────────────────────────────────────────────
+//  ・路徑表 SFX_DEFS：25 個音效（assets/audio/sfx/<分類>/<檔名>.mp3），依「GitHub Pages 絕對路徑 → 相對路徑 → raw」順序嘗試
+//    （正式首頁、rpg-test/、官網 iframe 都用同一組絕對路徑，不受頁面所在資料夾影響）
+//  ・Web Audio：每個檔案只下載 / 解碼一次；播放時才建立輕量的播放節點（不在每一幀建立新的 Audio）
+//  ・單次音效：每個音效有最短間隔與同時播放上限；全部音效另有總上限，避免無限疊加
+//  ・循環音效（跑步、Boss 招式、製作）：每一幀依「目前遊戲狀態」決定開 / 關（sfxSyncFrame），
+//    狀態結束、暫停、對話、切到背景、離開關卡時自動停止，不會殘留
+//  ・循環區段 loopStart / loopEnd：跳過檔案頭尾的靜音（不修改原始音檔）
+//  ・手機：使用者第一次觸控 / 按鍵後解鎖音訊；切到背景暫停音訊、回到前景恢復
+//  ・載入失敗：該音效安靜略過，不影響遊戲
+// ════════════════════════════════════════════════════════════════════
+const SFX_BASE_PATH = 'assets/audio/sfx/';
+const SFX_DEFS = {
+  // 小V
+  playerHurt:     { path: 'player/player_hurt.mp3',           vol: 0.9 },
+  hammerSwing:    { path: 'player/player_hammer_swing.mp3',   vol: 0.8 },
+  swordSwing:     { path: 'player/player_sword_swing.mp3',    vol: 0.8 },
+  run:            { path: 'player/player_run.mp3',            vol: 0.45, loop: true, loopStart: 0.085, loopEnd: 8.547 },
+  jump:           { path: 'player/player_jump.mp3',           vol: 0.7 },
+  land:           { path: 'player/player_land.mp3',           vol: 0.6, minGapMs: 180 },
+  hammerHit:      { path: 'player/player_hammer_hit.mp3',     vol: 0.9 },
+  swordHit:       { path: 'player/player_sword_hit.mp3',      vol: 0.9 },
+  // 橘子王
+  bossSwordBlock: { path: 'boss/boss_sword_block.mp3',        vol: 0.85 },
+  oilProjectileFly: { path: 'boss/boss_oil_projectile_fly.mp3', vol: 0.7, loop: true, loopStart: 0.452, loopEnd: 5.421 },
+  oilAim:         { path: 'boss/boss_oil_aim.mp3',            vol: 0.7, loop: true, loopStart: 0.048, loopEnd: 2.40 },
+  cannonCharge:   { path: 'boss/boss_cannon_charge.mp3',      vol: 0.75, loop: true },
+  cannonFire:     { path: 'boss/boss_cannon_fire.mp3',        vol: 0.9 },
+  chargeUp:       { path: 'boss/boss_charge_up.mp3',          vol: 0.75, loop: true, loopStart: 0.077, loopEnd: 6.874 },
+  dash:           { path: 'boss/boss_dash.mp3',               vol: 0.8, loop: true },
+  // 小狗
+  dogBark:        { path: 'dog/dog_bark.mp3',                 vol: 0.8, minGapMs: 600 },
+  dogHurt:        { path: 'dog/dog_hurt.mp3',                 vol: 0.7, minGapMs: 400 },
+  dogAngry:       { path: 'dog/dog_angry.mp3',                vol: 0.6, minGapMs: 250, maxVoices: 2 },
+  // 道具 / 介面
+  ringGet:        { path: 'item/golden_pipe_ring_get.mp3',    vol: 0.9 },
+  uiClick:        { path: 'ui/ui_button_click.mp3',           vol: 0.55, minGapMs: 90, maxVoices: 2 },
+  recipeOpen:     { path: 'ui/ui_recipe_open.mp3',            vol: 0.8, minGapMs: 300 },
+  secretDiscovered: { path: 'item/secret_discovered.mp3',     vol: 0.9, minGapMs: 500 },
+  heal:           { path: 'item/heal.mp3',                    vol: 0.8, minGapMs: 500 },
+  dialogOpen:     { path: 'ui/ui_dialog_open.mp3',            vol: 0.6, minGapMs: 200 },
+  crafting:       { path: 'item/balloon_crafting.mp3',        vol: 0.7, loop: true, loopStart: 0.053, loopEnd: 6.197 },
+};
+const SFX_MAX_TOTAL_VOICES = 14;
+const SFX = {
+  ctx: null, master: null, buffers: {}, status: {}, urls: {}, tried: {},
+  volume: 0.85, muted: false, unlocked: false, voices: [], lastPlay: {}, loops: {}, log: [], logOn: false,
+  craftActive: false, prevBossPhase: null, airFrames: 0,
+};
+function sfxReadSettings() { try { const o = JSON.parse(localStorage.getItem('balloonV_sfxSettings') || 'null'); if (o) { if (typeof o.volume === 'number') SFX.volume = Math.max(0, Math.min(1, o.volume)); SFX.muted = !!o.muted; } } catch (e) {} }
+function sfxSaveSettings() { try { localStorage.setItem('balloonV_sfxSettings', JSON.stringify({ volume: SFX.volume, muted: SFX.muted })); } catch (e) {} }
+// 預留：音量 / 靜音（本版沒有設定畫面，之後可接 UI）
+function sfxSetVolume(v) { SFX.volume = Math.max(0, Math.min(1, +v || 0)); if (SFX.master) SFX.master.gain.value = SFX.muted ? 0 : SFX.volume; sfxSaveSettings(); }
+function sfxSetMuted(m) { SFX.muted = !!m; if (SFX.master) SFX.master.gain.value = SFX.muted ? 0 : SFX.volume; sfxSaveSettings(); }
+function sfxEnsureCtx() {
+  if (SFX.ctx) return SFX.ctx;
+  try {
+    const AC = (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext);
+    if (!AC) return null;
+    // iOS Safari 17+：讓音效和 BGM 一樣不受靜音開關影響（不支援的瀏覽器略過）
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+    SFX.ctx = new AC();
+    SFX.master = SFX.ctx.createGain();
+    SFX.master.gain.value = SFX.muted ? 0 : SFX.volume;
+    SFX.master.connect(SFX.ctx.destination);
+  } catch (e) { SFX.ctx = null; }
+  return SFX.ctx;
+}
+function sfxUnlock() {
+  const c = sfxEnsureCtx(); if (!c) return;
+  if (c.state === 'suspended' && !(typeof document !== 'undefined' && document.hidden)) { try { c.resume(); } catch (e) {} }
+  if (!SFX.unlocked) {
+    SFX.unlocked = true;
+    try { const b = c.createBuffer(1, 1, 22050); const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) {} // iOS 解鎖
+    sfxPreloadAll();
+  }
+}
+function sfxCandidates(rel) {
+  const p = SFX_BASE_PATH + rel;
+  if (typeof getAssetSourceCandidates === 'function') return getAssetSourceCandidates(p).map(c => c.url);
+  return [resolveAdventureAssetSrc(p) + '?v=' + encodeURIComponent(GAME_VERSION)];
+}
+function sfxLoad(key) {
+  const def = SFX_DEFS[key]; if (!def) return Promise.resolve(null);
+  if (SFX.status[key] === 'loaded' || SFX.status[key] === 'loading' || SFX.status[key] === 'failed') return SFX.status[key + '__p'] || Promise.resolve(null);
+  const c = sfxEnsureCtx(); if (!c || typeof fetch !== 'function') { SFX.status[key] = 'failed'; return Promise.resolve(null); }
+  SFX.status[key] = 'loading';
+  const urls = sfxCandidates(def.path); SFX.tried[key] = [];
+  const tryAt = (i) => {
+    if (i >= urls.length) { SFX.status[key] = 'failed'; console.warn('[SFX] 載入失敗（略過這個音效）', def.path, SFX.tried[key]); return null; }
+    return fetch(urls[i]).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(ab => new Promise((res, rej) => { try { const pr = c.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); } catch (e) { rej(e); } }))
+      .then(buf => { SFX.buffers[key] = buf; SFX.status[key] = 'loaded'; SFX.urls[key] = urls[i]; return buf; })
+      .catch(err => { SFX.tried[key].push(urls[i].replace(/\?.*$/, '') + ' → ' + (err && err.message || err)); return tryAt(i + 1); });
+  };
+  const p = tryAt(0);
+  SFX.status[key + '__p'] = p;
+  return p;
+}
+let sfxPreloadStarted = false;
+function sfxPreloadAll() {
+  if (sfxPreloadStarted) return; sfxPreloadStarted = true;
+  const keys = Object.keys(SFX_DEFS);
+  let i = 0; const next = () => { if (i >= keys.length) return; const k = keys[i++]; Promise.resolve(sfxLoad(k)).then(next, next); };
+  for (let n = 0; n < 4; n++) next(); // 同時最多 4 個下載，不搶走關卡圖片的頻寬
+}
+function sfxCanPlay() { return !!(SFX.ctx && SFX.ctx.state === 'running' && !(typeof document !== 'undefined' && document.hidden)); }
+function sfxLog(type, key) { if (SFX.logOn) SFX.log.push({ type, key, t: Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now())) }); }
+// 單次音效
+function sfxPlay(key, opts) {
+  try {
+    const def = SFX_DEFS[key]; if (!def || def.loop) return false;
+    const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    if (now - (SFX.lastPlay[key] || -1e9) < (def.minGapMs != null ? def.minGapMs : 70)) return false; // 同一個音效太密集 → 略過
+    SFX.lastPlay[key] = now;
+    sfxLog('play', key);
+    if (!sfxCanPlay()) return false;
+    const buf = SFX.buffers[key]; if (!buf) { sfxLoad(key); return false; }
+    SFX.voices = SFX.voices.filter(v => !v.ended);
+    const same = SFX.voices.filter(v => v.key === key);
+    if (same.length >= (def.maxVoices || 3)) { try { same[0].src.stop(); } catch (e) {} same[0].ended = true; }
+    if (SFX.voices.filter(v => !v.ended).length >= SFX_MAX_TOTAL_VOICES) return false;
+    const c = SFX.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = buf; g.gain.value = (def.vol != null ? def.vol : 1) * ((opts && opts.vol) || 1);
+    src.connect(g); g.connect(SFX.master);
+    const v = { key, src, ended: false }; src.onended = () => { v.ended = true; };
+    src.start(0);
+    SFX.voices.push(v);
+    return true;
+  } catch (e) { return false; }
+}
+// 循環音效：on = true 開始（已在播就不動）/ false 停止
+function sfxLoop(key, on) {
+  const cur = SFX.loops[key];
+  if (!on) {
+    if (cur) { try { cur.src.stop(); } catch (e) {} delete SFX.loops[key]; sfxLog('loopStop', key); }
+    return;
+  }
+  if (cur) return;
+  if (!sfxCanPlay()) return;
+  const def = SFX_DEFS[key]; const buf = SFX.buffers[key];
+  if (!def || !buf) { if (def) sfxLoad(key); return; }
+  try {
+    const c = SFX.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = buf; src.loop = true;
+    const ls = Math.max(0, Math.min(def.loopStart || 0, buf.duration - 0.05));
+    const le = Math.min(buf.duration, def.loopEnd || buf.duration);
+    if (le > ls + 0.05) { src.loopStart = ls; src.loopEnd = le; }
+    g.gain.value = def.vol != null ? def.vol : 1;
+    src.connect(g); g.connect(SFX.master);
+    src.start(0, ls);
+    SFX.loops[key] = { src, g, at: c.currentTime };
+    sfxLog('loopStart', key);
+  } catch (e) {}
+}
+function sfxStopAllLoops() { Object.keys(SFX.loops).forEach(k => sfxLoop(k, false)); }
+const SFX_GAME_LOOPS = ['run', 'oilAim', 'oilProjectileFly', 'cannonCharge', 'chargeUp', 'dash'];
+// 每一幀：依目前狀態決定循環音效（只有狀態改變時才真的開 / 關）
+function sfxSyncFrame() {
+  const want = {};
+  const hidden = (typeof document !== 'undefined' && document.hidden);
+  const playing = !hidden && gameState === 'playing' && !(typeof rpgActive !== 'undefined' && rpgActive && !rpgActive.ui)
+    && !(typeof isGameStartGateActive === 'function' && isGameStartGateActive())
+    && !(typeof advIsBlockingGame === 'function' && advIsBlockingGame())
+    && !(typeof assetGateActive !== 'undefined' && assetGateActive)
+    && !(typeof screenFreezeForTest !== 'undefined' && screenFreezeForTest);
+  if (playing) {
+    if (player.onGround && Math.abs(player.vx || 0) > 0.5 && player.hp > 0) want.run = true;
+    const b = (typeof orangeKingBoss !== 'undefined') ? orangeKingBoss : null;
+    if (b && typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive() && b.phase !== 'defeated' && b.hp > 0) {
+      if (b.phase === 'lobAim' && b.activeLob) want.oilAim = true;                           // 拋物線瞄準虛線存在期間
+      if ((b.lobShots || []).some(s => !s.hit)) want.oilProjectileFly = true;                // 還有油彈在空中飛
+      if (b.phase === 'sprayWarn') want.cannonCharge = true;                                 // 油管砲集氣（預警線）
+      if (b.phase === 'chargeWarn' || b.phase === 'chargeCurl' || b.phase === 'chargeSpin') want.chargeUp = true; // 縮球衝撞的蓄力
+      if (b.phase === 'chargeDash') want.dash = true;                                        // 衝刺
+      if (b.phase === 'sprayFire' && SFX.prevBossPhase !== 'sprayFire') sfxPlay('cannonFire'); // 砲擊發射瞬間
+    }
+    SFX.prevBossPhase = b ? b.phase : null;
+  }
+  SFX_GAME_LOOPS.forEach(k => sfxLoop(k, !!want[k]));
+  // 製作音效：綁定「製作提示」實際顯示的期間（提示消失 / 秘笈關閉 / 切到背景 → 停止）
+  let craftOn = false;
+  if (SFX.craftActive) {
+    const cm = (typeof document !== 'undefined') ? document.getElementById('craft-message') : null;
+    const gb = (typeof document !== 'undefined') ? document.getElementById('guidebook-overlay') : null;
+    const shown = !!(cm && cm.style.opacity === '1' && gb && gb.style.display && gb.style.display !== 'none');
+    if (shown && !hidden) craftOn = true; else if (!shown) SFX.craftActive = false;
+  }
+  sfxLoop('crafting', craftOn);
+}
+// ── 事件掛勾（由遊戲各處呼叫）──
+function sfxOnPlayerFrameStart() { SFX.wasOnGround = !!player.onGround; }
+function sfxOnPlayerFrameEnd() {
+  if (player.onGround) {
+    if (!SFX.wasOnGround && SFX.airFrames >= 6) sfxPlay('land'); // 真的從空中落地（站著 / 碰撞判定不會重複觸發）
+    SFX.airFrames = 0;
+  } else SFX.airFrames++;
+}
+function sfxOnAttackStart(weapon) {
+  sfxPlay(weapon === 'hammer' ? 'hammerSwing' : 'swordSwing');
+  // 有帶小狗、狗狗切到 dog_angry 攻擊姿態（2-4 Boss 房沒有小狗）
+  if (bringBalloonDog && !(typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive())) sfxPlay('dogAngry');
+}
+function sfxOnPlayerHurt() {
+  sfxPlay('playerHurt');
+  if (bringBalloonDog && !(typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive())) setTimeout(() => sfxPlay('dogHurt'), 140); // 小狗和小V同步進入受傷狀態
+}
+let sfxLastHealAt = 0;
+function sfxOnHeal(gained) { if (!(gained > 0)) return; const now = Date.now(); if (now - sfxLastHealAt < 600) return; sfxLastHealAt = now; sfxPlay('heal'); }
+function sfxOnDialogOpen(scene) {
+  sfxPlay('dialogOpen');
+  if (scene && Array.isArray(scene.pages) && scene.pages.some(p => p && p.sp === 'dog')) setTimeout(() => sfxPlay('dogBark'), 160); // 狗狗汪汪的對話
+}
+function sfxStartCrafting() { SFX.craftActive = true; }
+// 介面按鈕：一次操作只響一次（滑鼠 / 觸控 / 鍵盤 Enter）；遊戲操作鍵、已停用的按鈕不響
+let sfxSuppressClickUntil = 0, sfxLastBtnEl = null, sfxLastBtnAt = 0;
+function sfxOnRecipeOpen() { sfxSuppressClickUntil = Date.now() + 250; sfxPlay('recipeOpen'); }
+function sfxHandleUiPress(e) {
+  try {
+    const t = e.target && e.target.closest ? e.target.closest('button, [role="button"]') : null;
+    if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+    if (t.closest('#mobile-controls') || t.classList.contains('ctrl-btn')) return; // 移動 / 跳躍 / 攻擊等遊戲按鍵
+    const now = Date.now();
+    if (t === sfxLastBtnEl && now - sfxLastBtnAt < 450) return; // 同一次操作的 pointerdown + click 只算一次
+    sfxLastBtnEl = t; sfxLastBtnAt = now;
+    setTimeout(() => { if (Date.now() < sfxSuppressClickUntil) return; sfxPlay('uiClick'); }, 0); // 開秘笈等有專屬音效的按鈕不再疊按鈕聲
+  } catch (err) {}
+}
+try {
+  sfxReadSettings();
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    ['pointerdown', 'touchend', 'keydown', 'click'].forEach(ev => document.addEventListener(ev, sfxUnlock, true));
+    document.addEventListener('pointerdown', e => { if (e.isPrimary !== false) sfxHandleUiPress(e); }, true);
+    document.addEventListener('click', e => { if (e.detail === 0) sfxHandleUiPress(e); }, true); // 鍵盤 Enter / 空白鍵按按鈕
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (!SFX.ctx) return;
+        if (document.hidden) { sfxStopAllLoops(); SFX.ctx.suspend(); }
+        else if (SFX.unlocked) SFX.ctx.resume();
+      } catch (e) {}
+    });
+  }
+} catch (e) {}
+function debugSfx() {
+  const o = { ctx: SFX.ctx ? SFX.ctx.state : 'none', unlocked: SFX.unlocked, volume: SFX.volume, muted: SFX.muted,
+    status: Object.fromEntries(Object.keys(SFX_DEFS).map(k => [k, SFX.status[k] || 'idle'])),
+    failed: Object.fromEntries(Object.keys(SFX_DEFS).filter(k => SFX.status[k] === 'failed').map(k => [k, SFX.tried[k]])),
+    loops: Object.keys(SFX.loops), voices: SFX.voices.filter(v => !v.ended).map(v => v.key) };
+  console.log('[SFX]', o); return o;
+}
+if (typeof window !== 'undefined') Object.assign(window, { SFX, SFX_DEFS, sfxPlay, sfxLoop, sfxSetVolume, sfxSetMuted, debugSfx, sfxPreloadAll });
+
 runWithAssetGate(['common', 'chapter1', 'rpgBoot'], '派對島準備中...', () => {
   assetBootReady = true;
+  try { sfxEnsureCtx(); setTimeout(() => { try { sfxPreloadAll(); } catch (e) {} }, 800); } catch (e) {} // v0.3.64：音效在背景下載 / 解碼（不擋開機）
   try { preloadAssetGroup('rpg'); } catch (e) {} // v0.3.59：其他 RPG 立繪開機後立刻在背景載入（不擋開機）
   try { renderStartGate(); } catch (e) {} // v0.3.57：手機 → 顯示「橫向 / 全螢幕 / 開始冒險」準備畫面（遊戲邏輯還沒開始）
   // v0.3.55：開機完成後在背景預載小狗動作圖（不擋開機；晚到的圖照規則等下一次進關才套用）

@@ -3432,3 +3432,6 @@ html, body {
   60%  { opacity: 1; transform: translate(-50%, 46px) scale(1); }
   100% { opacity: 0; transform: translate(-50%, 92px) scale(0.95); }
 }
+
+/* v0.3.64：舊版計分（v1）最佳只做參考，不和新版比較 */
+.adv-old-best { margin-top: 4px; font-size: 11.5px; font-weight: 700; color: #a49cd6; }
