@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.64-sfx-and-scoring-fixes-test-1';
-const BUILD_TIME   = '2026-10-19 02:55';
+const GAME_VERSION = 'adventure-v0.3.65-additional-sfx-test-1';
+const BUILD_TIME   = '2026-10-19 04:45';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -5719,6 +5719,7 @@ function updateProjectiles() {
       if (!e.active) return;
       if (rectsOverlap(p.x, p.y, p.w, p.h, e.x, e.y, e.w, e.h)) {
         e.hp--;
+        try { sfxPlay(e.variant === 'heavyBody' ? 'giantScorpionHurt' : 'scorpionHurt'); } catch (er) {} // v0.3.65：沒有武器時的遠距攻擊打中
         if (e.hp <= 0) {
           spawnScorpionDefeatEffect(e);
           e.active = false;
@@ -5763,6 +5764,7 @@ function damageScorpionEnemy(e, amount, source, onKillFn) {
   e.hp -= amount;
   e.hurtCooldown = SCORPION_HURT_COOLDOWN_FRAMES;
   try { if (source === 'sword') sfxPlay('swordHit'); else if (source === 'hammer') sfxPlay('hammerHit'); } catch (er) {} // v0.3.64：真的打中才播
+  try { if (source === 'sword' || source === 'hammer') sfxPlay(e.variant === 'heavyBody' ? 'giantScorpionHurt' : 'scorpionHurt'); } catch (er) {} // v0.3.65：巨蠍 / 一般蠍子各一種（不會同時兩種）
 
   if (e.hp <= 0) {
     e.hp = 0;
@@ -7759,6 +7761,7 @@ function checkCollectibles() {
     if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R*2, CONFIG.COIN_R*2)) {
       c.collected = true;
       try { advNoteCollect('coin', c); } catch (e) {} // v0.3.63
+      try { sfxPlay('coinPickup'); } catch (e) {} // v0.3.65（聲音有短冷卻，金幣一定會加）
       currentRunStats.coins++;
       player.coinsCollected++;      // HUD 顯示用（與 currentRunStats 同步）
       playerInventory.coins++;
@@ -7770,6 +7773,7 @@ function checkCollectibles() {
     if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W/2, b.y - CONFIG.BALLOON_H/2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) {
       b.collected = true;
       try { advNoteCollect('b260', b); } catch (e) {} // v0.3.63
+      try { sfxPlay('balloonPickup'); } catch (e) {} // v0.3.65
       currentRunStats.balloon260++;
       player.balloonsCollected++;
       playerInventory.balloon260++;
@@ -7788,7 +7792,7 @@ function checkCollectibles() {
         ROUND_BALLOON_CARRY_LIMIT,
         (playerInventory.roundBalloon || 0) + 1
       );
-      if (Number(playerInventory.roundBalloon || 0) > _roundBefore) { try { advNoteCollect('round', r); } catch (e) {} } // v0.3.63：背包真的多了一顆才算拾取
+      if (Number(playerInventory.roundBalloon || 0) > _roundBefore) { try { advNoteCollect('round', r); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} } // v0.3.63：背包真的多了一顆才算拾取 / v0.3.65 才播拾取聲
       saveInventory();
       // 第 3 關：首次撿到圓氣球，提示它是槌子材料
       if (currentLevelIndex === 2 && !stageFlowHints.roundBalloonHintShown) {
@@ -10887,6 +10891,7 @@ function triggerGameOver() {
 
 function triggerClear() {
   try { advOnAttemptCleared(); } catch (e) { console.warn('[Score] 通關提交失敗', e); } // v0.3.63：本關有效成果
+  try { sfxOnLevelClear(); } catch (e) {} // v0.3.65：每一次正式過關播一次（不延遲結算畫面）
   try { rpgHideDogFloat(true); } catch (e) {} // v0.3.59
   currentRunStats.enemiesDefeated = player.enemiesDefeated;
   prepCheckpoint = null; // v0.3.58：本關已通關 → 不能再返回上一關的整備
@@ -14791,6 +14796,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.65+：additional-sfx → more-sfx（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('additional-sfx')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'more-sfx' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.64+：sfx-and-scoring-fixes → sfx-scoring（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('sfx-and-scoring-fixes')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -17630,6 +17640,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart(opts) {
+  try { sfxStopLevelClear(); sfxStopEnemyVoices(); } catch (e) {} // v0.3.65：開始下一關 / 重試 / 新冒險 → 過關音效立刻停
   try { advEndLiveAttempt('discard'); } catch (e) {} // v0.3.64：其他原因重新開始（測試捷徑等）→ 不計次數，但已受傷害保留
   try { if (typeof flushPendingAssetApplies === 'function') flushPendingAssetApplies(); } catch (e) {} // v0.3.51：關卡開始時才套用晚到的素材
   dogArtModeLock = null; dogWasRunning = false; // v0.3.55：每關重新決定小狗用正式圖或 fallback
@@ -18059,7 +18070,6 @@ function renderGuidebook() {
             if (recipe.id === 'balloonDog') craftMsg = '🐶 氣球小狗入住小V的家，療癒了小V ❤️ +0.5';
             if (recipe.eatOnCraft) craftMsg = '🍭 氣球棒棒糖完成！小V開心地吃掉了棒棒糖！💗 生命恢復 +' + formatHealAmount(player.hp - _hpBeforeCraft); // v0.3.57
             showCraftMessage(craftMsg);
-            try { sfxStartCrafting(); } catch (e) {} // v0.3.64：製作音效跟著製作提示（提示消失就停）
             // 製作 basicHammer 後提示如何使用
             if (recipe.id === 'basicHammer' && !stageFlowHints.hammerCraftHintShown) {
               stageFlowHints.hammerCraftHintShown = true;
@@ -18161,6 +18171,7 @@ function playCraftSuccessFx(cardEl, recipe) {
   tx.style.left = (r.left + w / 2) + 'px';
   tx.style.top = Math.max(4, r.top - 30) + 'px';
   document.body.appendChild(tx);
+  if (!(recipe && recipe.shopBuy)) { try { sfxStartCrafting(tx); } catch (e) {} } // v0.3.65：製作音效只跟著這個提示（提示淡出就停；商店購買不播）
   setTimeout(() => { try { tx.remove(); } catch (e) {} }, 1300);
 }
 function showCraftMessage(msg) {
@@ -19516,6 +19527,7 @@ function rpgShowPage(i) {
   const scene = rpgActive; if (!scene) return;
   rpgPageIdx = i;
   const p = scene.pages[i];
+  try { sfxOnDialogPage(scene, i, p); } catch (e) {} // v0.3.65
   const spk = RPG_SPEAKERS[p.sp];
   if (p.left !== undefined) rpgCurLeft = p.left;
   if (p.right !== undefined) rpgCurRight = p.right;
@@ -19567,6 +19579,7 @@ function rpgHandleAction(act) {
 }
 function rpgClose(how) {
   const scene = rpgActive; if (!scene) return;
+  try { sfxOnDialogClose(); } catch (e) {} // v0.3.65：關閉 / 略過不補播，正在播的橘子王嗆聲也停
   cancelAnimationFrame(rpgRaf);
   if (how === 'finished' || how === 'skipped') {      // 看完 / 主動略過 → 才算已觀看；被中斷（reset）不算
     if (scene.modeControlled || scene.policy) rpgMarkSeen(scene.id, how);
@@ -20456,8 +20469,34 @@ const SFX_DEFS = {
   heal:           { path: 'item/heal.mp3',                    vol: 0.8, minGapMs: 500 },
   dialogOpen:     { path: 'ui/ui_dialog_open.mp3',            vol: 0.6, minGapMs: 200 },
   crafting:       { path: 'item/balloon_crafting.mp3',        vol: 0.7, loop: true, loopStart: 0.053, loopEnd: 6.197 },
+  // ── v0.3.65 新增 14 個 ──
+  // 橘子王（Boss 專用）
+  bossWallImpact: { path: 'boss/boss_wall_impact.mp3',        vol: 0.9, minGapMs: 300 },                    // 衝刺撞牆 / 跳起震地落地的瞬間
+  bossStunned:    { path: 'boss/boss_stunned.mp3',            vol: 0.7, loop: true, loopStart: 0, loopEnd: 2.043 }, // 喘氣（可以攻擊）期間
+  bossTaunt:      { path: 'boss/boss_taunt_crouch.mp3',       vol: 0.9, minGapMs: 0, maxVoices: 1 },        // 2-4 開場：橘子王每一句台詞
+  bossCrouch:     { path: 'boss/boss_taunt_crouch.mp3',       vol: 0.75, loop: true, loopStart: 0.357, loopEnd: 2.179, bufferOf: 'bossTaunt' }, // 衝撞前蹲下（同一個檔案）
+  // 一般敵人（不是 Boss；檔案放在 boss/ 或 item/ 資料夾只是分類，綁定的是一般敵人）
+  orangeSpray:    { path: 'boss/orange_spray.mp3',            vol: 0.6, minGapMs: 120, maxVoices: 2 },      // 一般橘子怪噴油（⚠ GitHub 目前沒有這個檔案）
+  orangeSpecialSpray: { path: 'boss/orange_special_spray.mp3', vol: 0.6, minGapMs: 120, maxVoices: 2 },    // 雙噴嘴橘子 / 煙囪橘子噴發
+  orangeProjectileRelease: { path: 'boss/orange_projectile_release.mp3', vol: 0.75, minGapMs: 150, maxVoices: 2 }, // 飛行油彈橘子 release
+  orangeProjectileFly: { path: 'boss/orange_projectile_fly.mp3', vol: 0.55, loop: true, loopStart: 0, loopEnd: 1.832 }, // 飛行油彈橘子的油彈（不是橘子王的）
+  giantScorpionHurt: { path: 'boss/giant_scorpion_hurt.mp3',  vol: 0.85, minGapMs: 90, maxVoices: 2 },      // 重甲（巨型）蠍子受到小V攻擊
+  scorpionHurt:   { path: 'item/scorpion_hurt.mp3',           vol: 0.8, minGapMs: 90, maxVoices: 2 },       // 一般蠍子受到小V攻擊
+  scorpionWalk:   { path: 'item/scorpion_walk.mp3',           vol: 0.45, loop: true },                      // 畫面中最近的一隻蠍子走路
+  // 道具 / 介面
+  balloonPickup:  { path: 'item/balloon_pickup.mp3',          vol: 0.75, minGapMs: 60, maxVoices: 2 },      // 260 / 圓氣球真的加入背包
+  coinPickup:     { path: 'item/coin_pickup.mp3',             vol: 0.6, minGapMs: 45, maxVoices: 3 },       // 金幣（冷卻只影響聲音，金幣照加）
+  dialogNext:     { path: 'ui/ui_dialog_next.mp3',            vol: 0.6, minGapMs: 60 },                     // RPG 對話第 2 句起
+  levelClear:     { path: 'ui/ui_level_clear.mp3',            vol: 0.8, minGapMs: 1000, maxVoices: 1 },     // 每關正式過關
 };
-const SFX_MAX_TOTAL_VOICES = 14;
+// v0.3.65：個別音量倍率（實機微調集中在這裡；1 = 原本音量）
+const SFX_VOLUME_TUNING = {
+  dogAngry: 0.75,   // 小狗憤怒：原音量約 75%（小V揮劍 / 揮槌維持清楚）
+  dogHurt:  0.75,   // 小狗受傷：原音量約 75%（小V受傷不變）
+  land:     0.70,   // 小V落地：降低 30%
+};
+function sfxVol(key) { const d = SFX_DEFS[key] || {}; return (d.vol != null ? d.vol : 1) * (SFX_VOLUME_TUNING[key] != null ? SFX_VOLUME_TUNING[key] : 1); }
+const SFX_MAX_TOTAL_VOICES = 16;
 const SFX = {
   ctx: null, master: null, buffers: {}, status: {}, urls: {}, tried: {},
   volume: 0.85, muted: false, unlocked: false, voices: [], lastPlay: {}, loops: {}, log: [], logOn: false,
@@ -20496,7 +20535,9 @@ function sfxCandidates(rel) {
   if (typeof getAssetSourceCandidates === 'function') return getAssetSourceCandidates(p).map(c => c.url);
   return [resolveAdventureAssetSrc(p) + '?v=' + encodeURIComponent(GAME_VERSION)];
 }
+function sfxBufferKey(key) { const d = SFX_DEFS[key]; return (d && d.bufferOf) || key; }
 function sfxLoad(key) {
+  key = sfxBufferKey(key);
   const def = SFX_DEFS[key]; if (!def) return Promise.resolve(null);
   if (SFX.status[key] === 'loaded' || SFX.status[key] === 'loading' || SFX.status[key] === 'failed') return SFX.status[key + '__p'] || Promise.resolve(null);
   const c = sfxEnsureCtx(); if (!c || typeof fetch !== 'function') { SFX.status[key] = 'failed'; return Promise.resolve(null); }
@@ -20516,7 +20557,7 @@ function sfxLoad(key) {
 let sfxPreloadStarted = false;
 function sfxPreloadAll() {
   if (sfxPreloadStarted) return; sfxPreloadStarted = true;
-  const keys = Object.keys(SFX_DEFS);
+  const keys = Object.keys(SFX_DEFS).filter(k => !SFX_DEFS[k].bufferOf);
   let i = 0; const next = () => { if (i >= keys.length) return; const k = keys[i++]; Promise.resolve(sfxLoad(k)).then(next, next); };
   for (let n = 0; n < 4; n++) next(); // 同時最多 4 個下載，不搶走關卡圖片的頻寬
 }
@@ -20527,25 +20568,35 @@ function sfxPlay(key, opts) {
   try {
     const def = SFX_DEFS[key]; if (!def || def.loop) return false;
     const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-    if (now - (SFX.lastPlay[key] || -1e9) < (def.minGapMs != null ? def.minGapMs : 70)) return false; // 同一個音效太密集 → 略過
+    if (now - (SFX.lastPlay[key] || -1e9) < (def.minGapMs != null ? def.minGapMs : 70)) return false; // 同一個音效太密集 → 略過（只影響聲音，不影響遊戲）
     SFX.lastPlay[key] = now;
     sfxLog('play', key);
     if (!sfxCanPlay()) return false;
-    const buf = SFX.buffers[key]; if (!buf) { sfxLoad(key); return false; }
+    const buf = SFX.buffers[sfxBufferKey(key)]; if (!buf) { sfxLoad(key); return false; }
     SFX.voices = SFX.voices.filter(v => !v.ended);
     const same = SFX.voices.filter(v => v.key === key);
     if (same.length >= (def.maxVoices || 3)) { try { same[0].src.stop(); } catch (e) {} same[0].ended = true; }
     if (SFX.voices.filter(v => !v.ended).length >= SFX_MAX_TOTAL_VOICES) return false;
     const c = SFX.ctx, src = c.createBufferSource(), g = c.createGain();
-    src.buffer = buf; g.gain.value = (def.vol != null ? def.vol : 1) * ((opts && opts.vol) || 1);
+    src.buffer = buf; g.gain.value = sfxVol(key) * ((opts && opts.vol) || 1);
     src.connect(g); g.connect(SFX.master);
-    const v = { key, src, ended: false }; src.onended = () => { v.ended = true; };
-    src.start(0);
+    const v = { key, src, g, ended: false }; src.onended = () => { v.ended = true; };
+    src.start(0, (opts && opts.offset) || 0);
     SFX.voices.push(v);
-    return true;
+    return v; // v0.3.65：回傳播放中的聲音（可以用 sfxStopVoice 提前停止）
   } catch (e) { return false; }
 }
 // 循環音效：on = true 開始（已在播就不動）/ false 停止
+// v0.3.65：提前停止某一個單次音效（短淡出，避免爆音）
+function sfxStopVoice(v, fadeMs) {
+  if (!v || v === true || v.ended) return;
+  try {
+    const c = SFX.ctx, t = c.currentTime, f = Math.max(0.01, (fadeMs || 80) / 1000);
+    v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value, t); v.g.gain.linearRampToValueAtTime(0.0001, t + f);
+    v.src.stop(t + f + 0.01);
+  } catch (e) { try { v.src.stop(); } catch (er) {} }
+  v.ended = true; sfxLog('voiceStop', v.key);
+}
 function sfxLoop(key, on) {
   const cur = SFX.loops[key];
   if (!on) {
@@ -20554,7 +20605,7 @@ function sfxLoop(key, on) {
   }
   if (cur) return;
   if (!sfxCanPlay()) return;
-  const def = SFX_DEFS[key]; const buf = SFX.buffers[key];
+  const def = SFX_DEFS[key]; const buf = SFX.buffers[sfxBufferKey(key)];
   if (!def || !buf) { if (def) sfxLoad(key); return; }
   try {
     const c = SFX.ctx, src = c.createBufferSource(), g = c.createGain();
@@ -20562,7 +20613,7 @@ function sfxLoop(key, on) {
     const ls = Math.max(0, Math.min(def.loopStart || 0, buf.duration - 0.05));
     const le = Math.min(buf.duration, def.loopEnd || buf.duration);
     if (le > ls + 0.05) { src.loopStart = ls; src.loopEnd = le; }
-    g.gain.value = def.vol != null ? def.vol : 1;
+    g.gain.value = sfxVol(key) * ((SFX.loopGainMul && SFX.loopGainMul[key]) || 1);
     src.connect(g); g.connect(SFX.master);
     src.start(0, ls);
     SFX.loops[key] = { src, g, at: c.currentTime };
@@ -20570,7 +20621,19 @@ function sfxLoop(key, on) {
   } catch (e) {}
 }
 function sfxStopAllLoops() { Object.keys(SFX.loops).forEach(k => sfxLoop(k, false)); }
-const SFX_GAME_LOOPS = ['run', 'oilAim', 'oilProjectileFly', 'cannonCharge', 'chargeUp', 'dash'];
+const SFX_GAME_LOOPS = ['run', 'oilAim', 'oilProjectileFly', 'cannonCharge', 'chargeUp', 'dash', 'bossStunned', 'bossCrouch', 'scorpionWalk', 'orangeProjectileFly'];
+// v0.3.65：判斷東西在不在畫面裡（世界座標）
+function sfxOnScreen(x, w, margin) { const m = margin || 0; return x + (w || 0) > cameraX - m && x < cameraX + CANVAS_W + m; }
+// 一般敵人噴發：每一隻敵人自己的那一聲，噴發結束就淡出停止（不會噴完還響很久）
+function sfxEnemySprayEdge(o, phaseKey, key, sprayingName) {
+  const ph = o[phaseKey];
+  if (ph === sprayingName && o._sfxPrevPhase !== sprayingName && (o.active !== false) && sfxOnScreen(o.x, o.w || 60, 40)) o._sfxVoice = sfxPlay(key);
+  if (ph !== sprayingName && o._sfxVoice) { sfxStopVoice(o._sfxVoice, 120); o._sfxVoice = null; }
+  o._sfxPrevPhase = ph;
+}
+function sfxStopEnemyVoices() {
+  try { [orangeNemeses, chimneyOranges, dualNozzleOranges].forEach(arr => (arr || []).forEach(o => { if (o._sfxVoice) { sfxStopVoice(o._sfxVoice, 60); o._sfxVoice = null; } o._sfxPrevPhase = null; })); } catch (e) {}
+}
 // 每一幀：依目前狀態決定循環音效（只有狀態改變時才真的開 / 關）
 function sfxSyncFrame() {
   const want = {};
@@ -20587,20 +20650,47 @@ function sfxSyncFrame() {
       if (b.phase === 'lobAim' && b.activeLob) want.oilAim = true;                           // 拋物線瞄準虛線存在期間
       if ((b.lobShots || []).some(s => !s.hit)) want.oilProjectileFly = true;                // 還有油彈在空中飛
       if (b.phase === 'sprayWarn') want.cannonCharge = true;                                 // 油管砲集氣（預警線）
-      if (b.phase === 'chargeWarn' || b.phase === 'chargeCurl' || b.phase === 'chargeSpin') want.chargeUp = true; // 縮球衝撞的蓄力
+      // v0.3.65：蓄力聲和蹲姿聲不重疊 — 預警（chargeWarn）蓄力聲 → 蹲下（chargeCurl）蹲姿聲 → 原地旋轉蓄力（chargeSpin）再接回蓄力聲
+      if (b.phase === 'chargeWarn' || b.phase === 'chargeSpin') want.chargeUp = true;       // 縮球衝撞的蓄力
+      if (b.phase === 'chargeCurl') want.bossCrouch = true;                                  // 衝撞前蹲下（保持蹲姿時循環）
       if (b.phase === 'chargeDash') want.dash = true;                                        // 衝刺
+      if (b.phase === 'cooldown') want.bossStunned = true;                                   // 喘氣暈眩（唯一可以攻擊的時段）
       if (b.phase === 'sprayFire' && SFX.prevBossPhase !== 'sprayFire') sfxPlay('cannonFire'); // 砲擊發射瞬間
+      if (b.phase === 'chargeRecover' && SFX.prevBossPhase === 'chargeDash') sfxPlay('bossWallImpact'); // 衝刺撞牆的瞬間
+      if (b.phase === 'slamLand' && SFX.prevBossPhase === 'slamDown') sfxPlay('bossWallImpact');       // 跳起震地、落地產生油漬的瞬間
     }
     SFX.prevBossPhase = b ? b.phase : null;
+    // v0.3.65：一般敵人（不是 Boss）
+    try {
+      (orangeNemeses || []).forEach(o => sfxEnemySprayEdge(o, 'phase', 'orangeSpray', 'spraying'));                 // 一般橘子怪
+      (chimneyOranges || []).forEach(o => sfxEnemySprayEdge(o, 'sprayPhase', 'orangeSpecialSpray', 'spraying'));    // 煙囪橘子
+      (dualNozzleOranges || []).forEach(o => sfxEnemySprayEdge(o, 'sprayPhase', 'orangeSpecialSpray', 'spraying')); // 雙噴嘴橘子
+      (projectileOranges || []).forEach(po => {                                                                    // 飛行油彈橘子：切到 release 那一刻
+        if (po.active && po.phase === 'release' && po._sfxPrevPhase !== 'release' && sfxOnScreen(po.x, po.w || 80, 40)) sfxPlay('orangeProjectileRelease');
+        po._sfxPrevPhase = po.phase;
+      });
+      if ((projectileOrangeShots || []).some(s => s.active !== false && sfxOnScreen(s.x - 30, 60, 0))) want.orangeProjectileFly = true;
+      // 蠍子走路：只用畫面中離小V最近、正在移動的一隻，音量依距離平滑變化
+      let near = null, nd = 1e9; const pc = player.x + player.w / 2;
+      (enemies || []).forEach(e => { if (!e.active || Math.abs(e.vx || 0) < 0.05 || !sfxOnScreen(e.x, e.w, 0)) return; const d = Math.abs(e.x + e.w / 2 - pc); if (d < nd) { nd = d; near = e; } });
+      if (near) { want.scorpionWalk = true; SFX.walkTarget = Math.max(0.25, Math.min(1, 1 - nd / 800)); }
+    } catch (e) {}
+  } else {
+    sfxStopEnemyVoices();
   }
   SFX_GAME_LOOPS.forEach(k => sfxLoop(k, !!want[k]));
+  // 蠍子走路音量：依距離平滑調整（不會忽大忽小）
+  try { const w = SFX.loops.scorpionWalk; if (w && SFX.walkTarget != null) w.g.gain.setTargetAtTime(sfxVol('scorpionWalk') * SFX.walkTarget, SFX.ctx.currentTime, 0.15); } catch (e) {}
   // 製作音效：綁定「製作提示」實際顯示的期間（提示消失 / 秘笈關閉 / 切到背景 → 停止）
+  // v0.3.65：綁定畫面上的「🎈 製作成功！」提示本身（v0.3.64 綁的是秘笈上方的綠色小字，比提示晚 1 秒多才消失）
   let craftOn = false;
   if (SFX.craftActive) {
-    const cm = (typeof document !== 'undefined') ? document.getElementById('craft-message') : null;
+    const el = SFX.craftEl;
     const gb = (typeof document !== 'undefined') ? document.getElementById('guidebook-overlay') : null;
-    const shown = !!(cm && cm.style.opacity === '1' && gb && gb.style.display && gb.style.display !== 'none');
-    if (shown && !hidden) craftOn = true; else if (!shown) SFX.craftActive = false;
+    let op = 0; try { op = (el && el.isConnected) ? parseFloat(getComputedStyle(el).opacity) : 0; } catch (e) { op = 0; }
+    const young = (Date.now() - (SFX.craftAt || 0)) < 400; // 提示剛出現時正在淡入（透明度從 0 開始）
+    const shown = !!(el && el.isConnected && (op > 0.05 || young) && gb && gb.style.display && gb.style.display !== 'none');
+    if (shown && !hidden) craftOn = true; else if (!shown) { SFX.craftActive = false; SFX.craftEl = null; }
   }
   sfxLoop('crafting', craftOn);
 }
@@ -20627,15 +20717,46 @@ function sfxOnDialogOpen(scene) {
   sfxPlay('dialogOpen');
   if (scene && Array.isArray(scene.pages) && scene.pages.some(p => p && p.sp === 'dog')) setTimeout(() => sfxPlay('dogBark'), 160); // 狗狗汪汪的對話
 }
-function sfxStartCrafting() { SFX.craftActive = true; }
+// v0.3.65：RPG 對話切換 / 橘子王嗆聲
+let sfxDialogShown = null, sfxTauntVoice = null;
+function sfxOnDialogPage(scene, i, p) {
+  const key = scene.id + '#' + i;
+  if (sfxDialogShown === key) return;          // 同一句重新顯示不重播
+  sfxDialogShown = key;
+  const king = p && p.sp === 'king';
+  if (i > 0) sfxPlay('dialogNext', { vol: king ? 0.35 : 1 }); // 第 2 句起；橘子王台詞時降低切換音，讓嗆聲清楚
+  if (king) { if (sfxTauntVoice) sfxStopVoice(sfxTauntVoice, 60); sfxTauntVoice = sfxPlay('bossTaunt'); } // 上一句還沒播完 → 停掉再播
+}
+function sfxOnDialogClose() { sfxDialogShown = null; if (sfxTauntVoice) { sfxStopVoice(sfxTauntVoice, 120); sfxTauntVoice = null; } }
+// v0.3.65：過關音效（自然播完；開始下一關 / 重試 / 重新開始時停止）
+let sfxClearVoice = null, sfxClearTimer = 0;
+function sfxOnLevelClear() {
+  sfxStopLevelClear();
+  // 2-4：橘子王勝利音樂還在播 → 等它播完再接過關音效（不重疊、不延遲結算畫面）
+  let waitMs = 0;
+  try { const j = (typeof orangeKingJingle !== 'undefined') ? orangeKingJingle : null; if (j && !j.paused && !j.ended && isFinite(j.duration)) waitMs = Math.max(0, (j.duration - j.currentTime) * 1000); } catch (e) {}
+  if (waitMs > 50) sfxClearTimer = setTimeout(() => { sfxClearTimer = 0; if (gameState === 'clear') sfxClearVoice = sfxPlay('levelClear'); }, waitMs + 150);
+  else sfxClearVoice = sfxPlay('levelClear');
+}
+function sfxStopLevelClear() { clearTimeout(sfxClearTimer); sfxClearTimer = 0; if (sfxClearVoice) { sfxStopVoice(sfxClearVoice, 150); sfxClearVoice = null; } }
+function sfxStartCrafting(el) { if (!el) return; SFX.craftActive = true; SFX.craftEl = el; SFX.craftAt = Date.now(); }
 // 介面按鈕：一次操作只響一次（滑鼠 / 觸控 / 鍵盤 Enter）；遊戲操作鍵、已停用的按鈕不響
 let sfxSuppressClickUntil = 0, sfxLastBtnEl = null, sfxLastBtnAt = 0;
+// v0.3.65：所有「開啟氣球秘笈」的入口（暫停選單 / 結算 / 小V的家 / 下一步提示裡的按鈕）
+const SFX_RECIPE_OPENER_IDS = ['btn-guidebook', 'btn-pause-guidebook', 'btn-home-open-guidebook'];
+function sfxIsRecipeOpener(t) {
+  if (!t) return false;
+  if (SFX_RECIPE_OPENER_IDS.includes(t.id)) return true;
+  const oc = t.getAttribute && (t.getAttribute('onclick') || '');
+  return /openGuidebook/.test(oc);
+}
 function sfxOnRecipeOpen() { sfxSuppressClickUntil = Date.now() + 250; sfxPlay('recipeOpen'); }
 function sfxHandleUiPress(e) {
   try {
     const t = e.target && e.target.closest ? e.target.closest('button, [role="button"]') : null;
     if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
     if (t.closest('#mobile-controls') || t.classList.contains('ctrl-btn')) return; // 移動 / 跳躍 / 攻擊等遊戲按鍵
+    if (sfxIsRecipeOpener(t)) return; // v0.3.65：開啟氣球秘笈的按鈕 → 只播秘笈音效（真的開啟時才播），不播一般按鈕聲
     const now = Date.now();
     if (t === sfxLastBtnEl && now - sfxLastBtnAt < 450) return; // 同一次操作的 pointerdown + click 只算一次
     sfxLastBtnEl = t; sfxLastBtnAt = now;
@@ -20659,8 +20780,8 @@ try {
 } catch (e) {}
 function debugSfx() {
   const o = { ctx: SFX.ctx ? SFX.ctx.state : 'none', unlocked: SFX.unlocked, volume: SFX.volume, muted: SFX.muted,
-    status: Object.fromEntries(Object.keys(SFX_DEFS).map(k => [k, SFX.status[k] || 'idle'])),
-    failed: Object.fromEntries(Object.keys(SFX_DEFS).filter(k => SFX.status[k] === 'failed').map(k => [k, SFX.tried[k]])),
+    status: Object.fromEntries(Object.keys(SFX_DEFS).map(k => [k, SFX.status[sfxBufferKey(k)] || 'idle'])),
+    failed: Object.fromEntries(Object.keys(SFX_DEFS).filter(k => !SFX_DEFS[k].bufferOf && SFX.status[k] === 'failed').map(k => [k, SFX.tried[k]])),
     loops: Object.keys(SFX.loops), voices: SFX.voices.filter(v => !v.ended).map(v => v.key) };
   console.log('[SFX]', o); return o;
 }
