@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.65-additional-sfx-test-1';
-const BUILD_TIME   = '2026-10-19 04:45';
+const GAME_VERSION = 'adventure-v0.3.65-sfx-final-fix-test-1';
+const BUILD_TIME   = '2026-10-19 11:25';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -5764,7 +5764,7 @@ function damageScorpionEnemy(e, amount, source, onKillFn) {
   e.hp -= amount;
   e.hurtCooldown = SCORPION_HURT_COOLDOWN_FRAMES;
   try { if (source === 'sword') sfxPlay('swordHit'); else if (source === 'hammer') sfxPlay('hammerHit'); } catch (er) {} // v0.3.64：真的打中才播
-  try { if (source === 'sword' || source === 'hammer') sfxPlay(e.variant === 'heavyBody' ? 'giantScorpionHurt' : 'scorpionHurt'); } catch (er) {} // v0.3.65：巨蠍 / 一般蠍子各一種（不會同時兩種）
+  try { if (source === 'sword' || source === 'hammer' || source === 'spinning') sfxPlay(e.variant === 'heavyBody' ? 'giantScorpionHurt' : 'scorpionHurt'); } catch (er) {} // v0.3.65：巨蠍 / 一般蠍子各一種；收尾版：被擊飛的蠍子撞傷其他蠍子也播（只在真的扣 HP 之後）
 
   if (e.hp <= 0) {
     e.hp = 0;
@@ -7329,6 +7329,7 @@ function updateHammerMelee() {
     const tierCfg    = getEnemyTierConfig(e);
     const skinKey    = variantCfg?.skinKey || 'scorpion_normal';
     const spinDamage = (e.variant === 'heavyBody') ? 2 : 1;
+    try { sfxPlay('scorpionKnockback'); } catch (er) {} // v0.3.65 收尾：被氣球槌擊飛的那一刻（一般 / 重甲共用，每次擊飛一次）
     spinningEnemies.push({
       x: e.x, y: e.y, w: e.w, h: e.h,
       vx: player.facingRight ? CONFIG.HAMMER_SPIN_SPEED : -CONFIG.HAMMER_SPIN_SPEED,
@@ -8161,6 +8162,7 @@ function updateOrangeKingBoss(dtMs) {
       if (b.y >= GROUND_Y - b.h) {
         b.y = GROUND_Y - b.h;
         orangeKingShake(500, 9);
+        try { sfxPlay('bossWallImpact'); } catch (e) {} // v0.3.65 收尾：2-4 開場從洞口落下、真的著地的那一刻（只有這一次落地）
         b.hpBarVisible = true;
         orangeKingBanner('橘子王 登場！', '', 1500);
         setOrangeKingPhase('introRoar');
@@ -8272,6 +8274,7 @@ function updateOrangeKingBoss(dtMs) {
       if (b.phaseMs >= ORANGE_KING_TIMING.LOB_AIM) {
         const shot = Object.assign({}, b.activeLob, { t: 0, x: b.activeLob.sx, y: b.activeLob.sy });
         b.lobShots.push(shot);
+        try { sfxPlay('cannonFire'); } catch (e) {} // v0.3.65 收尾：拋物線油彈真的生成發射的那一刻（每顆一次）
         b.lobMuzzle = { x: b.activeLob.sx, y: b.activeLob.sy, ms: 0 }; // v0.3.46：管口噴出的油花
         setOrangeKingPhase('lobFire');
       }
@@ -8502,6 +8505,7 @@ function checkOrangeKingMeleeHit(weapon, ax, ay, aw, ah) {
   b.invulnMs = ORANGE_KING.HURT_INVULN_MS;
   orangeKingFloatText('-' + dmg, fx, fy - 10, '#ff5c5c');
   try { sfxPlay('swordHit'); } catch (e) {} // v0.3.64：劍真的打中橘子王
+  try { sfxPlay('bossHurt'); } catch (e) {} // v0.3.65 收尾：橘子王 HP 真的減少（格擋 / 無敵 / 揮空都不會到這裡）
   for (let i = 0; i < 12; i++) { // 命中點金色火花
     const ang = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4;
     b.sparks.push({ x: fx, y: fy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, ms: 0 });
@@ -14796,6 +14800,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.65 收尾：sfx-final-fix → sfx-final（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('sfx-final-fix')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'sfx-final' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.65+：additional-sfx → more-sfx（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('additional-sfx')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -20475,14 +20484,16 @@ const SFX_DEFS = {
   bossStunned:    { path: 'boss/boss_stunned.mp3',            vol: 0.7, loop: true, loopStart: 0, loopEnd: 2.043 }, // 喘氣（可以攻擊）期間
   bossTaunt:      { path: 'boss/boss_taunt_crouch.mp3',       vol: 0.9, minGapMs: 0, maxVoices: 1 },        // 2-4 開場：橘子王每一句台詞
   bossCrouch:     { path: 'boss/boss_taunt_crouch.mp3',       vol: 0.75, loop: true, loopStart: 0.357, loopEnd: 2.179, bufferOf: 'bossTaunt' }, // 衝撞前蹲下（同一個檔案）
-  // 一般敵人（不是 Boss；檔案放在 boss/ 或 item/ 資料夾只是分類，綁定的是一般敵人）
-  orangeSpray:    { path: 'boss/orange_spray.mp3',            vol: 0.6, minGapMs: 120, maxVoices: 2 },      // 一般橘子怪噴油（⚠ GitHub 目前沒有這個檔案）
-  orangeSpecialSpray: { path: 'boss/orange_special_spray.mp3', vol: 0.6, minGapMs: 120, maxVoices: 2 },    // 雙噴嘴橘子 / 煙囪橘子噴發
-  orangeProjectileRelease: { path: 'boss/orange_projectile_release.mp3', vol: 0.75, minGapMs: 150, maxVoices: 2 }, // 飛行油彈橘子 release
-  orangeProjectileFly: { path: 'boss/orange_projectile_fly.mp3', vol: 0.55, loop: true, loopStart: 0, loopEnd: 1.832 }, // 飛行油彈橘子的油彈（不是橘子王的）
-  giantScorpionHurt: { path: 'boss/giant_scorpion_hurt.mp3',  vol: 0.85, minGapMs: 90, maxVoices: 2 },      // 重甲（巨型）蠍子受到小V攻擊
-  scorpionHurt:   { path: 'item/scorpion_hurt.mp3',           vol: 0.8, minGapMs: 90, maxVoices: 2 },       // 一般蠍子受到小V攻擊
-  scorpionWalk:   { path: 'item/scorpion_walk.mp3',           vol: 0.45, loop: true },                      // 畫面中最近的一隻蠍子走路
+  // 一般敵人：v0.3.65 收尾版統一從 enemy/ 載入（boss/、item/ 裡的舊檔案保留在 GitHub，但程式不再使用）
+  orangeSpray:    { path: 'enemy/orange_spray.mp3',           vol: 0.6, minGapMs: 120, maxVoices: 2 },      // 一般橘子怪噴油
+  orangeSpecialSpray: { path: 'enemy/orange_special_spray.mp3', vol: 0.6, minGapMs: 120, maxVoices: 2 },   // 雙噴嘴橘子 / 煙囪橘子噴發
+  orangeProjectileRelease: { path: 'enemy/orange_projectile_release.mp3', vol: 0.75, minGapMs: 150, maxVoices: 2 }, // 飛行油彈橘子 release
+  orangeProjectileFly: { path: 'enemy/orange_projectile_fly.mp3', vol: 0.55, loop: true, loopStart: 0, loopEnd: 1.832 }, // 飛行油彈橘子的油彈（不是橘子王的）
+  giantScorpionHurt: { path: 'enemy/giant_scorpion_hurt.mp3', vol: 0.85, minGapMs: 90, maxVoices: 2 },      // 重甲（巨型）蠍子受傷
+  scorpionHurt:   { path: 'enemy/scorpion_hurt.mp3',          vol: 0.8, minGapMs: 90, maxVoices: 2 },       // 一般蠍子受傷
+  scorpionWalk:   { path: 'enemy/scorpion_walk.mp3',          vol: 0.45, loop: true },                      // 畫面中最近的一隻蠍子走路
+  scorpionKnockback: { path: 'enemy/scorpion_knockback.mp3',  vol: 0.85, minGapMs: 60, maxVoices: 2 },      // 被氣球槌擊飛（一般 / 重甲共用）
+  bossHurt:       { path: 'enemy/giant_scorpion_hurt.mp3',    vol: 0.9, minGapMs: 120, maxVoices: 1, bufferOf: 'giantScorpionHurt' }, // 橘子王真的扣 HP（暫時共用重甲蠍子受傷聲）
   // 道具 / 介面
   balloonPickup:  { path: 'item/balloon_pickup.mp3',          vol: 0.75, minGapMs: 60, maxVoices: 2 },      // 260 / 圓氣球真的加入背包
   coinPickup:     { path: 'item/coin_pickup.mp3',             vol: 0.6, minGapMs: 45, maxVoices: 3 },       // 金幣（冷卻只影響聲音，金幣照加）
@@ -20491,8 +20502,8 @@ const SFX_DEFS = {
 };
 // v0.3.65：個別音量倍率（實機微調集中在這裡；1 = 原本音量）
 const SFX_VOLUME_TUNING = {
-  dogAngry: 0.75,   // 小狗憤怒：原音量約 75%（小V揮劍 / 揮槌維持清楚）
-  dogHurt:  0.75,   // 小狗受傷：原音量約 75%（小V受傷不變）
+  dogAngry: 0.6375, // 小狗憤怒：v0.3.65 的 75% 再降 15%（0.75 × 0.85）
+  dogHurt:  0.6375, // 小狗受傷：同上（小V受傷不變）
   land:     0.70,   // 小V落地：降低 30%
 };
 function sfxVol(key) { const d = SFX_DEFS[key] || {}; return (d.vol != null ? d.vol : 1) * (SFX_VOLUME_TUNING[key] != null ? SFX_VOLUME_TUNING[key] : 1); }
