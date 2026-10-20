@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.66-home-ui2-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.67-home-ui2-polish-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -53,7 +53,7 @@
        獨立於 game-wrapper，可在任何尺寸下正常顯示
        ════════════════════════════════════════════ -->
   <div id="home-screen" style="display:none">
-    <!-- ════ v0.3.66：小V之家 UI 2.0（第一階段）。舊版 #home-panel 保留在下方（隱藏），原有功能與資料寫入點不變 ════ -->
+    <!-- ════ v0.3.67：小V之家 UI 2.0（視覺與操作修正）。舊版 #home-panel 保留在下方（隱藏），原有功能與資料寫入點不變 ════ -->
     <div id="h2-root" aria-label="小V之家">
       <div class="h2-scene" aria-hidden="true">
         <img id="h2-bg-window" class="h2-layer" alt="" draggable="false">
@@ -63,40 +63,51 @@
         <!-- 左欄：玩家資料＋派對島狀態／氣球秘笈／挑戰資源／補給 -->
         <aside class="h2-col h2-col--left">
           <section class="h2-card h2-card--player" id="h2-card-player">
+            <span class="h2-heart-orn" aria-hidden="true"></span>
             <button type="button" class="h2-player" id="h2-player-btn" aria-label="玩家資料">
-              <div class="h2-avatars" id="h2-avatars"></div>
-              <div class="h2-pid" id="h2-pid"></div>
+              <span class="h2-avatars" id="h2-avatars"></span>
+              <span class="h2-pid" id="h2-pid"></span>
             </button>
             <div class="h2-status">
-              <div class="h2-stat-row"><span class="h2-stat-lbl">HP：</span><span class="h2-hearts" id="h2-hearts"></span></div>
-              <div class="h2-stat-row"><span class="h2-stat-lbl">關卡進度：</span><div class="h2-progress" id="h2-progress" role="progressbar"><div class="h2-progress-fill" id="h2-progress-fill"></div></div></div>
+              <div class="h2-stat-row"><span class="h2-stat-lbl">HP</span><span class="h2-hearts" id="h2-hearts"></span></div>
+              <div class="h2-stat-row"><span class="h2-stat-lbl">關卡進度</span><div class="h2-progress" id="h2-progress" role="progressbar"><div class="h2-progress-fill" id="h2-progress-fill"></div></div></div>
             </div>
           </section>
           <section class="h2-card" id="h2-card-recipes">
-            <div class="h2-card-head">
+            <div class="h2-head">
               <button type="button" class="h2-bulb" id="h2-bulb" aria-label="現實世界氣球教學">💡</button>
-              <button type="button" class="h2-card-title" onclick="h2_openGuidebook()">📖 氣球秘笈</button>
+              <button type="button" class="h2-plank" id="h2-title-recipes" onclick="h2_openGuidebook()">氣球秘笈</button>
+              <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="recipes" data-d="-1" aria-label="上一個"></button>
+              <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="recipes" data-d="1" aria-label="下一個"></button>
             </div>
-            <div class="h2-strip" data-car="recipes"></div>
+            <div class="h2-tiles" data-car="recipes"></div>
             <div class="h2-bubble" id="h2-bulb-bubble" style="display:none"></div>
           </section>
           <section class="h2-card" id="h2-card-res">
-            <div class="h2-card-head"><button type="button" class="h2-card-title" data-h2-open="bag">🎒 挑戰資源</button></div>
-            <div class="h2-strip" data-car="res"></div>
+            <div class="h2-head">
+              <button type="button" class="h2-plank" data-h2-open="bag"><img data-h2-icon="backpack" alt="">挑戰資源</button>
+              <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="res" data-d="-1" aria-label="上一個"></button>
+              <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="res" data-d="1" aria-label="下一個"></button>
+            </div>
+            <div class="h2-tiles" data-car="res"></div>
           </section>
           <section class="h2-card" id="h2-card-supply">
-            <div class="h2-card-head"><button type="button" class="h2-card-title" data-h2-open="supply">🏥 補給</button></div>
-            <div class="h2-strip" data-car="supply"></div>
+            <div class="h2-head">
+              <button type="button" class="h2-plank" data-h2-open="supply"><img data-h2-icon="firstAidKit" alt="">補給</button>
+              <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="supply" data-d="-1" aria-label="上一個"></button>
+              <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="supply" data-d="1" aria-label="下一個"></button>
+            </div>
+            <div class="h2-tiles" data-car="supply"></div>
           </section>
         </aside>
 
         <!-- 中央：小V四方向展示＋底部導航 -->
         <main class="h2-center">
-          <div class="h2-topbar">
-            <button type="button" class="h2-pill" id="h2-back">← 返回</button>
-            <button type="button" class="h2-pill" id="h2-handbook-btn">📔 冒險手冊</button>
-          </div>
           <div class="h2-hero-wrap">
+            <div class="h2-topbar">
+              <button type="button" class="h2-pill h2-pill--blue h2-pill--sm" id="h2-back">返回</button>
+              <button type="button" class="h2-pill h2-pill--purple h2-pill--sm" id="h2-handbook-btn">冒險手冊</button>
+            </div>
             <div class="h2-hero-stage" id="h2-hero-stage">
               <div class="h2-hero-shadow"></div>
               <img class="h2-hero-img" data-dir="0" alt="小V正面" draggable="false">
@@ -109,24 +120,31 @@
             </div>
             <button type="button" class="h2-turn h2-turn--l" id="h2-turn-l" aria-label="向左轉"></button>
             <button type="button" class="h2-turn h2-turn--r" id="h2-turn-r" aria-label="向右轉"></button>
+            <div class="h2-nextline"><button type="button" id="h2-nextline" data-h2-open="next"></button></div>
           </div>
-          <div class="h2-nextline"><button type="button" id="h2-nextline" data-h2-open="next"></button></div>
           <nav class="h2-nav">
-            <button type="button" class="h2-navbtn is-pending" id="h2-nav-map"><span class="h2-nav-ico">🗺️</span>世界地圖<small>準備中</small></button>
-            <button type="button" class="h2-navbtn is-pending" id="h2-nav-practice"><span class="h2-nav-ico">🎯</span>自由練習<small>準備中</small></button>
-            <button type="button" class="h2-navbtn" id="h2-nav-challenge" data-h2-open="challenge"><span class="h2-nav-ico">🏆</span>正式挑戰</button>
-            <button type="button" class="h2-navbtn h2-navbtn--go" id="h2-nav-go"><span>出發</span><small id="h2-go-sub"></small></button>
+            <button type="button" class="h2-pill h2-pill--yellow is-pending" id="h2-nav-map">世界地圖<small>準備中</small></button>
+            <button type="button" class="h2-pill h2-pill--yellow is-pending" id="h2-nav-practice">自由練習<small>準備中</small></button>
+            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge" data-h2-open="challenge">正式挑戰</button>
+            <button type="button" class="h2-pill h2-pill--green h2-go" id="h2-nav-go"><span>出發</span><small id="h2-go-sub"></small></button>
           </nav>
         </main>
 
         <!-- 右欄：商店／氣球小狗 -->
         <aside class="h2-col h2-col--right">
           <section class="h2-card" id="h2-card-shop">
-            <div class="h2-card-head"><button type="button" class="h2-card-title" data-h2-open="shop">🛒 商店</button></div>
-            <div class="h2-strip" data-car="shop"></div>
+            <div class="h2-head">
+              <button type="button" class="h2-plank" data-h2-open="shop"><img data-h2-icon="coinBag" alt="">商店</button>
+              <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="shop" data-d="-1" aria-label="上一個"></button>
+              <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="shop" data-d="1" aria-label="下一個"></button>
+            </div>
+            <div class="h2-tiles" data-car="shop"></div>
           </section>
-          <section class="h2-card" id="h2-card-dog">
-            <div class="h2-card-head"><span class="h2-card-title h2-card-title--static" style="cursor:default">🐶 氣球小狗</span><span class="h2-head-note" id="h2-dog-turns"></span></div>
+          <section class="h2-card h2-card--clear" id="h2-card-dog">
+            <div class="h2-head">
+              <span class="h2-plank h2-plank--static">氣球小狗</span>
+              <span class="h2-head-note" id="h2-dog-turns"></span>
+            </div>
             <div class="h2-dog-stage" id="h2-dog-stage">
               <img id="h2-dog-bed" alt="" draggable="false">
               <img id="h2-dog-rest" alt="休息中的氣球小狗" draggable="false">
@@ -137,13 +155,23 @@
         </aside>
       </div>
 
-      <!-- 詳細面板（背包／補給／商店／玩家資料／正式挑戰／冒險手冊／下一關準備）-->
+      <!-- 詳細面板（秘笈／背包／補給／商店／玩家資料／正式挑戰／冒險手冊／下一關準備）-->
       <div class="h2-panel-wrap" id="h2-panel-wrap">
         <section class="h2-card h2-panel" role="dialog" aria-modal="true">
-          <div class="h2-card-head"><span class="h2-panel-title" id="h2-panel-title"></span><button type="button" class="h2-close" id="h2-panel-close">✕ 返回</button></div>
+          <div class="h2-head"><span class="h2-plank h2-plank--static" id="h2-panel-title"></span><button type="button" class="h2-pill h2-pill--red h2-pill--sm h2-close" id="h2-panel-close">✕ 返回</button></div>
           <div class="h2-tabs" id="h2-panel-tabs"></div>
           <div class="h2-panel-body" id="h2-panel-body"></div>
-          <div id="h2-panel-keep" style="display:none"></div>
+        </section>
+      </div>
+      <!-- 通關獎勵摘要 -->
+      <div class="h2-sum-wrap" id="h2-sum-wrap">
+        <section class="h2-card h2-sum" role="dialog" aria-modal="true">
+          <div class="h2-head"><span class="h2-plank h2-plank--static" id="h2-sum-title">通關獎勵</span></div>
+          <div class="h2-sum-body" id="h2-sum-body"></div>
+          <div class="h2-sum-btns">
+            <button type="button" class="h2-pill h2-pill--green" id="h2-sum-ok">收下獎勵，開始整備</button>
+            <button type="button" class="h2-pill h2-pill--blue h2-pill--sm" id="h2-sum-detail">查看本關詳細結算</button>
+          </div>
         </section>
       </div>
     </div>
@@ -315,7 +343,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.66-home-ui2-test-1 · 2026-10-20
+        adventure-v0.3.67-home-ui2-polish-test-1 · 2026-10-20
       </div>
 
     </div><!-- /#home-panel -->
@@ -456,7 +484,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.66-home-ui2-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.67-home-ui2-polish-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
