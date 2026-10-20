@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.67-home-ui2-polish-test-1';
-const BUILD_TIME   = '2026-10-20 18:30';
+const GAME_VERSION = 'adventure-v0.3.68-home-ui2-fixes-map-doublekill-test-3';
+const BUILD_TIME   = '2026-10-21 03:40';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -2560,6 +2560,7 @@ function calcAdventureScore() {
   + timeLeft * 5
   + Math.floor((player.hp || 0) * 100)
   + (currentRunStats.foundHiddenTreasure ? 200 : 0)
+  + (currentRunStats.chainBonusScore  || 0)          // v0.3.68：氣球槌連鎖撞擊／Double Kill 加分（測試參數）
   - (currentRunStats.damageTaken      || 0) * 20;
   return Math.max(0, Math.floor(score));
 }
@@ -5513,6 +5514,7 @@ function update(dt, dtMs = 16.667) {
   updateSpinningEnemies(dt);
   updateScorpionDefeatEffects(dt);
   updateTreasurePickupEffects(); // v0.3.12
+  try { updateChainFx(dt); } catch (e) {} // v0.3.68：DOUBLE KILL 文字
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
   updateChimneyOranges(dtMs);     // v0.3.19：Chapter 2 煙囟橘子
@@ -7342,6 +7344,7 @@ function updateHammerMelee() {
                           * (tierCfg?.drawScaleMultiplier    ?? 1.0)),
       spinDamage,
       hitTargetIds: new Set(),
+      sourceId: e.runtimeId,   // v0.3.68：被擊飛的是哪一隻（Double Kill 防重複用）
     });
   }
 
@@ -7411,10 +7414,11 @@ function updateSpinningEnemies(dt) {
       if (tid !== -1) s.hitTargetIds.add(tid);
 
       const dmg = s.spinDamage || 1;
-      damageScorpionEnemy(e, dmg, 'spinning', (killed) => {
+      const chainRes = damageScorpionEnemy(e, dmg, 'spinning', (killed) => {
         // spinning kill → defeat effect（不連鎖擊飛，避免混亂）
         spawnScorpionDefeatEffect(killed);
       });
+      try { if (typeof chainImpactResult === 'function') chainImpactResult(s, e, chainRes); } catch (er) {} // v0.3.68：撞死 → Double Kill；撞傷 → 撞擊加分
 
       s.life = 0; // spinning projectile 命中後消失
     });
@@ -11126,6 +11130,7 @@ function draw() {
     drawOrangeKingBanner(); // v0.3.35
     drawHintBox();
     drawOrangeKingMachineCalibOverlay(); // v0.3.36：定位工具（測試版 F4，最上層）
+    try { drawChainFx(cameraX); } catch (e) {} // v0.3.68
     drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
     drawProjectileOrangeAssetStatusHud(); // v0.3.26-debug：projectile orange 載入狀態（測試版）
   } else if (gameState === 'paused') {
@@ -14802,6 +14807,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.68：home-ui2-fixes-map-doublekill → ui2-fixes（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('home-ui2-fixes')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'ui2-fixes' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.67：home-ui2-polish → ui2-polish（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('home-ui2-polish')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -17714,6 +17724,10 @@ function restart(opts) {
   currentRunStats.vCoinsGranted           = false;
   currentRunStats.vCoinsEarnedThisClear   = 0;
   currentRunStats.vCoinEarnDetails        = [];
+  currentRunStats.chainImpacts            = 0;  // v0.3.68
+  currentRunStats.doubleKills             = 0;
+  currentRunStats.chainBonusScore         = 0;
+  try { chainFx.length = 0; } catch (e) {}
   // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
   dogNoseGlow  = 0;
   dogNoseLevel = 0;
@@ -18869,22 +18883,25 @@ function rpgIsTouchControlsShown() {
   } catch (e) { return false; }
 }
 const RPG_RECIPE_LINES = {
+  // v0.3.68：第一張「咦！發現了氣球秘笈！」改成獨立的發現提示（rpg020_find，一定會顯示）；這裡從「原來是＿＿的製作秘笈啊！」開始
   basicHammer: [
-    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦？！這裡又藏著一本{g:氣球秘笈}！' },
     { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來是{g:氣球槌}的製作秘笈啊！' },
     // 第三頁依操作方式：電腦鍵盤 / 手機觸控（手機時圈出真正的換武器鍵）
     { sp: 'balloonv', face: 'balloonv_happy', text: () => rpgIsTouchControlsShown() ? '原來按這裡就能使用槌子了!' : '原來做出來後按2就能使用槌子了!', focusSwitchBtn: true },
   ],
   balloonLollipop: [
-    { sp: 'balloonv', face: 'balloonv_happy',    text: '咦？！這裡竟然藏著一本{g:氣球秘笈}！' },
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '原來是{g:氣球棒棒糖}的製作秘笈啊！' },
     { sp: 'balloonv', face: 'balloonv_thinking', text: '太好了，現在我能用{g:260氣球}做{g:棒棒糖}了！' },
     { sp: 'balloonv', face: 'balloonv_happy',    text: '它的功用是……做出來就能馬上吃掉，{b:恢復0.5點HP}！' }, // v0.3.60：第三頁改開心
   ],
 };
 // 008：資源寶箱的簡短反應（未來不同資源可對應不同台詞）
+// v0.3.68：第一張改成統一的發現提示（rpg020_find:goldChest），這裡只說明實際拿到的獎勵
 const RPG_CHEST_LINES = {
-  goldChest: [{ sp: 'balloonv', face: 'balloonv_happy', text: '哇！！找到金幣寶箱！！' }],
+  goldChest: [{ sp: 'balloonv', face: 'balloonv_happy', text: () => '太好了！獲得{g:冒險金幣 +' + ((currentRunStats && currentRunStats.foundTreasureCoins) || 30) + '}！' }],
 };
+// v0.3.68：撿到特殊物品的第一張提示（依物品類型填入；屬於即時取得回饋 → 不受顯示模式影響，略過也不影響入帳）
+const RPG_FIND_NAMES = { recipe: '氣球秘笈', goldChest: '金幣寶箱', bossNote: '弱點筆記' };
 // ── v0.3.60：可調整的台詞資料（集中在這裡，之後換正式台詞只改這一段）──
 const RPG_TEXT = {
   dogWoofTreasure: '汪！汪汪！',
@@ -18913,7 +18930,7 @@ const RPG_TEXT = {
   ],
   // v0.3.62：2-3 觀察筆記 — 先發現（一句）→ 中央展示 → 讀完的反應（兩句）
   kingNoteFind: [
-    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！？這是什麼？' },
+    { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:弱點筆記}！' },   // v0.3.68：統一的發現提示
   ],
   kingNoteReaction: [
     { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來如此……他的攻擊似乎都{b:有跡可循}！' },
@@ -18967,7 +18984,7 @@ function rpgBuildScene(id, extra) {
     // v0.3.61：2-3 橘子王觀察筆記 — 畫面正中央展示（必要的發現演出，不受顯示模式限制）→ 接著小V反應
     'rpg016_king_note_show': { title: '橘子王觀察筆記', modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, showcase: 'orange_king_weakness_note', next: 'rpg017_king_note_reaction', pages: [
       { sp: 'note', face: 'orange_king_weakness_note', text: '' } ] },
-    'rpg019_king_note_find': { title: '咦！？這是什麼？', modeControlled: true, saveHistory: true, left: 'balloonv_surprised', right: null, next: 'rpg016_king_note_show', pages: RPG_TEXT.kingNoteFind.map(l => Object.assign({}, l)) },
+    'rpg019_king_note_find': { title: '發現弱點筆記', modeControlled: false, saveHistory: true, left: 'balloonv_surprised', right: null, next: 'rpg016_king_note_show', pages: RPG_TEXT.kingNoteFind.map(l => Object.assign({}, l)) },
     'rpg017_king_note_reaction': { title: '讀完橘子王觀察筆記', modeControlled: true, saveHistory: true, left: 'balloonv_thinking', right: null, pages: RPG_TEXT.kingNoteReaction.map(l => Object.assign({}, l)) },
   });
   if (S[id]) return Object.assign({ id }, S[id]);
@@ -18980,6 +18997,14 @@ function rpgBuildScene(id, extra) {
   if (id.startsWith('rpg007_recipe:')) {
     const key = id.split(':')[1]; const lines = RPG_RECIPE_LINES[key]; if (!lines) return null;
     return { id, title: '發現秘笈：' + ((extra && extra.recipeName) || key), modeControlled: true, saveHistory: true, left: lines[0].face, right: 'balloon_recipe_book', pages: lines.map(l => Object.assign({}, l)) };
+  }
+  // v0.3.68：rpg020_find:recipe:<配方> / rpg020_find:goldChest / rpg020_find:bossNote — 第一張發現提示，接著播原本的說明
+  if (id.startsWith('rpg020_find:')) {
+    const parts = id.split(':'), kind = parts[1], key = parts[2];
+    const nm = RPG_FIND_NAMES[kind]; if (!nm) return null;
+    const next = kind === 'recipe' ? (RPG_RECIPE_LINES[key] ? 'rpg007_recipe:' + key : null) : kind === 'goldChest' ? 'rpg008_chest:goldChest' : null;
+    return { id, title: '發現' + nm, modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: 'balloonv_surprised', right: kind === 'recipe' ? 'balloon_recipe_book' : null,
+      next, pages: [{ sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:' + nm + '}！' }] };
   }
   if (id.startsWith('rpg008_chest:')) {
     const key = id.split(':')[1]; const lines = RPG_CHEST_LINES[key]; if (!lines) return null;
@@ -19355,8 +19380,9 @@ function rpgUpdate() {
 function rpgOnTreasureFound(t) {
   try {
     if (!t) return false;
-    if (t.type === 'recipe' && RPG_RECIPE_LINES[t.recipeKey]) return rpgRequest('rpg007_recipe:' + t.recipeKey, () => true, { recipeName: t.recipeName });
-    if (t.type === 'goldChest') return rpgRequest('rpg008_chest:goldChest', () => true);
+    // v0.3.68：先「咦！發現了＿＿！」（一定顯示），說明頁（秘笈用途／寶箱獎勵）由場景的 next 接著播（說明頁仍依顯示模式與首次觀看紀錄）
+    if (t.type === 'recipe') return rpgRequest('rpg020_find:recipe:' + t.recipeKey, () => true, { recipeName: t.recipeName });
+    if (t.type === 'goldChest') return rpgRequest('rpg020_find:goldChest', () => true);
   } catch (e) { console.warn('[RPG] treasure hook', e); }
   return false;
 }
@@ -20502,6 +20528,8 @@ const SFX_DEFS = {
   scorpionHurt:   { path: 'enemy/scorpion_hurt.mp3',          vol: 0.8, minGapMs: 90, maxVoices: 2 },       // 一般蠍子受傷
   scorpionWalk:   { path: 'enemy/scorpion_walk.mp3',          vol: 0.45, loop: true },                      // 畫面中最近的一隻蠍子走路
   scorpionKnockback: { path: 'enemy/scorpion_knockback.mp3',  vol: 0.85, minGapMs: 60, maxVoices: 2 },      // 被氣球槌擊飛（一般 / 重甲共用）
+  // v0.3.68：Double Kill（正式路徑：assets/audio/sfx/enemy/sfx_double_kill.mp3）
+  doubleKill:     { path: 'enemy/sfx_double_kill.mp3', vol: 0.9, minGapMs: 250, maxVoices: 1 },
   bossHurt:       { path: 'enemy/giant_scorpion_hurt.mp3',    vol: 0.9, minGapMs: 120, maxVoices: 1, bufferOf: 'giantScorpionHurt' }, // 橘子王真的扣 HP（暫時共用重甲蠍子受傷聲）
   // 道具 / 介面
   balloonPickup:  { path: 'item/balloon_pickup.mp3',          vol: 0.75, minGapMs: 60, maxVoices: 2 },      // 260 / 圓氣球真的加入背包
@@ -20562,7 +20590,7 @@ function sfxLoad(key) {
   if (SFX.status[key] === 'loaded' || SFX.status[key] === 'loading' || SFX.status[key] === 'failed') return SFX.status[key + '__p'] || Promise.resolve(null);
   const c = sfxEnsureCtx(); if (!c || typeof fetch !== 'function') { SFX.status[key] = 'failed'; return Promise.resolve(null); }
   SFX.status[key] = 'loading';
-  const urls = sfxCandidates(def.path); SFX.tried[key] = [];
+  const urls = sfxCandidates(def.path).concat(...(def.altPaths || []).map(sfxCandidates)); SFX.tried[key] = []; // v0.3.68：altPaths＝備用檔名
   const tryAt = (i) => {
     if (i >= urls.length) { SFX.status[key] = 'failed'; console.warn('[SFX] 載入失敗（略過這個音效）', def.path, SFX.tried[key]); return null; }
     return fetch(urls[i]).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
@@ -20827,7 +20855,7 @@ try { advBoot(); } catch (e) { console.warn('[Score] 開機初始化失敗', e);
   const btnPauseReset = document.getElementById('btn-pause-reset-test');
   if (btnPauseReset) {
     btnPauseReset.style.display = ADVENTURE_TEST_TOOLS_ENABLED ? '' : 'none';
-    btnPauseReset.addEventListener('click', resetAdventureTestState);
+    btnPauseReset.addEventListener('click', e => { e.preventDefault(); if (typeof p2ConfirmTestReset === 'function') p2ConfirmTestReset(1); }); // v0.3.68：兩次確認才重置
   }
   const btnTestLevel3 = document.getElementById('btn-pause-test-level3');
   if (btnTestLevel3) {
@@ -20921,6 +20949,8 @@ requestAnimationFrame(loop);
 
 // ════════════════════════════════════════════════════════════════════
 //  v0.3.67：小V之家 UI 2.0（視覺與操作修正）
+//  v0.3.68：卡片收合（手風琴）、道具圖不加框、價格 $N、不可操作時圖片保留彩色、
+//           出發條件／小狗尋寶提示回到小V之家、左右滑動／拖曳切換、詳細視窗置中縮窄
 //  ──────────────────────────────────────────────────────────────────
 //  ・只換「外觀與入口」：購買／使用／製作／帶狗／出發，仍呼叫原本的函式
 //    （buyShopItem、useHealingItemOutOfAdventure、homeUseBandage、craftItem、
@@ -20945,7 +20975,7 @@ const H2_UI = {
   // UI 共用元件（GitHub 上 blue / yellow 的實際檔名是 .png.png）
   frame:     H2_UI_COMP + 'ui_card_frame.png',
   plank:     H2_UI_COMP + 'ui_title_wood.png',
-  slot:      H2_UI_COMP + 'ui_item_slot.png',
+  // slot（ui_item_slot.png）：v0.3.68 起道具圖不再加這個裝飾框（不載入）
   btnGreen:  H2_UI_COMP + 'ui_button_green.png',
   btnYellow: H2_UI_COMP + 'ui_button_yellow.png.png',
   btnBlue:   H2_UI_COMP + 'ui_button_blue.png.png',
@@ -20964,8 +20994,9 @@ const H2_ICON = {
   firstAidKit:     { path: H2_UI_ITEMS + 'item_first_aid.png',   emoji: '🚑' },
   heartPatch:      { path: H2_UI_ITEMS + 'item_heart_patch.png', emoji: '❤️' },
   balloonLollipop: { path: H2_UI_ITEMS + 'item_lollipop.png',    emoji: '🍭' },
-  basicSword:      { path: null, emoji: '⚔️', candidate: H2_UI_ITEMS + 'item_sword_candidate.png' },   // 待確認：候選圖與遊戲內氣球劍外觀不同
-  basicHammer:     { path: null, emoji: '🔨', candidate: H2_UI_ITEMS + 'item_hammer_candidate.png' },  // 待確認：候選圖與遊戲內氣球槌外觀不同
+  // 氣球劍／氣球槌：專案美術提供的正式圖（2026-10-21 上傳；黃色劍身＋藍色劍柄、粉紫雙球＋藍色握柄）
+  basicSword:      { path: H2_UI_ITEMS + 'item_balloon_sword.png',  emoji: '⚔️' },
+  basicHammer:     { path: H2_UI_ITEMS + 'item_balloon_hammer.png', emoji: '🔨' },
   balloonDog:      { path: 'assets/adventure/companions/dog/dog_idle.png', emoji: '🐶' },              // 既有遊戲小狗圖
   bossNote:        { path: 'assets/adventure/rpg/objects/orange_king_weakness_note.png', emoji: '📜' },
   recipeBook:      { path: 'assets/adventure/rpg/objects/balloon_recipe_book.png', emoji: '📖' },
@@ -20984,16 +21015,17 @@ const H2_OUTFIT_NOTES = [                              // hero_front.png 實際�
   { id: 'buttons',  label: '三顆紫色釦子',   side: 'r', ly: 45, pts: [[50.0, 50.2], [50.0, 53.7], [50.0, 57.3]] },
   { id: 'pockets',  label: '背心左側雙口袋', side: 'r', ly: 62, pts: [[58.4, 54.7]] },
 ];
-const H2_DOG_BB = {                                    // 不透明範圍（alpha > 30）量測
+const H2_DOG_BB = {                                    // 不透明範圍（alpha > 30）量測；nose = 鼻子中心（原圖像素）
   bed:   { bb: [23, 233, 1232, 1037], cw: 1254, ch: 1254 },
-  rest:  { bb: [46, 346, 1239, 1011], cw: 1254, ch: 1254 },
-  ready: { bb: [27, 97, 1277, 1164],  cw: 1304, ch: 1206 },
+  rest:  { bb: [46, 346, 1239, 1011], cw: 1254, ch: 1254, nose: [982, 818, 62] },
+  ready: { bb: [27, 97, 1277, 1164],  cw: 1304, ch: 1206, nose: [262, 458, 66] },
 };
 const H2_TEACHING_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLK6Hk2syimYI'; // 使用者提供（待確認是否完整）
 const H2_CONTINENTS = [{ id: 'continent1', name: '第一大陸', stageIds: OFFICIAL_ADVENTURE_STAGE_IDS.slice() }];
 
 var h2BulkBuying = false;
-const H2 = { open: false, legacy: false, dir: 0, notes: false, car: { recipes: 0, res: 0, supply: 0, shop: 0 },
+const H2_COLLAPSIBLE = { recipes: 'left', res: 'left', supply: 'left', shop: 'right' };  // 可收合的一般功能卡（玩家資料、氣球小狗常駐）
+const H2 = { open: false, legacy: false, dir: 0, notes: false, car: { recipes: 0, res: 0, supply: 0, shop: 0 }, expanded: { left: null, right: null },
   panel: null, shopQty: {}, borrowed: [], bound: false, rendering: false, raf: 0, lastTap: {},
   img: {}, failed: [], coreLoading: false, forceResult: false, enterPending: false, enterReason: null, pendingSummary: null, summary: null };
 const H2_DEVTOOLS = (() => { try { return /[?&]devtools=1\b/.test(location.search) || localStorage.getItem('balloonV_devTools') === '1'; } catch (e) { return false; } })();
@@ -21059,10 +21091,14 @@ function h2SetImgEl(el, path) {
   h2Load(path).then(s => { if (s.status === 'ok') { el.src = s.url; el.dataset.h2Loaded = '1'; if (el.closest && el.closest('#h2-dog-stage')) h2PlaceDog(); } else el.dataset.h2Failed = '1'; });
 }
 // UI 元件 → CSS 變數（載入成功才換上正式外觀；失敗保留可讀的基本外框）
+// v0.3.68：變數與「已載入」標記放在 <html>（小V之家與暫停選單共用同一套木框／按鈕），#h2-root 也保留標記
+function h2SkinSet(cssVar, val, okClasses) {
+  const targets = [document.documentElement, h2$('h2-root')].filter(Boolean);
+  targets.forEach(t => { if (cssVar) t.style.setProperty(cssVar, val); (okClasses || []).forEach(c => t.classList.add(c)); });
+}
 function h2CssAsset(path, cssVar, okClass) {
   return h2Load(path).then(s => {
-    const root = h2$('h2-root'); if (!root) return;
-    if (s.status === 'ok') { root.style.setProperty(cssVar, 'url("' + s.url + '")'); if (okClass) root.classList.add(okClass); }
+    if (s.status === 'ok') h2SkinSet(cssVar, 'url("' + s.url + '")', okClass ? [okClass] : []);
   });
 }
 // 木框：中間羊皮紙改透明（卡片底色才能半透明）；頂端愛心另外取出、等比例顯示（不被拉寬）
@@ -21100,29 +21136,27 @@ function h2ProcessFrame(img) {
 function h2LoadFrame() {
   if (H2.frameTried) return; H2.frameTried = true;
   h2Load(H2_UI.frame, { cors: true }).then(s => {
-    const root = h2$('h2-root'); if (!root || s.status !== 'ok') return;
+    if (s.status !== 'ok') return;
     try {
       const r = h2ProcessFrame(s.img);
-      root.style.setProperty('--h2-img-frame', 'url("' + r.frame + '")');
-      root.style.setProperty('--h2-img-heart', 'url("' + r.heart + '")');
-      root.classList.add('h2-frame-ok');
+      h2SkinSet('--h2-img-frame', 'url("' + r.frame + '")');
+      h2SkinSet('--h2-img-heart', 'url("' + r.heart + '")', ['h2-frame-ok']);
     } catch (e) {
       // 畫布被瀏覽器擋下（跨網域）→ 直接用原圖（羊皮紙不透明、愛心會隨卡片寬度伸縮）
       console.warn('[Home2] 木框無法轉成透明，改用原圖', e);
-      root.style.setProperty('--h2-img-frame', 'url("' + s.url + '")');
-      root.classList.add('h2-frame-ok', 'h2-frame-raw');
+      h2SkinSet('--h2-img-frame', 'url("' + s.url + '")', ['h2-frame-ok', 'h2-frame-raw']);
     }
   });
 }
 // 先載入「進小V之家一定會看到」的素材；其餘（另外三個方向的小V、面板裡的道具圖）用到才載
 function h2PreloadCore() {
-  if (H2.coreLoading || typeof document === 'undefined' || !h2$('h2-root')) return;
+  if (H2.coreLoading || typeof document === 'undefined' || !document.documentElement) return;
   H2.coreLoading = true;
   h2LoadFrame();
   h2CssAsset(H2_UI.plank, '--h2-img-plank', 'h2-plank-ok');
-  h2CssAsset(H2_UI.slot, '--h2-img-slot', 'h2-slot-ok');
   h2CssAsset(H2_UI.arrowL, '--h2-img-arrow-l', null);
-  h2CssAsset(H2_UI.arrowR, '--h2-img-arrow-r', null).then(() => { const r = h2$('h2-root'); if (r && H2.img[H2_UI.arrowL] && H2.img[H2_UI.arrowL].status === 'ok') r.classList.add('h2-arrow-ok'); });
+  h2CssAsset(H2_UI.arrowR, '--h2-img-arrow-r', null).then(() => { if (H2.img[H2_UI.arrowL] && H2.img[H2_UI.arrowL].status === 'ok' && H2.img[H2_UI.arrowR].status === 'ok') h2SkinSet(null, null, ['h2-arrow-ok']); });
+  h2CssAsset(H2_UI.window, '--h2-img-continent', null);   // 暫停選單背景（目前所在大陸的風景；與小V之家窗景同一張）
   [['btnGreen', 'green'], ['btnYellow', 'yellow'], ['btnBlue', 'blue'], ['btnPurple', 'purple'], ['btnRed', 'red']].forEach(([k, c]) => h2CssAsset(H2_UI[k], '--h2-img-btn-' + c, 'h2-btn-' + c + '-ok'));
   h2SetImgEl(h2$('h2-bg-window'), H2_UI.window);
   h2SetImgEl(h2$('h2-bg-interior'), H2_UI.interior);
@@ -21175,8 +21209,10 @@ function h2Open() {
     h2HideBubble();
     h2ClosePanel();
     H2.dir = 0; H2.notes = false;
+    H2.expanded = { left: null, right: null };   // v0.3.68：每次進小V之家，一般功能卡片都先收合（看得到室內與小V）
     h2SetDir(0);
     h2RenderAll();
+    try { h2MapPreload(); } catch (e) {}
     if (homeEntryMode === 'result-shop') h2OpenPanel('shop');
     try { loadEquippedTitleFromFirebase().then(() => h2ScheduleRefresh()).catch(() => {}); } catch (e) {}
   } catch (err) {
@@ -21198,6 +21234,7 @@ function h2RenderAll() {
     try { renderHomeNextStage(); } catch (e) {}
     h2RenderPlayer(); h2RenderStatus();
     ['recipes', 'res', 'supply', 'shop'].forEach(h2RenderCarousel);
+    h2RenderCollapse();
     h2RenderDog(); h2RenderCenter();
     if (H2.panel) h2RenderPanel();
   } finally { H2.rendering = false; }
@@ -21274,8 +21311,8 @@ function h2SupplyItems() {
   const coins = playerInventory.coins || 0;
   const it = playerInventory.items || {};
   const list = [];
-  list.push({ key: 'heartPatch', name: '愛心貼布', icon: 'heartPatch', price: BANDAGE_PRICE,
-    desc: '花 ' + BANDAGE_PRICE + ' 金幣購買並立即使用，恢復 ' + BANDAGE_HEAL + ' HP（不放進背包）',
+  list.push({ key: 'heartPatch', name: '愛心貼布', icon: 'heartPatch', price: BANDAGE_PRICE, buyNow: true,
+    desc: '價格 $' + BANDAGE_PRICE + '（冒險金幣）：買了立即使用，恢復 ' + BANDAGE_HEAL + ' HP（不放進背包）',
     act: full ? '生命已滿' : coins < BANDAGE_PRICE ? '金幣不足' : '購買並使用', off: full || coins < BANDAGE_PRICE });
   ['bandage', 'firstAidKit'].forEach(id => {
     const item = SHOP_ITEMS[id]; if (!item) return;
@@ -21300,7 +21337,7 @@ function h2ShopTiles() {
   ensureInventoryItems();
   const list = Object.values(SHOP_ITEMS).map(item => {
     const have = playerInventory.items[item.id] || 0, room = Math.max(0, item.maxCarry - have);
-    return { key: item.id, name: item.name, label: item.name, sub: room <= 0 ? '已帶滿' : item.priceCoins + ' 金幣', icon: item.id, count: have + '/' + item.maxCarry, off: room <= 0 };
+    return { key: item.id, name: item.name, label: item.name, price: item.priceCoins, sub: room <= 0 ? '已達上限' : null, icon: item.id, count: have + '/' + item.maxCarry, off: room <= 0 };
   });
   list.push({ key: 'styleSoon', name: '造型商品', label: '造型商品', sub: '即將推出', icon: 'star', off: true, soon: true });
   return list;
@@ -21308,24 +21345,44 @@ function h2ShopTiles() {
 function h2CarItems(name) {
   if (name === 'recipes') return h2RecipeTiles();
   if (name === 'res') return h2ResTiles();
-  if (name === 'supply') return h2SupplyItems().map(it => Object.assign({}, it, { label: it.off || it.goShop ? it.act : (it.label || it.name), lblOff: it.off || it.goShop }));
+  if (name === 'supply') return h2SupplyItems().map(it => Object.assign({}, it, { label: it.label || it.name, sub: it.off || it.goShop ? it.act : null, lblOff: false }));
   if (name === 'shop') return h2ShopTiles();
   return [];
 }
 
+// ── v0.3.68：一般功能卡片收合（手風琴：同一側一次只展開一張；左右各自獨立；玩家資料、氣球小狗常駐）──
+function h2IsExpanded(name) { const side = H2_COLLAPSIBLE[name]; return !!side && H2.expanded[side] === name; }
+function h2SetExpanded(name, on) {
+  const side = H2_COLLAPSIBLE[name]; if (!side) return;
+  H2.expanded[side] = on ? name : (H2.expanded[side] === name ? null : H2.expanded[side]);
+  h2RenderCollapse();
+  if (on) { h2RenderCarousel(name); }
+}
+function h2ToggleCard(name) { h2SetExpanded(name, !h2IsExpanded(name)); }
+function h2RenderCollapse() {
+  Object.keys(H2_COLLAPSIBLE).forEach(name => {
+    const card = h2$('h2-card-' + name); if (!card) return;
+    const on = h2IsExpanded(name);
+    card.classList.toggle('is-collapsed', !on); card.classList.toggle('is-expanded', on);
+    const pl = card.querySelector('.h2-plank'); if (pl) pl.setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+  ['left', 'right'].forEach(side => { const col = document.querySelector('#h2-root .h2-col--' + side); if (col) col.dataset.open = H2.expanded[side] || ''; });
+}
+
 // ── 三格輪播 ─────────────────────────────────
+// v0.3.68：數量徽章（右下角、精簡）；價格不再用徽章（避免看起來像持有數量）→ 名稱下方的「$N」價格牌
 function h2BadgeHtml(t) {
-  if (t.price != null) return '<span class="h2-count h2-count--price">' + h2Esc(t.price) + '</span>';
-  if (t.count != null) return '<span class="h2-count">' + h2Esc(t.count) + '</span>';
+  if (t.count != null) return '<span class="h2-count' + (t.zero ? ' is-zero' : '') + '">' + h2Esc(t.count) + '</span>';
   return '';
 }
+function h2PriceHtml(n) { return '<span class="h2-price-tag">$' + h2Esc(n) + '</span>'; }
 function h2TileHtml(name, t, i) {
   if (!t) return '<span class="h2-tile h2-tile--empty"></span>';
   const act = t.opener ? ' onclick="h2_openGuidebook(\'' + t.opener + '\')"' : ' data-h2-act="tile" data-car="' + name + '" data-i="' + i + '"';
   return '<button type="button" class="h2-tile' + (t.zero ? ' is-zero' : '') + (t.off ? ' is-off' : '') + '"' + act + ' data-key="' + h2Esc(t.key) + '" title="' + h2Esc(t.name) + '">'
     + '<span class="h2-slot">' + h2Icon(t.icon) + h2BadgeHtml(t) + '</span>'
-    + '<span class="h2-tile-lbl' + (t.lblOff ? ' h2-tile-lbl--off' : '') + '">' + h2Esc(t.label || t.name) + '</span>'
-    + (t.sub ? '<span class="h2-tile-lbl h2-tile-lbl--sub' + (t.off ? ' h2-tile-lbl--off' : '') + '">' + h2Esc(t.sub) + '</span>' : '')
+    + '<span class="h2-tile-lbl">' + h2Esc(t.label || t.name) + '</span>'
+    + (t.sub ? '<span class="h2-tile-lbl h2-tile-lbl--sub h2-tile-lbl--off">' + h2Esc(t.sub) + '</span>' : t.price != null ? '<span class="h2-tile-lbl h2-tile-lbl--sub">' + h2PriceHtml(t.price) + '</span>' : '')
     + '</button>';
 }
 function h2RenderCarousel(name) {
@@ -21340,6 +21397,15 @@ function h2RenderCarousel(name) {
   const card = box.closest('.h2-card');
   const l = card && card.querySelector('.h2-arr--l'), r = card && card.querySelector('.h2-arr--r');
   if (l) l.disabled = off <= 0; if (r) r.disabled = off >= maxOff;
+  if (box) box.dataset.count = String(items.length);
+}
+// 輪播切換（箭頭、手指滑動、滑鼠拖曳共用）：一次只移動一格；只有一頁時不切換
+function h2CarStep(name, d) {
+  const n = h2CarItems(name).length, maxOff = Math.max(0, n - 3);
+  if (maxOff <= 0) return false;
+  const next = Math.max(0, Math.min(maxOff, (H2.car[name] || 0) + (d > 0 ? 1 : -1)));
+  if (next === H2.car[name]) return false;
+  H2.car[name] = next; h2RenderCarousel(name); return true;
 }
 
 // ── 氣球小狗（休息中／已安排同行／已消氣）──
@@ -21364,14 +21430,36 @@ function h2PlaceDog() {
   if (!SW || !SH || !bed || !rest || !ready) return;
   const st = h2DogState();
   rest.style.display = 'none'; ready.style.display = 'none';
+  let dogBox = null, spec = null;
   if (st === 'ready') {
     // 站起來、面向中央小V（圖片本身朝左）；狗窩放在右後方
     h2Place(bed, H2_DOG_BB.bed, { cx: SW * 0.70, bottom: SH * 0.97, w: SW * 0.58, h: SH * 0.56 });
-    h2Place(ready, H2_DOG_BB.ready, { cx: SW * 0.44, bottom: SH * 0.995, w: SW * 0.86, h: SH * 0.97 });
+    dogBox = h2Place(ready, H2_DOG_BB.ready, { cx: SW * 0.44, bottom: SH * 0.995, w: SW * 0.86, h: SH * 0.97 }); spec = H2_DOG_BB.ready;
   } else {
     const b = h2Place(bed, H2_DOG_BB.bed, { cx: SW * 0.5, bottom: SH * 0.99, w: SW * 0.98, h: SH * 0.92 });
-    if (st === 'rest') h2Place(rest, H2_DOG_BB.rest, { cx: SW * 0.5, bottom: b.top + b.h * 0.77, w: b.w * 0.8, h: b.top + b.h * 0.77 });
+    if (st === 'rest') { dogBox = h2Place(rest, H2_DOG_BB.rest, { cx: SW * 0.5, bottom: b.top + b.h * 0.77, w: b.w * 0.8, h: b.top + b.h * 0.77 }); spec = H2_DOG_BB.rest; }
   }
+  // v0.3.68：聞到寶物 → 鼻子閃爍（和冒險中的鼻子發光同一個意思；不透露寶物位置）
+  const nose = h2$('h2-dog-nose');
+  if (nose) {
+    const on = !!(dogBox && spec && spec.nose && H2.sniff);
+    nose.style.display = on ? 'block' : 'none';
+    if (on) {
+      const k = dogBox.w / (spec.bb[2] - spec.bb[0]);
+      const nx = dogBox.left + (spec.nose[0] - spec.bb[0]) * k, ny = dogBox.top + (spec.nose[1] - spec.bb[1]) * k, r = Math.max(10, spec.nose[2] * k * 1.7);
+      Object.assign(nose.style, { left: (nx - r) + 'px', top: (ny - r) + 'px', width: (2 * r) + 'px', height: (2 * r) + 'px' });
+    }
+  }
+}
+// v0.3.68：小狗尋寶提醒（原本小V之家的文案；判斷沿用 isHiddenTreasureAvailable；只說「好像有」，不說在哪裡）
+function h2SniffInfo() {
+  if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return null;
+  const idx = (gameState === 'clear' && homeEntryMode !== 'failed') ? getNextLevelIndex(currentLevelIndex) : currentLevelIndex;
+  const lv = LEVELS[idx]; if (!lv || !lv.hiddenTreasure || !isHiddenTreasureAvailable(lv.hiddenTreasure)) return null;
+  const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0);
+  if (!hasDog) return { dog: false, text: '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！' };
+  if (nextBringDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪汪！一起去找隱藏寶物！' };
+  return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
 }
 function h2RenderDog() {
   const st = h2DogState();
@@ -21381,6 +21469,9 @@ function h2RenderDog() {
   if (st === 'rest') h2SetImgEl(h2$('h2-dog-rest'), H2_UI.dogRest);
   if (st === 'ready') h2SetImgEl(h2$('h2-dog-ready'), H2_UI.dogReady);
   if (turns) turns.textContent = st === 'gone' ? '' : '陪伴 ' + (dog.turnsLeft || 0) + ' 次';
+  const sn = h2SniffInfo(); H2.sniff = !!(sn && sn.dog);
+  const bub = h2$('h2-dog-sniff');
+  if (bub) { const t = sn ? sn.text : ''; if (bub.textContent !== t) bub.textContent = t; bub.classList.toggle('is-on', !!sn); bub.classList.toggle('is-nodog', !!(sn && !sn.dog)); }
   let html = '';
   if (st === 'rest') {
     const can = canBringDogNextLevel();
@@ -21441,11 +21532,51 @@ function h2LayoutNotes() {
   const svg = box.querySelector('svg'); if (svg) svg.innerHTML = lines;
 }
 function h2HeroTap() { if (H2.dir !== 0) { h2SetDir(0); H2.notes = true; } else H2.notes = !H2.notes; h2RenderNotes(); }
-function h2GoState() {
+// ── v0.3.68：出發條件（直接讀遊戲原本的關卡規則；和 homeGoNextLevel → checkChapter1ProgressionGate 同一套判斷，不新增門檻）──
+//   ・2-4（Boss 關）：背包裡要有氣球劍（isBossWeaponGateBlocked）
+//   ・1-2（狗狗尋寶關，dogHammerStageIndex）：要有氣球小狗，而且已安排帶狗出發（nextBringDog）
+//   ・1-3（第一章流程內，nextIdx === 2）：要先製作氣球槌
+//   fix：告訴玩家去哪裡補齊（card = 要展開／提示的卡片，focus = 秘笈裡的配方）
+function h2DepartCheck() {
   if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return { kind: 'none', sub: '沒有可出發的關卡' };
   const lb = h2$('btn-home-next-level');
-  const txt = lb ? lb.textContent.replace(/[🚀↺↩🔄]/gu, '').trim() : '';
-  return { kind: (lb && lb.disabled) ? 'blocked' : 'go', sub: txt };
+  const legacyTxt = lb ? lb.textContent.replace(/[🚀↺↩🔄]/gu, '').trim() : '';
+  if (gameState !== 'clear' || homeEntryMode === 'failed') return { kind: 'go', sub: legacyTxt };
+  const nextIdx = getNextLevelIndex(currentLevelIndex);
+  if (nextIdx >= LEVELS.length) return { kind: 'go', sub: legacyTxt || '再玩一次' };
+  if (typeof isBossWeaponGateBlocked === 'function' && isBossWeaponGateBlocked(nextIdx))
+    return { kind: 'blocked', sub: '請先準備氣球劍', msg: '挑戰橘子王前，請先準備氣球劍。', detail: '2-4 只能使用氣球劍，到氣球秘笈製作一把吧！', fix: { card: 'recipes', focus: 'basicSword', label: '打開氣球秘笈' } };
+  if (nextIdx === dogHammerStageIndex) {
+    const dog = playerInventory.balloonDog || {};
+    if (!(dog.present && (dog.turnsLeft || 0) > 0))
+      return { kind: 'blocked', sub: '請先製作氣球小狗', msg: '下一關需要氣球小狗同行，請先製作氣球小狗。', detail: '下一關有隱藏寶藏，要靠氣球小狗幫忙尋找。', fix: { card: 'recipes', focus: 'balloonDog', label: '打開氣球秘笈' } };
+    if (nextBringDog !== true)
+      return { kind: 'blocked', sub: '請先安排小狗', msg: '下一關需要氣球小狗同行，請先安排小狗。', detail: '在右邊的氣球小狗卡按「帶狗出發」。', fix: { card: 'dog', label: '帶狗出發' } };
+  }
+  if (nextIdx === 2 && typeof isInChapter1Flow === 'function' && isInChapter1Flow(currentLevelIndex) && (((playerInventory.craftedItems || {}).basicHammer || 0) <= 0))
+    return { kind: 'blocked', sub: '請先製作氣球槌', msg: '進入下一關前，需要先製作氣球槌。', detail: '打開氣球秘笈，先製作第一把氣球槌吧！', fix: { card: 'recipes', focus: 'basicHammer', label: '打開氣球秘笈' } };
+  return { kind: 'go', sub: legacyTxt || '出發冒險！' };
+}
+function h2GoState() { return h2DepartCheck(); }
+// 依出發條件引導：展開相關卡片、捲到那個配方、閃一下（不自動製作、不自動扣任何東西）
+function h2ShowFix(fix) {
+  if (!fix) return;
+  if (fix.card === 'dog') {
+    const card = h2$('h2-card-dog'); h2Shake(card);
+    const b = card && card.querySelector('[data-h2-act="bringDog"]'); if (b) { b.classList.remove('h2-pulse'); void b.offsetWidth; b.classList.add('h2-pulse'); }
+    return;
+  }
+  if (H2_COLLAPSIBLE[fix.card]) {
+    h2SetExpanded(fix.card, true);
+    if (fix.focus) {
+      const items = h2CarItems(fix.card), i = items.findIndex(t => t.key === fix.focus);
+      if (i >= 0) { H2.car[fix.card] = Math.max(0, Math.min(i - 1, items.length - 3)); h2RenderCarousel(fix.card); }
+    }
+    setTimeout(() => {
+      const t = fix.focus && document.querySelector('#h2-root .h2-tiles[data-car="' + fix.card + '"] .h2-tile[data-key="' + fix.focus + '"]');
+      if (t) { t.classList.remove('h2-pulse'); void t.offsetWidth; t.classList.add('h2-pulse'); } else h2Shake(h2$('h2-card-' + fix.card));
+    }, 30);
+  }
 }
 function h2RenderCenter() {
   const lb = h2$('btn-home-back'), back = h2$('h2-back');
@@ -21454,6 +21585,7 @@ function h2RenderCenter() {
     back.classList.toggle('h2-ghost', !show); back.disabled = !show;
     back.textContent = !show ? '返回' : homeEntryMode === 'clear' ? '本關詳細結算' : lb.textContent.replace(/^←\s*/, '').trim();
   }
+  const g = h2GoState(), go = h2$('h2-nav-go'), sub = h2$('h2-go-sub');
   const nl = h2$('h2-nextline');
   if (nl) {
     let t = '';
@@ -21462,7 +21594,14 @@ function h2RenderCenter() {
     nl.textContent = t ? 'ⓘ ' + t : '';
     nl.parentElement.style.display = t ? '' : 'none';
   }
-  const g = h2GoState(), go = h2$('h2-nav-go'), sub = h2$('h2-go-sub');
+  // v0.3.68：不能出發時，在小V上方清楚顯示原因與去哪裡補齊（原本只在遊戲畫布上提示，小V之家看不到）
+  const warn = h2$('h2-depart-warn');
+  if (warn) {
+    const html = g.kind === 'blocked' ? '<span class="h2-warn-txt"><b>⚠ ' + h2Esc(g.msg) + '</b>' + (g.detail ? '<small>' + h2Esc(g.detail) + '</small>' : '') + '</span>'
+      + (g.fix ? '<button type="button" class="h2-pill h2-pill--yellow h2-pill--sm" data-h2-act="fix">' + h2Esc(g.fix.label) + '</button>' : '') : '';
+    if (warn.dataset.html !== html) { warn.dataset.html = html; warn.innerHTML = html; }
+    warn.classList.toggle('is-on', g.kind === 'blocked');
+  }
   if (go) { go.classList.toggle('is-blocked', g.kind === 'blocked'); go.classList.toggle('is-none', g.kind === 'none');
     go.classList.toggle('h2-pill--green', g.kind !== 'blocked'); go.classList.toggle('h2-pill--yellow', g.kind === 'blocked'); }  // 還不能出發 → 黃色按鈕（按了會說明要準備什麼）
   if (sub) sub.textContent = g.sub;
@@ -21471,9 +21610,16 @@ function h2Go() {
   if (h2Busy(600, 'go')) return;
   const g = h2GoState();
   if (g.kind === 'none') { h2Toast('目前沒有可出發的關卡。世界地圖與關卡選擇會在下一階段開放。'); return; }
-  if (g.kind === 'blocked') { h2OpenPanel('next'); h2Toast(g.sub || '出發前還有準備事項'); return; }
+  if (g.kind === 'blocked') { h2Toast(g.msg || g.sub || '出發前還有準備事項'); h2ShowFix(g.fix); return; }
   h2ClosePanel(); h2HideSummary();
-  homeGoNextLevel();
+  // v0.3.68：世界地圖 — 正常前往下一關時，飛行屋從目前關卡飛到下一關（地圖圖片已在背景載好才播；沒載好就直接出發，不讓玩家等）
+  const fly = (gameState === 'clear' && homeEntryMode !== 'failed') ? h2MapDepartFlight() : null;
+  const goNow = () => {
+    homeGoNextLevel();
+    // 保險：原本的關卡規則仍擋下（理論上上面已先判斷）→ 小V之家看得到原因
+    setTimeout(() => { if (h2IsOpen() && gameState === 'clear') { const g2 = h2DepartCheck(); if (g2.kind === 'blocked') { h2Toast(g2.msg); h2ShowFix(g2.fix); } } }, 50);
+  };
+  if (fly) fly.then(goNow); else goNow();
 }
 
 // ── 氣球秘笈（新版面板直接製作；名稱含 openGuidebook → 音效系統只播秘笈音效）──
@@ -21670,10 +21816,12 @@ function h2ReturnBorrowed() {
   H2.borrowed.forEach(b => { try { b.parent.insertBefore(b.node, (b.next && b.next.parentNode === b.parent) ? b.next : null); } catch (e) {} });
   H2.borrowed = [];
 }
+// v0.3.68：道具圖直接顯示（不加 ui_item_slot 框）、不因不能操作而變灰；價格用「$N」價格牌，狀態用文字（已達攜帶上限／生命已滿／金幣不足）
 function h2RowHtml(o) {
   return '<div class="h2-row' + (o.zero ? ' is-zero' : '') + (o.full ? ' is-full' : '') + '"' + (o.attr || '') + '>'
     + '<span class="h2-row-slot">' + (o.iconHtml || '') + (o.badge || '') + '</span>'
-    + '<div class="h2-row-main"><div class="h2-row-name">' + h2Esc(o.name) + '</div>' + (o.desc ? '<div class="h2-row-desc">' + o.desc + '</div>' : '') + (o.extra || '') + '</div>'
+    + '<div class="h2-row-main"><div class="h2-row-name">' + h2Esc(o.name) + (o.price != null ? ' ' + h2PriceHtml(o.price) : '') + (o.state ? ' <span class="h2-state">' + h2Esc(o.state) + '</span>' : '') + '</div>'
+    + (o.desc ? '<div class="h2-row-desc">' + o.desc + '</div>' : '') + (o.extra || '') + '</div>'
     + '<div class="h2-row-side">' + (o.side || '') + '</div></div>';
 }
 function h2CoinBar(withV) {
@@ -21684,8 +21832,9 @@ function h2CoinBar(withV) {
 function h2SupplyRowsHtml() {
   return '<div class="h2-stat-row" style="margin:0 0 0.5em"><span class="h2-stat-lbl">HP</span><span class="h2-hearts">' + buildHpHeartsHtml() + '</span></div>'
     + '<div class="h2-list">' + h2SupplyItems().map(it => h2RowHtml({
-      iconHtml: h2Icon(it.icon), badge: it.count != null ? '<span class="h2-count">' + h2Esc(it.count) + '</span>' : it.price != null ? '<span class="h2-count h2-count--price">' + h2Esc(it.price) + '</span>' : '',
-      name: it.name, desc: h2Esc(it.desc || ''), zero: it.zero,
+      iconHtml: h2Icon(it.icon), badge: it.count != null ? '<span class="h2-count' + (it.zero ? ' is-zero' : '') + '">' + h2Esc(it.count) + '</span>' : '',
+      name: it.name, desc: h2Esc(it.desc || '') + (it.count != null ? '<br>持有 ' + h2Esc(it.count) : ''), price: it.price,
+      state: it.off ? it.act : '',
       side: '<button type="button" class="h2-pill ' + (it.goShop ? 'h2-pill--yellow' : 'h2-pill--green') + ' h2-pill--sm" data-h2-act="use" data-key="' + it.key + '"' + (it.off ? ' disabled' : '') + '>' + h2Esc(it.goShop ? '去商店購買' : it.act) + '</button>',
     })).join('') + '</div>'
     + '<div class="h2-sub" style="margin-top:0.7em">補血不會超過生命上限；生命已滿時不會消耗道具。</div>';
@@ -21749,9 +21898,10 @@ function h2PanelBody(kind, tab) {
         + '<b>' + (room <= 0 ? 0 : q) + '</b><button type="button" data-h2-act="qty" data-key="' + item.id + '" data-d="-1" aria-label="減少數量"' + (room <= 0 || q <= 1 ? ' disabled' : '') + '>▼</button></span>';
       const btn = room <= 0 ? '<button type="button" class="h2-pill h2-pill--green" disabled>已達攜帶上限</button>'
         : '<button type="button" class="h2-pill h2-pill--green" data-h2-act="buy" data-key="' + item.id + '"' + (poor ? ' disabled' : '') + '>' + (poor ? '金幣不足' : '購買') + '</button>';
-      return h2RowHtml({ iconHtml: h2Icon(item.id), badge: '<span class="h2-count">' + have + '</span>', name: item.name, full: room <= 0, attr: ' data-shop-row="' + item.id + '"',
-        desc: h2Esc(item.description) + '<br>持有 ' + have + ' / 上限 ' + item.maxCarry + '　｜　單價 ' + item.priceCoins + ' 金幣',
-        side: qtyHtml + '<span class="h2-price">合計 ' + (room <= 0 ? 0 : total) + ' 金幣</span>' + btn });
+      return h2RowHtml({ iconHtml: h2Icon(item.id), badge: '<span class="h2-count' + (have <= 0 ? ' is-zero' : '') + '">' + have + '</span>', name: item.name, full: room <= 0, attr: ' data-shop-row="' + item.id + '"',
+        price: item.priceCoins, state: room <= 0 ? '已達攜帶上限' : poor ? '金幣不足' : '',
+        desc: h2Esc(item.description) + '<br>持有 ' + have + ' / 攜帶上限 ' + item.maxCarry,
+        side: qtyHtml + '<span class="h2-price">合計 $' + (room <= 0 ? 0 : total) + '</span>' + btn });
     }).join('') + '</div><div class="h2-sub" style="margin-top:0.7em">最多只能買到攜帶上限；冒險金幣只能用冒險中撿到的金幣，沒有儲值。</div>';
   }
   if (kind === 'challenge') {
@@ -21797,6 +21947,46 @@ function h2RenderPanel(first) {
   }
 }
 
+// ── v0.3.68：卡片內容左右滑動（手機）／滑鼠按住拖曳（桌面）切換選項 — 所有輪播共用一套 ──
+//   ・水平移動超過門檻（36px，且明顯大於垂直移動）才算滑動；一次手勢只切換一格
+//   ・滑動之後的那一下點擊會被吃掉（不會誤開道具）；只有一頁時不切換
+//   ・只處理 .h2-tiles 區域（詳細視窗的垂直捲動不受影響）
+const H2_SWIPE_MIN = 36;
+function h2BindSwipe(root) {
+  let g = null;
+  const end = (e, cancel) => {
+    if (!g) return;
+    const cur = g; g = null;
+    if (cancel) return;
+    const dx = e.clientX - cur.x, dy = e.clientY - cur.y;
+    if (Math.abs(dx) >= H2_SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      H2.swipeEatClick = Date.now() + 400;
+      h2CarStep(cur.car, dx < 0 ? 1 : -1);   // 向左滑 → 下一個；向右滑 → 上一個
+    }
+  };
+  root.addEventListener('pointerdown', e => {
+    if (e.button != null && e.button !== 0) return;
+    H2.swipeEatClick = 0;                                   // 新的一次操作：之前沒被用掉的「吃掉點擊」不延續
+    const box = e.target.closest && e.target.closest('.h2-tiles[data-car]');
+    if (!box || !h2IsOpen()) { g = null; return; }
+    g = { car: box.dataset.car, x: e.clientX, y: e.clientY, id: e.pointerId, box, mouse: e.pointerType === 'mouse', cap: false };
+  });
+  root.addEventListener('pointermove', e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) { g = null; return; }   // 明顯是上下動作 → 不當成換頁
+    if (g.mouse && !g.cap && Math.abs(dx) >= H2_SWIPE_MIN) { g.cap = true; try { g.box.setPointerCapture(e.pointerId); } catch (er) {} }   // 滑鼠已在拖曳：拖出卡片外放開也算（輕點不受影響）
+  });
+  root.addEventListener('pointerup', e => { if (g && e.pointerId === g.id) end(e, false); });
+  root.addEventListener('lostpointercapture', e => { if (g && e.pointerId === g.id && e.pointerType === 'mouse') end(e, false); });
+  root.addEventListener('pointercancel', e => end(e, true));
+  root.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.h2-tiles')) e.preventDefault(); });
+  // 剛剛是滑動／拖曳 → 接下來那一下點擊不算（在捕獲階段攔下，道具上的 onclick 也不會執行）
+  root.addEventListener('click', e => {
+    if (H2.swipeEatClick && Date.now() < H2.swipeEatClick && e.target.closest && e.target.closest('.h2-tiles')) { H2.swipeEatClick = 0; e.stopPropagation(); e.preventDefault(); }
+  }, true);
+}
+
 // ── 事件（只綁一次，事件委派）────────────────
 function h2BindOnce() {
   if (H2.bound) return;
@@ -21819,13 +22009,16 @@ function h2BindOnce() {
     if (c('#h2-player-btn')) { h2OpenPanel('player'); return; }
     if (c('#h2-back')) { if (!h2$('h2-back').disabled) homeGoBack(); return; }
     if (c('#h2-handbook-btn')) { h2OpenPanel('handbook'); return; }
-    if (c('#h2-nav-map')) { h2Toast('世界地圖會在下一階段開放（第一大陸：氣球森林、橘子工廠、港口、迷霧海域）。'); return; }
+    if (c('#h2-nav-map')) { h2MapOpen(); return; }
+    if (c('#h2-map-wrap')) { h2MapClick(e); return; }
     if (c('#h2-nav-practice')) { h2Toast('自由練習會在下一階段開放，練習成績不會影響正式挑戰。'); return; }
     if (c('#h2-nav-go')) { h2Go(); return; }
-    const op = c('[data-h2-open]'); if (op) { h2OpenPanel(op.dataset.h2Open); return; }
+    const tg = c('[data-h2-toggle]'); if (tg) { h2ToggleCard(tg.dataset.h2Toggle); return; }
+    const op = c('[data-h2-open]'); if (op) { h2OpenPanel(op.dataset.h2Open, { tab: op.dataset.tab }); return; }
     const a = c('[data-h2-act]'); if (!a || a.disabled) return;
     const act = a.dataset.h2Act, key = a.dataset.key;
-    if (act === 'car') { H2.car[a.dataset.car] = (H2.car[a.dataset.car] || 0) + (+a.dataset.d); h2RenderCarousel(a.dataset.car); return; }
+    if (act === 'car') { h2CarStep(a.dataset.car, +a.dataset.d); return; }
+    if (act === 'fix') { h2ShowFix((h2DepartCheck() || {}).fix); return; }
     if (act === 'tile') {
       const it = h2CarItems(a.dataset.car)[+a.dataset.i]; if (!it) return;
       if (a.dataset.car === 'supply') { h2UseSupply(it.key, a); return; }
@@ -21845,7 +22038,8 @@ function h2BindOnce() {
     if (act === 'legacyResult') { h2ShowLegacyResult(); return; }
     if (act === 'go') { h2Go(); return; }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && h2IsOpen()) { if (H2.panel) h2ClosePanel(); else h2HideSummary(); } });
+  h2BindSwipe(root);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && h2IsOpen()) { if (H2.map) h2MapClose(); else if (H2.panel) h2ClosePanel(); else h2HideSummary(); } });
   const onResize = () => { if (h2IsOpen()) { h2PlaceDog(); h2LayoutNotes(); } };
   try { if (typeof ResizeObserver === 'function') new ResizeObserver(onResize).observe(h2$('h2-dog-stage')); } catch (e) {}
   window.addEventListener('resize', onResize);
@@ -21951,12 +22145,12 @@ if (heroRunMode === 'B') heroRunLoadB();
   wrap('loadLevel', orig => function () { const r = orig.apply(this, arguments); try { setTimeout(() => { if (gameState === 'playing') h2PreloadCore(); }, 6000); } catch (e) {} return r; });
   // 開發用：暫停選單的跑步 A/B 切換（只有 ?devtools=1 才看得到）
   try {
-    const ov = document.querySelector('#pause-overlay .pause-btn--primary');
-    if (ov && !h2$('btn-pause-run-ab')) {
-      const b = document.createElement('button'); b.id = 'btn-pause-run-ab'; b.className = 'pause-btn pause-btn--secondary';
+    const box = h2$('p2-dev-body');   // v0.3.68：放在暫停選單的「開發測試工具」（只有 ?devtools=1 看得到）
+    if (box && !h2$('btn-pause-run-ab')) {
+      const b = document.createElement('button'); b.id = 'btn-pause-run-ab'; b.className = 'h2-pill h2-pill--purple h2-pill--sm';
       b.textContent = heroRunMode === 'B' ? '🏃 跑步動畫：B（新對位圖 6.19 FPS）⇄' : '🏃 跑步動畫：A（原本）⇄';
       b.addEventListener('click', e => { e.preventDefault(); setHeroRunMode(heroRunMode === 'B' ? 'A' : 'B'); });
-      ov.parentNode.appendChild(b);
+      box.appendChild(b);
     }
   } catch (e) {}
 })();
@@ -21976,3 +22170,372 @@ if (typeof window !== 'undefined') {
   };
   window.debugRunAB = function (m) { if (m) setHeroRunMode(m); const o = { mode: heroRunMode, active: heroRunIsB() ? 'B' : 'A', loaded: Object.keys(heroRunBImgs), failed: heroRunBFailed.slice(), fps: HERO_RUN_B.fps }; console.log('[RunAB]', o); return o; };
 }
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.68：世界地圖（第一版）
+//  ・底圖只是背景：關卡節點、連線、迷霧、飛行屋都是獨立圖層（換座標不必改圖）
+//  ・座標用「底圖的百分比」（x 0～100 從左到右、y 0～100 從上到下）；目前是草案，可用開發工具校正
+//  ・飛行屋停在「目前關卡」：通關後留在原地；按「出發」才飛到下一關（通關瞬間不會自己移動）
+//  ・資料結構可擴充：未來的其他大陸、港口、船、火車、馬車、特殊飛行交通放在 links
+//    （普通乳膠氣球飛行屋不設計成可直接飛越海洋的大陸間交通工具 → 大陸之間一律走 links）
+// ════════════════════════════════════════════════════════════════════
+const WORLD_MAP = {
+  version: 1,
+  continents: [{
+    id: 'continent1', name: '第一大陸',
+    image: 'assets/adventure/ui/map/map_continent_01.png', w: 1672, h: 941,
+    home: 'assets/adventure/ui/map/map_flying_home.png',
+    regions: ['氣球森林', '橘子工廠', '海岸與港口', '周邊海域', '迷霧（尚未探索）'],
+    // 草案座標（使用者提供，尚未依實際底圖校正）；stageId 對應 LEVELS（1-2 的關卡代號是 1-2b）
+    nodes: [
+      { stageId: '1-1',  label: '1-1', x: 17, y: 53 },
+      { stageId: '1-2b', label: '1-2', x: 27, y: 42 },
+      { stageId: '1-3',  label: '1-3', x: 42, y: 34 },
+      { stageId: '2-1',  label: '2-1', x: 53, y: 35 },
+      { stageId: '2-2',  label: '2-2', x: 59, y: 28 },
+      { stageId: '2-3',  label: '2-3', x: 65, y: 32 },
+      { stageId: '2-4',  label: '2-4', x: 66, y: 20, boss: true },
+    ],
+    routes: [['1-1', '1-2b'], ['1-2b', '1-3'], ['1-3', '2-1'], ['2-1', '2-2'], ['2-2', '2-3'], ['2-3', '2-4']],
+    transport: 'flyingHome',
+  }],
+  links: [],   // 大陸之間的交通（港口／船／火車／馬車／特殊飛行）— 尚未開放
+};
+const H2_MAP_DEV_LS = 'balloonV_dev_mapNodes';   // 只有開發工具會讀寫（正式玩家不使用）
+function h2MapContinent() {
+  const c = WORLD_MAP.continents[0];
+  if (H2_DEVTOOLS && !c._devApplied) {
+    c._devApplied = true;
+    try { const o = JSON.parse(localStorage.getItem(H2_MAP_DEV_LS) || 'null'); if (o && o.continent === c.id && o.nodes) c.nodes.forEach(n => { const v = o.nodes[n.stageId]; if (v) { n.x = +v.x; n.y = +v.y; } }); } catch (e) {}
+  }
+  return c;
+}
+function h2MapPreload() {
+  if (H2.mapPreloadT) return;
+  H2.mapPreloadT = setTimeout(() => { const c = h2MapContinent(); h2Load(c.image); h2Load(c.home); }, 4000);   // 先讓小V之家本身的圖載完
+}
+function h2MapReady() { const c = h2MapContinent(); const a = H2.img[c.image], b = H2.img[c.home]; return !!(a && a.status === 'ok' && b && b.status === 'ok'); }
+// 目前進度（不新增存檔：只讀現有的關卡位置與正式挑戰紀錄）
+function h2MapState() {
+  const c = h2MapContinent(), ids = c.nodes.map(n => n.stageId);
+  const curId = (LEVELS[currentLevelIndex] || {}).stageId, cur = ids.indexOf(curId);
+  const cleared = new Set();
+  if (cur >= 0) { const upto = gameState === 'clear' ? cur : cur - 1; for (let i = 0; i <= upto; i++) cleared.add(ids[i]); }
+  try { const run = advLoad().active; if (run && run.stageResults) Object.keys(run.stageResults).forEach(k => { if (ids.includes(k)) cleared.add(k); }); } catch (e) {}
+  let next = ids.findIndex(id => !cleared.has(id));
+  return { c, ids, cur, cleared, next };
+}
+function h2MapNodeName(stageId) {
+  const i = LEVELS.findIndex(l => l.stageId === stageId); if (i < 0) return stageId;
+  try { const d = getChapterDisplayInfo(i); return d.subtitle ? d.subtitle.replace(/^第\s*\d+\s*節｜/, '') : String(d.title || '').replace(/^\d+-\d+\s*/, ''); } catch (e) { return stageId; }
+}
+function h2MapRender(opts) {
+  const o = opts || {};
+  const st = h2MapState(), c = st.c;
+  const bg = h2$('h2-map-bg'); if (bg && H2.img[c.image] && H2.img[c.image].status === 'ok' && bg.getAttribute('src') !== H2.img[c.image].url) bg.src = H2.img[c.image].url;
+  const title = h2$('h2-map-title'); if (title) title.textContent = '世界地圖・' + c.name;
+  const byId = {}; c.nodes.forEach(n => { byId[n.stageId] = n; });
+  // 連線（已走過＝實線；還沒走＝虛線）
+  const svg = h2$('h2-map-routes');
+  if (svg) svg.innerHTML = c.routes.map(([a, b]) => { const A = byId[a], B = byId[b]; if (!A || !B) return '';
+    const done = st.cleared.has(a) && (st.cleared.has(b) || b === st.ids[st.next]);
+    return '<line class="' + (done ? 'is-done' : 'is-todo') + '" x1="' + A.x + '" y1="' + A.y + '" x2="' + B.x + '" y2="' + B.y + '"/>'; }).join('');
+  // 節點＋迷霧（還沒解鎖的關卡蓋一層霧）
+  const nodes = h2$('h2-map-nodes'), fog = h2$('h2-map-fog');
+  let nh = '', fh = '';
+  c.nodes.forEach((n, i) => {
+    const s = st.cleared.has(n.stageId) ? 'done' : i === st.next ? 'next' : 'locked';
+    nh += '<button type="button" class="h2-map-node is-' + s + (i === st.cur ? ' is-here' : '') + (n.boss ? ' is-boss' : '') + '" data-stage="' + h2Esc(n.stageId) + '" style="left:' + n.x + '%;top:' + n.y + '%" aria-label="' + h2Esc(n.label + ' ' + h2MapNodeName(n.stageId)) + '">'
+      + '<span class="h2-map-dot">' + (s === 'done' ? '✓' : s === 'locked' ? '🔒' : '') + '</span><span class="h2-map-lbl">' + h2Esc(n.label) + '</span></button>';
+    if (s === 'locked' && !o.noFog) fh += '<span class="h2-map-cloud" style="left:' + n.x + '%;top:' + n.y + '%"></span>';
+  });
+  if (nodes) nodes.innerHTML = nh;
+  if (fog) fog.innerHTML = fh;
+  // 飛行屋（獨立圖層）：停在目前關卡
+  const home = h2$('h2-map-home');
+  if (home) {
+    if (H2.img[c.home] && H2.img[c.home].status === 'ok' && home.getAttribute('src') !== H2.img[c.home].url) home.src = H2.img[c.home].url;
+    const here = st.cur >= 0 ? c.nodes[st.cur] : null;
+    if (here && !o.keepHome) { home.style.left = here.x + '%'; home.style.top = here.y + '%'; }
+    home.style.display = here ? 'block' : 'none';
+  }
+  const info = h2$('h2-map-info');
+  if (info && !o.keepInfo) {
+    const here = st.cur >= 0 ? c.nodes[st.cur] : null, nx = st.next >= 0 ? c.nodes[st.next] : null;
+    info.innerHTML = (here ? '<span>🏠 目前位置：<b>' + h2Esc(here.label + ' ' + h2MapNodeName(here.stageId)) + '</b></span>' : '<span>目前不在第一大陸的關卡上</span>')
+      + (nx ? '<span>➜ 下一站：<b>' + h2Esc(nx.label + ' ' + h2MapNodeName(nx.stageId)) + '</b></span>' : '<span>🏆 第一大陸的關卡都完成了！</span>')
+      + '<small>按「出發」時，氣球飛行屋才會飛往下一站。</small>';
+  }
+  h2MapRenderDev();
+}
+function h2MapOpen() {
+  if (h2Busy(400, 'map')) return;
+  const c = h2MapContinent();
+  const wrap = h2$('h2-map-wrap'); if (!wrap) return;
+  H2.map = { mode: 'view' };
+  [c.image, c.home].forEach(p => { if (H2.img[p] && H2.img[p].status === 'failed') delete H2.img[p]; });   // 上次載入失敗 → 這次重新試
+  wrap.classList.add('is-open'); wrap.setAttribute('aria-hidden', 'false');
+  wrap.classList.toggle('is-loading', !h2MapReady());
+  h2MapRender();
+  Promise.all([h2Load(c.image), h2Load(c.home)]).then(([a, b]) => {
+    if (!H2.map) return;
+    wrap.classList.remove('is-loading');
+    h2MapRender();
+    if (a.status !== 'ok') { const info = h2$('h2-map-info'); if (info) info.innerHTML = '<span>地圖圖片載入失敗（' + h2Esc(c.image) + '）。請檢查網路後再打開一次。</span>'; }
+  });
+}
+function h2MapClose() {
+  if (H2.map && H2.map.mode === 'flight') return;   // 飛行中由動畫自己結束
+  H2.map = null;
+  const wrap = h2$('h2-map-wrap'); if (wrap) { wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true'); }
+}
+function h2MapClick(e) {
+  const t = e.target, c = sel => t.closest && t.closest(sel);
+  if (H2.map && H2.map.mode === 'flight') { H2.map.skip = true; return; }   // 飛行中點一下 → 直接到
+  if (c('#h2-map-close') || t === h2$('h2-map-wrap')) { h2MapClose(); return; }
+  const dv = c('[data-map-dev]'); if (dv) { h2MapDevAction(dv.dataset.mapDev); return; }
+  if (H2.mapDev && H2.mapDev.on && c('#h2-map-stage')) { h2MapDevPick(e); return; }
+  const n = c('.h2-map-node');
+  if (n) {
+    const id = n.dataset.stage, st = h2MapState(), i = st.ids.indexOf(id), node = st.c.nodes[i];
+    const s = st.cleared.has(id) ? '已通過' : i === st.next ? '下一站' : '尚未解鎖（迷霧中）';
+    h2Toast(node.label + ' ' + h2MapNodeName(id) + '：' + s + (i === st.cur ? '（飛行屋在這裡）' : ''));
+  }
+}
+// 出發：飛行屋從目前關卡沿路線飛到下一關（回傳 Promise；地圖還沒載好 → null，直接出發不等待）
+function h2MapDepartFlight() {
+  try {
+    if (H2.flying || !h2MapReady()) return null;
+    const st = h2MapState(), c = st.c;
+    const nextIdx = getNextLevelIndex(currentLevelIndex); const toId = (LEVELS[nextIdx] || {}).stageId;
+    const from = st.cur >= 0 ? c.nodes[st.cur] : null, to = c.nodes.find(n => n.stageId === toId);
+    if (!from || !to || from === to) return null;
+    const wrap = h2$('h2-map-wrap'), home = h2$('h2-map-home'); if (!wrap || !home) return null;
+    H2.flying = true; H2.map = { mode: 'flight', skip: false };
+    wrap.classList.add('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'false');
+    h2MapRender({ keepInfo: true });
+    const info = h2$('h2-map-info'); if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！前往 <b>' + h2Esc(to.label + ' ' + h2MapNodeName(to.stageId)) + '</b></span><small>點一下畫面可以跳過</small>';
+    const DUR = 1500, t0 = performance.now();
+    return new Promise(resolve => {
+      const step = now => {
+        const k = Math.min(1, (now - t0) / DUR), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        const x = from.x + (to.x - from.x) * e, y = from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 4;
+        home.style.left = x + '%'; home.style.top = y + '%';
+        if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
+        home.style.left = to.x + '%'; home.style.top = to.y + '%';
+        setTimeout(() => {
+          H2.flying = false; H2.map = null;
+          wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true');
+          resolve();
+        }, H2.map && H2.map.skip ? 0 : 250);
+      };
+      requestAnimationFrame(step);
+    });
+  } catch (e) { H2.flying = false; H2.map = null; return null; }
+}
+// ── 開發工具：節點定位（只有 ?devtools=1）──
+function h2MapRenderDev() {
+  const box = h2$('h2-map-dev'); if (!box) return;
+  if (!H2_DEVTOOLS || !H2.map || H2.map.mode !== 'view') { box.innerHTML = ''; box.style.display = 'none'; return; }
+  const d = H2.mapDev || (H2.mapDev = { on: false, sel: null, last: null });
+  box.style.display = '';
+  const c = h2MapContinent();
+  box.innerHTML = '<b>🛠 地圖節點定位（開發用）</b>'
+    + '<button type="button" data-map-dev="toggle">' + (d.on ? '關閉定位模式' : '開啟定位模式') + '</button>'
+    + '<button type="button" data-map-dev="copy">複製座標</button><button type="button" data-map-dev="reset">還原程式座標</button>'
+    + '<span>' + (d.on ? (d.sel ? '已選 ' + h2Esc(d.sel) + '：點地圖放到新位置' : '點節點選取，再點地圖移動') : '') + (d.last ? '　點擊位置 x ' + d.last.x + '　y ' + d.last.y : '') + '</span>'
+    + (d.json ? '<textarea readonly rows="3">' + h2Esc(d.json) + '</textarea>' : '');
+}
+function h2MapDevPick(e) {
+  const d = H2.mapDev, stage = h2$('h2-map-stage'); const r = stage.getBoundingClientRect();
+  const x = +((e.clientX - r.left) / r.width * 100).toFixed(1), y = +((e.clientY - r.top) / r.height * 100).toFixed(1);
+  d.last = { x, y };
+  const n = e.target.closest && e.target.closest('.h2-map-node');
+  if (n) { d.sel = n.dataset.stage; }
+  else if (d.sel) {
+    const c = h2MapContinent(), node = c.nodes.find(k => k.stageId === d.sel);
+    if (node) { node.x = x; node.y = y; h2MapDevSave(); }
+  }
+  h2MapRender();
+}
+function h2MapDevSave() { const c = h2MapContinent(); const o = { continent: c.id, nodes: {} }; c.nodes.forEach(n => { o.nodes[n.stageId] = { x: n.x, y: n.y }; }); try { localStorage.setItem(H2_MAP_DEV_LS, JSON.stringify(o)); } catch (e) {} return o; }
+function h2MapDevAction(a) {
+  const d = H2.mapDev || (H2.mapDev = { on: false, sel: null });
+  if (a === 'toggle') { d.on = !d.on; d.sel = null; }
+  if (a === 'copy') {
+    const c = h2MapContinent();
+    d.json = JSON.stringify(c.nodes.map(n => ({ stageId: n.stageId, label: n.label, x: n.x, y: n.y })));
+    try { navigator.clipboard.writeText(d.json).then(() => h2Toast('已複製節點座標'), () => h2Toast('請從下方文字框手動複製')); } catch (e) { h2Toast('請從下方文字框手動複製'); }
+  }
+  if (a === 'reset') { try { localStorage.removeItem(H2_MAP_DEV_LS); } catch (e) {} h2Toast('已清除開發用座標，重新整理後回到程式內的座標'); }
+  h2MapRender();
+}
+if (typeof window !== 'undefined') window.debugWorldMap = function () { const st = h2MapState(); const o = { continent: st.c.id, here: st.ids[st.cur] || null, next: st.ids[st.next] || null, cleared: [...st.cleared], ready: h2MapReady(), nodes: st.c.nodes.map(n => n.stageId + '@' + n.x + ',' + n.y) }; console.log('[Map]', o); return o; };
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.68：暫停選單 UI 2.0（手機橫向）
+//  ・沿用小V之家的木框、木牌、按鈕素材（同一套 .h2-skin 樣式）；不另做新素材
+//  ・背景＝目前所在大陸的風景（第一大陸：window_continent_01.png）；不顯示小V之家室內、商店卡、小狗大卡
+//  ・按鈕仍是原本的元素與原本的函式：繼續冒險（resumeGame）／回家整備（retryOrReturnToPrep，有整備節點才是回家整備，
+//    否則照舊是「重試本關」）／目前模式（rpgCycleMode：RPG 對話顯示模式 完整／僅首次／關閉）
+//  ・背包／補血、氣球秘笈、冒險提示筆記保留在左側「冒險工具」
+//  ・測試專用按鈕放進「開發測試工具」（只在 ?devtools=1 顯示，預設收合）
+//  ・暫停狀態鎖定不變：gameState = 'paused' 時遊戲迴圈不推進（敵人、計時都停止）
+// ════════════════════════════════════════════════════════════════════
+function p2PauseShown() { const ov = document.getElementById('pause-overlay'); return !!(ov && ov.style.display && ov.style.display !== 'none'); }
+function p2RenderPause() {
+  try {
+    if (!document.getElementById('p2-player') || !p2PauseShown()) return;   // 只在暫停選單真的打開時更新（不在開機時提早載入素材）
+    try { h2PreloadCore(); } catch (e) {}
+    const p = h2Profile();
+    const base = p.baseAvatarKey || 'boy1', disp = p.displayAvatarKey || p.avatarKey || base;
+    const av = h2$('p2-avatars'), sig = base + '|' + disp;
+    if (av && av.dataset.sig !== sig) { av.dataset.sig = sig; av.innerHTML = h2AvaHtml(base, '身份') + h2AvaHtml(disp, '顯示'); }
+    const pid = h2$('p2-pid'); if (pid) pid.textContent = p.id || 'Player';
+    const hearts = h2$('p2-hearts'); if (hearts) { const html = buildHpHeartsHtml(); if (hearts.dataset.html !== html) { hearts.dataset.html = html; hearts.innerHTML = html; } hearts.classList.toggle('is-many', (player.maxHp || 3) > 4); }
+    const stage = h2$('p2-stage'); if (stage) stage.textContent = getChapterDisplayTitle(currentLevelIndex);
+    const coins = h2$('p2-coins'); if (coins) coins.innerHTML = h2Icon('coins', 'h2-coin-ico') + ' 冒險金幣 ' + (playerInventory.coins || 0);
+    const pr = h2OfficialProgress(); const fill = h2$('p2-progress-fill'); if (fill) fill.style.width = (pr.total ? pr.done / pr.total * 100 : 0).toFixed(2) + '%';
+    p2RelabelPrep(); p2RelabelMode();
+  } catch (e) { console.warn('[Pause2]', e); }
+}
+// 「返回整備」改成較白話的「回家整備」（同一個按鈕、同一個功能；沒有整備節點時照舊是「重試本關」）
+function p2RelabelPrep() {
+  const a = h2$('btn-pause-restart'); if (!a) return;
+  const ok = (typeof hasValidPrepCheckpoint === 'function') && hasValidPrepCheckpoint();
+  a.innerHTML = ok ? '🏠 回家整備<small>回到上一關過關後的小V之家</small>' : '↺ 重試本關<small>從這一關的開頭重新挑戰</small>';
+  a.classList.toggle('h2-pill--blue', ok); a.classList.toggle('h2-pill--yellow', !ok);
+}
+function p2RelabelMode() {
+  const b = h2$('btn-pause-rpg-mode'); if (!b) return;
+  let m = 'first'; try { m = rpgGetMode(); } catch (e) {}
+  b.innerHTML = '目前模式：' + h2Esc(RPG_MODE_LABEL[m] || m) + ' ⇄<small>冒險對話：完整提示／僅首次顯示／全部關閉</small>';
+}
+function p2ToggleDev() { const c = h2$('p2-dev'); if (c) c.classList.toggle('is-collapsed'); }
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.68：重新開始測試（只在開發測試工具；兩次確認；白名單）
+//  只重置「確認屬於冒險遊戲本身」的資料，其他一律不動：
+//   重置：balloonV_inventory（背包、冒險金幣、材料、武器與道具、配方／秘笈解鎖、弱點筆記等重要物品、小狗、第一章教學旗標）
+//         balloonV_adventureRpg_v1__<playerKey> 的觀看紀錄／提示筆記／劇情紀錄（顯示模式設定保留）
+//         正式挑戰「進行中的那一趟」（balloonVAdventureScore…__<playerKey> 的 active → 封存為 abandoned；歷史成績保留）
+//         記憶體中的首次教學提示、整備節點、本次挑戰統計、通關摘要
+//   不動：playerKey／玩家身份／頭像（balloonVAdventurePlayerProfile）、V 幣（Wallet／VCoinLogs）、每日獎勵、成就（這三項會影響 V 幣）、
+//         玩家的家（balloonVAdventureHome，尚未使用）、音效設定、各種校正／開發設定、Firebase（本功能完全不寫入、不刪除 Firebase）
+//   不使用 localStorage.clear()、不用模糊前綴刪除
+// ════════════════════════════════════════════════════════════════════
+const P2_RESET_LIST = {
+  reset: ['關卡通關進度（正式挑戰進行中的那一趟，封存後從 1-1 重新開始）', '背包、冒險金幣、260 氣球、圓氣球', '武器與道具（氣球劍、氣球槌、繃帶、急救包、棒棒糖）', '已取得配方、秘笈解鎖', '弱點筆記等重要物品', '氣球小狗與第一章教學／保底紀錄', '看過的 RPG 對話、提示筆記、劇情紀錄', '首次教學提示（記憶體中）'],
+  keep:  ['玩家身份、playerKey、頭像', '跨遊戲稱號', 'V 幣、V 幣紀錄、每日獎勵、成就', '歷史成績與排行榜資料', 'Firebase 上的所有資料', '音效與 RPG 顯示模式設定'],
+};
+function p2ConfirmTestReset(step) {
+  let ov = h2$('p2-confirm');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'p2-confirm'; ov.className = 'p2-confirm h2-skin'; (h2$('pause-overlay') || document.body).appendChild(ov); }
+  const s = step || 1;
+  if (s === 1) {
+    ov.innerHTML = '<section class="h2-card p2-confirm-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">重新開始測試（1 / 2）</span></div>'
+      + '<div class="p2-confirm-body"><p>要讓這位玩家<b>重新體驗第一次玩冒險</b>嗎？</p>'
+      + '<div class="p2-confirm-cols"><div><b>會重置</b><ul>' + P2_RESET_LIST.reset.map(t => '<li>' + h2Esc(t) + '</li>').join('') + '</ul></div>'
+      + '<div><b>不會動到</b><ul>' + P2_RESET_LIST.keep.map(t => '<li>' + h2Esc(t) + '</li>').join('') + '</ul></div></div></div>'
+      + '<div class="p2-confirm-btns"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-p2c="cancel">取消</button><button type="button" class="h2-pill h2-pill--red h2-pill--sm" data-p2c="next">下一步</button></div></section>';
+  } else {
+    ov.innerHTML = '<section class="h2-card p2-confirm-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">再確認一次（2 / 2）</span></div>'
+      + '<div class="p2-confirm-body"><p><b>重置後無法復原。</b>確定要清除這位玩家的冒險進度、背包與對話紀錄嗎？</p><p class="p2-confirm-who">玩家：' + h2Esc((h2Profile() || {}).id || 'Player') + '</p></div>'
+      + '<div class="p2-confirm-btns"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-p2c="cancel">取消</button><button type="button" class="h2-pill h2-pill--red h2-pill--sm" data-p2c="do">確定重置</button></div></section>';
+  }
+  ov.classList.add('is-open');
+  ov.onclick = e => {
+    const b = e.target.closest && e.target.closest('[data-p2c]'); if (!b) return;
+    if (b.dataset.p2c === 'cancel') { ov.classList.remove('is-open'); return; }
+    if (b.dataset.p2c === 'next') { p2ConfirmTestReset(2); return; }
+    if (b.dataset.p2c === 'do') { ov.classList.remove('is-open'); p2DoTestReset(); }
+  };
+}
+function p2DoTestReset() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  const before = { profile: localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY), wallet: localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureWallet')) };
+  resetAdventureTestState();   // 原本的重置：封存進行中挑戰、RPG 觀看紀錄、背包、回到 1-1
+  try { resetCurrentChallenge(); } catch (e) {}
+  try { Object.assign(stageFlowHints, { stageStart: {}, roundBalloonHintShown: false, hammerCraftHintShown: false, scorpionHammerHintShown: false, hammerUsedOnScorpion: false }); } catch (e) {}
+  try { prepCheckpoint = null; advLastSnapshot = null; nextBringDog = false; bringBalloonDog = false; levelStartBringDog = false; } catch (e) {}
+  try { initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); applyAdventureTestLoadout(); } catch (e) {}
+  try { H2.pendingSummary = null; H2.summary = null; } catch (e) {}
+  const after = { profile: localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY), wallet: localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureWallet')) };
+  console.log('[TestReset] 完成；共用資料未變動：', before.profile === after.profile && before.wallet === after.wallet);
+}
+if (typeof window !== 'undefined') window.p2ConfirmTestReset = p2ConfirmTestReset;
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.68：氣球槌連鎖撞擊與 Double Kill
+//  機制：小V用氣球槌把敵人 A 擊飛 → 飛行中的 A 撞到敵人 B → 依 B 這一次受傷的結果判斷（不是小V再次追擊 A）
+//   ・B 因這次撞擊死亡 → DOUBLE KILL：保留 B 原本的擊敗分數＋雙殺加分、大字回饋、sfx_double_kill.mp3
+//   ・B 受傷但沒死（重裝蠍子）→ 撞擊加分（比雙殺少），小字回饋，不顯示 DOUBLE KILL、不播雙殺音效
+//   ・原本的擊飛（scorpion_knockback）、受傷（scorpion_hurt／giant_scorpion_hurt）音效照常播放
+//   ・同一次擊飛、同一組敵人只算一次（擊飛物命中一次就消失，並以 A×B 記錄防重複）；本版不做 Triple Kill
+//  ⚠ 加分數值是「測試參數」（尚未由使用者決定）：參考本關分數 calcAdventureScore（擊敗一隻敵人 30 分）
+// ════════════════════════════════════════════════════════════════════
+const CHAIN_HIT_TEST_PARAMS = {
+  testOnly: true,          // 尚未核准的測試值
+  impactBonus: 15,         // 撞傷但沒撞死：約半隻敵人的分數
+  doubleKillBonus: 50,     // 撞死：B 原本的 30 分之外再加 50
+};
+let chainFx = [];
+function chainImpactResult(s, e, res) {
+  if (!s || !e || !res) return;                       // false＝這次沒有真的扣到 HP（例如受擊冷卻中）
+  if (!s.chainAwarded) s.chainAwarded = new Set();
+  const key = (s.sourceId != null ? s.sourceId : 'a') + '>' + (e.runtimeId != null ? e.runtimeId : 'b');
+  if (s.chainAwarded.has(key)) return;
+  s.chainAwarded.add(key);
+  const cx = e.x + e.w / 2, cy = e.y;
+  if (res === 'killed') {
+    currentRunStats.doubleKills = (currentRunStats.doubleKills || 0) + 1;
+    currentRunStats.chainBonusScore = (currentRunStats.chainBonusScore || 0) + CHAIN_HIT_TEST_PARAMS.doubleKillBonus;
+    chainFx.push({ kind: 'double', x: cx, y: cy, t: 0, life: 70, bonus: CHAIN_HIT_TEST_PARAMS.doubleKillBonus });
+    try { sfxPlay('doubleKill'); } catch (er) {}
+  } else {
+    currentRunStats.chainImpacts = (currentRunStats.chainImpacts || 0) + 1;
+    currentRunStats.chainBonusScore = (currentRunStats.chainBonusScore || 0) + CHAIN_HIT_TEST_PARAMS.impactBonus;
+    chainFx.push({ kind: 'impact', x: cx, y: cy, t: 0, life: 45, bonus: CHAIN_HIT_TEST_PARAMS.impactBonus });
+  }
+}
+function updateChainFx(dt) { for (let i = chainFx.length - 1; i >= 0; i--) { const f = chainFx[i]; f.t += (dt || 1); if (f.t >= f.life) chainFx.splice(i, 1); } }
+function drawChainFx(cx) {
+  if (!chainFx.length) return;
+  chainFx.forEach(f => {
+    const k = f.t / f.life, sx = f.x - cx, rise = k * 46;
+    const a = k < 0.75 ? 1 : Math.max(0, 1 - (k - 0.75) / 0.25);
+    const pop = f.kind === 'double' ? (k < 0.12 ? 0.6 + k / 0.12 * 0.55 : k < 0.2 ? 1.15 - (k - 0.12) / 0.08 * 0.15 : 1) : 1;
+    ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    if (f.kind === 'double') {
+      const y = f.y - 34 - rise;
+      ctx.translate(sx, y); ctx.scale(pop, pop);
+      ctx.font = '900 34px "Nunito", "Arial Black", sans-serif';
+      ctx.lineWidth = 7; ctx.strokeStyle = '#5a1300'; ctx.strokeText('DOUBLE KILL!', 0, 0);
+      const g = ctx.createLinearGradient(0, -18, 0, 18); g.addColorStop(0, '#fff6a8'); g.addColorStop(0.5, '#ffc21f'); g.addColorStop(1, '#ff7a00');
+      ctx.fillStyle = g; ctx.fillText('DOUBLE KILL!', 0, 0);
+      ctx.font = '900 20px "Nunito", sans-serif'; ctx.lineWidth = 5; ctx.strokeText('+' + f.bonus, 0, 28); ctx.fillStyle = '#fff'; ctx.fillText('+' + f.bonus, 0, 28);
+    } else {
+      const y = f.y - 22 - rise;
+      ctx.font = '900 18px "Nunito", sans-serif'; ctx.lineWidth = 5; ctx.strokeStyle = '#3b1d00';
+      ctx.strokeText('撞擊！+' + f.bonus, sx, y); ctx.fillStyle = '#ffe28a'; ctx.fillText('撞擊！+' + f.bonus, sx, y);
+    }
+    ctx.restore();
+  });
+}
+if (typeof window !== 'undefined') window.debugChainHit = function () { const o = { params: CHAIN_HIT_TEST_PARAMS, doubleKills: currentRunStats.doubleKills || 0, impacts: currentRunStats.chainImpacts || 0, bonus: currentRunStats.chainBonusScore || 0, sfx: { status: SFX.status.doubleKill || 'not-loaded', url: SFX.urls.doubleKill || null, tried: SFX.tried.doubleKill || [] } }; console.log('[ChainHit]', o); return o; };
+
+// ── 接上既有函式 ──
+(function p2Install() {
+  if (typeof document === 'undefined' || typeof globalThis === 'undefined') return;
+  const after = (name, fn) => { const orig = globalThis[name]; if (typeof orig !== 'function' || orig._p2wrapped) return;
+    const w = function () { const r = orig.apply(this, arguments); try { fn.apply(this, [r].concat([].slice.call(arguments))); } catch (e) { console.warn('[Pause2]', name, e); } return r; };
+    w._p2wrapped = true; w._p2orig = orig; Object.keys(orig).forEach(k => { w[k] = orig[k]; }); globalThis[name] = w; };
+  after('pauseGame', () => { if (gameState === 'paused') p2RenderPause(); });
+  after('updatePrepReturnButtons', () => p2RelabelPrep());
+  after('rpgRefreshModeButton', () => p2RelabelMode());
+  after('closePauseBag', () => { if (gameState === 'paused') p2RenderPause(); });
+  after('refreshAllHpDisplays', () => { if (gameState === 'paused') p2RenderPause(); });
+  // 跑步 A/B 按鈕（開發用）移到「開發測試工具」
+  try { const ab = h2$('btn-pause-run-ab'), body = h2$('p2-dev-body'); if (ab && body) { ab.className = 'h2-pill h2-pill--purple h2-pill--sm'; body.appendChild(ab); } } catch (e) {}
+  try { const t = h2$('p2-dev-toggle'); if (t) t.addEventListener('click', e => { e.preventDefault(); p2ToggleDev(); }); } catch (e) {}
+})();

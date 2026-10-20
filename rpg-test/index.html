@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.67-home-ui2-polish-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.68-home-ui2-fixes-map-doublekill-test-3" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -53,8 +53,8 @@
        獨立於 game-wrapper，可在任何尺寸下正常顯示
        ════════════════════════════════════════════ -->
   <div id="home-screen" style="display:none">
-    <!-- ════ v0.3.67：小V之家 UI 2.0（視覺與操作修正）。舊版 #home-panel 保留在下方（隱藏），原有功能與資料寫入點不變 ════ -->
-    <div id="h2-root" aria-label="小V之家">
+    <!-- ════ v0.3.68：小V之家 UI 2.0（卡片收合、出發條件、尋寶提示、世界地圖）。舊版 #home-panel 保留在下方（隱藏），原有功能與資料寫入點不變 ════ -->
+    <div id="h2-root" class="h2-skin" aria-label="小V之家">
       <div class="h2-scene" aria-hidden="true">
         <img id="h2-bg-window" class="h2-layer" alt="" draggable="false">
         <img id="h2-bg-interior" class="h2-layer" alt="" draggable="false">
@@ -73,31 +73,34 @@
               <div class="h2-stat-row"><span class="h2-stat-lbl">關卡進度</span><div class="h2-progress" id="h2-progress" role="progressbar"><div class="h2-progress-fill" id="h2-progress-fill"></div></div></div>
             </div>
           </section>
-          <section class="h2-card" id="h2-card-recipes">
+          <section class="h2-card h2-card--fold is-collapsed" id="h2-card-recipes">
             <div class="h2-head">
               <button type="button" class="h2-bulb" id="h2-bulb" aria-label="現實世界氣球教學">💡</button>
-              <button type="button" class="h2-plank" id="h2-title-recipes" onclick="h2_openGuidebook()">氣球秘笈</button>
+              <button type="button" class="h2-plank" id="h2-title-recipes" data-h2-toggle="recipes" aria-expanded="false">氣球秘笈</button>
               <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="recipes" data-d="-1" aria-label="上一個"></button>
               <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="recipes" data-d="1" aria-label="下一個"></button>
             </div>
             <div class="h2-tiles" data-car="recipes"></div>
+            <div class="h2-more-row"><button type="button" class="h2-more" onclick="h2_openGuidebook()">打開氣球秘笈 ›</button></div>
             <div class="h2-bubble" id="h2-bulb-bubble" style="display:none"></div>
           </section>
-          <section class="h2-card" id="h2-card-res">
+          <section class="h2-card h2-card--fold is-collapsed" id="h2-card-res">
             <div class="h2-head">
-              <button type="button" class="h2-plank" data-h2-open="bag"><img data-h2-icon="backpack" alt="">挑戰資源</button>
+              <button type="button" class="h2-plank" data-h2-toggle="res" aria-expanded="false"><img data-h2-icon="backpack" alt="">挑戰資源</button>
               <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="res" data-d="-1" aria-label="上一個"></button>
               <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="res" data-d="1" aria-label="下一個"></button>
             </div>
             <div class="h2-tiles" data-car="res"></div>
+            <div class="h2-more-row"><button type="button" class="h2-more" data-h2-open="bag">完整背包 ›</button></div>
           </section>
-          <section class="h2-card" id="h2-card-supply">
+          <section class="h2-card h2-card--fold is-collapsed" id="h2-card-supply">
             <div class="h2-head">
-              <button type="button" class="h2-plank" data-h2-open="supply"><img data-h2-icon="firstAidKit" alt="">補給</button>
+              <button type="button" class="h2-plank" data-h2-toggle="supply" aria-expanded="false"><img data-h2-icon="firstAidKit" alt="">補給</button>
               <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="supply" data-d="-1" aria-label="上一個"></button>
               <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="supply" data-d="1" aria-label="下一個"></button>
             </div>
             <div class="h2-tiles" data-car="supply"></div>
+            <div class="h2-more-row"><button type="button" class="h2-more" data-h2-open="supply">全部補給 ›</button></div>
           </section>
         </aside>
 
@@ -121,9 +124,10 @@
             <button type="button" class="h2-turn h2-turn--l" id="h2-turn-l" aria-label="向左轉"></button>
             <button type="button" class="h2-turn h2-turn--r" id="h2-turn-r" aria-label="向右轉"></button>
             <div class="h2-nextline"><button type="button" id="h2-nextline" data-h2-open="next"></button></div>
+            <div class="h2-depart-warn" id="h2-depart-warn" role="status" aria-live="polite"></div>
           </div>
           <nav class="h2-nav">
-            <button type="button" class="h2-pill h2-pill--yellow is-pending" id="h2-nav-map">世界地圖<small>準備中</small></button>
+            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-map">世界地圖</button>
             <button type="button" class="h2-pill h2-pill--yellow is-pending" id="h2-nav-practice">自由練習<small>準備中</small></button>
             <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge" data-h2-open="challenge">正式挑戰</button>
             <button type="button" class="h2-pill h2-pill--green h2-go" id="h2-nav-go"><span>出發</span><small id="h2-go-sub"></small></button>
@@ -132,13 +136,14 @@
 
         <!-- 右欄：商店／氣球小狗 -->
         <aside class="h2-col h2-col--right">
-          <section class="h2-card" id="h2-card-shop">
+          <section class="h2-card h2-card--fold is-collapsed" id="h2-card-shop">
             <div class="h2-head">
-              <button type="button" class="h2-plank" data-h2-open="shop"><img data-h2-icon="coinBag" alt="">商店</button>
+              <button type="button" class="h2-plank" data-h2-toggle="shop" aria-expanded="false"><img data-h2-icon="coinBag" alt="">商店</button>
               <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="shop" data-d="-1" aria-label="上一個"></button>
               <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="shop" data-d="1" aria-label="下一個"></button>
             </div>
             <div class="h2-tiles" data-car="shop"></div>
+            <div class="h2-more-row"><button type="button" class="h2-more" data-h2-open="shop">進入商店 ›</button></div>
           </section>
           <section class="h2-card h2-card--clear" id="h2-card-dog">
             <div class="h2-head">
@@ -149,6 +154,8 @@
               <img id="h2-dog-bed" alt="" draggable="false">
               <img id="h2-dog-rest" alt="休息中的氣球小狗" draggable="false">
               <img id="h2-dog-ready" alt="準備同行的氣球小狗" draggable="false">
+              <span class="h2-dog-nose" id="h2-dog-nose" aria-hidden="true"></span>
+              <div class="h2-dog-sniff" id="h2-dog-sniff" role="status"></div>
             </div>
             <div class="h2-dog-foot" id="h2-dog-foot"></div>
           </section>
@@ -161,6 +168,24 @@
           <div class="h2-head"><span class="h2-plank h2-plank--static" id="h2-panel-title"></span><button type="button" class="h2-pill h2-pill--red h2-pill--sm h2-close" id="h2-panel-close">✕ 返回</button></div>
           <div class="h2-tabs" id="h2-panel-tabs"></div>
           <div class="h2-panel-body" id="h2-panel-body"></div>
+        </section>
+      </div>
+      <!-- v0.3.68：世界地圖（底圖＋獨立圖層：連線、關卡節點、迷霧、飛行屋）-->
+      <div class="h2-map-wrap" id="h2-map-wrap" aria-hidden="true">
+        <section class="h2-map" role="dialog" aria-modal="true" aria-label="世界地圖">
+          <div class="h2-map-stage" id="h2-map-stage">
+            <img class="h2-map-bg" id="h2-map-bg" alt="" draggable="false">
+            <svg class="h2-map-routes" id="h2-map-routes" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div class="h2-map-fog" id="h2-map-fog" aria-hidden="true"></div>
+            <div class="h2-map-nodes" id="h2-map-nodes"></div>
+            <img class="h2-map-home" id="h2-map-home" alt="氣球飛行屋" draggable="false">
+          </div>
+          <div class="h2-map-top">
+            <span class="h2-plank h2-plank--static" id="h2-map-title">世界地圖</span>
+            <button type="button" class="h2-pill h2-pill--red h2-pill--sm" id="h2-map-close">✕ 返回</button>
+          </div>
+          <div class="h2-map-info" id="h2-map-info"></div>
+          <div class="h2-map-dev" id="h2-map-dev"></div>
         </section>
       </div>
       <!-- 通關獎勵摘要 -->
@@ -343,7 +368,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.67-home-ui2-polish-test-1 · 2026-10-20
+        adventure-v0.3.68-home-ui2-fixes-map-doublekill-test-3 · 2026-10-21
       </div>
 
     </div><!-- /#home-panel -->
@@ -358,40 +383,60 @@
       <button id="btn-fs-ingame"    class="ingame-top-btn">× 離開全螢幕</button>
     </div>
 
-    <!-- 暫停 overlay -->
+    <!-- 暫停 overlay（v0.3.68：UI 2.0 手機橫向版；按鈕 id 與功能都沿用原本的）-->
     <div id="pause-overlay">
-      <div id="pause-panel">
-        <div id="pause-title">⏸ 派對暫停中</div>
-        <div id="pause-actions">
-          <button id="btn-resume"        class="pause-btn pause-btn--primary">▶ 繼續冒險</button>
-          <button id="btn-pause-bag" class="pause-btn pause-btn--secondary" onclick="openPauseBag()">🎒 背包／補血</button>
-          <button id="btn-pause-guidebook" class="pause-btn pause-btn--secondary" onclick="openGuidebookFromPause()">📖 氣球秘笈</button>
-          <button id="btn-pause-restart" class="pause-btn pause-btn--secondary">↺ 重試本關</button>
-          <button id="btn-pause-rpg-mode" class="pause-btn pause-btn--secondary" onclick="rpgCycleMode()">💬 目前模式：僅首次顯示 ⇄</button>
-          <button id="btn-pause-rpg-notes" class="pause-btn pause-btn--secondary" onclick="rpgOpenNotes()">📖 冒險提示筆記</button>
-          <!-- 測試版限定：重新開始測試（由 main.js 控制顯示）-->
-          <button id="btn-pause-reset-test" class="pause-btn pause-btn--danger" style="display:none">🔄 重新開始測試</button>
-          <!-- 測試版限定：跳第 3 關（由 main.js 控制顯示）-->
-          <button id="btn-pause-test-level3" class="pause-btn pause-btn--secondary" style="display:none">🦂 測試第 3 關</button>
-          <!-- 測試版限定：橘子怪測試關（由 main.js 控制顯示）v0.3.14 -->
-          <button id="btn-pause-test-orange" class="pause-btn pause-btn--secondary" style="display:none">🍊 測試橘子怪</button>
-          <!-- 測試版限定：Enemy Variant+Tier 測試（由 main.js 控制顯示）v0.3.15 -->
-          <button id="btn-pause-test-variant" class="pause-btn pause-btn--secondary" style="display:none">🧪 測試小怪變體</button>
-          <!-- 已隱藏（v0.3.27）：舊版第二章測試入口，含 fan orange 幾何版本，避免與新第二章方向混淆 -->
-          <button id="btn-pause-test-ch2" class="pause-btn pause-btn--secondary" style="display:none">🏭 測試第二章</button>
-          <!-- 測試版限定：雙噴嘴橘子美術測試（由 main.js 控制顯示）v0.3.25 -->
-          <button id="btn-pause-test-dual-orange" class="pause-btn pause-btn--secondary" style="display:none">🍊 測試 Dual Orange</button>
-          <!-- 測試版限定：飛行油彈橘子美術測試（由 main.js 控制顯示）v0.3.26 -->
-          <button id="btn-pause-test-projectile-orange" class="pause-btn pause-btn--secondary" style="display:none">🥋 測試 Projectile Orange</button>
-          <!-- 測試版限定：第二章橘子家族綜合測試（由 main.js 控制顯示）v0.3.27 -->
-          <button id="btn-pause-test-orange-family" class="pause-btn pause-btn--secondary" style="display:none">🍊 測試橘子家族</button>
-          <!-- 測試版限定：第二章地形測試（由 main.js 控制顯示）v0.3.27 -->
-          <button id="btn-pause-test-chapter2-terrain" class="pause-btn pause-btn--secondary" style="display:none">⛰️ 測試第二章地形</button>
-          <!-- 測試版限定：正式第二章 2-1 → 2-2 → 2-3（由 main.js 控制顯示）v0.3.28 -->
-          <button id="btn-pause-test-chapter2-formal" class="pause-btn pause-btn--secondary" style="display:none">🚀 測試正式第二章</button>
-          <button id="btn-pause-test-orange-king" class="pause-btn pause-btn--secondary" style="display:none">🍊 測試 2-4 橘子王</button>
-        </div>
-        <div id="pause-hint">桌機可按 ESC 繼續</div>
+      <div id="pause-panel" class="h2-skin p2">
+        <div class="p2-bg" aria-hidden="true"></div>
+        <aside class="p2-col p2-col--left">
+          <section class="h2-card h2-card--player p2-player" id="p2-player">
+            <span class="h2-heart-orn" aria-hidden="true"></span>
+            <div class="h2-player"><span class="h2-avatars" id="p2-avatars"></span><span class="h2-pid" id="p2-pid"></span></div>
+            <div class="h2-status">
+              <div class="h2-stat-row"><span class="h2-stat-lbl">HP</span><span class="h2-hearts" id="p2-hearts"></span></div>
+              <div class="h2-stat-row"><span class="h2-stat-lbl">關卡進度</span><div class="h2-progress"><div class="h2-progress-fill" id="p2-progress-fill"></div></div></div>
+              <div class="p2-coins" id="p2-coins"></div>
+            </div>
+          </section>
+          <section class="h2-card p2-tools">
+            <div class="h2-head"><span class="h2-plank h2-plank--static">冒險工具</span></div>
+            <div class="p2-tool-list">
+              <button id="btn-pause-bag" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="openPauseBag()">🎒 背包／補血</button>
+              <button id="btn-pause-guidebook" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="openGuidebookFromPause()">📖 氣球秘笈</button>
+              <button id="btn-pause-rpg-notes" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="rpgOpenNotes()">📝 冒險提示筆記</button>
+            </div>
+          </section>
+        </aside>
+        <main class="p2-center">
+          <div class="p2-title"><span class="h2-plank h2-plank--static" id="pause-title">派對暫停中</span></div>
+          <div class="p2-stage" id="p2-stage"></div>
+          <div id="pause-actions" class="p2-main">
+            <button id="btn-resume" class="h2-pill h2-pill--green p2-big">▶ 繼續冒險</button>
+            <button id="btn-pause-restart" class="h2-pill h2-pill--blue">↺ 重試本關</button>
+            <button id="btn-pause-rpg-mode" class="h2-pill h2-pill--purple" onclick="rpgCycleMode()">💬 目前模式：僅首次顯示 ⇄</button>
+          </div>
+          <div id="pause-hint">桌機可按 ESC 繼續</div>
+        </main>
+        <aside class="p2-col p2-col--right">
+          <!-- 開發測試工具：只在 ?devtools=1 顯示，預設收合（正式玩家介面看不到）-->
+          <section class="h2-card p2-dev is-collapsed" id="p2-dev">
+            <div class="h2-head"><button type="button" class="h2-plank" id="p2-dev-toggle">🛠 開發測試工具</button></div>
+            <div class="p2-dev-body" id="p2-dev-body">
+              <!-- 測試版限定：重新開始測試（兩次確認；只重置冒險資料）-->
+              <button id="btn-pause-reset-test" class="h2-pill h2-pill--red h2-pill--sm" style="display:none">🔄 重新開始測試</button>
+              <button id="btn-pause-test-chapter2-formal" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🚀 測試正式第二章</button>
+              <button id="btn-pause-test-orange-king" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🍊 測試 2-4 橘子王</button>
+              <!-- 已不顯示的舊測試入口（main.js 會保持隱藏；函式保留）-->
+              <button id="btn-pause-test-level3" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🦂 測試第 3 關</button>
+              <button id="btn-pause-test-orange" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🍊 測試橘子怪</button>
+              <button id="btn-pause-test-variant" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🧪 測試小怪變體</button>
+              <button id="btn-pause-test-ch2" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🏭 測試第二章</button>
+              <button id="btn-pause-test-dual-orange" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🍊 測試 Dual Orange</button>
+              <button id="btn-pause-test-projectile-orange" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🥋 測試 Projectile Orange</button>
+              <button id="btn-pause-test-orange-family" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">🍊 測試橘子家族</button>
+              <button id="btn-pause-test-chapter2-terrain" class="h2-pill h2-pill--yellow h2-pill--sm" style="display:none">⛰️ 測試第二章地形</button>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
 
@@ -484,7 +529,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.67-home-ui2-polish-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.68-home-ui2-fixes-map-doublekill-test-3"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
