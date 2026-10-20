@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.65-sfx-final-fix-test-1';
-const BUILD_TIME   = '2026-10-19 11:25';
+const GAME_VERSION = 'adventure-v0.3.66-home-ui2-test-1';
+const BUILD_TIME   = '2026-10-20 06:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -14800,6 +14800,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.66：home-ui2（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('home-ui2')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'home-ui2' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.65 收尾：sfx-final-fix → sfx-final（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('sfx-final-fix')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -18146,8 +18151,10 @@ function clearCraftFxDom() {
 }
 function playCraftSuccessFx(cardEl, recipe) {
   if (typeof document === 'undefined' || !document.body) return;
+  if (recipe && recipe.shopBuy && typeof h2BulkBuying !== 'undefined' && h2BulkBuying) return; // v0.3.66：商店 ×N 購買 → 買完只播一次
   ensureCraftFxStyles();
-  const el = (cardEl && isElVisible(cardEl)) ? cardEl : document.getElementById((recipe && recipe.shopBuy) ? 'home-shop-body' : 'guidebook-recipe-list');
+  const _fxEl0 = (cardEl && isElVisible(cardEl)) ? cardEl : document.getElementById((recipe && recipe.shopBuy) ? 'home-shop-body' : 'guidebook-recipe-list');
+  const el = (_fxEl0 && isElVisible(_fxEl0)) ? _fxEl0 : null; // v0.3.66：舊版區塊被 UI 2.0 隱藏時 → 用畫面中央
   const r0 = el ? el.getBoundingClientRect() : { left: window.innerWidth / 2 - 100, top: window.innerHeight / 2, width: 200, height: 60 };
   // 卡片若在捲動區外（被捲走），演出位置夾在秘笈清單看得到的範圍內，不會跑到面板外
   const list = (recipe && recipe.shopBuy) ? null : document.getElementById('guidebook-recipe-list');
@@ -20908,3 +20915,799 @@ try { advBoot(); } catch (e) { console.warn('[Score] 開機初始化失敗', e);
 });
 
 requestAnimationFrame(loop);
+
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.66：小V之家 UI 2.0（第一階段）
+//  ──────────────────────────────────────────────────────────────────
+//  ・只換「外觀與入口」：所有購買／使用／製作／帶狗／出發，仍呼叫原本的函式
+//    （buyShopItem、useHealingItemOutOfAdventure、homeUseBandage、craftItem、
+//      useBalloonLollipopOutOfAdventure、homeBringDog、homeGoNextLevel、homeGoBack…）
+//  ・舊版 #home-panel 保留在 DOM（隱藏），原有 renderHome*() 照常寫入；
+//    UI 2.0 在原函式執行後重新讀取 playerInventory / player / nextBringDog 等既有資料畫出卡片
+//  ・不新增存檔欄位、不改配方 / 價格 / 攜帶上限 / 補血量
+//  ・開發用：debugHomeLegacy(true) 切回舊版小V的家；?devtools=1 顯示結算畫面「清除背包資料」
+// ════════════════════════════════════════════════════════════════════
+const H2_ASSET_DIR = 'assets/adventure/ui/home/';
+const H2_IMG = {
+  window:   'window_continent_01.png',   // 底層：第一大陸窗景（未來換大陸只換這張）
+  interior: 'home_interior.png',         // 中景：小V之家室內（窗戶透明）
+  hero:     ['hero_front.png', 'hero_right.png', 'hero_back.png', 'hero_left.png'], // 順序＝向右轉的順序
+  dogBed:   'dog_bed.png',
+  dogRest:  'dog_rest.png',
+  dogReady: 'dog_ready.png',             // 粉紅基本款（GitHub 上的檔名沒有色彩後綴）
+};
+// 四方向圖的軀幹中心不在同一個 x（實際量測 hero_*.png，畫布 1024 寬）：正面 512、右側 541、背面 512、左側 497
+// → 以圖片寬度百分比補正，切換時不左右跳動（腳底 y 1503～1512，差距 < 1%，不補）
+const H2_HERO_SHIFT_X = [0, -2.8, 0, 1.5];
+const H2_HERO_DIR_NAMES = ['正面', '右側', '背面', '左側'];
+// 服裝標註座標：依 hero_front.png 實際位置量測（% of 圖片寬／高）；只在正面顯示
+const H2_OUTFIT_NOTES = [
+  { id: 'shirt',    label: '白襯衫',         side: 'l', ly: 49, pts: [[26.4, 51.4]] },
+  { id: 'shoulder', label: '雙肩紫色布',     side: 'l', ly: 37, pts: [[39.0, 41.6], [61.0, 41.3]], all: true },
+  { id: 'vest',     label: '黃色背心',       side: 'l', ly: 60, pts: [[39.5, 57.0]] },
+  { id: 'pants',    label: '紫色褲子',       side: 'l', ly: 73, pts: [[44.0, 72.0]] },
+  { id: 'buttons',  label: '三顆紫色釦子',   side: 'r', ly: 45, pts: [[50.0, 50.2], [50.0, 53.7], [50.0, 57.3]] },
+  { id: 'pockets',  label: '背心左側雙口袋', side: 'r', ly: 62, pts: [[58.4, 54.7]] },
+];
+// 狗狗卡片排版：依各圖片實際不透明範圍（alpha > 30）量測
+const H2_DOG_BB = {
+  bed:   { bb: [23, 233, 1232, 1037], cw: 1254, ch: 1254 },
+  rest:  { bb: [46, 346, 1239, 1011], cw: 1254, ch: 1254 },
+  ready: { bb: [27, 97, 1277, 1164],  cw: 1304, ch: 1206 },
+};
+const H2_TEACHING_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLK6Hk2syimYI'; // 使用者提供
+// 大陸 → 正式挑戰關卡（進度條依此計算；目前只有第一大陸＝正式七關）
+const H2_CONTINENTS = [{ id: 'continent1', name: '第一大陸', stageIds: OFFICIAL_ADVENTURE_STAGE_IDS.slice() }];
+
+var h2BulkBuying = false; // 商店一次買多個時，只播一次購買演出（playCraftSuccessFx 讀取）
+const H2 = { open: false, legacy: false, dir: 0, notes: false, car: { recipes: 0, res: 0, supply: 0, shop: 0 },
+  panel: null, shopQty: {}, borrowed: [], preloaded: false, bound: false, rendering: false, raf: 0, lastTap: {} };
+const H2_DEVTOOLS = (() => { try { return /[?&]devtools=1\b/.test(location.search) || localStorage.getItem('balloonV_devTools') === '1'; } catch (e) { return false; } })();
+
+function h2$(id) { return document.getElementById(id); }
+function h2Esc(s) { return escapeHtml(s == null ? '' : String(s)); }
+function h2Signed(n) { const v = Math.round(n * 100) / 100; return (v > 0 ? '+' : '−') + Math.abs(v); }
+function h2AssetUrl(file) { const c = getAssetSourceCandidates(H2_ASSET_DIR + file); return c.length ? c[0].url : ''; }
+function h2SetImg(el, file) {
+  if (!el || el.dataset.h2File === file) return;
+  el.dataset.h2File = file;
+  const cands = getAssetSourceCandidates(H2_ASSET_DIR + file);
+  let i = 0;
+  const tryNext = () => {
+    if (i >= cands.length) { el.dataset.h2Failed = '1'; console.warn('[Home2] 圖片載入失敗', file); return; }
+    el.src = cands[i++].url;
+  };
+  el.onerror = tryNext;
+  el.onload = () => { el.dataset.h2Loaded = '1'; if (el.closest && el.closest('#h2-dog-stage')) h2PlaceDog(); };
+  tryNext();
+}
+function h2ImgTag(file, fallback, cls) {
+  return '<img' + (cls ? ' class="' + cls + '"' : '') + ' src="' + h2Esc(h2AssetUrl(file)) + '" alt="" draggable="false"'
+    + ' onerror="this.replaceWith(document.createTextNode(\'' + String(fallback).replace(/'/g, '') + '\'))">';
+}
+function h2Preload() {
+  if (H2.preloaded || typeof document === 'undefined' || !h2$('h2-root')) return;
+  H2.preloaded = true;
+  h2SetImg(h2$('h2-bg-window'), H2_IMG.window);
+  h2SetImg(h2$('h2-bg-interior'), H2_IMG.interior);
+  document.querySelectorAll('#h2-hero-stage .h2-hero-img').forEach(img => h2SetImg(img, H2_IMG.hero[+img.dataset.dir]));
+  h2SetImg(h2$('h2-dog-bed'), H2_IMG.dogBed);
+  h2SetImg(h2$('h2-dog-rest'), H2_IMG.dogRest);
+  h2SetImg(h2$('h2-dog-ready'), H2_IMG.dogReady);
+}
+// 防連點：只擋「同一個動作」在短時間內重複觸發（不同按鈕互不影響）
+function h2Busy(ms, key) { const k = key || 'tap'; const now = Date.now(); if (now - (H2.lastTap[k] || 0) < (ms || 320)) return true; H2.lastTap[k] = now; return false; }
+function h2Toast(msg) {
+  const root = h2$('h2-root'); if (!root) return;
+  let el = h2$('h2-toast');
+  if (!el) { el = document.createElement('div'); el.id = 'h2-toast'; el.className = 'h2-toast'; root.appendChild(el); }
+  el.textContent = msg; el.classList.remove('is-on'); void el.offsetWidth; el.classList.add('is-on');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('is-on'), 2600);
+}
+// 實際數量變化的浮動提示（沿用既有 .adv-consume-float 樣式；位置依文字寬度夾在畫面內）
+function h2Float(text, anchorEl) {
+  if (typeof document === 'undefined' || !document.body) return;
+  const el = document.createElement('div');
+  el.className = 'adv-consume-float';
+  el.textContent = text;
+  if (window.innerWidth < 760) el.style.fontSize = '14px';
+  document.body.appendChild(el);
+  let x = window.innerWidth / 2, y = window.innerHeight / 2;
+  const r = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+  if (r && r.width) { x = r.left + r.width / 2; y = r.top + r.height / 2; }
+  else if (advLastPointer && Date.now() - advLastPointer.t < 1500) { x = advLastPointer.x; y = advLastPointer.y; }
+  const w = el.offsetWidth || 200;
+  el.style.left = Math.max(w / 2 + 8, Math.min(window.innerWidth - w / 2 - 8, x)) + 'px';
+  el.style.top  = Math.max(12, Math.min(window.innerHeight - 70, y - 18)) + 'px';
+  setTimeout(() => { try { el.remove(); } catch (e) {} }, 1500);
+}
+
+// ── 開啟 / 關閉 ─────────────────────────────
+function h2Open() {
+  const hs = h2$('home-screen'), root = h2$('h2-root');
+  if (!hs || !root || H2.legacy) return;
+  try {
+    hs.classList.add('h2-on');
+    H2.open = true;
+    h2Preload();
+    h2BindOnce();
+    h2HideBubble();
+    h2ClosePanel();
+    H2.dir = 0; H2.notes = false;
+    h2SetDir(0);
+    h2RenderAll();
+    // 從結算頁「Shopping」進來 → 直接打開商店
+    if (homeEntryMode === 'result-shop') h2OpenPanel('shop');
+    try { loadEquippedTitleFromFirebase().then(() => h2ScheduleRefresh()).catch(() => {}); } catch (e) {}
+  } catch (err) {
+    // 新版出錯 → 退回舊版小V的家（舊版內容已由 openHomeScreen 畫好），不讓玩家卡住
+    console.warn('[Home2] UI 2.0 開啟失敗，改用舊版小V的家', err);
+    hs.classList.remove('h2-on'); H2.open = false;
+  }
+}
+function h2Close() {
+  H2.open = false;
+  h2HideBubble();
+  h2ClosePanel();
+}
+function h2IsOpen() { return H2.open && !H2.legacy; }
+function h2ScheduleRefresh() {
+  if (!h2IsOpen() || H2.rendering || H2.raf) return;
+  const run = () => { H2.raf = 0; if (h2IsOpen()) h2RenderAll(); };
+  H2.raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(run) : setTimeout(run, 16);
+}
+
+// ── 全部重畫 ─────────────────────────────────
+function h2RenderAll() {
+  if (H2.rendering) return;
+  H2.rendering = true;
+  try {
+    try { renderHomeNextStage(); } catch (e) {} // 舊版「下一關準備」：出發按鈕的狀態與文字以它為準
+    h2RenderPlayer();
+    h2RenderStatus();
+    h2RenderCarousel('recipes'); h2RenderCarousel('res'); h2RenderCarousel('supply'); h2RenderCarousel('shop');
+    h2RenderDog();
+    h2RenderCenter();
+    if (H2.panel) h2RenderPanel();
+  } finally { H2.rendering = false; }
+}
+
+// ── 玩家資料＋派對島狀態 ─────────────────────
+function h2Profile() { return playerProfile || loadPlayerProfile(); }
+function h2AvaHtml(key, tag) {
+  return '<span class="h2-ava"><span>🎈</span>'
+    + '<img src="' + h2Esc(resolveAdventureAvatarSrc(key || 'boy1')) + '" alt="' + h2Esc(tag) + '" style="position:absolute;inset:0" onerror="this.remove()">'
+    + (tag ? '<span class="h2-ava-tag">' + h2Esc(tag) + '</span>' : '') + '</span>';
+}
+function h2RenderPlayer() {
+  const p = h2Profile();
+  const base = p.baseAvatarKey || 'boy1';
+  const disp = p.displayAvatarKey || p.avatarKey || base;
+  const av = h2$('h2-avatars');
+  const sig = base + '|' + disp;
+  if (av && av.dataset.sig !== sig) { av.dataset.sig = sig; av.innerHTML = h2AvaHtml(base, '身份') + h2AvaHtml(disp, '顯示'); }
+  const pid = h2$('h2-pid'); if (pid) pid.textContent = p.id || 'Player';
+}
+// 正式挑戰進度：只看「進行中的正式挑戰」已通過的關卡；測試紀錄不算
+function h2OfficialProgress() {
+  const ids = H2_CONTINENTS[0].stageIds;
+  let done = 0;
+  try {
+    const d = advLoad(); const run = d.active;
+    if (run && run.status === 'in_progress') done = ids.filter(s => run.stageResults && run.stageResults[s]).length;
+    else if (!run && advLastSnapshot && advLastSnapshot.complete && !advLastSnapshot.testOnly) done = ids.length; // 剛完成整趟冒險
+  } catch (e) {}
+  return { done, total: ids.length, name: H2_CONTINENTS[0].name };
+}
+function h2RenderStatus() {
+  const hearts = h2$('h2-hearts');
+  if (hearts) {
+    const html = buildHpHeartsHtml();
+    if (hearts.dataset.html !== html) { hearts.dataset.html = html; hearts.innerHTML = html; }
+    hearts.classList.toggle('is-many', (player.maxHp || 3) > 4);
+    hearts.setAttribute('aria-label', '生命 ' + formatHpText());
+  }
+  const pr = h2OfficialProgress();
+  const fill = h2$('h2-progress-fill');
+  if (fill) fill.style.width = (pr.total ? (pr.done / pr.total * 100) : 0).toFixed(2) + '%';
+  const bar = h2$('h2-progress');
+  if (bar) { bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', String(pr.total)); bar.setAttribute('aria-valuenow', String(pr.done)); bar.setAttribute('aria-label', pr.name + '正式挑戰進度'); }
+}
+
+// ── 三格輪播：資料 ───────────────────────────
+function h2WeaponRecipes() {
+  const ur = playerInventory.unlockedRecipes || {}, ci = playerInventory.craftedItems || {};
+  return RECIPES.filter(r => r.durability > 0 && !r.eatOnCraft && (!r.unlockKey || ur[r.unlockKey] || (ci[r.id] || 0) > 0));
+}
+function h2RecipeTiles() {
+  const ur = playerInventory.unlockedRecipes || {}, ci = playerInventory.craftedItems || {};
+  return RECIPES.filter(r => !r.unlockKey || ur[r.unlockKey]).map(r => { // 與 renderGuidebook 相同：未解鎖不顯示
+    const t = { key: r.id, name: r.name, tileName: r.name.replace(/^基礎/, ''), ico: h2Esc(r.emoji || '🎈'), opener: r.id };
+    if (r.id === 'balloonDog') { t.ico = h2ImgTag(H2_IMG.dogRest, '🐶'); if (playerInventory.balloonDog && playerInventory.balloonDog.present) t.badge = '在家'; }
+    else if (r.durability > 0 && !r.eatOnCraft) { const n = ci[r.id] || 0; t.badge = n; t.zero = n <= 0; }
+    else if (r.eatOnCraft) t.badge = '現做';
+    return t;
+  });
+}
+function h2ResTiles() {
+  const inv = playerInventory, ci = inv.craftedItems || {};
+  const list = [
+    { key: 'coins', name: '冒險金幣', ico: itemIconHtml('coin', '🪙'), badge: inv.coins || 0, tab: 'mat' },
+    { key: 'b260',  name: '260 氣球', ico: itemIconHtml('b260', '🎈'), badge: inv.balloon260 || 0, tab: 'mat' },
+    { key: 'round', name: '圓氣球',   ico: itemIconHtml('round', '🔴'), badge: inv.roundBalloon || 0, tab: 'mat' },
+  ];
+  h2WeaponRecipes().forEach(r => { const n = ci[r.id] || 0; list.push({ key: r.id, name: r.name.replace('基礎', ''), ico: h2Esc(r.emoji), badge: n, zero: n <= 0, tab: 'weapon' }); });
+  const keys = Object.keys(inv.keyItems || {}).length;
+  if (keys > 0) list.push({ key: 'keyItems', name: '重要物品', ico: '📜', badge: keys, tab: 'key' });
+  return list;
+}
+// 補給：卡片與「全部補給」面板共用同一份清單與同一套使用函式
+function h2SupplyItems() {
+  ensureInventoryItems();
+  const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
+  const full = (Number(player.hp) || 0) >= maxHp;
+  const coins = playerInventory.coins || 0;
+  const it = playerInventory.items || {};
+  const list = [];
+  list.push({ key: 'heartPatch', name: '愛心貼布', ico: '❤️‍🩹',
+    desc: '花 ' + BANDAGE_PRICE + ' 金幣購買並立即使用，恢復 ' + BANDAGE_HEAL + ' HP（不放進背包）',
+    act: full ? '生命已滿' : coins < BANDAGE_PRICE ? '金幣不足' : '−' + BANDAGE_PRICE + '🪙 使用', short: full ? '生命已滿' : coins < BANDAGE_PRICE ? '金幣不足' : '−' + BANDAGE_PRICE + '🪙',
+    off: full || coins < BANDAGE_PRICE });
+  ['bandage', 'firstAidKit'].forEach(id => {
+    const item = SHOP_ITEMS[id]; if (!item) return;
+    const n = it[id] || 0;
+    list.push({ key: id, name: item.name, ico: h2Esc(item.icon), badge: n, zero: n <= 0, desc: item.description,
+      act: n <= 0 ? '去商店' : full ? '生命已滿' : '使用', off: n > 0 && full, goShop: n <= 0 });
+  });
+  const lol = RECIPES.find(r => r.eatOnCraft);
+  if (lol && (!lol.unlockKey || (playerInventory.unlockedRecipes || {})[lol.unlockKey])) {
+    const enough = Object.entries(lol.cost).every(([m, q]) => (playerInventory[m] || 0) >= q);
+    const costText = Object.entries(lol.cost).map(([m, q]) => matName(m) + ' ×' + q).join('、');
+    list.push({ key: 'lollipopNew', name: lol.name, ico: h2Esc(lol.emoji), recipeId: lol.id,
+      desc: '現做現吃：消耗 ' + costText + '，恢復 ' + LOLLIPOP_HEAL + ' HP（不放進背包）',
+      act: full ? '生命已滿' : enough ? '做來吃' : '材料不足', off: full || !enough });
+  }
+  const old = getLollipopCount();
+  if (old > 0) list.push({ key: 'lollipopOld', name: '棒棒糖（舊庫存）', tileName: '舊棒棒糖', ico: '🍭', badge: old,
+    desc: '舊版製作、放在背包裡的棒棒糖，恢復 ' + LOLLIPOP_HEAL + ' HP', act: full ? '生命已滿' : '使用', off: full });
+  return list;
+}
+function h2ShopTiles() {
+  ensureInventoryItems();
+  const list = Object.values(SHOP_ITEMS).map(item => {
+    const have = playerInventory.items[item.id] || 0;
+    const room = Math.max(0, item.maxCarry - have);
+    return { key: item.id, name: item.name, ico: h2Esc(item.icon), badge: have + '/' + item.maxCarry,
+      act: room <= 0 ? '已帶滿' : item.priceCoins + '🪙', off: room <= 0 };
+  });
+  list.push({ key: 'styleSoon', name: '造型商品', ico: '🎀', act: '即將推出', short: '敬請期待', off: true, soon: true });
+  return list;
+}
+function h2CarItems(name) {
+  if (name === 'recipes') return h2RecipeTiles();
+  if (name === 'res') return h2ResTiles();
+  if (name === 'supply') return h2SupplyItems();
+  if (name === 'shop') return h2ShopTiles();
+  return [];
+}
+
+// ── 三格輪播：畫面 ───────────────────────────
+function h2TileHtml(name, t, i) {
+  if (!t) return '<span class="h2-tile h2-tile--empty"></span>';
+  const opener = t.opener ? ' onclick="h2_openGuidebook(\'' + t.opener + '\')"' : ' data-h2-act="tile" data-car="' + name + '" data-i="' + i + '"';
+  return '<button type="button" class="h2-tile' + (t.zero ? ' is-zero' : '') + '"' + opener + ' data-key="' + h2Esc(t.key) + '">'
+    + '<span class="h2-tile-ico">' + t.ico + '</span>'
+    + '<span class="h2-tile-name" title="' + h2Esc(t.name) + '">' + h2Esc(t.tileName || t.name) + '</span>'
+    + ((t.short || t.act) ? '<span class="h2-tile-act' + (t.off ? ' h2-tile-act--off' : '') + '">' + h2Esc(t.short || t.act) + '</span>' : '')
+    + (t.badge != null ? '<span class="h2-badge">' + h2Esc(t.badge) + '</span>' : '')
+    + '</button>';
+}
+function h2RenderCarousel(name) {
+  const strip = document.querySelector('#h2-root .h2-strip[data-car="' + name + '"]');
+  if (!strip) return;
+  const items = h2CarItems(name);
+  const maxOff = Math.max(0, items.length - 3);
+  H2.car[name] = Math.max(0, Math.min(H2.car[name] || 0, maxOff));
+  const off = H2.car[name];
+  let tiles = '';
+  for (let k = 0; k < 3; k++) tiles += h2TileHtml(name, items[off + k], off + k);
+  const html = '<button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="' + name + '" data-d="-1" aria-label="上一個"' + (off <= 0 ? ' disabled' : '') + '></button>'
+    + '<div class="h2-tiles">' + tiles + '</div>'
+    + '<button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="' + name + '" data-d="1" aria-label="下一個"' + (off >= maxOff ? ' disabled' : '') + '></button>';
+  if (strip.dataset.html !== html) { strip.dataset.html = html; strip.innerHTML = html; }
+}
+
+// ── 氣球小狗（三種狀態）─────────────────────
+// rest：有狗、未安排同行 ／ ready：有狗、已安排同行（nextBringDog）／ gone：沒有小狗（消氣或尚未製作）
+function h2DogState() {
+  const dog = playerInventory.balloonDog || {};
+  if (dog.present && (dog.turnsLeft || 0) > 0) return nextBringDog ? 'ready' : 'rest';
+  return 'gone';
+}
+function h2Place(img, spec, box) {
+  // box：內容（不透明範圍）要放的位置 { cx, bottom, w, h }（px）；依寬、高兩個限制取較小的縮放
+  const bw = spec.bb[2] - spec.bb[0], bh = spec.bb[3] - spec.bb[1];
+  const s = Math.min(box.w / bw, box.h / bh);
+  img.style.width = (spec.cw * s) + 'px'; img.style.height = (spec.ch * s) + 'px';
+  img.style.left = (box.cx - bw * s / 2 - spec.bb[0] * s) + 'px';
+  img.style.top = (box.bottom - spec.bb[3] * s) + 'px';
+  img.style.display = 'block';
+  return { left: box.cx - bw * s / 2, top: box.bottom - bh * s, w: bw * s, h: bh * s };
+}
+function h2PlaceDog() {
+  const stage = h2$('h2-dog-stage'); if (!stage) return;
+  const SW = stage.clientWidth, SH = stage.clientHeight;
+  const bed = h2$('h2-dog-bed'), rest = h2$('h2-dog-rest'), ready = h2$('h2-dog-ready');
+  if (!SW || !SH || !bed || !rest || !ready) return;
+  const st = h2DogState();
+  rest.style.display = 'none'; ready.style.display = 'none';
+  if (st === 'ready') {
+    // 小狗站起來、面向中央小V（圖片本身朝左）；狗窩縮小放在後方
+    h2Place(bed, H2_DOG_BB.bed, { cx: SW * 0.74, bottom: SH * 0.94, w: SW * 0.46, h: SH * 0.5 });
+    h2Place(ready, H2_DOG_BB.ready, { cx: SW * 0.42, bottom: SH * 0.98, w: SW * 0.66, h: SH * 0.92 });
+  } else {
+    const b = h2Place(bed, H2_DOG_BB.bed, { cx: SW * 0.5, bottom: SH * 0.97, w: SW * 0.84, h: SH * 0.84 });
+    if (st === 'rest') h2Place(rest, H2_DOG_BB.rest, { cx: SW * 0.5, bottom: b.top + b.h * 0.77, w: b.w * 0.765, h: b.h * 1.2 });
+  }
+}
+function h2RenderDog() {
+  const st = h2DogState();
+  const dog = playerInventory.balloonDog || {};
+  const stage = h2$('h2-dog-stage'), foot = h2$('h2-dog-foot'), turns = h2$('h2-dog-turns');
+  if (stage) { stage.classList.toggle('is-gone', st === 'gone'); stage.dataset.state = st; }
+  if (turns) turns.textContent = st === 'gone' ? '' : '陪伴 ' + (dog.turnsLeft || 0) + ' 次';
+  let html = '';
+  if (st === 'rest') {
+    const can = canBringDogNextLevel();
+    html = '<div class="h2-dog-txt">在狗窩休息中<small>帶牠出門需要 260 氣球 ×' + (CONFIG.DOG_LEASH_COST_BALLOON260 || 1) + ' 做狗繩</small></div>'
+      + '<button type="button" class="h2-btn" data-h2-act="bringDog"' + (can ? '' : ' disabled') + '>' + (can ? '🐾 帶狗出發 −1🎈' : '260 氣球不足') + '</button>';
+  } else if (st === 'ready') {
+    html = '<div class="h2-dog-txt"><span class="h2-tag">✓ 已安排同行</span><small>項圈、狗繩都戴好了，下一關一起出發</small></div>';
+  } else {
+    const gone = !!(currentRunStats && currentRunStats.dogGoneThisClear);
+    html = '<div class="h2-dog-txt"><span class="h2-tag h2-tag--gone">' + (gone ? '已消氣' : '還沒有氣球小狗') + '</span><small>' + (gone ? '小狗陪你完成最後一次冒險了' : '到氣球秘笈製作一隻吧') + '</small></div>'
+      + '<button type="button" class="h2-btn h2-btn--orange" onclick="h2_openGuidebook(\'balloonDog\')">' + (gone ? '🎈 重新製作' : '🎈 製作小狗') + '</button>';
+  }
+  if (foot && foot.dataset.html !== html) { foot.dataset.html = html; foot.innerHTML = html; }
+  h2PlaceDog();
+}
+
+// ── 中央：小V、返回、下一關、底部按鈕 ────────
+function h2SetDir(d) {
+  H2.dir = ((d % 4) + 4) % 4;
+  document.querySelectorAll('#h2-hero-stage .h2-hero-img').forEach(img => {
+    const k = +img.dataset.dir;
+    img.classList.toggle('is-on', k === H2.dir);
+    img.style.transform = 'translateX(' + H2_HERO_SHIFT_X[k] + '%)';
+  });
+  if (H2.dir !== 0) H2.notes = false;
+  h2RenderNotes();
+}
+function h2RenderNotes() {
+  const box = h2$('h2-notes'), hint = h2$('h2-hero-hint');
+  if (box && !box.dataset.built) {
+    box.dataset.built = '1';
+    let lines = '', html = '';
+    H2_OUTFIT_NOTES.forEach(n => {
+      const lx = n.side === 'l' ? -3 : 103;
+      (n.all ? n.pts : [n.pts[0]]).forEach(p => { lines += '<line x1="' + lx + '" y1="' + n.ly + '" x2="' + p[0] + '" y2="' + p[1] + '"/>'; });
+      n.pts.forEach(p => { html += '<span class="h2-note-dot" style="left:' + p[0] + '%;top:' + p[1] + '%"></span>'; });
+      html += '<span class="h2-note-lbl' + (n.side === 'l' ? ' h2-note-lbl--l' : '') + '" data-note="' + n.id + '" style="left:' + lx + '%;top:' + n.ly + '%">' + h2Esc(n.label) + '</span>';
+    });
+    box.innerHTML = '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + lines + '</svg>' + html;
+  }
+  if (box) box.classList.toggle('is-on', H2.notes && H2.dir === 0);
+  const wrap = box && box.closest('.h2-hero-wrap'); if (wrap) wrap.classList.toggle('is-notes', H2.notes && H2.dir === 0);
+  h2LayoutNotes();
+  if (hint) hint.textContent = (H2.notes && H2.dir === 0) ? '再點一次收起' : (H2.dir === 0 ? '點小V看服裝' : H2_HERO_DIR_NAMES[H2.dir] + '（點小V看服裝）');
+}
+// 服裝標註的標籤：預設放在小V圖片左右兩側外；若中央欄不夠寬，往內收，不蓋到左右卡片
+function h2LayoutNotes() {
+  const box = h2$('h2-notes'), stage = h2$('h2-hero-stage'), center = document.querySelector('#h2-root .h2-center');
+  if (!box || !box.classList.contains('is-on') || !stage || !center) return;
+  const S = stage.getBoundingClientRect(), C = center.getBoundingClientRect();
+  if (!S.width) return;
+  let lines = '';
+  H2_OUTFIT_NOTES.forEach(n => {
+    const lbl = box.querySelector('[data-note="' + n.id + '"]'); if (!lbl) return;
+    const w = lbl.offsetWidth;
+    const edge = n.side === 'l'
+      ? Math.max(-0.03 * S.width, C.left + 4 + w - S.left)     // 左側標籤：這是標籤的右緣
+      : Math.min(1.03 * S.width, C.right - 4 - w - S.left);    // 右側標籤：這是標籤的左緣
+    const ex = edge / S.width * 100;
+    lbl.style.left = ex + '%';
+    (n.all ? n.pts : [n.pts[0]]).forEach(p => { lines += '<line x1="' + ex.toFixed(2) + '" y1="' + n.ly + '" x2="' + p[0] + '" y2="' + p[1] + '"/>'; });
+  });
+  const svg = box.querySelector('svg'); if (svg) svg.innerHTML = lines;
+}
+function h2HeroTap() {
+  if (H2.dir !== 0) { h2SetDir(0); H2.notes = true; }
+  else H2.notes = !H2.notes;
+  h2RenderNotes();
+}
+function h2GoState() {
+  if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return { kind: 'none', sub: '沒有可出發的關卡' };
+  const lb = h2$('btn-home-next-level');
+  const txt = lb ? lb.textContent.replace(/[🚀↺↩🔄]/gu, '').trim() : '';
+  return { kind: (lb && lb.disabled) ? 'blocked' : 'go', sub: txt };
+}
+function h2RenderCenter() {
+  const lb = h2$('btn-home-back'), back = h2$('h2-back');
+  if (back) {
+    const show = !!(lb && lb.style.display !== 'none');
+    back.classList.toggle('h2-pill--ghost', !show);
+    back.disabled = !show;
+    back.textContent = show ? lb.textContent.trim() : '← 返回';
+  }
+  const nl = h2$('h2-nextline');
+  if (nl) {
+    let t = '';
+    if (gameState === 'failed' || gameState === 'gameover') t = '目前關卡：' + getChapterDisplayTitle(currentLevelIndex);
+    else if (gameState === 'clear') { const n = getNextLevelIndex(currentLevelIndex); t = n < LEVELS.length ? '下一關：' + getChapterDisplayInfo(n).title : '冒險完成！'; }
+    nl.textContent = t ? t + '　ⓘ 準備' : '';
+    nl.style.display = t ? '' : 'none';
+  }
+  const g = h2GoState(), go = h2$('h2-nav-go'), sub = h2$('h2-go-sub');
+  if (go) { go.classList.toggle('is-blocked', g.kind === 'blocked'); go.classList.toggle('is-none', g.kind === 'none'); }
+  if (sub) sub.textContent = g.sub;
+}
+function h2Go() {
+  if (h2Busy(600, 'go')) return;
+  const g = h2GoState();
+  if (g.kind === 'none') { h2Toast('目前沒有可出發的關卡。世界地圖與關卡選擇會在下一階段開放。'); return; }
+  if (g.kind === 'blocked') { h2OpenPanel('next'); h2Toast(g.sub || '出發前還有準備事項'); return; }
+  h2ClosePanel();
+  homeGoNextLevel(); // 與舊版「開始下一關」按鈕同一個函式（失敗時＝重試本關／返回整備）
+}
+
+// ── 秘笈（沿用既有氣球秘笈視窗；名稱含 openGuidebook → 音效系統只播秘笈開啟音）──
+function h2_openGuidebook(recipeId) {
+  if (h2Busy(320, 'guidebook')) return;
+  h2HideBubble();
+  openGuidebook();
+  if (recipeId) {
+    try {
+      const btn = document.querySelector('#guidebook-recipe-list .recipe-card__btn[data-id="' + recipeId + '"]');
+      const card = btn && btn.closest('.recipe-card');
+      if (card) { card.scrollIntoView({ block: 'center' }); card.classList.remove('hv-craft-pop'); void card.offsetWidth; card.classList.add('hv-craft-pop'); }
+    } catch (e) {}
+  }
+}
+if (typeof window !== 'undefined') window.h2_openGuidebook = h2_openGuidebook;
+function h2ShowBubble() {
+  const b = h2$('h2-bulb-bubble'); if (!b) return;
+  b.innerHTML = '🎬 前往現實世界看小V氣球教學影片 ▶<small>再點一下這個提示，開啟 YouTube 播放清單</small>';
+  b.style.display = 'block';
+  b.setAttribute('role', 'button'); b.setAttribute('tabindex', '0');
+}
+function h2HideBubble() { const b = h2$('h2-bulb-bubble'); if (b) b.style.display = 'none'; }
+
+// ── 補給：使用（全部走既有函式）─────────────
+function h2UseSupply(key, anchor) {
+  if (h2Busy(350, 'use:' + key)) return;
+  const it = h2SupplyItems().find(x => x.key === key);
+  if (!it) return;
+  if (it.goShop) { h2OpenPanel('shop', { focus: key }); return; }
+  if (it.off) { h2Toast(it.act === '生命已滿' ? '生命已經滿了！' : it.act === '金幣不足' ? '金幣不夠，先去冒險收集更多金幣吧！' : it.act); return; }
+  if (key === 'heartPatch') homeUseBandage();
+  else if (key === 'bandage' || key === 'firstAidKit') useHealingItemOutOfAdventure(key);
+  else if (key === 'lollipopOld') useBalloonLollipopOutOfAdventure();
+  else if (key === 'lollipopNew') {
+    const r = RECIPES.find(x => x.id === it.recipeId);
+    const hp0 = player.hp;
+    const ok = craftItem(it.recipeId); // 現做現吃：既有配方扣材料 + 補血
+    if (ok) {
+      try { playCraftSuccessFx(anchor || null, r); } catch (e) {}
+      const healed = player.hp - hp0;
+      if (healed > 0) setTimeout(() => { try { playHealFeedbackDom(healed, false, anchor && anchor.isConnected ? anchor : null); } catch (e) {} }, 250);
+    } else h2Toast('材料不足，無法製作');
+  }
+  h2ScheduleRefresh();
+}
+
+// ── 商店：數量 ▲▼ ＋ 購買（逐個呼叫既有 buyShopItem，規則與上限完全相同）──
+function h2ShopRoom(id) { ensureInventoryItems(); const item = SHOP_ITEMS[id]; return item ? Math.max(0, item.maxCarry - (playerInventory.items[id] || 0)) : 0; }
+function h2ShopQty(id) { const room = h2ShopRoom(id); const q = Math.max(1, Math.min(H2.shopQty[id] || 1, Math.max(1, room))); H2.shopQty[id] = q; return q; }
+function h2BuyQty(id, anchor) {
+  if (h2Busy(450, 'buy:' + id)) return;
+  const item = SHOP_ITEMS[id]; if (!item) return;
+  ensureInventoryItems();
+  const have0 = playerInventory.items[id] || 0, coins0 = playerInventory.coins || 0;
+  const room = Math.max(0, item.maxCarry - have0);
+  if (room <= 0) { h2Toast('已達攜帶上限'); return; }
+  const qty = Math.max(1, Math.min(H2.shopQty[id] || 1, room));
+  if (coins0 < item.priceCoins * qty) { h2Toast('金幣不夠，先去冒險收集更多金幣吧！'); return; }
+  h2BulkBuying = true;
+  try { for (let k = 0; k < qty; k++) { buyShopItem._lastAt = 0; buyShopItem(id); } }
+  finally { h2BulkBuying = false; }
+  const got = (playerInventory.items[id] || 0) - have0, spent = coins0 - (playerInventory.coins || 0);
+  if (got > 0) {
+    H2.shopQty[id] = 1;
+    h2Float(item.icon + ' ' + item.name + ' +' + got + '　🪙 −' + spent, anchor);
+    try { playCraftSuccessFx(anchor || null, { name: item.name + ' ×' + got, emoji: item.icon, shopBuy: true }); } catch (e) {}
+  }
+  h2RenderAll();
+}
+
+// ── 製作後顯示「實際」材料增減（包住 craftItem：前後比對真正的背包數字，失敗不顯示）──
+function h2InvSnap() {
+  const inv = playerInventory;
+  return { balloon260: inv.balloon260 || 0, roundBalloon: inv.roundBalloon || 0, coins: inv.coins || 0,
+    ci: Object.assign({}, inv.craftedItems || {}), dog: !!(inv.balloonDog && inv.balloonDog.present), hp: Number(player.hp) || 0 };
+}
+function h2CraftDeltaText(recipeId, s) {
+  const inv = playerInventory, parts = [];
+  [['balloon260', '🎈 260 氣球'], ['roundBalloon', '🔴 圓氣球'], ['coins', '🪙 金幣']].forEach(([k, label]) => {
+    const d = (inv[k] || 0) - s[k]; if (d) parts.push(label + ' ' + h2Signed(d));
+  });
+  const r = RECIPES.find(x => x.id === recipeId);
+  const dci = ((inv.craftedItems || {})[recipeId] || 0) - (s.ci[recipeId] || 0);
+  if (dci && r) parts.push((r.emoji || '') + ' ' + r.name + ' ' + h2Signed(dci));
+  if (!s.dog && inv.balloonDog && inv.balloonDog.present) parts.push('🐶 氣球小狗 +1');
+  const dhp = (Number(player.hp) || 0) - s.hp; if (dhp > 0) parts.push('❤️ +' + formatHealAmount(dhp));
+  return parts.join('　');
+}
+
+// ── 詳細面板 ─────────────────────────────────
+const H2_PANEL_TITLES = { player: '🪪 玩家資料', bag: '🎒 完整背包', supply: '🏥 全部補給', shop: '🛒 商店', challenge: '🏆 正式挑戰', handbook: '📔 冒險手冊', next: '🗺️ 下一關準備' };
+const H2_BAG_TABS = [['weapon', '武器'], ['supply', '補給品'], ['mat', '材料'], ['key', '重要物品']];
+const H2_SHOP_TABS = [['items', '冒險道具'], ['style', '造型・寵物配件']];
+function h2OpenPanel(kind, opts) {
+  if (!H2_PANEL_TITLES[kind]) return;
+  h2HideBubble();
+  const o = opts || {};
+  H2.panel = { kind, tab: o.tab || (kind === 'bag' ? 'weapon' : kind === 'shop' ? 'items' : ''), focus: o.focus || null };
+  if (kind === 'bag' && o.focus && !o.tab) H2.panel.tab = o.focusTab || H2.panel.tab;
+  if (kind === 'player') { try { loadEquippedTitleFromFirebase().then(() => h2ScheduleRefresh()).catch(() => {}); } catch (e) {} }
+  const w = h2$('h2-panel-wrap'); if (w) w.classList.add('is-open');
+  h2RenderPanel(true);
+}
+function h2ClosePanel() {
+  h2ReturnBorrowed();
+  H2.panel = null;
+  const w = h2$('h2-panel-wrap'); if (w) w.classList.remove('is-open');
+}
+function h2Borrow(id, into) {
+  const n = h2$(id); if (!n || !into) return;
+  if (!H2.borrowed.some(b => b.node === n)) H2.borrowed.push({ node: n, parent: n.parentNode, next: n.nextSibling });
+  into.appendChild(n);
+}
+function h2ReturnBorrowed() {
+  H2.borrowed.forEach(b => { try { b.parent.insertBefore(b.node, (b.next && b.next.parentNode === b.parent) ? b.next : null); } catch (e) {} });
+  H2.borrowed = [];
+}
+function h2RowHtml(o) {
+  return '<div class="h2-row' + (o.zero ? ' is-zero' : '') + (o.full ? ' is-full' : '') + '"' + (o.attr || '') + '>'
+    + '<div class="h2-row-ico">' + o.ico + '</div>'
+    + '<div class="h2-row-main"><div class="h2-row-name">' + h2Esc(o.name) + '</div>' + (o.desc ? '<div class="h2-row-desc">' + o.desc + '</div>' : '') + '</div>'
+    + '<div class="h2-row-side">' + (o.side || '') + '</div></div>';
+}
+function h2CoinBar(withV) {
+  let html = '<div class="h2-coinbar"><span>' + itemIconHtml('coin', '🪙') + ' 冒險金幣 ' + (playerInventory.coins || 0) + '</span>';
+  if (withV) { const w = ensurePlayerWallet(); html += '<span>🐷 V 幣 ' + ((w && w.vCoins) || 0) + '</span>'; }
+  return html + '</div>';
+}
+function h2SupplyRowsHtml() {
+  return '<div class="h2-stat-row" style="margin:0 0 0.5em"><span class="h2-stat-lbl">HP：</span><span class="h2-hearts">' + buildHpHeartsHtml() + '</span></div>'
+    + '<div class="h2-list">' + h2SupplyItems().map(it => h2RowHtml({
+      ico: it.ico, name: it.name, desc: h2Esc(it.desc || ''), zero: it.zero,
+      side: (it.badge != null ? '<span class="h2-count">×' + h2Esc(it.badge) + '</span>' : '')
+        + '<button type="button" class="h2-btn' + (it.goShop ? ' h2-btn--plain' : '') + '" data-h2-act="use" data-key="' + it.key + '"' + (it.off ? ' disabled' : '') + '>' + h2Esc(it.goShop ? '去商店購買' : it.act) + '</button>',
+    })).join('') + '</div>'
+    + '<div class="h2-sub" style="margin-top:0.7em">補血不會超過生命上限；生命已滿時不會消耗道具。</div>';
+}
+function h2PanelBody(kind, tab) {
+  const inv = playerInventory;
+  if (kind === 'player') {
+    const p = h2Profile();
+    const base = p.baseAvatarKey || 'boy1', disp = p.displayAvatarKey || p.avatarKey || base;
+    const title = getEquippedTitleDisplayText();
+    const w = ensurePlayerWallet();
+    return '<div class="h2-profile">' + h2AvaHtml(base, '身份頭像') + h2AvaHtml(disp, '顯示頭像') + '</div>'
+      + '<dl class="h2-kv"><dt>身份頭像</dt><dd>' + h2Esc(base) + '</dd><dt>顯示頭像</dt><dd>' + h2Esc(disp) + '</dd>'
+      + '<dt>玩家 ID</dt><dd>' + h2Esc(p.id || 'Player') + '</dd>'
+      + '<dt>目前裝備稱號</dt><dd>' + h2Esc(title && title !== '未裝備' ? title : '未裝備') + '</dd>'
+      + '<dt>V 幣</dt><dd>🐷 ' + ((w && w.vCoins) || 0) + '</dd></dl>'
+      + '<div class="h2-sub" style="margin-top:0.8em">V 幣是跨遊戲共用的獎勵；冒險金幣只在這個冒險裡使用，兩者不同。</div>';
+  }
+  if (kind === 'supply' || (kind === 'bag' && tab === 'supply')) return (kind === 'bag' ? h2CoinBar() : '') + h2SupplyRowsHtml();
+  if (kind === 'bag' && tab === 'weapon') {
+    const ws = h2WeaponRecipes();
+    if (!ws.length) return h2CoinBar() + '<div class="h2-empty">還沒有武器。</div>';
+    const ci = inv.craftedItems || {};
+    return h2CoinBar() + '<div class="h2-list">' + ws.map(r => {
+      const n = ci[r.id] || 0;
+      const eq = r.id === 'basicSword' ? (inv.equippedSwordDur || 0) : r.id === 'basicHammer' ? (inv.equippedHammerDur || 0) : 0;
+      return h2RowHtml({ ico: h2Esc(r.emoji), name: r.name, zero: n <= 0,
+        desc: '耐久：可攻擊 ' + r.durability + ' 次' + (eq > 0 ? '　｜　裝備中剩餘耐久 ' + eq : ''),
+        side: '<span class="h2-count">×' + n + '</span><button type="button" class="h2-btn h2-btn--plain" onclick="h2_openGuidebook(\'' + r.id + '\')">去秘笈製作</button>' });
+    }).join('') + '</div><div class="h2-sub" style="margin-top:0.7em">武器在冒險中用暫停選單或 🔁 切換；這裡只顯示持有數量。</div>';
+  }
+  if (kind === 'bag' && tab === 'mat') {
+    return h2CoinBar() + '<div class="h2-list">'
+      + h2RowHtml({ ico: itemIconHtml('b260', '🎈'), name: '260 長條氣球', desc: '製作武器、氣球小狗、棒棒糖，也是帶狗出門的狗繩', side: '<span class="h2-count">×' + (inv.balloon260 || 0) + '</span>' })
+      + h2RowHtml({ ico: itemIconHtml('round', '🔴'), name: '圓氣球', desc: '製作氣球槌的槌頭（最多攜帶 ' + ROUND_BALLOON_CARRY_LIMIT + ' 顆）', side: '<span class="h2-count">×' + (inv.roundBalloon || 0) + '</span>' })
+      + '</div>';
+  }
+  if (kind === 'bag' && tab === 'key') {
+    const ks = Object.values(inv.keyItems || {}).sort((a, b) => (a.acquiredAt || 0) - (b.acquiredAt || 0));
+    if (!ks.length) return '<div class="h2-empty">還沒有重要物品。冒險中找到的 Boss 弱點筆記等會放在這裡。</div>';
+    return '<div class="h2-list">' + ks.map(k => h2RowHtml({ ico: h2Esc(k.emoji || '📜'), name: k.name || k.title || '重要物品', desc: h2Esc(k.title && k.title !== k.name ? k.title : ''),
+      side: '<button type="button" class="h2-btn h2-btn--plain" data-h2-act="readKey" data-key="' + h2Esc(k.id) + '">閱讀</button>' })).join('') + '</div>';
+  }
+  if (kind === 'shop' && tab === 'style') {
+    return '<div class="h2-soon">🎀 造型商品與寵物配件<br>即將推出，目前還不能購買。<br><small>（角色換裝與小狗配件的取得方式尚未開放）</small></div>';
+  }
+  if (kind === 'shop') {
+    ensureInventoryItems();
+    return h2CoinBar() + '<div class="h2-list">' + Object.values(SHOP_ITEMS).map(item => {
+      const have = inv.items[item.id] || 0, room = Math.max(0, item.maxCarry - have);
+      const q = h2ShopQty(item.id), total = item.priceCoins * q;
+      const poor = (inv.coins || 0) < total;
+      const qtyHtml = '<span class="h2-qty"><button type="button" data-h2-act="qty" data-key="' + item.id + '" data-d="1" aria-label="增加數量"' + (room <= 0 || q >= room ? ' disabled' : '') + '>▲</button>'
+        + '<b>' + (room <= 0 ? 0 : q) + '</b><button type="button" data-h2-act="qty" data-key="' + item.id + '" data-d="-1" aria-label="減少數量"' + (room <= 0 || q <= 1 ? ' disabled' : '') + '>▼</button></span>';
+      const btn = room <= 0 ? '<button type="button" class="h2-btn" disabled>已達攜帶上限</button>'
+        : '<button type="button" class="h2-btn" data-h2-act="buy" data-key="' + item.id + '"' + (poor ? ' disabled' : '') + '>' + (poor ? '金幣不足' : '購買') + '</button>';
+      return h2RowHtml({ ico: h2Esc(item.icon), name: item.name, full: room <= 0, attr: ' data-shop-row="' + item.id + '"',
+        desc: h2Esc(item.description) + '<br>持有 ' + have + ' / 上限 ' + item.maxCarry + '　｜　單價 ' + item.priceCoins + ' 🪙',
+        side: qtyHtml + '<span class="h2-price">合計 ' + (room <= 0 ? 0 : total) + ' 🪙</span>' + btn });
+    }).join('') + '</div><div class="h2-sub" style="margin-top:0.7em">最多只能買到攜帶上限；冒險金幣只能用冒險中撿到的金幣，沒有儲值。</div>';
+  }
+  if (kind === 'challenge') {
+    const pr = h2OfficialProgress();
+    let summary = '';
+    try {
+      const run = advLoad().active;
+      if (run && run.status === 'in_progress') summary = '戰敗 ' + (run.totalFailures || 0) + ' 次　·　主動重試 ' + (run.manualRetries || 0) + ' 次　·　累計損失 ' + (run.totalActualHpLost || 0) + ' HP';
+    } catch (e) {}
+    return '<div class="h2-sub">' + h2Esc(pr.name) + '正式挑戰：已通過 ' + pr.done + ' / ' + pr.total + ' 關' + (summary ? '<br>' + summary : '') + '</div>'
+      + '<div class="h2-progress" style="height:1.1em;margin-bottom:0.8em"><div class="h2-progress-fill" style="width:' + (pr.total ? pr.done / pr.total * 100 : 0).toFixed(2) + '%"></div></div>'
+      + '<div class="h2-sub">本次冒險統計</div><div id="h2-borrow-challenge"></div>'
+      + '<div class="h2-soon" style="margin-top:0.8em">「正式挑戰／自由練習」的模式選擇與世界地圖，會在下一階段開放。<br>目前請用「出發」繼續目前的冒險。</div>';
+  }
+  if (kind === 'handbook') {
+    return '<div class="h2-menu">'
+      + '<button type="button" class="h2-btn h2-btn--plain" data-h2-act="notes">💡 冒險提示筆記・劇情紀錄<br><small>學過的玩法提示與看過的對話</small></button>'
+      + '<button type="button" class="h2-btn h2-btn--plain" data-h2-act="openPanel" data-key="bag" data-tab="key">📜 Boss 弱點筆記・重要物品<br><small>冒險中找到的重要物品</small></button>'
+      + '<button type="button" class="h2-btn h2-btn--plain" data-h2-act="openPanel" data-key="challenge">🏆 冒險紀錄<br><small>正式挑戰進度與本次統計</small></button>'
+      + '</div><div class="h2-sub" style="margin-top:1em">版本：' + h2Esc(GAME_VERSION) + '</div>';
+  }
+  if (kind === 'next') {
+    const g = h2GoState();
+    return '<div id="h2-borrow-next"></div><div style="margin-top:0.8em;display:flex;justify-content:flex-end">'
+      + '<button type="button" class="h2-btn" data-h2-act="go"' + (g.kind === 'go' ? '' : ' disabled') + '>出發：' + h2Esc(g.sub || '—') + '</button></div>';
+  }
+  return '';
+}
+function h2RenderPanel(first) {
+  const P = H2.panel; if (!P) return;
+  const body = h2$('h2-panel-body'), tabs = h2$('h2-panel-tabs'), title = h2$('h2-panel-title');
+  if (!body) return;
+  const scroll = first ? 0 : body.scrollTop;
+  h2ReturnBorrowed(); // innerHTML 重設前先把借用的舊版區塊還回去，避免被清掉
+  if (title) title.textContent = H2_PANEL_TITLES[P.kind];
+  const tabDefs = P.kind === 'bag' ? H2_BAG_TABS : P.kind === 'shop' ? H2_SHOP_TABS : [];
+  if (tabs) {
+    tabs.style.display = tabDefs.length ? '' : 'none';
+    tabs.innerHTML = tabDefs.map(([id, label]) => '<button type="button" class="h2-tab' + (P.tab === id ? ' is-on' : '') + '" data-h2-act="tab" data-key="' + id + '">' + label + '</button>').join('');
+  }
+  if (P.kind === 'challenge') { try { renderHomeChallenge(); } catch (e) {} }
+  body.innerHTML = h2PanelBody(P.kind, P.tab);
+  if (P.kind === 'challenge') h2Borrow('home-challenge-body', h2$('h2-borrow-challenge'));
+  if (P.kind === 'next') h2Borrow('home-next-stage-body', h2$('h2-borrow-next'));
+  body.scrollTop = scroll;
+  if (first && P.focus) {
+    const row = body.querySelector('[data-shop-row="' + P.focus + '"]');
+    if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('hv-craft-pop'); }
+  }
+}
+
+// ── 事件（只綁一次，全部用事件委派）──────────
+function h2BindOnce() {
+  if (H2.bound) return;
+  const root = h2$('h2-root'); if (!root) return;
+  H2.bound = true;
+  root.addEventListener('click', e => {
+    const t = e.target;
+    const bubble = h2$('h2-bulb-bubble');
+    if (bubble && bubble.style.display !== 'none') {
+      if (t.closest && t.closest('#h2-bulb-bubble')) {
+        h2HideBubble();
+        try { window.open(H2_TEACHING_PLAYLIST_URL, '_blank', 'noopener'); } catch (er) {}
+        return;
+      }
+      if (!(t.closest && t.closest('#h2-bulb'))) h2HideBubble();
+    }
+    if (t.closest && t.closest('#h2-bulb')) { const b = h2$('h2-bulb-bubble'); if (b && b.style.display === 'block') h2HideBubble(); else h2ShowBubble(); return; }
+    if (t === h2$('h2-panel-wrap')) { h2ClosePanel(); return; }
+    if (t.closest && t.closest('#h2-panel-close')) { h2ClosePanel(); return; }
+    if (t.closest && t.closest('#h2-turn-l')) { h2SetDir(H2.dir - 1); return; }
+    if (t.closest && t.closest('#h2-turn-r')) { h2SetDir(H2.dir + 1); return; }
+    if (t.closest && t.closest('#h2-hero-btn')) { h2HeroTap(); return; }
+    if (t.closest && t.closest('#h2-player-btn')) { h2OpenPanel('player'); return; }
+    if (t.closest && t.closest('#h2-back')) { if (!h2$('h2-back').disabled) homeGoBack(); return; }
+    if (t.closest && t.closest('#h2-handbook-btn')) { h2OpenPanel('handbook'); return; }
+    if (t.closest && t.closest('#h2-nav-map')) { h2Toast('世界地圖會在下一階段開放（第一大陸：氣球森林、橘子工廠、港口、迷霧海域）。'); return; }
+    if (t.closest && t.closest('#h2-nav-practice')) { h2Toast('自由練習會在下一階段開放，練習成績不會影響正式挑戰。'); return; }
+    if (t.closest && t.closest('#h2-nav-go')) { h2Go(); return; }
+    const op = t.closest && t.closest('[data-h2-open]');
+    if (op) { h2OpenPanel(op.dataset.h2Open); return; }
+    const a = t.closest && t.closest('[data-h2-act]');
+    if (!a || a.disabled) return;
+    const act = a.dataset.h2Act, key = a.dataset.key;
+    if (act === 'car') { H2.car[a.dataset.car] = (H2.car[a.dataset.car] || 0) + (+a.dataset.d); h2RenderCarousel(a.dataset.car); return; }
+    if (act === 'tile') {
+      const items = h2CarItems(a.dataset.car), it = items[+a.dataset.i]; if (!it) return;
+      if (a.dataset.car === 'supply') { h2UseSupply(it.key, a); return; }
+      if (a.dataset.car === 'res') { h2OpenPanel('bag', { tab: it.tab }); return; }
+      if (a.dataset.car === 'shop') { if (it.soon) h2OpenPanel('shop', { tab: 'style' }); else h2OpenPanel('shop', { focus: it.key }); return; }
+      return;
+    }
+    if (act === 'bringDog') { if (!h2Busy(500, 'bringDog')) homeBringDog(); h2ScheduleRefresh(); return; }
+    if (act === 'use') { h2UseSupply(key, a.closest('.h2-row') || a); return; }
+    if (act === 'tab') { if (H2.panel) { H2.panel.tab = key; H2.panel.focus = null; h2RenderPanel(true); } return; }
+    if (act === 'qty') { const room = h2ShopRoom(key); H2.shopQty[key] = Math.max(1, Math.min(room, (H2.shopQty[key] || 1) + (+a.dataset.d))); h2RenderPanel(); return; }
+    if (act === 'buy') { h2BuyQty(key, a.closest('.h2-row') || a); return; }
+    if (act === 'readKey') { const k = (playerInventory.keyItems || {})[key]; if (k) openDiscoveryItemModal(k, { mode: 'read' }); return; }
+    if (act === 'notes') { rpgOpenNotes(); return; }
+    if (act === 'openPanel') { h2OpenPanel(key, { tab: a.dataset.tab }); return; }
+    if (act === 'go') { h2Go(); return; }
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && H2.panel && h2IsOpen()) h2ClosePanel(); });
+  const onResize = () => { if (h2IsOpen()) { h2PlaceDog(); h2LayoutNotes(); } };
+  try { if (typeof ResizeObserver === 'function') new ResizeObserver(onResize).observe(h2$('h2-dog-stage')); } catch (e) {}
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', () => setTimeout(onResize, 300));
+}
+
+// ── 接上既有函式（只在原函式「之後」刷新新版畫面；不改原本行為）──
+(function h2Install() {
+  if (typeof document === 'undefined' || typeof globalThis === 'undefined') return;
+  try { if (H2_DEVTOOLS && document.body) document.body.classList.add('h2-devtools'); } catch (e) {}
+  const after = (name, fn) => {
+    const orig = globalThis[name];
+    if (typeof orig !== 'function' || orig._h2wrapped) return;
+    const w = function () { const r = orig.apply(this, arguments); try { fn.apply(this, [r].concat([].slice.call(arguments))); } catch (e) { console.warn('[Home2]', name, e); } return r; };
+    w._h2wrapped = true; w._h2orig = orig;
+    globalThis[name] = w;
+  };
+  after('openHomeScreen', () => h2Open());
+  ['renderHomeInventory', 'renderHomeInventorySummary', 'renderHomeSupply', 'renderHomeShop', 'renderHomeDog', 'renderHomeNextStage',
+   'renderHomePlayer', 'renderHomeWallet', 'refreshAllHpDisplays', 'saveInventory', 'refreshDogTripUi'].forEach(n => after(n, () => h2ScheduleRefresh()));
+  after('populateResultPanel', () => h2Preload());  // 結算畫面出現時先在背景載入小V之家圖片
+  after('triggerFailed', () => h2Preload());
+  // 關閉：先收起新版面板
+  const origClose = globalThis.closeHomeScreen;
+  if (typeof origClose === 'function' && !origClose._h2wrapped) {
+    const w = function () { try { h2Close(); } catch (e) {} return origClose.apply(this, arguments); };
+    w._h2wrapped = true; w._h2orig = origClose; globalThis.closeHomeScreen = w;
+  }
+  // 製作：成功時依實際背包差異顯示「260 氣球 −1」等（失敗不顯示、不改回傳值）
+  const origCraft = globalThis.craftItem;
+  if (typeof origCraft === 'function' && !origCraft._h2wrapped) {
+    const w = function (recipeId) {
+      let snap = null; try { snap = h2InvSnap(); } catch (e) {}
+      const ok = origCraft.apply(this, arguments);
+      if (ok && snap) { try { const txt = h2CraftDeltaText(recipeId, snap); if (txt) h2Float(txt, null); } catch (e) {} }
+      try { h2ScheduleRefresh(); } catch (e) {}
+      return ok;
+    };
+    w._h2wrapped = true; w._h2orig = origCraft; globalThis.craftItem = w;
+  }
+})();
+if (typeof window !== 'undefined') {
+  window.debugHomeLegacy = function (on) {
+    H2.legacy = !!on;
+    const hs = h2$('home-screen');
+    if (hs) hs.classList.toggle('h2-on', !H2.legacy && H2.open);
+    if (H2.legacy) h2ClosePanel(); else if (hs && hs.style.display !== 'none') h2Open();
+    return H2.legacy ? '舊版小V的家' : 'UI 2.0';
+  };
+  window.debugHome2 = function () {
+    const o = { open: H2.open, legacy: H2.legacy, dir: H2_HERO_DIR_NAMES[H2.dir], notes: H2.notes, panel: H2.panel, carousel: Object.assign({}, H2.car),
+      dog: h2DogState(), progress: h2OfficialProgress(), go: h2GoState(),
+      images: Array.from(document.querySelectorAll('#h2-root img[data-h2-file]')).map(i => ({ file: i.dataset.h2File, loaded: !!i.dataset.h2Loaded, failed: !!i.dataset.h2Failed })) };
+    console.log('[Home2]', o); return o;
+  };
+}
