@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.68-home-ui2-fixes-map-doublekill-test-3';
-const BUILD_TIME   = '2026-10-21 03:40';
+const GAME_VERSION = 'adventure-v0.3.69-weapon-durability-pop-score-ui-sfx-test-1';
+const BUILD_TIME   = '2026-10-21 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -1997,8 +1997,11 @@ function normalizeActiveWeaponSlot() {
 }
 
 // 測試版完整裝備（sword + hammer，runtime-only，不寫背包）
+// v0.3.69：只有明確的測試入口（暫停選單的測試按鈕）才呼叫；呼叫後 adventureTestLoadoutActive = true，
+//   同一個測試關卡重試時由 restart() 依這個旗標重新套用；回到正常流程時關閉（HUD 會標示「🧪 測試裝備」）
 function applyAdventureTestLoadout() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  adventureTestLoadoutActive = true;
   equippedSword.id         = 'basicSword';
   equippedSword.name       = '基礎氣球劍（測試）';
   equippedSword.maxDur     = 999;
@@ -3091,7 +3094,7 @@ const RECIPES = [
     id:         'basicHammer',
     name:       '基礎氣球槌',
     effect:     '可以敲擊小怪，也可觸發特定場景機關（下一版開放）',
-    durability: 3,
+    durability: 6,                // v0.3.69：正式試玩數值（氣球劍 10、氣球槌 6；之後可能依實際遊玩調整）
     cost:       { roundBalloon: 2, balloon260: 1 },  // 2 顆圓氣球（槌頭）+ 1 條 260（握把）
     emoji:      '🔨',
     unlockKey:  'basicHammer',   // 對應 unlockedRecipes.basicHammer
@@ -3507,30 +3510,12 @@ function initEquippedSword() {
 // 打中敵人時呼叫：扣耐久、處理斷裂
 function consumeSwordDurability() {
   if (!equippedSword.id) return;
-  equippedSword.currentDur--;
-
-  if (equippedSword.currentDur <= 0) {
-    // 這把劍耗盡
-    const ci = playerInventory.craftedItems;
-    ci.basicSword = Math.max(0, (ci.basicSword || 1) - 1);
-
-    if (ci.basicSword > 0) {
-      // 還有備用劍，自動裝下一把
-      equippedSword.currentDur = equippedSword.maxDur;
-    } else {
-      // 沒有劍了
-      equippedSword.id = null;
-      equippedSword.name = '';
-      equippedSword.maxDur = 0;
-      equippedSword.currentDur = 0;
-    }
-    playerInventory.equippedSwordDur = equippedSword.currentDur;
-    saveInventory();
-  } else {
-    // 儲存目前耐久
-    playerInventory.equippedSwordDur = equippedSword.currentDur;
-    saveInventory();
-  }
+  equippedSword.currentDur = Math.max(0, equippedSword.currentDur - 1);
+  // v0.3.69：耗盡 → 和尖刺／橘子怪立即爆裂共用同一個銷毀流程（庫存 −1、備用接續、爆裂音效與碎片各一次）
+  if (equippedSword.currentDur <= 0) { weaponBreak('sword', 'worn'); return; }
+  if (weaponIsTestLoadout('sword')) return;          // 測試裝備的耐用度不寫進背包存檔
+  playerInventory.equippedSwordDur = equippedSword.currentDur;
+  saveInventory();
 }
 
 const player = {
@@ -5137,32 +5122,12 @@ function initEquippedHammer() {
 
 function consumeHammerDurability() {
   if (!equippedHammer.id) return;
-  // 測試版槌子：耐久不耗盡
-  if (ADVENTURE_TEST_TOOLS_ENABLED && equippedHammer.currentDur >= 990) {
-    equippedHammer.currentDur = equippedHammer.maxDur || 999;
-    return;
-  }
-  equippedHammer.currentDur--;
-  if (equippedHammer.currentDur <= 0) {
-    const ci = playerInventory.craftedItems;
-    ci.basicHammer = Math.max(0, (ci.basicHammer || 1) - 1);
-    if (ci.basicHammer > 0) {
-      equippedHammer.currentDur = equippedHammer.maxDur;
-    } else {
-      equippedHammer.id = null;
-      equippedHammer.name = '';
-      equippedHammer.maxDur = 0;
-      equippedHammer.currentDur = 0;
-      // 自動切回劍（若有）
-      if (equippedSword.id) activeSlot = 'sword';
-      else activeSlot = null;
-    }
-    playerInventory.equippedHammerDur = equippedHammer.currentDur;
-    saveInventory();
-  } else {
-    playerInventory.equippedHammerDur = equippedHammer.currentDur;
-    saveInventory();
-  }
+  // v0.3.69：拿掉「測試版槌子耐久不耗盡」；測試裝備（明確開啟時）只扣執行期的數字、不寫背包
+  equippedHammer.currentDur = Math.max(0, equippedHammer.currentDur - 1);
+  if (equippedHammer.currentDur <= 0) { weaponBreak('hammer', 'worn'); return; }   // 庫存 −1、備用接續；沒有了自動切回劍（若有）
+  if (weaponIsTestLoadout('hammer')) return;
+  playerInventory.equippedHammerDur = equippedHammer.currentDur;
+  saveInventory();
 }
 
 // 切換道具（手機按鈕 / 鍵盤）
@@ -5515,6 +5480,7 @@ function update(dt, dtMs = 16.667) {
   updateScorpionDefeatEffects(dt);
   updateTreasurePickupEffects(); // v0.3.12
   try { updateChainFx(dt); } catch (e) {} // v0.3.68：DOUBLE KILL 文字
+  try { updateWeaponPopFx(dt); } catch (e) {} // v0.3.69：武器爆裂碎片
   updateBreakableTrees(dt);
   updateOrangeNemeses(dtMs);
   updateChimneyOranges(dtMs);     // v0.3.19：Chapter 2 煙囟橘子
@@ -5798,6 +5764,7 @@ function updateMeleeAttack() {
   const atkY = player.y + (player.h - CONFIG.BASIC_SWORD_ATTACK_HEIGHT) / 2;
   const atkW = CONFIG.BASIC_SWORD_ATTACK_RANGE;
   const atkH = CONFIG.BASIC_SWORD_ATTACK_HEIGHT;
+  if (weaponPopCheck('sword', atkX, atkY, atkW, atkH)) return;   // v0.3.69：碰到尖刺／橘子怪 → 立即爆裂，這次攻擊不再造成傷害
   // v0.3.35：2-4 橘子王（不消耗耐久：金色油管環讓武器實體化）
   if (orangeKingBoss) checkOrangeKingMeleeHit('sword', atkX, atkY, atkW, atkH);
 
@@ -7324,6 +7291,7 @@ function updateHammerMelee() {
   const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
   const atkW = CONFIG.HAMMER_ATTACK_RANGE;
   const atkH = CONFIG.HAMMER_ATTACK_HEIGHT;
+  if (weaponPopCheck('hammer', atkX, atkY, atkW, atkH)) return;  // v0.3.69：碰到尖刺／橘子怪 → 立即爆裂
   // v0.3.35：2-4 橘子王（不消耗耐久：金色油管環讓武器實體化）
   if (orangeKingBoss) checkOrangeKingMeleeHit('hammer', atkX, atkY, atkW, atkH);
 
@@ -7345,6 +7313,7 @@ function updateHammerMelee() {
       spinDamage,
       hitTargetIds: new Set(),
       sourceId: e.runtimeId,   // v0.3.68：被擊飛的是哪一隻（Double Kill 防重複用）
+      sourceAdvId: e.advId,    // v0.3.69：正式挑戰用的穩定 ID
     });
   }
 
@@ -10692,6 +10661,7 @@ function startOrangeKingBossTestLevel__impl() {
   nextBringDog = false;
   currentLevelIndex = idx;
   loadLevel(idx);
+  applyAdventureTestLoadout(); // v0.3.69：測試 2-4 橘子王 → 明確配發測試裝備（HUD 標示「🧪 測試裝備」；不寫背包）
   restart({ keepHp: false, preserveBringDog: false });
   const pauseEl = document.getElementById('pause-overlay');
   if (pauseEl) { pauseEl.style.display = 'none'; pauseEl.classList.remove('active'); }
@@ -11131,6 +11101,7 @@ function draw() {
     drawHintBox();
     drawOrangeKingMachineCalibOverlay(); // v0.3.36：定位工具（測試版 F4，最上層）
     try { drawChainFx(cameraX); } catch (e) {} // v0.3.68
+    try { drawWeaponPopFx(cameraX); } catch (e) {} // v0.3.69
     drawTreasurePickupEffects(); // v0.3.12-test-2：screen-space 通知框，在 HUD 上方
     drawProjectileOrangeAssetStatusHud(); // v0.3.26-debug：projectile orange 載入狀態（測試版）
   } else if (gameState === 'paused') {
@@ -14755,10 +14726,12 @@ function drawHUD() {
     ctx.strokeStyle = capBorder; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(capX, capY, capW, capH, 8); ctx.stroke();
 
-    // emoji + 耐久文字
+    // 武器圖（v0.3.69：正式 PNG；還沒載好才用文字）+ 耐久文字
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.font = '12px sans-serif';
-    ctx.fillText(itemEmoji, capX + 5, capY + 11);
+    const _wImg = (typeof weaponHudImg === 'function') ? weaponHudImg(activeItem.id) : null;
+    if (_wImg) ctx.drawImage(_wImg, capX + 2, capY + 1, 19, 19); else ctx.fillText(itemEmoji, capX + 5, capY + 11);
+    if (typeof adventureTestLoadoutActive !== 'undefined' && adventureTestLoadoutActive) { ctx.save(); ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'right'; ctx.fillText('🧪 測試裝備', capX + capW, capY + capH + 9); ctx.restore(); }
     ctx.font = 'bold 10px monospace';
     ctx.fillStyle = activeSlot === 'hammer' ? '#ffd080' : '#c8f0ff';
     ctx.fillText(activeItem.currentDur + '/' + activeItem.maxDur, capX + 22, capY + 11);
@@ -14807,6 +14780,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.69：weapon-durability-pop-score-ui-sfx → wpn-pop（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('weapon-durability-pop')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'wpn-pop' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.68：home-ui2-fixes-map-doublekill → ui2-fixes（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('home-ui2-fixes')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -15242,14 +15220,14 @@ function buildBagRows() {
     const durStr = equippedSword.id === 'basicSword'
       ? `｜裝備 ${equippedSword.currentDur}/${equippedSword.maxDur}`
       : '';
-    rows.push([`⚔️ 基礎氣球劍`, `x${qty}${durStr}`, 'result-cyan']);
+    rows.push([weaponIconHtml('basicSword') + ` 基礎氣球劍`, `x${qty}${durStr}`, 'result-cyan']);
   }
   // 基礎氣球槌
   if ((ci.basicHammer || 0) > 0) {
     const hqty   = ci.basicHammer;
     const hdurStr = (equippedHammer.id && activeSlot === 'hammer')
       ? `｜裝備 ${equippedHammer.currentDur}/${equippedHammer.maxDur}` : '';
-    rows.push([`🔨 基礎氣球槌`, `x${hqty}${hdurStr}`, 'result-purple']);
+    rows.push([weaponIconHtml('basicHammer') + ` 基礎氣球槌`, `x${hqty}${hdurStr}`, 'result-purple']);
   }
   // 氣球棒棒糖
   if ((ci.balloonLollipop || 0) > 0) {
@@ -16507,8 +16485,8 @@ function getInventoryOtherItems() {
   const items = playerInventory.items || {};
   const list  = [];
   const swordQty = Math.max(ci.basicSword || 0, (equippedSword && equippedSword.id === 'basicSword') ? 1 : 0);
-  if (swordQty > 0)                  list.push({ icon: '⚔️', label: '基礎氣球劍', count: swordQty });
-  if ((ci.basicHammer || 0) > 0)     list.push({ icon: '🔨', label: '基礎氣球槌', count: ci.basicHammer });
+  if (swordQty > 0)                  list.push({ icon: weaponIconHtml('basicSword'), label: '基礎氣球劍', count: swordQty });
+  if ((ci.basicHammer || 0) > 0)     list.push({ icon: weaponIconHtml('basicHammer'), label: '基礎氣球槌', count: ci.basicHammer });
   if ((ci.balloonLollipop || 0) > 0) list.push({ icon: '🍭', label: '氣球棒棒糖', count: ci.balloonLollipop });
   if ((items.bandage || 0) > 0)      list.push({ icon: '🩹', label: '繃帶',       count: items.bandage });
   if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
@@ -16905,8 +16883,8 @@ function renderHomeInventory() {
     { e:itemIconHtml('coin', '🪙'),  v: playerInventory.coins,       lbl:'金幣',    cls:'inv-coin',   dur:null },
     { e:itemIconHtml('b260', '🎈'),  v: playerInventory.balloon260,  lbl:'260 氣球',cls:'inv-balloon',dur:null },
     { e:itemIconHtml('round', '⚪'), v: playerInventory.roundBalloon,lbl:'圓氣球',  cls:'inv-round',  dur:null },
-    { e:'⚔️', v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
-    { e:'🔨', v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
+    { e:weaponIconHtml('basicSword'), v: ci.basicSword     ||0,        lbl:'氣球劍',  cls:'inv-sword',  dur:eqSword },
+    { e:weaponIconHtml('basicHammer'), v: ci.basicHammer    ||0,        lbl:'氣球槌',  cls:'inv-hammer', dur:eqHammer },
     { e:'🍭', v: ci.balloonLollipop||0,        lbl:'棒棒糖',  cls:'inv-candy',  dur:null },
     // v0.3.32：重要物品（Boss 弱點筆記等）；v0.3.33-fix-1：可點擊閱讀
     ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id).map(k =>
@@ -17551,8 +17529,8 @@ function openPauseBag() {
     { e:itemIconHtml('coin', '🪙'),  v:playerInventory.coins,        lbl:'金幣',   cls:'inv-coin',    dur:null },
     { e:itemIconHtml('b260', '🎈'),  v:playerInventory.balloon260,   lbl:'260氣球',cls:'inv-balloon', dur:null },
     { e:itemIconHtml('round', '⚪'), v:playerInventory.roundBalloon, lbl:'圓氣球', cls:'inv-round',   dur:null },
-    { e:'⚔️', v:ci.basicSword     ||0,         lbl:'氣球劍', cls:'inv-sword',   dur:eqSword },
-    { e:'🔨', v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
+    { e:weaponIconHtml('basicSword'), v:ci.basicSword     ||0,         lbl:'氣球劍', cls:'inv-sword',   dur:eqSword },
+    { e:weaponIconHtml('basicHammer'), v:ci.basicHammer    ||0,         lbl:'氣球槌', cls:'inv-hammer',  dur:eqHammer },
     { e:'🍭', v:ci.balloonLollipop||0,         lbl:'棒棒糖', cls:'inv-candy',   dur:null },
     // v0.3.32：重要物品
     ...Object.values(playerInventory.keyItems || {}).filter(k => k && k.id && k.id !== 'orangeKingWeaknessNote01').map(k => /* v0.3.62：觀察筆記改用下方可閱讀的專用列 */
@@ -17727,7 +17705,8 @@ function restart(opts) {
   currentRunStats.chainImpacts            = 0;  // v0.3.68
   currentRunStats.doubleKills             = 0;
   currentRunStats.chainBonusScore         = 0;
-  try { chainFx.length = 0; } catch (e) {}
+  currentRunStats.chainKeys               = [];
+  try { chainFx.length = 0; weaponPopFx.length = 0; player._popSwing_sword = null; player._popSwing_hammer = null; } catch (e) {}
   // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
   dogNoseGlow  = 0;
   dogNoseLevel = 0;
@@ -17739,7 +17718,8 @@ function restart(opts) {
   initEquippedSword();
   initEquippedHammer();
   normalizeActiveWeaponSlot();         // 確保 activeSlot 正確
-  applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
+  // v0.3.69：不再每次 restart 都自動配發 999 測試武器（這是測試版一直有無限武器的根本原因）；只有明確的測試入口開啟後才重新套用
+  if (adventureTestLoadoutActive) applyAdventureTestLoadout();
 
   // Reset world
   cameraX    = 0;
@@ -18070,7 +18050,7 @@ function renderGuidebook() {
 
     card.innerHTML = `
       <div class="recipe-card__header">
-        <span class="recipe-card__emoji">${recipe.emoji}</span>
+        <span class="recipe-card__emoji">${(recipe.id === 'basicSword' || recipe.id === 'basicHammer') ? weaponIconHtml(recipe.id) : recipe.emoji}</span>
         <span class="recipe-card__name">${recipe.name}</span>
         ${ownedLabel}
       </div>
@@ -18870,6 +18850,8 @@ const RPG_SPEAKERS = {
 //   name / danger 只填目前規格已確認的內容；其他危險類型請先確認台詞再加入
 const RPG_POP_TARGETS = {
   orangeOil: { name: '橘子怪', danger: '橘子皮的油' },
+  // v0.3.69：武器碰到尖刺（事件 ID rpg003_weapon_pop:spike，和橘子怪分開記錄首次觀看）
+  spike:     { name: '尖刺', spiritText: '尖刺會把氣球刺破啊！武器一碰到尖刺就會直接爆掉，要記得{b:跳過去}，不要攻擊它！' },
 };
 // 007：秘笈台詞依配方區分（同一張書本圖）；沒有確認台詞的配方不播 RPG，維持原本通知
 // v0.3.62：判斷「現在是不是用手機觸控按鈕在玩」— 看手機操作鍵是否真的顯示在畫面上（不只看螢幕寬度）
@@ -18992,7 +18974,7 @@ function rpgBuildScene(id, extra) {
     const key = id.split(':')[1]; const t = RPG_POP_TARGETS[key]; if (!t) return null;
     return { id, title: '武器爆了：' + t.name, modeControlled: true, saveHistory: true, left: 'balloonv_shocked', right: null, pages: [
       { sp: 'balloonv', face: 'balloonv_shocked', text: '啊啊啊！！！我的武器爆了！' },
-      { sp: 'spirit', face: 'star_spirit_angry', right: 'star_spirit_angry', text: '你怎麼認為可以攻擊' + t.name + '？！它的' + t.danger + '會把氣球弄爆啊！！' } ] };
+      { sp: 'spirit', face: 'star_spirit_angry', right: 'star_spirit_angry', text: t.spiritText || ('你怎麼認為可以攻擊' + t.name + '？！它的' + t.danger + '會把氣球弄爆啊！！') } ] };
   }
   if (id.startsWith('rpg007_recipe:')) {
     const key = id.split(':')[1]; const lines = RPG_RECIPE_LINES[key]; if (!lines) return null;
@@ -19942,7 +19924,7 @@ function advOnAttemptStart() {
   let run = d.active;
   if (run && (run.status === 'completed' || run.status === 'abandoned')) { run = null; d.active = null; }
   if (!run) {
-    if (sid === '1-1' && !test) run = advNewRun('in_progress');
+    if (sid === '1-1' && !test) { run = advNewRun('in_progress'); adventureTestLoadoutActive = false; } // v0.3.69：正式冒險開始 → 不再沿用測試裝備
     else if (test) run = advNewRun('test_only', String(test));
     else { advAttempt = null; advSave(d); return; } // 完成後重玩單關等「自由遊玩」：不建立挑戰
     d.active = run;
@@ -19950,6 +19932,7 @@ function advOnAttemptStart() {
     // 回到 1-1 重新出發（不是 1-1 的重試）→ 明確封存舊紀錄，開新的一趟
     advArchiveRun(d, run, run.status === 'test_only' ? 'test_only' : 'abandoned');
     run = advNewRun(test ? 'test_only' : 'in_progress', test ? String(test) : null);
+    if (!test) adventureTestLoadoutActive = false; // v0.3.69
     d.active = run;
   } else if (test) {
     advTaint(run, String(test));
@@ -20022,6 +20005,7 @@ function advOnAttemptCleared() {
     coins: [...a.coins], b260: [...a.b260], round: [...a.round], roundSpawned: a.roundSpawned,
     enemies: { normal: [...a.enemies.normal], big: [...a.enemies.big] }, explore: [...a.explore],
     bossDefeated: !!a.bossDefeated, hpLost: a.hpLost, bringDog: a.bringDog,
+    chain: a.chain ? { doubleKills: a.chain.doubleKills, impacts: a.chain.impacts, score: a.chain.score, keys: a.chain.keys.slice() } : { doubleKills: 0, impacts: 0, score: 0, keys: [] },  // v0.3.69
   };
   run.totalActualHpLost = +(run.totalActualHpLost + a.hpLost).toFixed(2);
   run.lastAttemptCleared = true; run.live = null; run.updatedAt = Date.now();
@@ -20161,7 +20145,10 @@ function advComputeScore(run) {
   const raw = { collect: collect.score, explore: explore.score, combat: combatScore, survival: survivalScore, efficiency: effScore };
   Object.keys(raw).forEach(k => { raw[k] = Math.max(0, Math.min(R.max[k], raw[k])); });
   const rounded = advRoundParts(raw);
-  const total = Math.max(0, Math.min(10000, rounded.total));
+  // v0.3.69：氣球槌連鎖撞擊加分（撞死 +50、撞傷 +15）加在五大分項之外 → 畫面上加多少，總成績就多多少
+  const chainBonus = Math.max(0, Math.round(advChainBonus(run)));
+  const chainDK = advSumStages(run, r => (r.chain && r.chain.doubleKills) || 0), chainImp = advSumStages(run, r => (r.chain && r.chain.impacts) || 0);
+  const total = Math.max(0, Math.min(10000, rounded.total)) + chainBonus;
   const rk = advRankFor(total);
   return {
     scoreVersion: ADV_SCORE_VERSION, gameVersion: GAME_VERSION, catalogVersion: ADV_RESOURCE_CATALOG.version,
@@ -20172,8 +20159,9 @@ function advComputeScore(run) {
       combat: { normal, big, earnedWeight: earnedW, totalWeight: totalW, bossDefeated, otherEnemies: [] },
       survival: { totalActualHpLost: hpLost, totalFailures: defeats, deaths: run.deaths, timeouts: run.timeouts, manualRetries: run.manualRetries, interruptions: run.interruptions, failures: run.failures, damageScore, challengeScore, failureScore },
       efficiency: eff, failedAttemptTime: run.failedAttemptTime,
+      chain: { doubleKills: chainDK, impacts: chainImp, bonus: chainBonus },
     },
-    rawScores: raw, scores: rounded.parts, total, rank: rk.rank, rankTitle: rk.title,
+    rawScores: raw, scores: rounded.parts, chainBonus, total, rank: rk.rank, rankTitle: rk.title,
     subParts: { collect: collect.parts, explore: explore.parts },
   };
 }
@@ -20260,6 +20248,7 @@ function advShowResumePrompt(run) {
 }
 function advHideResumePrompt() { advResumePromptOpen = false; const el = document.getElementById('adv-resume-overlay'); if (el) el.style.display = 'none'; lastTime = 0; fixedStepAccumulator = 0; }
 function advDoAbandonAndStart() {
+  adventureTestLoadoutActive = false; // v0.3.69
   const d = advLoad(); if (d.active) { advArchiveRun(d, d.active, 'abandoned'); d.active = null; advSave(d); }
   advHideResumePrompt();
   advOnAttemptStart(); // 目前畫面就是開機的 1-1 → 新的一趟
@@ -20382,7 +20371,7 @@ function advShowFinalResults(snap, best) {
     +   '<div class="adv-final-head">'
     +     '<div class="adv-final-title">派對島大冒險完成！</div>'
     +     '<div class="adv-final-sub">第一章＋第二章｜完整冒險成績</div>'
-    +     '<div class="adv-score-line"><span class="adv-score-total">' + advFmt(snap.total) + '</span><span class="adv-score-max"> / 10,000</span></div>'
+    +     '<div class="adv-score-line"><span class="adv-score-total">' + advFmt(snap.total) + '</span><span class="adv-score-max"> / 10,000' + (snap.chainBonus ? '（含連鎖撞擊加分 +' + advFmt(snap.chainBonus) + '）' : '') + '</span></div>'
     +     '<div class="adv-best-line">' + bestBadge + '<span>' + bestLine + '</span></div>' + v1Line
     +   '</div>'
     +   '<div class="adv-rank adv-rank--' + snap.rank + '"><div class="adv-rank-letter">' + snap.rank + '</div><div class="adv-rank-title">' + snap.rankTitle + '</div></div>'
@@ -20399,6 +20388,7 @@ function advShowFinalResults(snap, best) {
     +     '<div class="adv-card-note">隱藏物需要帶氣球小狗才找得到。</div></div>'
     +   '<div class="adv-card"><div class="adv-card-title">⚔️ 戰鬥　' + advFmt(S.combat) + ' / 2,000</div>'
     +     row('一般蠍子（×1）', xy(raw.combat.normal)) + row('大型蠍子（×4）', xy(raw.combat.big)) + row('橘子王', raw.combat.bossDefeated ? '已擊敗 👑' : '未擊敗')
+    +     (raw.chain ? row('連鎖撞擊加分', 'DOUBLE KILL ' + raw.chain.doubleKills + '・撞傷 ' + raw.chain.impacts + '　+' + advFmt(raw.chain.bonus)) : '')
     +     '<div class="adv-card-note">橘子怪家族只能閃避，不列入擊敗率。</div></div>'
     +   '<div class="adv-card"><div class="adv-card-title">❤️ 生存　' + advFmt(S.survival) + ' / 1,500</div>'
     +     row('累計實際損失 HP', raw.survival.totalActualHpLost)
@@ -20430,6 +20420,7 @@ function advFinalGoHome() {
 }
 // 重新開始一趟完整冒險：新的 challengeId，從 1-1 出發（背包 / 秘笈 / 身份等永久資料不清除）
 function advStartNewAdventure() {
+  adventureTestLoadoutActive = false; // v0.3.69
   advHideFinalResults();
   try { closeHomeScreen(); } catch (e) {}
   const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none';
@@ -20530,6 +20521,10 @@ const SFX_DEFS = {
   scorpionKnockback: { path: 'enemy/scorpion_knockback.mp3',  vol: 0.85, minGapMs: 60, maxVoices: 2 },      // 被氣球槌擊飛（一般 / 重甲共用）
   // v0.3.68：Double Kill（正式路徑：assets/audio/sfx/enemy/sfx_double_kill.mp3）
   doubleKill:     { path: 'enemy/sfx_double_kill.mp3', vol: 0.9, minGapMs: 250, maxVoices: 1 },
+  // v0.3.69：氣球武器爆裂（尖刺／橘子怪／耐用度歸零；同一次爆裂只播一次）
+  balloonPop:     { path: 'weapon/sfx_balloon_pop.mp3', vol: 0.9, minGapMs: 120, maxVoices: 2 },
+  // v0.3.69：世界地圖飛行屋移動（正式檔名 ui_flying_home.mp3；GitHub 目前上傳的是 ui_flying_home.mp3.mp3 → 暫時當備用，改名後自動只用正式檔名）
+  flyingHome:     { path: 'ui/ui_flying_home.mp3', altPaths: ['ui/ui_flying_home.mp3.mp3'], vol: 0.75, minGapMs: 200, maxVoices: 1 },
   bossHurt:       { path: 'enemy/giant_scorpion_hurt.mp3',    vol: 0.9, minGapMs: 120, maxVoices: 1, bufferOf: 'giantScorpionHurt' }, // 橘子王真的扣 HP（暫時共用重甲蠍子受傷聲）
   // 道具 / 介面
   balloonPickup:  { path: 'item/balloon_pickup.mp3',          vol: 0.75, minGapMs: 60, maxVoices: 2 },      // 260 / 圓氣球真的加入背包
@@ -20847,7 +20842,8 @@ loadLevel(0);        // 載入第 1 關
 initEquippedSword(); // 初始化裝備（只執行一次）
 initEquippedHammer();
 normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
-applyAdventureTestLoadout();          // 測試版：runtime-only sword + hammer
+// v0.3.69：開機不再自動配發 999 測試武器（原本只要版本名稱有 -test- 就會配發）
+try { weaponSanitizeSave(); initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) { console.warn('[Weapon] 存檔檢查失敗', e); }
 try { advBoot(); } catch (e) { console.warn('[Score] 開機初始化失敗', e); } // v0.3.63：完整冒險挑戰紀錄
 
 // 測試版：綁定暫停畫面測試按鈕
@@ -21154,8 +21150,12 @@ function h2PreloadCore() {
   H2.coreLoading = true;
   h2LoadFrame();
   h2CssAsset(H2_UI.plank, '--h2-img-plank', 'h2-plank-ok');
-  h2CssAsset(H2_UI.arrowL, '--h2-img-arrow-l', null);
-  h2CssAsset(H2_UI.arrowR, '--h2-img-arrow-r', null).then(() => { if (H2.img[H2_UI.arrowL] && H2.img[H2_UI.arrowL].status === 'ok' && H2.img[H2_UI.arrowR].status === 'ok') h2SkinSet(null, null, ['h2-arrow-ok']); });
+  // v0.3.69：左右箭頭要「兩張都載好」才換上正式圖。原本只在右箭頭載好的當下檢查左箭頭 —
+  //   實際網路上左箭頭常比右箭頭晚到 → 「已載入」標記永遠沒加上 → 一直顯示沒有圖的備用圓形（小V左右的轉身鈕看起來是空白圓圈）
+  Promise.all([h2CssAsset(H2_UI.arrowL, '--h2-img-arrow-l', null), h2CssAsset(H2_UI.arrowR, '--h2-img-arrow-r', null)]).then(() => {
+    const okL = H2.img[H2_UI.arrowL] && H2.img[H2_UI.arrowL].status === 'ok', okR = H2.img[H2_UI.arrowR] && H2.img[H2_UI.arrowR].status === 'ok';
+    h2SkinSet(null, null, [okL && okR ? 'h2-arrow-ok' : 'h2-arrow-fail']);
+  });
   h2CssAsset(H2_UI.window, '--h2-img-continent', null);   // 暫停選單背景（目前所在大陸的風景；與小V之家窗景同一張）
   [['btnGreen', 'green'], ['btnYellow', 'yellow'], ['btnBlue', 'blue'], ['btnPurple', 'purple'], ['btnRed', 'red']].forEach(([k, c]) => h2CssAsset(H2_UI[k], '--h2-img-btn-' + c, 'h2-btn-' + c + '-ok'));
   h2SetImgEl(h2$('h2-bg-window'), H2_UI.window);
@@ -22284,7 +22284,15 @@ function h2MapOpen() {
     if (a.status !== 'ok') { const info = h2$('h2-map-info'); if (info) info.innerHTML = '<span>地圖圖片載入失敗（' + h2Esc(c.image) + '）。請檢查網路後再打開一次。</span>'; }
   });
 }
+// v0.3.69：飛行屋移動音效（ui_flying_home）— 同時只會有一個；抵達、跳過、離開地圖都會停
+function h2MapFlySfx(on) {
+  try {
+    if (H2.flySfx) { sfxStopVoice(H2.flySfx, on ? 0 : 120); H2.flySfx = null; }
+    if (on) { const v = sfxPlay('flyingHome'); H2.flySfx = (v && v !== true) ? v : null; }
+  } catch (e) { H2.flySfx = null; }
+}
 function h2MapClose() {
+  h2MapFlySfx(false);
   if (H2.map && H2.map.mode === 'flight') return;   // 飛行中由動畫自己結束
   H2.map = null;
   const wrap = h2$('h2-map-wrap'); if (wrap) { wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true'); }
@@ -22316,6 +22324,7 @@ function h2MapDepartFlight() {
     h2MapRender({ keepInfo: true });
     const info = h2$('h2-map-info'); if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！前往 <b>' + h2Esc(to.label + ' ' + h2MapNodeName(to.stageId)) + '</b></span><small>點一下畫面可以跳過</small>';
     const DUR = 1500, t0 = performance.now();
+    h2MapFlySfx(true);                                                     // v0.3.69：飛行屋真的開始移動才播
     return new Promise(resolve => {
       const step = now => {
         const k = Math.min(1, (now - t0) / DUR), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
@@ -22323,6 +22332,7 @@ function h2MapDepartFlight() {
         home.style.left = x + '%'; home.style.top = y + '%';
         if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
         home.style.left = to.x + '%'; home.style.top = to.y + '%';
+        h2MapFlySfx(false);                                                // 抵達（或被跳過）→ 立即停止
         setTimeout(() => {
           H2.flying = false; H2.map = null;
           wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true');
@@ -22331,7 +22341,7 @@ function h2MapDepartFlight() {
       };
       requestAnimationFrame(step);
     });
-  } catch (e) { H2.flying = false; H2.map = null; return null; }
+  } catch (e) { H2.flying = false; H2.map = null; h2MapFlySfx(false); return null; }
 }
 // ── 開發工具：節點定位（只有 ?devtools=1）──
 function h2MapRenderDev() {
@@ -22458,7 +22468,7 @@ function p2DoTestReset() {
   try { resetCurrentChallenge(); } catch (e) {}
   try { Object.assign(stageFlowHints, { stageStart: {}, roundBalloonHintShown: false, hammerCraftHintShown: false, scorpionHammerHintShown: false, hammerUsedOnScorpion: false }); } catch (e) {}
   try { prepCheckpoint = null; advLastSnapshot = null; nextBringDog = false; bringBalloonDog = false; levelStartBringDog = false; } catch (e) {}
-  try { initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); applyAdventureTestLoadout(); } catch (e) {}
+  try { adventureTestLoadoutActive = false; initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) {}   // v0.3.69：回到正式新手流程的裝備（不再配發 999 測試武器）
   try { H2.pendingSummary = null; H2.summary = null; } catch (e) {}
   const after = { profile: localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY), wallet: localStorage.getItem(getPlayerScopedStorageKey('balloonVAdventureWallet')) };
   console.log('[TestReset] 完成；共用資料未變動：', before.profile === after.profile && before.wallet === after.wallet);
@@ -22472,27 +22482,30 @@ if (typeof window !== 'undefined') window.p2ConfirmTestReset = p2ConfirmTestRese
 //   ・B 受傷但沒死（重裝蠍子）→ 撞擊加分（比雙殺少），小字回饋，不顯示 DOUBLE KILL、不播雙殺音效
 //   ・原本的擊飛（scorpion_knockback）、受傷（scorpion_hurt／giant_scorpion_hurt）音效照常播放
 //   ・同一次擊飛、同一組敵人只算一次（擊飛物命中一次就消失，並以 A×B 記錄防重複）；本版不做 Triple Kill
-//  ⚠ 加分數值是「測試參數」（尚未由使用者決定）：參考本關分數 calcAdventureScore（擊敗一隻敵人 30 分）
+//  加分數值已由使用者確認：撞死 +50、撞傷 +15（本關分數與七關正式挑戰總分都會計入，同一組只算一次）
 // ════════════════════════════════════════════════════════════════════
-const CHAIN_HIT_TEST_PARAMS = {
-  testOnly: true,          // 尚未核准的測試值
-  impactBonus: 15,         // 撞傷但沒撞死：約半隻敵人的分數
-  doubleKillBonus: 50,     // 撞死：B 原本的 30 分之外再加 50
+const CHAIN_HIT_TEST_PARAMS = {   // v0.3.69：數值已由使用者確認（名稱沿用，避免改動既有呼叫）
+  testOnly: false,
+  impactBonus: 15,         // 撞傷但沒撞死
+  doubleKillBonus: 50,     // 撞死（B 原本的擊敗分數照算）
 };
 let chainFx = [];
 function chainImpactResult(s, e, res) {
   if (!s || !e || !res) return;                       // false＝這次沒有真的扣到 HP（例如受擊冷卻中）
-  if (!s.chainAwarded) s.chainAwarded = new Set();
-  const key = (s.sourceId != null ? s.sourceId : 'a') + '>' + (e.runtimeId != null ? e.runtimeId : 'b');
-  if (s.chainAwarded.has(key)) return;
-  s.chainAwarded.add(key);
+  // v0.3.69：同一組「被擊飛的 A × 被撞的 B」在這次關卡嘗試只結算一次（本關分數與正式挑戰用同一把鑰匙）
+  const key = (s.sourceAdvId || ('r' + s.sourceId)) + '>' + (e.advId || ('r' + e.runtimeId));
+  if (!Array.isArray(currentRunStats.chainKeys)) currentRunStats.chainKeys = [];
+  if (currentRunStats.chainKeys.includes(key)) return;
+  currentRunStats.chainKeys.push(key);
   const cx = e.x + e.w / 2, cy = e.y;
   if (res === 'killed') {
+    try { advNoteChain(s, e, 'double', CHAIN_HIT_TEST_PARAMS.doubleKillBonus); } catch (er) {}   // v0.3.69：同時記入正式挑戰（同一組只記一次）
     currentRunStats.doubleKills = (currentRunStats.doubleKills || 0) + 1;
     currentRunStats.chainBonusScore = (currentRunStats.chainBonusScore || 0) + CHAIN_HIT_TEST_PARAMS.doubleKillBonus;
     chainFx.push({ kind: 'double', x: cx, y: cy, t: 0, life: 70, bonus: CHAIN_HIT_TEST_PARAMS.doubleKillBonus });
     try { sfxPlay('doubleKill'); } catch (er) {}
   } else {
+    try { advNoteChain(s, e, 'impact', CHAIN_HIT_TEST_PARAMS.impactBonus); } catch (er) {}
     currentRunStats.chainImpacts = (currentRunStats.chainImpacts || 0) + 1;
     currentRunStats.chainBonusScore = (currentRunStats.chainBonusScore || 0) + CHAIN_HIT_TEST_PARAMS.impactBonus;
     chainFx.push({ kind: 'impact', x: cx, y: cy, t: 0, life: 45, bonus: CHAIN_HIT_TEST_PARAMS.impactBonus });
@@ -22539,3 +22552,148 @@ if (typeof window !== 'undefined') window.debugChainHit = function () { const o 
   try { const ab = h2$('btn-pause-run-ab'), body = h2$('p2-dev-body'); if (ab && body) { ab.className = 'h2-pill h2-pill--purple h2-pill--sm'; body.appendChild(ab); } } catch (e) {}
   try { const t = h2$('p2-dev-toggle'); if (t) t.addEventListener('click', e => { e.preventDefault(); p2ToggleDev(); }); } catch (e) {}
 })();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.69：武器耐用度正式回歸、氣球武器立即爆裂、測試裝備只在明確的測試入口
+//  ・正式試玩數值：氣球劍最大耐用度 10、氣球槌最大耐用度 6（RECIPES.durability）
+//  ・資料結構不變：庫存 = playerInventory.craftedItems.basicSword / basicHammer（把數），
+//                  目前裝備 = equippedSword / equippedHammer（執行期），剩餘耐用度存 playerInventory.equippedSwordDur / equippedHammerDur
+//  ・正常耗盡與特殊危險物立即爆裂，都走同一個 weaponBreak()：庫存 −1 → 有備用就換下一把（滿耐用度）→ 沒有就變成無武器
+//  ・測試裝備（999）：只有明確的測試入口（暫停選單「測試正式第二章／測試 2-4 橘子王」等）才會開啟，
+//    有 HUD 標示「🧪 測試裝備」；耐用度不寫進背包存檔；回到正常流程（出發下一關、重新開始測試、新冒險）就關閉
+// ════════════════════════════════════════════════════════════════════
+var adventureTestLoadoutActive = false;
+function weaponRecipeMax(id) { const r = RECIPES.find(x => x.id === id); return r ? r.durability : 0; }
+function weaponIsTestLoadout(slot) { const eq = slot === 'hammer' ? equippedHammer : equippedSword; return adventureTestLoadoutActive && eq && eq.maxDur >= 990; }
+// 開機一次：舊測試存檔的安全修正（只修「不可能是正常取得」的數值，不刪背包）
+//   A. 測試裝備遺留：剩餘耐用度 > 最大耐用度（例如 998）→ 改回這把的最大耐用度（庫存把數不動）
+//   B. 合法武器資料：把數 > 0、耐用度在 1～最大值之間 → 不動
+//   C. 沒有這種武器卻留著耐用度 → 歸零
+function weaponSanitizeSave() {
+  const ci = playerInventory.craftedItems || {}; const fixes = [];
+  [['basicSword', 'equippedSwordDur'], ['basicHammer', 'equippedHammerDur']].forEach(([id, key]) => {
+    const max = weaponRecipeMax(id), n = Math.max(0, Math.floor(Number(ci[id]) || 0)), d = Number(playerInventory[key]) || 0;
+    if (ci[id] !== undefined && ci[id] !== n) { ci[id] = n; fixes.push(id + ' 把數 → ' + n); }
+    if (n <= 0 && d !== 0) { playerInventory[key] = 0; fixes.push(key + ' ' + d + ' → 0（沒有這種武器）'); }
+    else if (n > 0 && (d > max || d < 0)) { playerInventory[key] = max; fixes.push(key + ' ' + d + ' → ' + max + '（超過最大耐用度，視為測試裝備遺留）'); }
+  });
+  if (fixes.length) { saveInventory(); console.log('[Weapon] 舊存檔安全修正：', fixes); }
+  return fixes;
+}
+// 共用的武器銷毀流程（正常耗盡＝worn；尖刺＝spike；橘子怪＝orangeOil）
+function weaponBreak(slot, reason, at) {
+  const eq = slot === 'hammer' ? equippedHammer : equippedSword;
+  if (!eq || !eq.id) return false;
+  const id = slot === 'hammer' ? 'basicHammer' : 'basicSword', key = slot === 'hammer' ? 'equippedHammerDur' : 'equippedSwordDur';
+  const test = weaponIsTestLoadout(slot);
+  const ci = playerInventory.craftedItems || (playerInventory.craftedItems = {});
+  let left = 0;
+  if (!test) {
+    ci[id] = Math.max(0, (ci[id] || 0) - 1);                              // 庫存只扣這一把
+    left = ci[id];
+  }
+  if (left > 0) { eq.maxDur = weaponRecipeMax(id); eq.currentDur = eq.maxDur; }   // 有備用 → 換上下一把（滿耐用度）
+  else { eq.id = null; eq.name = ''; eq.maxDur = 0; eq.currentDur = 0; }
+  if (!test) { playerInventory[key] = eq.currentDur; saveInventory(); }
+  if (slot === 'hammer' && !eq.id) activeSlot = equippedSword.id ? 'sword' : null;
+  // 爆裂演出（每次銷毀只播一次）
+  try { sfxPlay('balloonPop'); } catch (e) {}
+  const p = at || { x: player.x + (player.facingRight ? player.w + 24 : -24), y: player.y + player.h * 0.45 };
+  weaponPopFx.push({ x: p.x, y: p.y, t: 0, life: 26, slot, seed: Math.random() * 6.28 });
+  const name = slot === 'hammer' ? '氣球槌' : '氣球劍';
+  const tail = left > 0 ? '，換上備用的' + name + '（還有 ' + left + ' 把）' : '，目前沒有' + name + '了';
+  if (reason === 'worn') showHint('💥 ' + name + '用到沒氣了' + tail, 200);
+  else showHint('💥 ' + name + (reason === 'spike' ? '碰到尖刺爆掉了' : '碰到橘子油爆掉了') + tail, 220);
+  try { if (typeof h2ScheduleRefresh === 'function') h2ScheduleRefresh(); } catch (e) {}
+  console.log('[Weapon] 爆裂', slot, reason, '剩餘把數', left, test ? '（測試裝備：不動背包）' : '');
+  return true;
+}
+// 武器有效碰撞範圍碰到「會刺破氣球」的危險物 → 這一次攻擊就此結束（同一次攻擊只結算一次）
+//   尖刺：關卡資料的 spikes（buildSpikes 建立、和小V踩到會受傷的是同一份；背景裝飾不在這裡）
+//   橘子怪：orangeNemeses（type balloonNemesis）、chimneyOranges、dualNozzleOranges、fanOranges、projectileOranges 的「本體」碰撞框
+//           （和小V身體碰到會受傷用的是同一個本體框；油幕、油彈、背景橘子、工廠物件、2-4 橘子王都不算）
+function weaponHazardAt(ax, ay, aw, ah) {
+  if (typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive()) return null;   // 2-4 由金色油管環的既有規則處理
+  for (const s of spikes) if (rectsOverlap(ax, ay, aw, ah, s.x, s.y, s.w, s.h)) return { kind: 'spike', x: s.x + s.w / 2, y: s.y };
+  for (const o of orangeNemeses) if (o.active !== false && rectsOverlap(ax, ay, aw, ah, o.x + 4, o.y + 4, o.w - 8, o.h - 8)) return { kind: 'orangeOil' };
+  for (const arr of [chimneyOranges, dualNozzleOranges, fanOranges]) for (const o of arr) if (o.active && rectsOverlap(ax, ay, aw, ah, o.x, o.y, o.w, o.h)) return { kind: 'orangeOil' };
+  for (const po of projectileOranges) { if (!po.active) continue; const b = getProjectileOrangeBodyHitbox(po); if (rectsOverlap(ax, ay, aw, ah, b.x, b.y, b.w, b.h)) return { kind: 'orangeOil' }; }
+  return null;
+}
+function weaponPopCheck(slot, ax, ay, aw, ah) {
+  const eq = slot === 'hammer' ? equippedHammer : equippedSword;
+  if (!eq || !eq.id) return false;
+  const swing = slot === 'hammer' ? player.hammerSwingId : player.swordSwingId;
+  if (player['_popSwing_' + slot] === swing) return true;                // 這一次攻擊已經爆了：剩下的影格不再造成傷害
+  const hz = weaponHazardAt(ax, ay, aw, ah); if (!hz) return false;
+  player['_popSwing_' + slot] = swing;
+  if (slot === 'hammer') { player.meleeHammerActive = 0; player.hammerHit = true; } else { player.meleeActive = 0; player.meleeHit = true; }
+  weaponBreak(slot, hz.kind, { x: ax + aw / 2, y: ay + ah / 2 });
+  try { if (typeof rpgOnWeaponPopped === 'function') rpgOnWeaponPopped(hz.kind); } catch (e) {}   // 首次教學（依顯示模式）；最多一個對話
+  return true;
+}
+// 爆裂碎片（純畫面，不參與碰撞）
+let weaponPopFx = [];
+function updateWeaponPopFx(dt) { for (let i = weaponPopFx.length - 1; i >= 0; i--) { const f = weaponPopFx[i]; f.t += (dt || 1); if (f.t >= f.life) weaponPopFx.splice(i, 1); } }
+function drawWeaponPopFx(cx) {
+  weaponPopFx.forEach(f => {
+    const k = f.t / f.life, sx = f.x - cx, a = 1 - k;
+    const cols = f.slot === 'hammer' ? ['#ff6fae', '#8a5cd6', '#8ec8ff'] : ['#ffe27a', '#ffd04a', '#4a7fe0'];
+    ctx.save(); ctx.globalAlpha = Math.max(0, a);
+    for (let i = 0; i < 9; i++) {
+      const ang = f.seed + i * 0.698, r = 6 + k * 34;
+      ctx.fillStyle = cols[i % cols.length];
+      ctx.beginPath(); ctx.ellipse(sx + Math.cos(ang) * r, f.y + Math.sin(ang) * r * 0.8 + k * k * 12, 5 - k * 3, 2.5, ang, 0, Math.PI * 2); ctx.fill();
+    }
+    if (k < 0.7) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 ' + Math.round(20 + k * 8) + 'px "Nunito", sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = '#5a1300'; ctx.strokeText('啪！', sx, f.y - 18 - k * 16); ctx.fillStyle = '#fff3a0'; ctx.fillText('啪！', sx, f.y - 18 - k * 16); }
+    ctx.restore();
+  });
+}
+// 武器圖示（正式 PNG；載不到時換回文字）— 背包、暫停背包、結算、舊版秘笈共用
+function weaponIconHtml(id) { return (typeof h2Icon === 'function') ? h2Icon(id, 'wpn-icon') : (id === 'basicHammer' ? '🔨' : '⚔️'); }
+// HUD 用的武器小圖（畫布）
+const weaponHudImgs = {};
+function weaponHudImg(id) {
+  let s = weaponHudImgs[id];
+  if (!s) {
+    s = weaponHudImgs[id] = { img: new Image(), ok: false, i: 0 };
+    const path = (H2_ICON[id] || {}).path; const cands = path ? getAssetSourceCandidates(path).map(c => c.url) : [];
+    s.img.onload = () => { s.ok = true; }; s.img.onerror = () => { if (s.i < cands.length) s.img.src = cands[s.i++]; };
+    if (cands.length) s.img.src = cands[s.i++];
+  }
+  return s.ok ? s.img : null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.69：連鎖撞擊／Double Kill 正式計入七關正式挑戰
+//  ・每個有效事件以「被擊飛的 A × 被撞的 B」（關卡內穩定 ID）記一次，存在這次關卡嘗試裡
+//  ・通關時跟著本關成果一起提交（同一關以通關那一次為準，取代舊成果，不相加；失敗／重試的嘗試不計）
+//  ・總分 = 原本五大分項（上限 10,000）＋ 連鎖撞擊加分（撞死 +50、撞傷 +15）
+// ════════════════════════════════════════════════════════════════════
+function advNoteChain(s, e, kind, bonus) {
+  if (!advAttempt || advAttempt.ended) return;
+  if (!advAttempt.chain) advAttempt.chain = { keys: [], doubleKills: 0, impacts: 0, score: 0 };
+  const key = (s.sourceAdvId || ('r' + s.sourceId)) + '>' + (e.advId || ('r' + e.runtimeId));
+  if (advAttempt.chain.keys.includes(key)) return;
+  advAttempt.chain.keys.push(key);
+  if (kind === 'double') advAttempt.chain.doubleKills++; else advAttempt.chain.impacts++;
+  advAttempt.chain.score += bonus;
+}
+function advChainBonus(run) { return advSumStages(run, r => (r.chain && r.chain.score) || 0); }
+// 製作成功 → 手上沒有這種武器時立刻裝上（暫停中用秘笈做的也能馬上用）；已經有一把在用就只是多一把備用
+(function weaponInstall() {
+  if (typeof globalThis === 'undefined') return;
+  const orig = globalThis.craftItem; if (typeof orig !== 'function' || orig._wpnWrapped) return;
+  const w = function (recipeId) {
+    const ok = orig.apply(this, arguments);
+    try {
+      if (ok && !adventureTestLoadoutActive) {
+        if (recipeId === 'basicSword' && !equippedSword.id) { playerInventory.equippedSwordDur = 0; initEquippedSword(); normalizeActiveWeaponSlot(); }
+        if (recipeId === 'basicHammer' && !equippedHammer.id) { playerInventory.equippedHammerDur = 0; initEquippedHammer(); normalizeActiveWeaponSlot(); }
+      }
+    } catch (e) { console.warn('[Weapon] 製作後裝備失敗', e); }
+    return ok;
+  };
+  Object.keys(orig).forEach(k => { w[k] = orig[k]; }); w._wpnWrapped = true; w._h2wrapped = orig._h2wrapped; globalThis.craftItem = w;
+})();
+if (typeof window !== 'undefined') window.debugWeapons = function () { const o = { sword: Object.assign({}, equippedSword), hammer: Object.assign({}, equippedHammer), slot: activeSlot, stock: Object.assign({}, playerInventory.craftedItems), saved: { sword: playerInventory.equippedSwordDur, hammer: playerInventory.equippedHammerDur }, testLoadout: adventureTestLoadoutActive, max: { sword: weaponRecipeMax('basicSword'), hammer: weaponRecipeMax('basicHammer') } }; console.log('[Weapon]', o); return o; };

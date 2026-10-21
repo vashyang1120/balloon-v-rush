@@ -3533,9 +3533,10 @@ html:not(.h2-plank-ok) .h2-plank { background: linear-gradient(#c58a4b, #8f5627)
 .h2-arr--r { background-image: var(--h2-img-arrow-r, none) !important; }
 .h2-arr::after { content: ''; position: absolute; inset: -5px -3px; }
 .h2-arr:disabled { opacity: 0.35; filter: grayscale(0.8); }
-html:not(.h2-arrow-ok) .h2-arr { background: #f0cf8e !important; border-radius: 50%; border: 2px solid #5e3517 !important; }
-html:not(.h2-arrow-ok) .h2-arr--l::before { content: '◀'; color: #5e3517; }
-html:not(.h2-arrow-ok) .h2-arr--r::before { content: '▶'; color: #5e3517; }
+/* v0.3.69：只有箭頭圖「真的載入失敗」才用備用圓形；載入中先不畫（避免一直卡在沒有圖的圓形） */
+html.h2-arrow-fail .h2-arr { background: #f0cf8e !important; border-radius: 50%; border: 2px solid #5e3517 !important; }
+html.h2-arrow-fail .h2-arr--l::before { content: '◀'; color: #5e3517; }
+html.h2-arrow-fail .h2-arr--r::before { content: '▶'; color: #5e3517; }
 
 /* ── 💡 教學小燈泡 ── */
 .h2-bulb { position: relative; flex: 0 0 auto; width: calc(var(--h2-head) * 0.82); height: calc(var(--h2-head) * 0.82); border-radius: 50% !important;
@@ -3624,7 +3625,9 @@ html:not(.h2-btn-red-ok) .h2-pill--red { background: #d9532e; }
   background: var(--h2-img-arrow-l, none) center / contain no-repeat; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4)); }
 .h2-turn--l { left: 0; } .h2-turn--r { right: 0; background-image: var(--h2-img-arrow-r, none); }
 .h2-turn::after { content: ''; position: absolute; inset: -6px; }
-html:not(.h2-arrow-ok) .h2-turn { background: #f0cf8e; border-radius: 50%; border: 3px solid #5e3517; }
+html.h2-arrow-fail .h2-turn { background: #f0cf8e; border-radius: 50%; border: 3px solid #5e3517; }
+html.h2-arrow-fail .h2-turn--l::before { content: '◀'; color: #5e3517; font-size: 1.3em; }
+html.h2-arrow-fail .h2-turn--r::before { content: '▶'; color: #5e3517; font-size: 1.3em; }
 .h2-hero-wrap.is-notes .h2-turn { display: none; }
 .h2-hero-hint { position: absolute; left: 50%; bottom: 0.2em; transform: translateX(-50%); z-index: 3; font-size: 0.92em; font-weight: 900; color: #fff; background: rgba(60,30,8,0.66); border-radius: 10px; padding: 0.12em 0.6em; white-space: nowrap; pointer-events: none; }
 .h2-nextline { position: absolute; z-index: 4; left: 50%; bottom: 1.9em; transform: translateX(-50%); max-width: 100%; }
@@ -3873,3 +3876,7 @@ body.h2-devtools .p2 .p2-dev { display: flex; flex: 0 1 auto; min-height: 0; mar
   #pause-overlay #pause-hint { display: none; }
 }
 #pause-overlay #btn-pause-rpg-mode { font-size: 0.94em; padding: 0 calc(var(--bh) * 0.2); }
+
+/* v0.3.69：正式武器圖示（背包、暫停背包、結算、舊版秘笈）— 和文字同高，取代 ⚔️／🔨 */
+img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -0.2em; display: inline-block; }
+.inv-item__icon img.wpn-icon, .recipe-card__emoji img.wpn-icon { width: 1.6em; height: 1.6em; }
