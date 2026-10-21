@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.69-weapon-durability-pop-score-ui-sfx-test-1';
-const BUILD_TIME   = '2026-10-21 14:00';
+const GAME_VERSION = 'adventure-v0.3.70-hud-tutorial-intro-pop-rpg-persistence-test-1';
+const BUILD_TIME   = '2026-10-21 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -701,6 +701,11 @@ function computeHeroArtKey() {
   // v0.3.46：F4 預覽王權劍 frame — 固定顯示該張
   const calibRoyal = getRoyalSwordCalibFrame();
   if (calibRoyal) return 'swordAttack0' + calibRoyal;
+  // v0.3.70：武器被尖刺／橘子怪弄爆 → 短暫顯示 hurt（驚嚇；獨立計時器，不是 player.invincible，不閃爍）
+  if (player.popScare > 0) {
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
+    return 'hurt';
+  }
   // ── 優先 0：槌子攻擊視覺動畫（hammerAnimTimer > 0）──
   // 01→02→03→04，一次性下砸動作，不循環
   if (player.hammerAnimTimer > 0) {
@@ -937,7 +942,8 @@ function getScorpionWalkImg() {
 // =============================================
 
 const HAMMER_ATTACK_SCALE_MULTIPLIER  = 1.383; // 1.465 × 0.944 = 1.383（補回縮小比率後再校正）
-const ROUND_BALLOON_CARRY_LIMIT       = 2;    // 玩家最多攜帶 2 顆圓氣球（可補充材料） // 補回素材端縮小比率（610→416px，需放大補回）
+// v0.3.70：取消「圓氣球最多攜帶 2 顆」（原 ROUND_BALLOON_CARRY_LIMIT）。背包可累積；各關圓氣球改成固定的關卡配置數（每次進關最多就是那幾顆，失敗會照原規則回滾）
+const HAMMER_ROUND_BALLOON_NEED       = 2;    // 製作一把氣球槌需要的圓氣球（只用在 1-2 通關的一次性材料保底）
 const HAMMER_ATTACK_FRAME_DUR        = 6;     // 每幀停留（game frames），接近 sword attack 節奏
 
 const HAMMER_ATTACK_ASSETS = [
@@ -3240,8 +3246,7 @@ function craftItem(recipeId) {
   saveInventory();
   // v0.3.35-fix-1：做出劍 / 槌後，結算頁與小V的家的「下一關」狀態要立刻解鎖（2-4 武器檢查）
   if (recipeId === 'basicSword' || recipeId === 'basicHammer') refreshAdventureProgressAfterCraft();
-  // v0.3.60：氣球槌真的做好、已加入物品資料 → 星靈教學（一般三段模式）
-  if (recipeId === 'basicHammer') { try { if (typeof rpgRequestUi === 'function') rpgRequestUi('rpg011_hammer_crafted', 800); } catch (e) {} }
+  // v0.3.70：氣球槌教學（rpg011）改在「冒險畫面中」播（第 4 頁要圈出右上角武器 HUD）：冒險中做的 → 回到遊戲就播；在小V的家／結算做的 → 下一關開始後播
   return true;
 }
 
@@ -3514,6 +3519,7 @@ function consumeSwordDurability() {
   // v0.3.69：耗盡 → 和尖刺／橘子怪立即爆裂共用同一個銷毀流程（庫存 −1、備用接續、爆裂音效與碎片各一次）
   if (equippedSword.currentDur <= 0) { weaponBreak('sword', 'worn'); return; }
   if (weaponIsTestLoadout('sword')) return;          // 測試裝備的耐用度不寫進背包存檔
+  weaponSnapSync('sword', 'use');                    // v0.3.70：用掉的耐用度不會因戰敗／返回整備而回復
   playerInventory.equippedSwordDur = equippedSword.currentDur;
   saveInventory();
 }
@@ -3611,12 +3617,9 @@ function makeChapter2Scorpion(x, patrolRange, variant = 'normal') {
   };
 }
 
-// v0.3.28：圓氣球依攜帶上限補生成（同 1-2 規則：最多補到 ROUND_BALLOON_CARRY_LIMIT 顆）
-// spots = [[x, yOff], ...]，依序取用
+// v0.3.70：圓氣球改成固定的關卡配置（不再依背包數量「補到 2 顆」）；spots = [[x, yOff], ...]
 function buildChapter2RoundBalloons(spots) {
-  const have    = Number(playerInventory.roundBalloon || 0);
-  const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
-  return spots.slice(0, missing).map(([x, yOff]) => ({
+  return spots.map(([x, yOff]) => ({
     x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2,
   }));
 }
@@ -4081,13 +4084,11 @@ const LEVELS = [
     ],
     buildRoundBalloons: () => {
       // 圓氣球是可消耗材料，不用一次性旗標決定是否生成
-      // 依缺量生成：最多讓玩家補到 ROUND_BALLOON_CARRY_LIMIT (2) 顆
-      const have    = Number(playerInventory.roundBalloon || 0);
-      const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
-      const results = [];
-      if (missing >= 1) results.push({ x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
-      if (missing >= 2) results.push({ x: 1700, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
-      return results;
+      // v0.3.70：固定 2 顆（原本依背包缺量「補到 2 顆」；取消攜帶上限後改成本關的固定配置數）
+      return [
+        { x: 1400, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+        { x: 1700, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+      ];
     },
     hiddenTreasure: {
       type:       'recipe',
@@ -4270,13 +4271,11 @@ const LEVELS = [
     })),
     buildOranges: () => [],
     buildRoundBalloons: () => {
-      // 依缺量生成，與既有 1-3 邏輯一致：補到 ROUND_BALLOON_CARRY_LIMIT (2) 顆為止
-      const have    = Number(playerInventory.roundBalloon || 0);
-      const missing = Math.max(0, ROUND_BALLOON_CARRY_LIMIT - have);
-      const results = [];
-      if (missing >= 1) results.push({ x: 1600, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
-      if (missing >= 2) results.push({ x: 2000, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 });
-      return results;
+      // v0.3.70：固定 2 顆（原本依背包缺量補到 2 顆）
+      return [
+        { x: 1600, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+        { x: 2000, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+      ];
     },
     hiddenTreasure: {
       type:       'recipe',
@@ -5126,6 +5125,7 @@ function consumeHammerDurability() {
   equippedHammer.currentDur = Math.max(0, equippedHammer.currentDur - 1);
   if (equippedHammer.currentDur <= 0) { weaponBreak('hammer', 'worn'); return; }   // 庫存 −1、備用接續；沒有了自動切回劍（若有）
   if (weaponIsTestLoadout('hammer')) return;
+  weaponSnapSync('hammer', 'use');                   // v0.3.70
   playerInventory.equippedHammerDur = equippedHammer.currentDur;
   saveInventory();
 }
@@ -5652,6 +5652,7 @@ function updatePlayer(dt) {
 
   // Invincibility frames
   if (player.invincible > 0) player.invincible--;
+  if (player.popScare > 0) player.popScare--; // v0.3.70：爆裂驚嚇（和受傷無敵分開）
 }
 
 function fireProjectile() {
@@ -7764,10 +7765,7 @@ function checkCollectibles() {
       r.collected = true;
       currentRunStats.roundBalloon++;
       const _roundBefore = Number(playerInventory.roundBalloon || 0);
-      playerInventory.roundBalloon = Math.min(
-        ROUND_BALLOON_CARRY_LIMIT,
-        (playerInventory.roundBalloon || 0) + 1
-      );
+      playerInventory.roundBalloon = (playerInventory.roundBalloon || 0) + 1; // v0.3.70：取消攜帶上限
       if (Number(playerInventory.roundBalloon || 0) > _roundBefore) { try { advNoteCollect('round', r); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} } // v0.3.63：背包真的多了一顆才算拾取 / v0.3.65 才播拾取聲
       saveInventory();
       // 第 3 關：首次撿到圓氣球，提示它是槌子材料
@@ -10944,12 +10942,12 @@ function triggerClear() {
       flags.hammerRecipeGranted = true;
     }
 
-    // 2. 槌子材料保底（roundBalloon 補到 2、balloon260 補到 1，不可突破上限）
+    // 2. 槌子材料保底（一次性：roundBalloon 不足一把槌子 → 補到剛好 2、balloon260 補到 1；已經夠的不加）
     if (!flags.hammerMaterialGuaranteeDone) {
       const haveRound = Number(playerInventory.roundBalloon || 0);
-      if (haveRound < ROUND_BALLOON_CARRY_LIMIT) {
-        const missing = ROUND_BALLOON_CARRY_LIMIT - haveRound;
-        playerInventory.roundBalloon = ROUND_BALLOON_CARRY_LIMIT;
+      if (haveRound < HAMMER_ROUND_BALLOON_NEED) {
+        const missing = HAMMER_ROUND_BALLOON_NEED - haveRound;
+        playerInventory.roundBalloon = HAMMER_ROUND_BALLOON_NEED;
         currentRunStats.chapter1RoundBalloonGranted = missing;
         showHint('氣球小狗在家門口找到 ' + missing + ' 顆圓氣球！牠搖著尾巴把材料帶回來了！', 280);
       }
@@ -13793,6 +13791,7 @@ function getDogPoseKey() {
   const heroKey = (typeof _heroLastArtKey === 'string') ? _heroLastArtKey : '';
   // 受傷閃爍優先於跑步 / 跳躍 / 攻擊；閃爍結束立刻回到正確動作
   if (isPlayerHurtFlashing()) { dogWasRunning = false; return { key: getDogFrameKey(DOG_ART.hurtFrame), state: 'hurt' }; }
+  if (player.popScare > 0) { dogWasRunning = false; return { key: getDogFrameKey(DOG_ART.hurtFrame), state: 'scare' }; } // v0.3.70：一起嚇到（不閃爍、不抖動、不扣陪伴次數）
   if (heroKey.startsWith('swordAttack') || heroKey.startsWith('hammerAttack')) { dogWasRunning = false; return { key: getDogFrameKey(DOG_ART.attackFrame), state: 'attack' }; }
   if (!player.onGround) { dogWasRunning = false; return player.vy < 0 ? { key: getDogFrameKey(DOG_ART.jumpFrame), state: 'jump' } : { key: getDogFrameKey(DOG_ART.fallFrame), state: 'fall' }; }
   const moving = Math.abs(player.vx || 0) > 0.1;
@@ -14711,52 +14710,8 @@ function drawHUD() {
   ctx.beginPath(); ctx.roundRect(barX, 34, barW * progress, 4, 2); ctx.fill();
   } // end v0.3.35 非 Boss 房
 
-  // ── 右下：裝備道具膠囊 ──
-  const activeItem = activeSlot === 'hammer' ? equippedHammer : equippedSword;
-  if (activeItem && activeItem.id) {
-    const itemEmoji = activeSlot === 'hammer' ? '🔨' : '⚔️';
-    const durFrac   = activeItem.currentDur / activeItem.maxDur;
-    const capColor  = activeSlot === 'hammer' ? 'rgba(255,208,128,0.18)' : 'rgba(200,240,255,0.14)';
-    const capBorder = activeSlot === 'hammer' ? 'rgba(255,208,128,0.45)' : 'rgba(200,240,255,0.4)';
-    const capW = 96, capH = 22, capX = CANVAS_W - pad - capW, capY = 56;
-
-    // 膠囊背景
-    ctx.fillStyle = capColor;
-    ctx.beginPath(); ctx.roundRect(capX, capY, capW, capH, 8); ctx.fill();
-    ctx.strokeStyle = capBorder; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(capX, capY, capW, capH, 8); ctx.stroke();
-
-    // 武器圖（v0.3.69：正式 PNG；還沒載好才用文字）+ 耐久文字
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.font = '12px sans-serif';
-    const _wImg = (typeof weaponHudImg === 'function') ? weaponHudImg(activeItem.id) : null;
-    if (_wImg) ctx.drawImage(_wImg, capX + 2, capY + 1, 19, 19); else ctx.fillText(itemEmoji, capX + 5, capY + 11);
-    if (typeof adventureTestLoadoutActive !== 'undefined' && adventureTestLoadoutActive) { ctx.save(); ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#ff9f43'; ctx.textAlign = 'right'; ctx.fillText('🧪 測試裝備', capX + capW, capY + capH + 9); ctx.restore(); }
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = activeSlot === 'hammer' ? '#ffd080' : '#c8f0ff';
-    ctx.fillText(activeItem.currentDur + '/' + activeItem.maxDur, capX + 22, capY + 11);
-
-    // 耐久小橫條（膠囊底部）
-    const bx = capX + 4, bw2 = capW - 8, by2 = capY + capH - 4;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.beginPath(); ctx.roundRect(bx, by2, bw2, 3, 1); ctx.fill();
-    ctx.fillStyle = durFrac > 0.4 ? '#55EFC4' : '#FDCB6E';
-    ctx.beginPath(); ctx.roundRect(bx, by2, bw2 * durFrac, 3, 1); ctx.fill();
-  }
-
-  // ── 氣球小狗 HUD ──
-  if (bringBalloonDog) {
-    const dogX = CANVAS_W - pad - 96;
-    const dogY = 84;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(255,179,209,0.15)';
-    ctx.beginPath(); ctx.roundRect(dogX, dogY, 96, 18, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,107,157,0.35)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(dogX, dogY, 96, 18, 6); ctx.stroke();
-    ctx.font = '11px sans-serif'; ctx.fillStyle = '#FFB3D1';
-    const noseText = dogNoseLevel >= 3 ? '🐶✨' : dogNoseLevel >= 2 ? '🐶🌟' : dogNoseLevel >= 1 ? '🐶💡' : '🐶';
-    ctx.fillText(noseText + ' 小狗同行', dogX + 5, dogY + 9);
-  }
+  // ── 右上：武器／耐用度與狗狗同行（v0.3.70：放大，見 drawWeaponDogHud）──
+  drawWeaponDogHud(pad);
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
@@ -14780,6 +14735,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.70：hud-tutorial-intro-pop-rpg-persistence → hud-intro（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('hud-tutorial-intro')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'hud-intro' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.69：weapon-durability-pop-score-ui-sfx → wpn-pop（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('weapon-durability-pop')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -17706,7 +17666,7 @@ function restart(opts) {
   currentRunStats.doubleKills             = 0;
   currentRunStats.chainBonusScore         = 0;
   currentRunStats.chainKeys               = [];
-  try { chainFx.length = 0; weaponPopFx.length = 0; player._popSwing_sword = null; player._popSwing_hammer = null; } catch (e) {}
+  try { chainFx.length = 0; weaponPopFx.length = 0; player._popSwing_sword = null; player._popSwing_hammer = null; player.popScare = 0; } catch (e) {}
   // bringBalloonDog 由 next/retry button 管理，不在 restart 清除
   dogNoseGlow  = 0;
   dogNoseLevel = 0;
@@ -18809,6 +18769,9 @@ const RPG_ASSETS = {
   balloonv_happy:     'assets/adventure/rpg/portraits/balloonv/balloonv_happy.png',
   star_spirit_normal: 'assets/adventure/rpg/portraits/star-spirit/star_spirit_normal.png',
   star_spirit_angry:  'assets/adventure/rpg/portraits/star-spirit/star_spirit_angry.png',
+  // v0.3.70：星靈更生氣／不想理人（使用者已驗收的正式立繪；檔名沒有 star_ 前綴）
+  star_spirit_angry_02: 'assets/adventure/rpg/portraits/star-spirit/spirit_angry_02.png',
+  star_spirit_sulking:  'assets/adventure/rpg/portraits/star-spirit/spirit_sulking.png',
   dog_treasure_alert: 'assets/adventure/rpg/portraits/dog/dog_treasure_alert.png',
   balloon_recipe_book:'assets/adventure/rpg/objects/balloon_recipe_book.png',
   // v0.3.61：正式 RPG 立繪（使用者已上傳）
@@ -18831,7 +18794,7 @@ const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/b
 const RPG_EXTERNAL_ASSET_KEYS = []; // 由其他素材群組載入的立繪（目前沒有）
 // v0.3.61：RPG 立繪改成「一張一張依序載入」（手機上 13 張同時下載容易逾時失敗），常用的先載；每個來源最多等 30 秒
 const RPG_ASSET_LOAD_ORDER = ['balloonv_surprised', 'balloonv_thinking', 'balloonv_shocked', 'balloonv_confused', 'balloonv_happy', 'dog_treasure_alert',
-  'balloon_recipe_book', 'star_spirit_angry', 'orange_king_weakness_note', 'balloonv_angry', 'balloonv_heroic', 'orange_king_taunt', 'orange_king_angry'];
+  'balloon_recipe_book', 'star_spirit_angry', 'star_spirit_angry_02', 'star_spirit_sulking', 'orange_king_weakness_note', 'balloonv_angry', 'balloonv_heroic', 'orange_king_taunt', 'orange_king_angry'];
 const RPG_ASSET_TIMEOUT_MS = 30000;
 const RPG_ASSET_MAX_RETRY = 2;
 const RPG_BOOT_ASSET_KEYS = ['star_spirit_normal']; // 1-1 一開場就要用 → 跟開機一起載；其他立繪開機後在背景載
@@ -18896,9 +18859,12 @@ const RPG_TEXT = {
     '這次我先提醒你，以後要自己注意狗狗還在不在身邊喔！',
   ],
   // 本輪暫用教學文字（使用者指定，之後可再調整）
+  // v0.3.70：原本兩句整合成一頁，接著三步耐用度教學（第 4 頁圈出右上角武器 HUD）
   hammerCrafted: [
-    '小V！你做出氣球槌了耶！',
-    '{g:氣球槌}不只能攻擊，還可以把氣球蠍子{b:打飛}喔！',
+    '小V！你做出{g:氣球槌}了耶！它不只能攻擊，還可以把氣球蠍子{b:打飛}喔！',
+    '氣球武器用久了，{b:耐用度}可是會下降的！',
+    '右上角會告訴你，現在拿的是什麼武器，還能用多久。',
+    '看！就是這裡！',
   ],
   goldenRing: [
     '小V！{g:金色油管環}的力量能讓你的氣球劍變成{g:王權劍}！不過{r:其他氣球武器}可沒有這種保護喔！',
@@ -18958,7 +18924,7 @@ function rpgBuildScene(id, extra) {
     // 狗狗陪伴次數用完、消氣 → 星靈一生只提醒一次（顯示模式「全部關閉」也會提醒）（事件 ID 沿用，保護舊觀看紀錄）
     'rpg010_dog_left': { title: '氣球小狗消氣了', policy: 'oncePerPlayer', saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.dogLeft.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
     // 1-2：真的做出氣球槌（一般教學，三段模式）
-    'rpg011_hammer_crafted': { title: '做出氣球槌', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.hammerCrafted.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
+    'rpg011_hammer_crafted': { title: '做出氣球槌', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.hammerCrafted.map((t, i, a) => ({ sp: 'spirit', face: 'star_spirit_normal', text: t, focusHud: i === a.length - 1 })) },
     // 2-4：撿到金色油管環、變成王權劍之後（一般教學，三段模式）
     'rpg013_golden_ring': { title: '金色油管環', modeControlled: true, saveHistory: true, left: null, right: 'star_spirit_normal', pages: RPG_TEXT.goldenRing.map(t => ({ sp: 'spirit', face: 'star_spirit_normal', text: t })) },
     // 2-4：橘子王登場互嗆（DRAFT 台詞；重要 Boss 登場：僅首次 = 一生一次、完整提示 = 每次開啟網頁一次、全部關閉 = 不播）
@@ -18970,12 +18936,7 @@ function rpgBuildScene(id, extra) {
     'rpg017_king_note_reaction': { title: '讀完橘子王觀察筆記', modeControlled: true, saveHistory: true, left: 'balloonv_thinking', right: null, pages: RPG_TEXT.kingNoteReaction.map(l => Object.assign({}, l)) },
   });
   if (S[id]) return Object.assign({ id }, S[id]);
-  if (id.startsWith('rpg003_weapon_pop:')) {
-    const key = id.split(':')[1]; const t = RPG_POP_TARGETS[key]; if (!t) return null;
-    return { id, title: '武器爆了：' + t.name, modeControlled: true, saveHistory: true, left: 'balloonv_shocked', right: null, pages: [
-      { sp: 'balloonv', face: 'balloonv_shocked', text: '啊啊啊！！！我的武器爆了！' },
-      { sp: 'spirit', face: 'star_spirit_angry', right: 'star_spirit_angry', text: t.spiritText || ('你怎麼認為可以攻擊' + t.name + '？！它的' + t.danger + '會把氣球弄爆啊！！') } ] };
-  }
+  if (id.startsWith('rpg003_weapon_pop:')) return rpgBuildPopScene(id, extra); // v0.3.70：依爆裂次數（尖刺＋橘子怪合併）
   if (id.startsWith('rpg007_recipe:')) {
     const key = id.split(':')[1]; const lines = RPG_RECIPE_LINES[key]; if (!lines) return null;
     return { id, title: '發現秘笈：' + ((extra && extra.recipeName) || key), modeControlled: true, saveHistory: true, left: lines[0].face, right: 'balloon_recipe_book', pages: lines.map(l => Object.assign({}, l)) };
@@ -19029,6 +18990,7 @@ const RPG_NOTE_DEFS = {
   hammer:        { title: '氣球槌', summary: '氣球槌不只能攻擊，還可以把氣球蠍子打飛。', from: ['rpg011_hammer_crafted'] },
   royalSword:    { title: '王權劍', summary: '金色油管環的力量能讓氣球劍變成王權劍；其他氣球武器（例如氣球槌）沒有這種保護。', from: ['rpg013_golden_ring'] },
   popOrangeOil:  { title: '武器碰到橘子怪', summary: '橘子怪的橘子皮油會把氣球武器弄爆。', from: ['rpg003_weapon_pop:orangeOil'] },
+  popSpike:      { title: '武器碰到尖刺', summary: '尖刺會把氣球武器刺破，武器一碰到就會爆掉。', from: ['rpg003_weapon_pop:spike'] }, // v0.3.70
 };
 const RPG_STORY_EVENTS = ['rpg014_boss_taunt', 'rpg019_king_note_find', 'rpg017_king_note_reaction']; // 純劇情 / 反應：只留劇情紀錄，不算玩法知識
 function rpgNoteIdsForEvent(eventId) { return Object.keys(RPG_NOTE_DEFS).filter(k => RPG_NOTE_DEFS[k].from.includes(eventId)); }
@@ -19131,6 +19093,7 @@ function rpgRenderMarkup(el, segs, n) {
 function rpgResetForTest() {
   const d = rpgLoad();
   d.seen = {}; d.notes = {}; d.story = {}; d.history = [];
+  d.popCount = 0; d.worldIntro = 'pending'; // v0.3.70：武器爆裂次數歸零；首次入場地圖可以再體驗一次
   rpgSave();
   rpgSessionShown.clear();
   rpgQueue = []; rpgUiQueue = [];
@@ -19182,6 +19145,7 @@ function rpgShouldShowScene(scene) {
     if (m === 'first') return !rpgIsSeen(scene.id);
     return !rpgSessionShown.has(scene.id);                                          // 完整提示：每次開網頁一次，死亡重試不強制重播
   }
+  if (scene.policy === 'popReact') return true;                                   // v0.3.70：武器被天敵弄爆的反應 — 必要事件，不受顯示模式影響
   if (!scene.modeControlled) return true;
   const m = rpgGetMode();
   if (m === 'off') return false;
@@ -19245,7 +19209,7 @@ function rpgScheduleRetry(key) {
 // 同一角色的表情備援順序（只在同一角色內回退，不會換成別的角色）
 const RPG_FACE_FALLBACK = {
   balloonv_: ['balloonv_thinking', 'balloonv_happy', 'balloonv_surprised', 'balloonv_confused', 'balloonv_shocked', 'balloonv_heroic', 'balloonv_angry'],
-  star_spirit_: ['star_spirit_normal', 'star_spirit_angry'],
+  star_spirit_: ['star_spirit_angry', 'star_spirit_normal', 'star_spirit_angry_02', 'star_spirit_sulking'], // v0.3.70：新表情載入失敗 → 先用普通生氣（普通表情失敗 → 生氣，和原本相同）
   orange_king_: ['orange_king_taunt', 'orange_king_angry'],
 };
 function rpgResolveFace(key) {
@@ -19368,11 +19332,7 @@ function rpgOnTreasureFound(t) {
   } catch (e) { console.warn('[RPG] treasure hook', e); }
   return false;
 }
-// 003：武器碰到天敵「真的爆裂」時由碰撞結果呼叫（目前遊戲沒有這個機制 → 尚無呼叫點，見回報）
-function rpgOnWeaponPopped(targetKey) {
-  if (!RPG_POP_TARGETS[targetKey]) { console.warn('[RPG] 003 未定義的危險類型', targetKey); return false; }
-  return rpgRequest('rpg003_weapon_pop:' + targetKey, () => true);
-}
+// 003：武器碰到天敵爆裂 → rpgOnWeaponPopped()（v0.3.70 移到檔案最後的 v0.3.70 區塊：合併計次）
 
 // ── 對話框 DOM ──
 function rpgEnsureDom() {
@@ -19571,6 +19531,7 @@ function rpgShowPage(i) {
   cancelAnimationFrame(rpgRaf);
   const segs = rpgParseMarkup(rpgPageText(p));
   rpgSetButtonFocus(p.focusSwitchBtn && rpgIsTouchControlsShown() ? 'btn-switch-weapon' : null); // v0.3.62：只在這一頁圈出換武器鍵
+  try { rpgSetHudFocus(!!p.focusHud && !scene.ui); } catch (e) {} // v0.3.70：露出遊戲畫面、圈出右上角武器 HUD
   const total = segs.reduce((a, sg) => a + sg.chars.length, 0);
   const tick = () => {
     if (!rpgActive) return;
@@ -19619,6 +19580,7 @@ function rpgClose(how) {
   if (ov) { ov.style.display = 'none'; ov.classList.remove('rpg--show', 'rpg--showcase'); const sc = ov.querySelector('.rpg-showcase'); if (sc) sc.style.display = 'none'; }
   rpgSetTargetHighlight(null);   // 對話結束：光暈與箭頭立即消失
   rpgSetButtonFocus(null);       // v0.3.62：按鈕引導也立即消失
+  try { rpgSetHudFocus(false); } catch (e) {} // v0.3.70
   rpgSetUiMode(false);
   Object.keys(keys).forEach(k => { keys[k] = false; });
   Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; });
@@ -21716,8 +21678,7 @@ function h2BuyQty(id) {
   if (got > 0) {                                                           // 只有真的買到才播成功演出（不播補血愛心）
     const row = document.querySelector('#h2-panel-body [data-shop-row="' + id + '"]');
     h2Shake(row);
-    h2Float('🪙 冒險金幣 −' + spent, row, -6);
-    setTimeout(() => h2Float(item.name + ' +' + got, row, 26), 120);
+    h2FloatDeltas([item.name + ' +' + got], spent > 0 ? ['🪙 冒險金幣 −' + spent] : [], row); // v0.3.70：取得向上、付出向下
     try { playCraftSuccessFx(row || null, { name: item.name + ' ×' + got, emoji: '', shopBuy: true }); } catch (e) {}
   }
 }
@@ -21754,7 +21715,7 @@ function h2BuildSummary(b) {
   const b260 = Number(rs.balloon260 || 0) + Math.max(0, (inv.balloon260 || 0) - b.b260);
   if (b260 > 0) rows.push({ icon: 'balloon260', text: '260 氣球', val: '+' + b260 });
   const round = Number(rs.roundBalloon || 0) + Math.max(0, (inv.roundBalloon || 0) - b.round);
-  if (round > 0) rows.push({ icon: 'roundBalloon', text: '圓氣球' + ((inv.roundBalloon || 0) >= ROUND_BALLOON_CARRY_LIMIT ? '（最多帶 ' + ROUND_BALLOON_CARRY_LIMIT + ' 顆）' : ''), val: '+' + round });
+  if (round > 0) rows.push({ icon: 'roundBalloon', text: '圓氣球', val: '+' + round });
   Object.keys(inv.unlockedRecipes || {}).forEach(k => { if (inv.unlockedRecipes[k] && !b.ur[k]) { const r = RECIPES.find(x => x.unlockKey === k); if (r) rows.push({ icon: r.id, text: '新秘笈：' + r.name, val: '解鎖' }); } });
   Object.keys(inv.keyItems || {}).forEach(k => { if (!b.keys.includes(k)) { const it = inv.keyItems[k]; rows.push({ icon: it.type === 'bossNote' ? 'bossNote' : 'bossNote', text: it.name || it.title || '重要物品', val: '收進背包' }); } });
   const dhp = (Number(player.hp) || 0) - b.hp;
@@ -21879,7 +21840,7 @@ function h2PanelBody(kind, tab) {
   if (kind === 'bag' && tab === 'mat') {
     return h2CoinBar() + '<div class="h2-list">'
       + h2RowHtml({ iconHtml: h2Icon('balloon260'), badge: '<span class="h2-count">' + (inv.balloon260 || 0) + '</span>', name: '260 長條氣球', desc: '製作武器、氣球小狗、棒棒糖，也是帶狗出門的狗繩' })
-      + h2RowHtml({ iconHtml: h2Icon('roundBalloon'), badge: '<span class="h2-count">' + (inv.roundBalloon || 0) + '</span>', name: '圓氣球', desc: '製作氣球槌的槌頭（最多攜帶 ' + ROUND_BALLOON_CARRY_LIMIT + ' 顆）' })
+      + h2RowHtml({ iconHtml: h2Icon('roundBalloon'), badge: '<span class="h2-count">' + (inv.roundBalloon || 0) + '</span>', name: '圓氣球', desc: '製作氣球槌的槌頭' })
       + '</div>';
   }
   if (kind === 'bag' && tab === 'key') {
@@ -22113,7 +22074,7 @@ if (heroRunMode === 'B') heroRunLoadB();
   wrap('craftItem', orig => function (recipeId) {
     let snap = null; try { snap = h2InvSnap(); } catch (e) {}
     const ok = orig.apply(this, arguments);
-    if (ok && snap) { try { const txt = h2CraftDeltaText(recipeId, snap); if (txt) h2Float(txt, null); } catch (e) {} }
+    if (ok && snap) { try { const p = h2CraftDeltaParts(recipeId, snap); h2FloatDeltas(p.gain, p.loss, null); } catch (e) {} } // v0.3.70：取得向上、付出向下
     try { h2ScheduleRefresh(); } catch (e) {}
     return ok;
   });
@@ -22591,6 +22552,7 @@ function weaponBreak(slot, reason, at) {
   if (!test) {
     ci[id] = Math.max(0, (ci[id] || 0) - 1);                              // 庫存只扣這一把
     left = ci[id];
+    weaponSnapSync(slot, 'break');                                        // v0.3.70：爆掉的這一把不會因戰敗／返回整備而復活
   }
   if (left > 0) { eq.maxDur = weaponRecipeMax(id); eq.currentDur = eq.maxDur; }   // 有備用 → 換上下一把（滿耐用度）
   else { eq.id = null; eq.name = ''; eq.maxDur = 0; eq.currentDur = 0; }
@@ -22629,6 +22591,7 @@ function weaponPopCheck(slot, ax, ay, aw, ah) {
   player['_popSwing_' + slot] = swing;
   if (slot === 'hammer') { player.meleeHammerActive = 0; player.hammerHit = true; } else { player.meleeActive = 0; player.meleeHit = true; }
   weaponBreak(slot, hz.kind, { x: ax + aw / 2, y: ay + ah / 2 });
+  weaponPopScare();                                                      // v0.3.70：小V（和同行狗狗）嚇一跳；不是受傷
   try { if (typeof rpgOnWeaponPopped === 'function') rpgOnWeaponPopped(hz.kind); } catch (e) {}   // 首次教學（依顯示模式）；最多一個對話
   return true;
 }
@@ -22687,6 +22650,7 @@ function advChainBonus(run) { return advSumStages(run, r => (r.chain && r.chain.
   const w = function (recipeId) {
     const ok = orig.apply(this, arguments);
     try {
+      if (ok && (recipeId === 'basicSword' || recipeId === 'basicHammer')) weaponSnapCraft(recipeId);   // v0.3.70：冒險中做的武器與材料消耗不回滾
       if (ok && !adventureTestLoadoutActive) {
         if (recipeId === 'basicSword' && !equippedSword.id) { playerInventory.equippedSwordDur = 0; initEquippedSword(); normalizeActiveWeaponSlot(); }
         if (recipeId === 'basicHammer' && !equippedHammer.id) { playerInventory.equippedHammerDur = 0; initEquippedHammer(); normalizeActiveWeaponSlot(); }
@@ -22697,3 +22661,330 @@ function advChainBonus(run) { return advSumStages(run, r => (r.chain && r.chain.
   Object.keys(orig).forEach(k => { w[k] = orig[k]; }); w._wpnWrapped = true; w._h2wrapped = orig._h2wrapped; globalThis.craftItem = w;
 })();
 if (typeof window !== 'undefined') window.debugWeapons = function () { const o = { sword: Object.assign({}, equippedSword), hammer: Object.assign({}, equippedHammer), slot: activeSlot, stock: Object.assign({}, playerInventory.craftedItems), saved: { sword: playerInventory.equippedSwordDur, hammer: playerInventory.equippedHammerDur }, testLoadout: adventureTestLoadoutActive, max: { sword: weaponRecipeMax('basicSword'), hammer: weaponRecipeMax('basicHammer') } }; console.log('[Weapon]', o); return o; };
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.70：HUD 放大、氣球槌耐用度教學、首次世界地圖入場、交易飄字方向、爆裂 RPG、爆裂驚嚇、失敗不回復武器耐用度
+// ════════════════════════════════════════════════════════════════════
+
+// ── 8. 失敗返回整備／重試：武器消耗是「不可逆」的 ──
+//   原本：進關快照（levelStartSnapshot）在戰敗、時間到、返回整備、重試時整包還原 → 武器耐用度、爆掉的武器、做武器用掉的材料都會回到出發前
+//   現在：武器真的被使用／爆掉／在冒險中製作時，同步把「進關快照」裡的武器資料改成實際結果；
+//         快照其他內容（金幣、260、圓氣球、秘笈、重要物品…本關暫時成果）照舊回滾，不改既有規則
+//   對應：快照裡原本就有的那幾把武器會先被用掉（FIFO）；快照裡沒有的武器（本關才拿到）照原本規則回滾
+function weaponSnapSync(slot, ev) {
+  const S = levelStartSnapshot; if (!S) return;
+  if (weaponIsTestLoadout(slot)) return;                                   // 測試裝備不碰正式資料
+  const id = slot === 'hammer' ? 'basicHammer' : 'basicSword', P = slot === 'hammer' ? 'equippedHammer' : 'equippedSword';
+  const eq = slot === 'hammer' ? equippedHammer : equippedSword, max = weaponRecipeMax(id);
+  const sc = S.craftedItems || (S.craftedItems = {}); const n = Math.max(0, sc[id] || 0);
+  if (ev === 'use') {                                                      // 扣耐用度：正在用的是快照裡的那一把 → 快照跟著扣
+    if (n > 0 && S[P + 'Id']) S[P + 'Dur'] = eq.currentDur;
+  } else if (ev === 'break') {                                             // 這一把爆了：快照少一把；有備用 → 下一把滿耐用度
+    if (n <= 0) return;
+    sc[id] = n - 1;
+    if (n - 1 > 0) { S[P + 'Id'] = id; S[P + 'Max'] = max; S[P + 'Dur'] = max; }
+    else { S[P + 'Id'] = null; S[P + 'Max'] = 0; S[P + 'Dur'] = 0; if (slot === 'hammer' && S.activeSlot === 'hammer') S.activeSlot = 'sword'; }
+  } else if (ev === 'craft') {                                             // 冒險中（暫停開秘笈）做出來的武器：材料已真的用掉 → 快照也保留這把
+    sc[id] = n + 1;
+    if (!S[P + 'Id']) { S[P + 'Id'] = id; S[P + 'Max'] = max; S[P + 'Dur'] = eq.id ? eq.currentDur : max; }
+  }
+}
+function weaponSnapCraft(recipeId) {
+  if (!(gameState === 'playing' || gameState === 'paused') || !levelStartSnapshot) return;
+  const r = RECIPES.find(x => x.id === recipeId); if (!r) return;
+  for (const [mat, qty] of Object.entries(r.cost || {})) { if (typeof levelStartSnapshot[mat] === 'number') levelStartSnapshot[mat] = Math.max(0, levelStartSnapshot[mat] - qty); }
+  weaponSnapSync(recipeId === 'basicHammer' ? 'hammer' : 'sword', 'craft');
+}
+
+// ── 7. 武器被天敵弄爆 → 小V（和同行的狗狗）短暫嚇一跳 ──
+//   和真正受傷完全分開：不用 player.invincible、不扣 HP、不擊退、不閃爍、不播受傷音效、不扣狗狗陪伴次數
+const POP_SCARE_FRAMES = 36;   // 約 0.6 秒
+function weaponPopScare() {
+  player.popScare = POP_SCARE_FRAMES;
+  player.swordAnimTimer = 0; player.hammerAnimTimer = 0;                    // 立刻中斷揮劍／揮槌畫面（不再拿著爆掉的武器）
+  player.attackCooldown = Math.max(player.attackCooldown || 0, POP_SCARE_FRAMES);   // 嚇一跳期間不能馬上再攻擊
+}
+
+// ── 6. 武器爆裂 RPG：尖刺＋橘子怪合併計次（依 playerKey 存在冒險 RPG 進度；重新開始測試會清掉）──
+const RPG_POP_NAMES = { spike: '尖刺', orangeOil: '橘子怪' };
+function rpgPopCount() { return Math.max(0, Number(rpgLoad().popCount) || 0); }
+function rpgOnWeaponPopped(targetKey) {
+  if (!RPG_POP_NAMES[targetKey]) { console.warn('[RPG] 003 未定義的危險類型', targetKey); return false; }
+  const d = rpgLoad(); d.popCount = (Math.max(0, Number(d.popCount) || 0)) + 1; rpgSave();
+  const n = d.popCount;
+  // 「沒有武器」看的是這次銷毀、備用武器接上之後的實際狀態
+  const noWeapon = !(equippedSword && equippedSword.id) && !(equippedHammer && equippedHammer.id);
+  const base = 'rpg003_weapon_pop:' + targetKey;
+  const id = rpgIsSeen(base) ? base + '#' + n : base;
+  console.log('[RPG] 武器爆裂第 ' + n + ' 次（' + RPG_POP_NAMES[targetKey] + '）' + (noWeapon ? '，沒有武器了' : ''));
+  return rpgRequest(id, () => true, { popN: n, noWeapon });
+}
+function rpgBuildPopScene(id, extra) {
+  const m = id.match(/^rpg003_weapon_pop:([A-Za-z]+)(?:#(\d+))?$/); if (!m) return null;
+  const key = m[1], nm = RPG_POP_NAMES[key]; if (!nm) return null;
+  const n = (extra && extra.popN) || (m[2] ? Number(m[2]) : 1), noWeapon = !!(extra && extra.noWeapon);
+  const first = !m[2];
+  let pages;
+  if (n <= 1) pages = [
+    { sp: 'balloonv', face: 'balloonv_shocked', text: '哇啊！我的氣球爆了！' },
+    { sp: 'spirit', face: 'star_spirit_angry', right: 'star_spirit_angry', text: '你自己不知道{r:' + nm + '}不能用氣球打嗎？！' } ];
+  else if (n === 2) {
+    pages = [
+      { sp: 'balloonv', face: 'balloonv_shocked', text: '啊啊！又爆了！' },
+      { sp: 'spirit', face: 'star_spirit_angry_02', right: 'star_spirit_angry_02', text: '你自己不知道{r:' + nm + '}不能用氣球打嗎？！' } ];
+    if (noWeapon) pages.push({ sp: 'spirit', face: 'star_spirit_sulking', right: 'star_spirit_sulking', text: '這下連武器都沒了！我懶得再說了！' });
+  } else pages = [{ sp: 'balloonv', face: 'balloonv_shocked', text: '啊啊！氣球又爆了！' }];
+  // 必要的爆裂反應：不受「僅首次／全部關閉」影響；每次爆裂都有自己的事件（同一次爆裂只會排一次）
+  return { id, title: '武器爆了：' + nm + '（第 ' + n + ' 次）', policy: 'popReact', saveHistory: first, repeatable: false, left: 'balloonv_shocked', right: null, pages };
+}
+
+// ── 3. 第一次做出氣球槌 → 進入冒險畫面後的耐用度教學（第 4 頁圈出右上角武器 HUD）──
+function rpgHammerTutorialDue() {
+  if (typeof adventureTestLoadoutActive !== 'undefined' && adventureTestLoadoutActive) return false;
+  if (!(((playerInventory.craftedItems || {}).basicHammer || 0) > 0 || (equippedHammer && equippedHammer.id))) return false;
+  if (rpgIsSeen('rpg011_hammer_crafted')) return false;                    // 只在第一次做出氣球槌時教一次（之後再做不重播）
+  if (typeof isOrangeKingStageActive === 'function' && isOrangeKingStageActive()) return false;
+  return elapsedSec >= 0.8;
+}
+let hudWeaponRect = null;                                                   // 最近一次畫出來的武器 HUD 位置（960×540 畫布座標）
+function rpgSetHudFocus(on) {
+  const ov = document.getElementById('rpg-overlay'); if (!ov) return;
+  let el = ov.querySelector('.rpg-hudfocus');
+  ov.classList.toggle('rpg--hudfocus', !!on);
+  if (!on) { if (el) el.style.display = 'none'; return; }
+  if (!el) { el = document.createElement('div'); el.className = 'rpg-hudfocus'; el.innerHTML = '<div class="rpg-hudfocus-ring"></div><div class="rpg-hudfocus-arrow">➜</div>'; ov.appendChild(el); }
+  const r = hudWeaponRect || { x: CANVAS_W - 14 - HUD_WPN_W, y: HUD_WPN_Y, w: HUD_WPN_W, h: HUD_WPN_H };
+  el.style.setProperty('--hx', r.x); el.style.setProperty('--hy', r.y); el.style.setProperty('--hw', r.w); el.style.setProperty('--hh', r.h);
+  el.style.display = 'block';
+  ov.dataset.hudfocus = Math.round(r.x) + ',' + Math.round(r.y) + ',' + Math.round(r.w) + ',' + Math.round(r.h);
+}
+
+// ── 2. 右上角武器／耐用度與狗狗同行 HUD（放大；沿用畫布繪製）──
+const HUD_WPN_W = 206, HUD_WPN_H = 50, HUD_WPN_Y = 46, HUD_DOG_H = 32;
+const hudFx = { slot: null, id: null, dur: null, dog: null, t: 0, kind: '' };
+function drawWeaponDogHud(pad) {
+  const slot = activeSlot === 'hammer' ? 'hammer' : 'sword';
+  const it = slot === 'hammer' ? equippedHammer : equippedSword;
+  const has = !!(it && it.id);
+  const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+  // 數值變化 → 短暫亮一下（切換、耐用度下降、爆裂、狗狗狀態）
+  const sig = slot + '|' + (has ? it.id : '') + '|' + (has ? it.currentDur : -1);
+  const dogSig = bringBalloonDog ? ('on' + dogNoseLevel) : 'off';
+  if (hudFx.sig !== undefined && hudFx.sig !== sig) { hudFx.t = now; hudFx.kind = !has ? 'gone' : (hudFx.slot !== slot || hudFx.id !== (has ? it.id : '')) ? 'swap' : 'tick'; }
+  if (hudFx.dogSig !== undefined && hudFx.dogSig !== dogSig) hudFx.dogT = now;
+  hudFx.sig = sig; hudFx.slot = slot; hudFx.id = has ? it.id : ''; hudFx.dogSig = dogSig;
+  const W = HUD_WPN_W, H = HUD_WPN_H, x = CANVAS_W - pad - W, y = HUD_WPN_Y;
+  const flash = Math.max(0, 1 - (now - hudFx.t) / 450);
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  // 卡片底
+  ctx.fillStyle = 'rgba(28,16,56,0.66)';
+  ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.fill();
+  const col = !has ? 'rgba(255,255,255,0.45)' : slot === 'hammer' ? '#ffc46b' : '#9fe3ff';
+  ctx.lineWidth = 2.5; ctx.strokeStyle = col;
+  ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.stroke();
+  if (flash > 0) { ctx.globalAlpha = flash * 0.55; ctx.fillStyle = hudFx.kind === 'gone' ? '#ff5a5a' : '#ffffff'; ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.fill(); ctx.globalAlpha = 1; }
+  if (has) {
+    const img = (typeof weaponHudImg === 'function') ? weaponHudImg(it.id) : null;
+    if (img) { ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, x + 5, y + 5, 40, 40); ctx.restore(); }
+    else { ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(slot === 'hammer' ? '🔨' : '⚔️', x + 25, y + 26); }
+    const stock = ((playerInventory.craftedItems || {})[it.id]) || 0;
+    const name = (slot === 'hammer' ? '氣球槌' : '氣球劍') + (stock > 1 && !weaponIsTestLoadout(slot) ? ' ×' + stock : '');
+    ctx.textAlign = 'left'; ctx.font = 'bold 17px sans-serif';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.fillStyle = '#ffffff';
+    ctx.strokeText(name, x + 52, y + 16); ctx.fillText(name, x + 52, y + 16);
+    const frac = it.maxDur > 0 ? Math.max(0, Math.min(1, it.currentDur / it.maxDur)) : 0;
+    const dcol = frac > 0.5 ? '#6ff0b0' : frac > 0.25 ? '#ffd166' : '#ff7b7b';
+    const durTxt = it.currentDur + '/' + it.maxDur;
+    ctx.textAlign = 'right'; ctx.font = 'bold 18px monospace';
+    ctx.strokeText(durTxt, x + W - 10, y + 16); ctx.fillStyle = dcol; ctx.fillText(durTxt, x + W - 10, y + 16);
+    const bx = x + 52, bw = W - 62, by = y + 32;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, 9, 4.5); ctx.fill();
+    if (frac > 0) { ctx.fillStyle = dcol; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(9, bw * frac), 9, 4.5); ctx.fill(); }
+  } else {
+    ctx.textAlign = 'left'; ctx.font = 'bold 17px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText('🚫 沒有武器', x + 14, y + H / 2);
+  }
+  if (typeof adventureTestLoadoutActive !== 'undefined' && adventureTestLoadoutActive) {
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.fillStyle = '#ffb35c';
+    ctx.strokeText('🧪 測試裝備', x + W - 4, y + H + 10); ctx.fillText('🧪 測試裝備', x + W - 4, y + H + 10);
+  }
+  hudWeaponRect = { x, y, w: W, h: H };
+  // 狗狗同行
+  if (bringBalloonDog) {
+    const dy = y + H + (adventureTestLoadoutActive ? 22 : 7), dh = HUD_DOG_H;
+    const dflash = hudFx.dogT ? Math.max(0, 1 - (now - hudFx.dogT) / 450) : 0;
+    ctx.fillStyle = 'rgba(120,30,80,0.62)'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#ff9fc8'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.stroke();
+    if (dflash > 0) { ctx.globalAlpha = dflash * 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.textAlign = 'left'; ctx.font = 'bold 16px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.fillStyle = '#ffe3ef';
+    ctx.strokeText('🐶 小狗同行中', x + 10, dy + dh / 2 + 1); ctx.fillText('🐶 小狗同行中', x + 10, dy + dh / 2 + 1);
+    const nose = dogNoseLevel >= 3 ? '✨ 就在附近' : dogNoseLevel >= 2 ? '🌟 很近了' : dogNoseLevel >= 1 ? '💡 有寶物' : '';
+    if (nose) { ctx.textAlign = 'right'; ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#fff3a0'; ctx.strokeText(nose, x + W - 8, dy + dh / 2 + 1); ctx.fillText(nose, x + W - 8, dy + dh / 2 + 1); }
+  }
+  ctx.restore();
+}
+
+// ── 5. 交易飄字：取得 / 增加 → 向上；付出 / 減少 → 向下（用交易前後的實際差異計算）──
+function h2CraftDeltaParts(recipeId, s) {
+  const inv = playerInventory, gain = [], loss = [];
+  const put = (d, label) => { if (!d) return; (d > 0 ? gain : loss).push(label + ' ' + h2Signed(d)); };
+  put((inv.balloon260 || 0) - s.balloon260, '🎈 260 氣球');
+  put((inv.roundBalloon || 0) - s.roundBalloon, '🔴 圓氣球');
+  put((inv.coins || 0) - s.coins, '🪙 金幣');
+  const r = RECIPES.find(x => x.id === recipeId);
+  const dci = ((inv.craftedItems || {})[recipeId] || 0) - (s.ci[recipeId] || 0);
+  if (dci && r) put(dci, ((recipeId === 'basicSword' || recipeId === 'basicHammer') ? '' : (r.emoji || '') + ' ') + r.name);
+  if (!s.dog && inv.balloonDog && inv.balloonDog.present) gain.push('🐶 氣球小狗 +1');
+  const dhp = (Number(player.hp) || 0) - s.hp; if (dhp > 0) gain.push('❤️ +' + formatHealAmount(dhp));
+  return { gain, loss };
+}
+function h2FloatDeltas(gain, loss, anchorEl) {
+  if (typeof document === 'undefined' || !document.body) return [];
+  gain = gain || []; loss = loss || [];
+  if (!gain.length && !loss.length) return [];
+  let x = window.innerWidth / 2, y = window.innerHeight / 2;
+  const r = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+  if (r && r.width) { x = r.left + r.width / 2; y = r.top + r.height / 2; }
+  else if (advLastPointer && Date.now() - advLastPointer.t < 1500) { x = advLastPointer.x; y = advLastPointer.y; }
+  const vh = window.innerHeight, small = window.innerWidth < 760, step = small ? 38 : 44;   // 每一行的間距（比提示高度大 → 不重疊）
+  const UP = 64, DOWN = 74;                                                // 動畫位移（和 CSS 一致）
+  // 取得往上排、付出往下排；整組夾在畫面內（手機不跑出螢幕）
+  let cy = y;
+  const topNeed = 8 + UP + gain.length * step, botNeed = 8 + DOWN + loss.length * step;
+  if (cy - topNeed < 0) cy = topNeed;
+  if (cy + botNeed > vh) cy = Math.max(topNeed, vh - botNeed);
+  const out = [];
+  const mk = (text, cls, top, delay) => {
+    const el = document.createElement('div');
+    el.className = cls; el.textContent = text;
+    if (small) el.style.fontSize = '15px';
+    el.style.animationDelay = delay + 'ms';
+    document.body.appendChild(el);
+    const w = el.offsetWidth || 180;
+    el.style.left = Math.max(w / 2 + 8, Math.min(window.innerWidth - w / 2 - 8, x)) + 'px';
+    el.style.top = top + 'px';
+    setTimeout(() => { try { el.remove(); } catch (e) {} }, 1300 + delay);
+    out.push(el);
+  };
+  // 同一組一起移動（不錯開時間 → 移動中也不會疊在一起）；付出比取得晚一點點出現
+  gain.forEach((t, i) => mk(t, 'adv-gain-float', cy - 6 - (i + 1) * step, 0));
+  loss.forEach((t, i) => mk(t, 'adv-consume-float adv-loss-float', cy + 6 + i * step, gain.length ? 80 : 0));
+  return out;
+}
+
+// ── 4. 第一次開始冒險：世界地圖 → 飛行屋從地圖外飛到 1-1 → 直接開始 1-1 ──
+//   紀錄存在冒險 RPG 進度（依 playerKey）：worldIntro = 'done'／'pending'（重新開始測試會設回 pending）
+//   沒有紀錄時：已經玩過的舊玩家（有觀看紀錄、正式挑戰紀錄或通關成果）直接記成 done，不補播
+let advIntroActive = false, advIntroChecked = false;
+function advIntroShouldPlay() {
+  try {
+    if (currentLevelIndex !== 0 || (LEVELS[0] || {}).stageId !== '1-1') return false;
+    if (typeof advResumePromptOpen !== 'undefined' && advResumePromptOpen) return false;
+    if (elapsedSec > 0.5) return false;
+    const d = rpgLoad();
+    if (d.worldIntro === 'done') return false;
+    if (d.worldIntro === 'pending') return true;
+    let legacy = Object.keys(d.seen || {}).length > 0 || Object.keys(d.notes || {}).length > 0;
+    try { const a = advLoad(); if ((a.recent || []).length || (a.archived || []).length || Object.keys(a.best || {}).length || (a.active && a.active.stageResults && Object.keys(a.active.stageResults).length)) legacy = true; } catch (e) {}
+    if (legacy) { d.worldIntro = 'done'; rpgSave(); return false; }
+    return true;
+  } catch (e) { return false; }
+}
+function advIntroRunInLevel() {
+  if (advIntroActive) return;
+  if (gameState === 'playing') gameState = 'paused';                        // 入場演出期間：不計時、不觸發關卡對話（不開暫停選單）
+  advIntroPlay(played => {
+    if (played) { const d = rpgLoad(); d.worldIntro = 'done'; rpgSave(); }
+    if (gameState === 'paused' && !(typeof rpgIsActive === 'function' && rpgIsActive())) {
+      gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+      if ((typeof document !== 'undefined' && document.hidden) || (isTouchPlayDevice() && isPortraitNow())) pauseGame();   // 演出時切到背景／轉直向 → 停在暫停選單
+    }
+    console.log('[Intro] 首次入場演出結束 → 直接開始 1-1', played ? '' : '（地圖沒載好，略過演出）');
+  });
+}
+function advIntroPlay(done) {
+  const c = h2MapContinent(), wrap = h2$('h2-map-wrap'), home = h2$('h2-map-home');
+  if (!wrap || !home || typeof h2Load !== 'function') { done(false); return; }
+  advIntroActive = true;
+  let host = document.getElementById('adv-intro');
+  if (!host) {
+    host = document.createElement('div'); host.id = 'adv-intro'; host.className = 'h2-skin';
+    host.innerHTML = '<button type="button" class="h2-pill h2-pill--sm adv-intro-skip">跳過 ⏭</button>';
+    document.body.appendChild(host);
+  }
+  const parent = wrap.parentNode, nextSib = wrap.nextSibling;
+  host.insertBefore(wrap, host.firstChild); host.style.display = 'block';
+  H2.map = { mode: 'flight', skip: false };                                 // 沿用地圖的「飛行中」狀態（點一下＝跳過，返回鍵隱藏）
+  wrap.classList.add('is-open', 'is-flight', 'is-loading'); wrap.setAttribute('aria-hidden', 'false');
+  home.style.display = 'none';
+  const info0 = h2$('h2-map-info'); if (info0) info0.innerHTML = '<small>點一下畫面或按「跳過」可以直接開始</small>';
+  let started = false, ended = false;
+  const finish = played => {
+    if (ended) return; ended = true;
+    h2MapFlySfx(false);
+    H2.map = null;
+    wrap.classList.remove('is-open', 'is-flight', 'is-loading'); wrap.setAttribute('aria-hidden', 'true');
+    if (parent) parent.insertBefore(wrap, nextSib && nextSib.parentNode === parent ? nextSib : null);
+    host.style.display = 'none'; host.onclick = null;
+    try { Object.keys(keys).forEach(k => { keys[k] = false; }); Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; }); } catch (e) {}   // 演出中按住的鍵不帶進關卡
+    advIntroActive = false;
+    done(played);
+  };
+  host.onclick = e => { e.preventDefault(); e.stopPropagation(); if (!started) { finish(true); return; } if (H2.map) H2.map.skip = true; };
+  const limit = setTimeout(() => { if (!started) finish(false); }, 6000);
+  // 飛行音效也先載好（最多等 2.5 秒；載不到就安靜地飛，不影響演出）
+  const sfxReady = new Promise(res => { try { Promise.resolve(sfxLoad('flyingHome')).then(res, res); } catch (e) { res(); } setTimeout(res, 2500); });
+  Promise.all([h2Load(c.image), h2Load(c.home), sfxReady]).then(([a, b]) => {
+    clearTimeout(limit);
+    if (ended) return;
+    if (!a || a.status !== 'ok' || !b || b.status !== 'ok') { finish(false); return; }
+    started = true;
+    wrap.classList.remove('is-loading');
+    h2MapRender({ keepHome: true, keepInfo: true });
+    const to = c.nodes.find(n => n.stageId === '1-1'); if (!to) { finish(false); return; }
+    const from = { x: -14, y: Math.min(92, to.y + 22) };                     // 從地圖左下外側飛進來
+    home.style.left = from.x + '%'; home.style.top = from.y + '%'; home.style.display = 'block';
+    const info = h2$('h2-map-info');
+    if (info) info.innerHTML = '<span>🎈 氣球飛行屋飛向 <b>' + h2Esc(to.label + ' ' + h2MapNodeName(to.stageId)) + '</b></span><small>點一下畫面或按「跳過」可以直接開始</small>';
+    // 先看一眼地圖（0.6 秒）→ 飛 1.7 秒（和飛行音效 ui_flying_home 約 1.6 秒的長度一致）→ 抵達停 0.5 秒
+    const DUR = 1700; let t0 = 0;
+    const step = nowT => {
+      if (!t0) { t0 = nowT; h2MapFlySfx(true); }
+      if (ended) return;
+      const k = Math.min(1, (nowT - t0) / DUR), e = 1 - Math.pow(1 - k, 3);
+      home.style.left = (from.x + (to.x - from.x) * e) + '%';
+      home.style.top = (from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 9) + '%';
+      if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
+      home.style.left = to.x + '%'; home.style.top = to.y + '%';
+      h2MapFlySfx(false);                                                   // 抵達／跳過 → 立刻停
+      setTimeout(() => finish(true), (H2.map && H2.map.skip) ? 0 : 500);
+    };
+    setTimeout(() => { if (!ended) { if (H2.map && H2.map.skip) finish(true); else requestAnimationFrame(step); } }, 600);
+  }).catch(() => { clearTimeout(limit); finish(false); });
+}
+
+// ── 掛上既有流程（包住原函式；原本行為不變）──
+(function v370Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v370) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v370 = true; globalThis[name] = w; };
+  // 入場演出中不能用鍵盤／按鈕把遊戲「繼續」
+  wrapFn('resumeGame', o => function () { if (advIntroActive) return; return o.apply(this, arguments); });
+  wrapFn('pauseGame', o => function () { if (advIntroActive) return; return o.apply(this, arguments); });
+  // 重新開始測試 → 回到 1-1 後可再體驗一次入場
+  wrapFn('p2DoTestReset', o => function () { const r = o.apply(this, arguments); try { if (advIntroShouldPlay()) advIntroRunInLevel(); } catch (e) {} return r; });
+  // 冒險畫面中：第一次做出氣球槌的耐用度教學（排進一般 RPG 佇列，依顯示模式）
+  wrapFn('rpgUpdate', o => function () {
+    // 開機後冒險「第一次真的開始跑」的那一格（電腦：開機就開始；手機：按「▶ 開始冒險」之後）→ 新玩家先播入場
+    if (!advIntroChecked && gameState === 'playing') {
+      advIntroChecked = true;
+      try { if (!rpgActive && advIntroShouldPlay()) { advIntroRunInLevel(); return; } } catch (e) {}
+    }
+    try {
+      if (gameState === 'playing' && !rpgActive && !rpgWasShownThisAttempt('rpg011_hammer_crafted') && rpgHammerTutorialDue())
+        rpgRequest('rpg011_hammer_crafted', () => gameState === 'playing' || gameState === 'paused');
+    } catch (e) {}
+    return o.apply(this, arguments);
+  });
+})();
+if (typeof window !== 'undefined') Object.assign(window, { advIntroShouldPlay, advIntroRunInLevel, weaponSnapSync, rpgPopCount, h2FloatDeltas });
