@@ -3724,8 +3724,8 @@ html.h2-arrow-fail .h2-turn--r::before { content: '▶'; color: #5e3517; font-si
 @keyframes h2Shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
 .h2-shake { animation: h2Shake 0.26s ease-out 1; }
 body:not(.h2-devtools) #btn-result-reset { display: none !important; }
-#btn-pause-run-ab { display: none; }
-body.h2-devtools #btn-pause-run-ab { display: block; }
+#btn-pause-run-ab, #btn-pause-sword-ab { display: none; }
+body.h2-devtools #btn-pause-run-ab, body.h2-devtools #btn-pause-sword-ab { display: block; }
 
 /* 矮螢幕（手機橫向）微調：字不縮小，改收內距 */
 @media (max-height: 420px) {

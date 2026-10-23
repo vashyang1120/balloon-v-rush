@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.70-hud-tutorial-intro-pop-rpg-persistence-test-1';
-const BUILD_TIME   = '2026-10-21 20:00';
+const GAME_VERSION = 'adventure-v0.3.71-run-v3-sword-v2-anim-test-1';
+const BUILD_TIME   = '2026-10-24 12:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -678,9 +678,10 @@ function getHeroDrawRect(img, effectiveScale, royalN) {
       dX: (player.w - dW) / 2 + HERO_DRAW_OFFSET_X + (A['royalSwordAttack' + royalN + 'OffsetX'] || 0),
       dY: player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y + (A['royalSwordAttack' + royalN + 'OffsetY'] || 0) };
   }
-  const dW = player.w * HERO_DRAW_SCALE * effectiveScale;
-  const dH = dW * (img.height / img.width);
-  const _runBFootY = (img && img._heroRunB && typeof HERO_RUN_B !== 'undefined') ? HERO_RUN_B.footOffsetY : 0; // v0.3.67：B 跑步圖腳底對齊待機圖
+  const _wMul = (img && img._heroWidthMul) || 1;   // v0.3.71：揮劍 v2 素材畫布較寬 → 寬度 ×1.38756（不是放大小V）
+  const dW = player.w * HERO_DRAW_SCALE * effectiveScale * _wMul;
+  const dH = dW * (img.height / img.width);          // 每張用自己的寬高比例（跑步 v3 第 3 張比較高）
+  const _runBFootY = (img && typeof img._heroFootY === 'number') ? img._heroFootY : 0; // v0.3.67／v0.3.71：跑步 v2／v3 往上 4.76px；揮劍 v2 為 0
   return { dW, dH, dX: (player.w - dW) / 2 + HERO_DRAW_OFFSET_X, dY: player.h - dH * HERO_FOOT_ANCHOR_Y + HERO_DRAW_OFFSET_Y + _runBFootY };
 }
 
@@ -721,6 +722,8 @@ function computeHeroArtKey() {
   if (player.swordAnimTimer > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
     const t = 30 - player.swordAnimTimer; // 已過幀數 0~29
+    const _sv2 = (typeof heroSwordV2Key === 'function') ? heroSwordV2Key(t) : null; // v0.3.71：揮劍 B（v2）01→02→03→04→05 各 100ms，播一次
+    if (_sv2) return _sv2;
     if (t < 6)  return 'swordAttack01';   //  0~5  : 6 幀（起手）
     if (t < 12) return 'swordAttack02';   //  6~11 : 6 幀（揮出）
     if (t < 18) return 'swordAttack03';   // 12~17 : 6 幀（命中）
@@ -13160,7 +13163,7 @@ function drawPlayer(cx) {
       useHammerScale = false;
     }
   } else {
-    heroImg = (typeof heroRunBImg === 'function' ? heroRunBImg(heroKey) : null) || getAdventureImage(heroKey) || getAdventureImage('idle'); // v0.3.67：B 的跑步圖
+    heroImg = (typeof heroAnimTestImg === 'function' ? heroAnimTestImg(heroKey) : null) || getAdventureImage(heroKey) || getAdventureImage('idle'); // v0.3.71：跑步 v2／v3、揮劍 v2
   }
 
   // v0.3.46：橙煌王權劍（2-4 撿到金色油管環後）；F4 預覽時可切換 王權劍＋原圖 ghost / 只看王權劍 / 只看原圖
@@ -14735,6 +14738,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.71：run-v3-sword-v2-anim → anim-ab（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('run-v3-sword-v2-anim')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'anim-ab' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.70：hud-tutorial-intro-pop-rpg-persistence → hud-intro（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('hud-tutorial-intro')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -22008,31 +22016,78 @@ function h2BindOnce() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  v0.3.67：跑步動畫 A/B（只在開發工具切換；不改移動速度、碰撞、物理與其他動作）
-//  A＝原本 hero_run_01～05 ＋ 原本節奏（起跑 6 幀、循環 7 幀、停下 8 幀，以 60Hz 邏輯幀計）
-//  B＝hero_run_0N_aligned_test.png（500×642，已在定位工具對位）＋ 6.19 FPS（以累積時間計時）
-//    ・縮放：沿用原本的繪製規則（寬 = 碰撞盒寬 × 2）；量測後頭部大小與待機圖一致（≈ 41px vs 42px）
-//    ・腳底：B 圖的落地腳底線（第 4 張 y = 633）比待機圖腳底低 4.76px → 往上補 4.76px，待機↔跑步不跳位
-//    ・播放順序與 A 相同（34543212 循環），方便直接比較；只換圖與速度
+//  v0.3.71：動畫驗收 A/B（只在開發工具切換；不改移動速度、碰撞、物理、攻擊判定、冷卻與其他動作）
+//  跑步  A＝跑步 v2（hero_run_0N_aligned_test.png，原本 v0.3.67 的「跑步 B」，已確認較好）← 預設
+//        B＝跑步 v3（hero_run_v3_0N.png，新候選）
+//        （原本的跑步 v1 hero_run_01～05.png 退出 A/B；只在 v2 圖片還沒載好／載入失敗時當備援）
+//    ・兩組都是 5 張 PNG、8 步循環 03→04→05→04→03→02→01→02，每步 161.55ms（一圈 1292.41ms），以累積時間計時
+//    ・繪製：寬 120 遊戲 px（= 碰撞盒寬 × 2）、腳底 88.3%、再往上 4.76px（drawOffsetY −4.76）
+//    ・PNG 已含校準結果 → 不再套 alignment.json 的矩陣；每張用自己的寬高比例（v3 第 3 張比較高，不假設同高）
+//  揮劍  A＝目前的揮劍（hero_sword_attack_01～04，01→02→03→02→01，每張 6 邏輯幀）← 預設
+//        B＝揮劍 v2（hero_sword_attack_v2_01～05，01→02→03→04→05，每張 100ms＝6 邏輯幀，共 500ms，播一次）
+//    ・繪製：寬 120 × 1.38756 ≈ 166.51 遊戲 px（素材畫布比較寬，不是把小V放大），drawOffsetY 0，維持原圖比例
+//    ・時間長度和原本的揮劍視覺計時（swordAnimTimer = 30 邏輯幀）一樣 → 攻擊判定（14 幀）、冷卻（28 幀）完全沿用
+//    ・2-4 王權劍（金色油管環）期間照舊使用王權劍圖（v2 沒有王權劍版本）
 // ════════════════════════════════════════════════════════════════════
-var HERO_RUN_B = { fps: 6.19, footOffsetY: -4.76, loop: ['run03', 'run04', 'run05', 'run04', 'run03', 'run02', 'run01', 'run02'],
-  files: { run01: 'assets/adventure/hero/hero_run_01_aligned_test.png', run02: 'assets/adventure/hero/hero_run_02_aligned_test.png', run03: 'assets/adventure/hero/hero_run_03_aligned_test.png',
-           run04: 'assets/adventure/hero/hero_run_04_aligned_test.png', run05: 'assets/adventure/hero/hero_run_05_aligned_test.png' } };
-var heroRunMode = 'A', heroRunBImgs = {}, heroRunBFailed = [], heroRunBLoading = false, _hrbLastPhase = null, _hrbT0 = 0;
-try { if (ADVENTURE_TEST_TOOLS_ENABLED) { const m = /[?&]run=([ab])\b/i.exec(location.search); const ls = localStorage.getItem('balloonV_dev_runAB'); if ((m ? m[1] : ls || 'A').toUpperCase() === 'B') heroRunMode = 'B'; } } catch (e) {}
-function heroRunLoadB() {
-  if (heroRunBLoading) return; heroRunBLoading = true;
-  Object.keys(HERO_RUN_B.files).forEach(k => {
-    const cands = getAssetSourceCandidates(HERO_RUN_B.files[k]).map(c => c.url); let i = 0;
-    const img = new Image(); img._heroRunB = true;
-    img.onload = () => { heroRunBImgs[k] = img; };
-    img.onerror = () => { if (i < cands.length) img.src = cands[i++]; else { heroRunBFailed.push(HERO_RUN_B.files[k]); console.warn('[RunAB] 新跑步圖載入失敗', HERO_RUN_B.files[k]); } };
-    img.src = cands[i++];
-  });
+const HERO_ANIM_STEP_MS = 161.55;
+const HERO_RUN_SETS = {
+  v2: { label: '跑步 v2', stepMs: HERO_ANIM_STEP_MS, footOffsetY: -4.76, widthMul: 1,
+        files: { run01: 'assets/adventure/hero/hero_run_01_aligned_test.png', run02: 'assets/adventure/hero/hero_run_02_aligned_test.png', run03: 'assets/adventure/hero/hero_run_03_aligned_test.png',
+                 run04: 'assets/adventure/hero/hero_run_04_aligned_test.png', run05: 'assets/adventure/hero/hero_run_05_aligned_test.png' } },
+  v3: { label: '跑步 v3', stepMs: HERO_ANIM_STEP_MS, footOffsetY: -4.76, widthMul: 1,
+        files: { run01: 'assets/adventure/hero/hero_run_v3_01.png', run02: 'assets/adventure/hero/hero_run_v3_02.png', run03: 'assets/adventure/hero/hero_run_v3_03.png',
+                 run04: 'assets/adventure/hero/hero_run_v3_04.png', run05: 'assets/adventure/hero/hero_run_v3_05.png' } },
+};
+const HERO_RUN_LOOP = ['run03', 'run04', 'run05', 'run04', 'run03', 'run02', 'run01', 'run02'];
+var HERO_RUN_B = { fps: 1000 / HERO_ANIM_STEP_MS, footOffsetY: -4.76, loop: HERO_RUN_LOOP, files: HERO_RUN_SETS.v2.files };   // 舊名稱保留（相容）
+const HERO_SWORD_V2 = { label: '揮劍 v2', frameMs: 100, frames: 5, widthMul: 1.38756, footOffsetY: 0,
+  files: ['assets/adventure/hero/hero_sword_attack_v2_01.png', 'assets/adventure/hero/hero_sword_attack_v2_02.png', 'assets/adventure/hero/hero_sword_attack_v2_03.png',
+          'assets/adventure/hero/hero_sword_attack_v2_04.png', 'assets/adventure/hero/hero_sword_attack_v2_05.png'],
+  // GitHub 上第 4 張目前的檔名多了「shero_」→ 先試正確檔名，找不到才用這個（改名後自動用正確檔名）
+  altPaths: { 3: ['assets/adventure/hero/hero_shero_sword_attack_v2_04.png'] } };
+var heroRunMode = 'A', heroSwordMode = 'A';
+const heroAnimSets = {};   // { v2: { imgs:{run01..}, failed:[], loading }, v3: …, swordV2: { imgs:[…], used:[], failed:[] } }
+try {
+  if (ADVENTURE_TEST_TOOLS_ENABLED) {
+    // v0.3.71：A/B 的意義改了（A＝v2、B＝v3）→ 用新的記錄鍵，不沿用舊的「B＝v2」選擇
+    const m = /[?&]run=([ab])\b/i.exec(location.search); const ls = localStorage.getItem('balloonV_dev_runAB_v371');
+    if ((m ? m[1] : ls || 'A').toUpperCase() === 'B') heroRunMode = 'B';
+    const s = /[?&]sword=([ab])\b/i.exec(location.search); const ls2 = localStorage.getItem('balloonV_dev_swordAB_v371');
+    if ((s ? s[1] : ls2 || 'A').toUpperCase() === 'B') heroSwordMode = 'B';
+  }
+} catch (e) {}
+function heroAnimLoadImg(path, alt, onOk, onFail, tag) {
+  const cands = getAssetSourceCandidates(path, alt).map(c => c.url); let i = 0;
+  const img = new Image();
+  img.onload = () => onOk(img, img.src);
+  img.onerror = () => { if (i < cands.length) img.src = cands[i++]; else { onFail(path); console.warn('[AnimAB] ' + tag + ' 載入失敗', path); } };
+  img.src = cands[i++];
 }
-function heroRunIsB() { return heroRunMode === 'B' && ['run01', 'run02', 'run03', 'run04', 'run05'].every(k => heroRunBImgs[k] && heroRunBImgs[k].naturalWidth > 0); }
+function heroRunLoadSet(id) {
+  const set = HERO_RUN_SETS[id]; if (!set) return;
+  const st = heroAnimSets[id] || (heroAnimSets[id] = { imgs: {}, failed: [], loading: false });
+  if (st.loading) return; st.loading = true;
+  Object.keys(set.files).forEach(k => heroAnimLoadImg(set.files[k], null, img => {
+    img._heroRunB = true; img._heroFootY = set.footOffsetY; img._heroWidthMul = set.widthMul; img._heroSet = id;   // 繪製設定跟著圖片走
+    st.imgs[k] = img;
+  }, p => st.failed.push(p), set.label));
+}
+function heroSwordLoadV2() {
+  const st = heroAnimSets.swordV2 || (heroAnimSets.swordV2 = { imgs: [], used: [], failed: [], loading: false });
+  if (st.loading) return; st.loading = true;
+  HERO_SWORD_V2.files.forEach((p, i) => heroAnimLoadImg(p, HERO_SWORD_V2.altPaths[i], (img, url) => {
+    img._heroWidthMul = HERO_SWORD_V2.widthMul; img._heroFootY = HERO_SWORD_V2.footOffsetY; img._heroSet = 'swordV2';
+    st.imgs[i] = img; st.used[i] = decodeURIComponent(url.split('?')[0]).replace(/^.*?(assets\/)/, '$1');
+    if (st.used[i] !== p) console.warn('[AnimAB] 揮劍 v2 第 ' + (i + 1) + ' 張：' + p + ' 不存在，暫用 ' + st.used[i] + '（請到 GitHub 改名）');
+  }, f => st.failed.push(f), HERO_SWORD_V2.label));
+}
+function heroRunSetId() { return heroRunMode === 'B' ? 'v3' : 'v2'; }
+function heroRunSetReady(id) { const st = heroAnimSets[id]; return !!st && ['run01', 'run02', 'run03', 'run04', 'run05'].every(k => st.imgs[k] && st.imgs[k].naturalWidth > 0); }
+// 「用新跑步圖」：選到的那組 5 張都載好才用（還沒好 → 用原本的 v1 跑步，不會缺圖）
+function heroRunIsB() { return heroRunSetReady(heroRunSetId()); }
+let _hrbLastPhase = null, _hrbT0 = 0;
 function heroRunKeyB(moving) {
-  const now = fixedStepCount * FIXED_STEP_MS, F = 1000 / HERO_RUN_B.fps;
+  const now = fixedStepCount * FIXED_STEP_MS, F = HERO_RUN_SETS[heroRunSetId()].stepMs;
   if (_heroRunPhase !== _hrbLastPhase) { _hrbLastPhase = _heroRunPhase; _hrbT0 = now; }
   const n = Math.floor((now - _hrbT0) / F);
   if (!moving) {
@@ -22041,18 +22096,52 @@ function heroRunKeyB(moving) {
   }
   if (_heroRunPhase === 'entry') { if (n === 0) return 'runB01'; if (n === 1) return 'runB02'; _heroRunPhase = 'loop'; _hrbLastPhase = 'loop'; _hrbT0 = now; }
   else if (_heroRunPhase !== 'loop') { _heroRunPhase = 'loop'; _hrbLastPhase = 'loop'; _hrbT0 = now; }
-  return 'runB' + HERO_RUN_B.loop[Math.floor((now - _hrbT0) / F) % HERO_RUN_B.loop.length].slice(3);
+  return 'runB' + HERO_RUN_LOOP[Math.floor((now - _hrbT0) / F) % HERO_RUN_LOOP.length].slice(3);
 }
-function heroRunBImg(key) { return key && key.indexOf('runB') === 0 ? (heroRunBImgs['run' + key.slice(4)] || null) : null; }
+function heroSwordV2Ready() { const st = heroAnimSets.swordV2; return !!st && [0, 1, 2, 3, 4].every(i => st.imgs[i] && st.imgs[i].naturalWidth > 0); }
+// 揮劍 v2 的視覺影格（t＝這次揮劍已經過的邏輯幀 0～29）；王權劍、F4 王權劍預覽時不用 v2
+function heroSwordV2Key(t) {
+  if (heroSwordMode !== 'B' || !heroSwordV2Ready()) return null;
+  if ((typeof isRoyalSwordActive === 'function' && isRoyalSwordActive()) || (typeof getRoyalSwordCalibFrame === 'function' && getRoyalSwordCalibFrame())) return null;
+  const per = HERO_SWORD_V2.frameMs / FIXED_STEP_MS;   // 100ms ＝ 6 邏輯幀
+  return 'swordAttackV2_0' + (Math.min(HERO_SWORD_V2.frames - 1, Math.floor(Math.max(0, t) / per)) + 1);
+}
+// 繪製時取圖：跑步 v2／v3、揮劍 v2（其他動作照舊）
+function heroAnimTestImg(key) {
+  if (!key) return null;
+  if (key.indexOf('runB') === 0) { const st = heroAnimSets[heroRunSetId()]; return (st && st.imgs['run' + key.slice(4)]) || null; }
+  if (key.indexOf('swordAttackV2_0') === 0) { const st = heroAnimSets.swordV2; return (st && st.imgs[Number(key.slice(-1)) - 1]) || null; }
+  return null;
+}
+function heroRunBImg(key) { return key && key.indexOf('runB') === 0 ? heroAnimTestImg(key) : null; }   // 舊名稱保留（相容）
+const HERO_RUN_LABEL = { A: '🏃 跑步動畫：A（v2，已確認）⇄', B: '🏃 跑步動畫：B（v3，新候選）⇄' };
+const HERO_SWORD_LABEL = { A: '⚔️ 揮劍動畫：A（目前）⇄', B: '⚔️ 揮劍動畫：B（v2，新素材）⇄' };
+// 切換只換圖和繪製設定：不重設位置、HP、金幣、進度、攻擊狀態
 function setHeroRunMode(m) {
   heroRunMode = (String(m).toUpperCase() === 'B') ? 'B' : 'A';
-  try { localStorage.setItem('balloonV_dev_runAB', heroRunMode); } catch (e) {}
-  if (heroRunMode === 'B') heroRunLoadB();
+  try { localStorage.setItem('balloonV_dev_runAB_v371', heroRunMode); } catch (e) {}
+  heroRunLoadSet(heroRunSetId());
   _hrbLastPhase = null;
-  const b = h2$('btn-pause-run-ab'); if (b) b.textContent = heroRunMode === 'B' ? '🏃 跑步動畫：B（新對位圖 6.19 FPS）⇄' : '🏃 跑步動畫：A（原本）⇄';
+  const b = h2$('btn-pause-run-ab'); if (b) b.textContent = HERO_RUN_LABEL[heroRunMode] + (heroRunIsB() ? '' : '（載入中…）');
   return heroRunMode;
 }
-if (heroRunMode === 'B') heroRunLoadB();
+function setHeroSwordMode(m) {
+  heroSwordMode = (String(m).toUpperCase() === 'B') ? 'B' : 'A';
+  try { localStorage.setItem('balloonV_dev_swordAB_v371', heroSwordMode); } catch (e) {}
+  if (heroSwordMode === 'B') heroSwordLoadV2();
+  const b = h2$('btn-pause-sword-ab'); if (b) b.textContent = HERO_SWORD_LABEL[heroSwordMode] + (heroSwordMode === 'B' && !heroSwordV2Ready() ? '（載入中…）' : '');
+  return heroSwordMode;
+}
+heroRunLoadSet('v2');                      // 預設 A＝v2：一開機就載
+if (heroRunMode === 'B') heroRunLoadSet('v3');
+if (heroSwordMode === 'B') heroSwordLoadV2();
+if (typeof window !== 'undefined') {
+  window.debugAnimAB = function () {
+    const o = { run: { mode: heroRunMode, set: heroRunSetId(), usingNewArt: heroRunIsB(), stepMs: HERO_RUN_SETS[heroRunSetId()].stepMs, failed: Object.keys(heroAnimSets).reduce((a, k) => a.concat(heroAnimSets[k].failed || []), []) },
+      sword: { mode: heroSwordMode, v2Ready: heroSwordV2Ready(), used: ((heroAnimSets.swordV2 || {}).used || []).slice() } };
+    console.log('[AnimAB]', o); return o;
+  };
+}
 
 // ── 接上既有函式（只在原函式「之後」刷新新版畫面；不改原本行為）──
 (function h2Install() {
@@ -22109,8 +22198,14 @@ if (heroRunMode === 'B') heroRunLoadB();
     const box = h2$('p2-dev-body');   // v0.3.68：放在暫停選單的「開發測試工具」（只有 ?devtools=1 看得到）
     if (box && !h2$('btn-pause-run-ab')) {
       const b = document.createElement('button'); b.id = 'btn-pause-run-ab'; b.className = 'h2-pill h2-pill--purple h2-pill--sm';
-      b.textContent = heroRunMode === 'B' ? '🏃 跑步動畫：B（新對位圖 6.19 FPS）⇄' : '🏃 跑步動畫：A（原本）⇄';
+      b.textContent = HERO_RUN_LABEL[heroRunMode];
       b.addEventListener('click', e => { e.preventDefault(); setHeroRunMode(heroRunMode === 'B' ? 'A' : 'B'); });
+      box.appendChild(b);
+    }
+    if (box && !h2$('btn-pause-sword-ab')) {   // v0.3.71：揮劍 A（目前）／B（v2）
+      const b = document.createElement('button'); b.id = 'btn-pause-sword-ab'; b.className = 'h2-pill h2-pill--purple h2-pill--sm';
+      b.textContent = HERO_SWORD_LABEL[heroSwordMode];
+      b.addEventListener('click', e => { e.preventDefault(); setHeroSwordMode(heroSwordMode === 'B' ? 'A' : 'B'); });
       box.appendChild(b);
     }
   } catch (e) {}
@@ -22129,7 +22224,7 @@ if (typeof window !== 'undefined') {
       assets: Object.keys(H2.img).map(p => ({ path: p, status: H2.img[p].status })), rootFlags: (h2$('h2-root') || {}).className };
     console.log('[Home2]', o); return o;
   };
-  window.debugRunAB = function (m) { if (m) setHeroRunMode(m); const o = { mode: heroRunMode, active: heroRunIsB() ? 'B' : 'A', loaded: Object.keys(heroRunBImgs), failed: heroRunBFailed.slice(), fps: HERO_RUN_B.fps }; console.log('[RunAB]', o); return o; };
+  window.debugRunAB = function (m) { if (m) setHeroRunMode(m); return debugAnimAB(); };   // v0.3.71
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -22510,7 +22605,7 @@ if (typeof window !== 'undefined') window.debugChainHit = function () { const o 
   after('closePauseBag', () => { if (gameState === 'paused') p2RenderPause(); });
   after('refreshAllHpDisplays', () => { if (gameState === 'paused') p2RenderPause(); });
   // 跑步 A/B 按鈕（開發用）移到「開發測試工具」
-  try { const ab = h2$('btn-pause-run-ab'), body = h2$('p2-dev-body'); if (ab && body) { ab.className = 'h2-pill h2-pill--purple h2-pill--sm'; body.appendChild(ab); } } catch (e) {}
+  try { const body = h2$('p2-dev-body'); ['btn-pause-run-ab', 'btn-pause-sword-ab'].forEach(id => { const ab = h2$(id); if (ab && body) { ab.className = 'h2-pill h2-pill--purple h2-pill--sm'; body.appendChild(ab); } }); } catch (e) {}
   try { const t = h2$('p2-dev-toggle'); if (t) t.addEventListener('click', e => { e.preventDefault(); p2ToggleDev(); }); } catch (e) {}
 })();
 
