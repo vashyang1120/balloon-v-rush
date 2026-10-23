@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>動態漫畫播放器（測試）</title>
+<!--
+  氣球小V・動態漫畫播放器 正式播放頁  motion-comic-editor-v0.1.0-test-1
+  網址參數：
+    ?range=ready   只播有素材的幕次（預設）
+    ?range=all     播放全部幕次（缺素材的幕會顯示「尚未配置素材」）
+    ?scene=2       只播第 2 幕
+    ?source=local  播放編輯器在這台電腦「儲存」的版本（同一個網站來源才讀得到）
+    ?project=../projects/xxx.json   指定專案檔（需要 HTTP 伺服器）
+-->
+<link rel="stylesheet" href="motion-comic-player.css">
+<style>
+  :root { --ui-text: #fff6e8; --ui-bg: rgba(20, 12, 8, 0.42); --ui-border: rgba(255, 236, 200, 0.28); --accent: #ffcf6b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; color: var(--ui-text);
+    font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  body { height: 100dvh; }
+  #host { position: fixed; inset: 0; }
+  .ctrl { position: fixed; z-index: 20; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; opacity: .55; transition: opacity .3s; }
+  .ctrl:hover { opacity: 1; }
+  .btn { font: inherit; font-size: 14px; letter-spacing: .08em; color: var(--ui-text); background: var(--ui-bg);
+    border: 1px solid var(--ui-border); border-radius: 999px; padding: 8px 16px; cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  @media (max-height: 500px) { .ctrl .btn { font-size: 11px; padding: 5px 10px; } }
+  .overlay { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; background: #000; text-align: center; padding: 24px; }
+  .overlay[hidden] { display: none; }
+  .overlay h1 { font-size: clamp(18px, 3.2vw, 28px); font-weight: 600; letter-spacing: .15em; }
+  .overlay p { font-size: 14px; opacity: .75; line-height: 1.7; }
+  #startBtn { font-size: 17px; padding: 12px 34px; background: rgba(255, 207, 107, .14); border-color: rgba(255, 207, 107, .55); }
+  #startBtn:disabled { opacity: .35; }
+  .bar { width: min(260px, 60vw); height: 3px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  #endTag { position: fixed; z-index: 20; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    font-size: 13px; letter-spacing: .2em; padding: 6px 14px; border-radius: 999px; background: var(--ui-bg);
+    border: 1px solid var(--ui-border); opacity: 0; transition: opacity .8s; pointer-events: none; }
+  #endTag.show { opacity: .8; }
+  #rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center;
+    justify-content: center; gap: 16px; background: #000; text-align: center; padding: 24px; }
+  #rotate .phone { width: 46px; height: 76px; border: 3px solid var(--ui-text); border-radius: 9px; animation: turn 1.8s ease-in-out infinite; }
+  @keyframes turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<div class="ctrl">
+  <button class="btn" id="skipBtn" type="button">略過本幕 ⏭</button>
+  <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
+  <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
+</div>
+<div id="endTag">播放完畢</div>
+
+<div class="overlay" id="startScreen">
+  <h1 id="title">動態漫畫</h1>
+  <p id="loadMsg">正在讀取專案…</p>
+  <div class="bar"><i id="loadBar"></i></div>
+  <button class="btn" id="startBtn" type="button" disabled>▶ 開始播放</button>
+</div>
+<div id="rotate"><div class="phone"></div><p>請將手機轉為橫向觀看</p></div>
+
+<script src="motion-comic-player.js"></script>
+<script src="../projects/party-island-opening.js"></script>
+<script>
+(async () => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const LS_KEY = 'mc-editor-project-v1';
+
+  // 讀取專案：本機儲存 → 指定 JSON（HTTP）→ 內建專案（file:// 也能用）
+  async function loadProject() {
+    if (params.get('source') === 'local') {
+      try { const s = localStorage.getItem(LS_KEY); if (s) return { p: JSON.parse(s), from: '編輯器儲存的版本' }; } catch (_) {}
+    }
+    const url = params.get('project') || '../projects/party-island-opening.json';
+    if (location.protocol !== 'file:') try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.ok) return { p: await r.json(), from: url };
+    } catch (_) {}
+    return { p: window.MC_PROJECT, from: '內建專案（party-island-opening.js）' };
+  }
+
+  const { p: project, from } = await loadProject();
+  const check = MotionComic.validateProject(project);
+  if (check.errors.length) {
+    $('loadMsg').innerHTML = '專案格式錯誤：<br>' + check.errors.slice(0, 6).join('<br>');
+    return;
+  }
+  $('title').textContent = project.title || '動態漫畫';
+
+  const endTag = $('endTag');
+  const player = new MotionComic.Player($('host'), {
+    baseUrl: '../', mode: 'play',
+    onEnd: () => endTag.classList.add('show'),
+    onPlayState: p => { $('pauseBtn').textContent = p ? '暫停 ⏸' : '繼續 ▶'; },
+  });
+  window.mcPlayer = player;
+  player.setProject(project);
+  $('loadMsg').textContent = '正在載入圖片…';
+  $('loadBar').style.width = '30%';
+  const report = await player.loadAssets();
+  $('loadBar').style.width = '100%';
+  const failed = report.filter(r => !r.ok);
+  $('loadMsg').innerHTML = `來源：${from}<br>圖片 ${report.length - failed.length} / ${report.length} 張可用` +
+    (failed.length ? `<br>缺少：${failed.map(f => f.label).join('、')}` : '');
+
+  function applyRange() {
+    const sc = parseInt(params.get('scene'), 10);
+    if (sc > 0) player.setRange(player.rangeFor('scene', sc - 1));
+    else if (params.get('range') === 'all') player.setRange(null);
+    else player.setRange(player.rangeFor('ready'));
+  }
+  applyRange();
+  player.seek(player.range ? player.range.from : 0);
+  $('startBtn').disabled = false;
+
+  async function enterMobileLandscape() {
+    if (!matchMedia('(pointer: coarse)').matches) return;
+    try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+  }
+  $('startBtn').addEventListener('click', async () => {
+    $('startBtn').disabled = true;
+    await enterMobileLandscape();
+    $('startScreen').hidden = true;
+    endTag.classList.remove('show');
+    player.replay();
+  });
+  $('replayBtn').addEventListener('click', () => { endTag.classList.remove('show'); player.replay(); });
+  $('skipBtn').addEventListener('click', () => player.skipScene());
+  $('pauseBtn').addEventListener('click', () => { if (player.t < player._rangeEnd()) player.togglePlay(); });
+  window.addEventListener('keydown', e => {
+    if (!$('startScreen').hidden) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (player.blocked) player.continueDialogue(); else player.togglePlay();
+    }
+    if (e.key === 's' || e.key === 'S' || e.key === 'Escape') player.skipScene();
+    if (e.key === 'r' || e.key === 'R') { endTag.classList.remove('show'); player.replay(); }
+  });
+})();
+</script>
+</body>
+</html>
