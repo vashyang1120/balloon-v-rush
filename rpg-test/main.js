@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.71-run-v3-sword-v2-anim-test-1';
-const BUILD_TIME   = '2026-10-24 12:00';
+const GAME_VERSION = 'adventure-v0.3.72-run-v3-sword-v2-default-test-1';
+const BUILD_TIME   = '2026-10-24 06:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -14738,6 +14738,11 @@ function getShortVersionLabel() {
   const vMatch = GAME_VERSION.match(/v(\d+\.\d+\.\d+)/);
   const vPart  = vMatch ? 'v' + vMatch[1] : '';
   let tPart = '';
+  // v0.3.72：run-v3-sword-v2-default → anim-v3v2（test-N > 1 時加上 -N）
+  if (GAME_VERSION.includes('run-v3-sword-v2-default')) {
+    const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
+    tPart = 'anim-v3v2' + (tN === '1' ? '' : '-' + tN);
+  } else
   // v0.3.71：run-v3-sword-v2-anim → anim-ab（test-N > 1 時加上 -N）
   if (GAME_VERSION.includes('run-v3-sword-v2-anim')) {
     const tN = GAME_VERSION.match(/-test-(\d+)/)?.[1] || '1';
@@ -22017,6 +22022,7 @@ function h2BindOnce() {
 
 // ════════════════════════════════════════════════════════════════════
 //  v0.3.71：動畫驗收 A/B（只在開發工具切換；不改移動速度、碰撞、物理、攻擊判定、冷卻與其他動作）
+//  v0.3.72：使用者實機驗收通過 → 正式預設＝B（跑步 v3、揮劍 v2）；A 只留在開發工具比較（素材載不到時自動退回原本的圖）
 //  跑步  A＝跑步 v2（hero_run_0N_aligned_test.png，原本 v0.3.67 的「跑步 B」，已確認較好）← 預設
 //        B＝跑步 v3（hero_run_v3_0N.png，新候選）
 //        （原本的跑步 v1 hero_run_01～05.png 退出 A/B；只在 v2 圖片還沒載好／載入失敗時當備援）
@@ -22043,17 +22049,19 @@ var HERO_RUN_B = { fps: 1000 / HERO_ANIM_STEP_MS, footOffsetY: -4.76, loop: HERO
 const HERO_SWORD_V2 = { label: '揮劍 v2', frameMs: 100, frames: 5, widthMul: 1.38756, footOffsetY: 0,
   files: ['assets/adventure/hero/hero_sword_attack_v2_01.png', 'assets/adventure/hero/hero_sword_attack_v2_02.png', 'assets/adventure/hero/hero_sword_attack_v2_03.png',
           'assets/adventure/hero/hero_sword_attack_v2_04.png', 'assets/adventure/hero/hero_sword_attack_v2_05.png'],
-  // GitHub 上第 4 張目前的檔名多了「shero_」→ 先試正確檔名，找不到才用這個（改名後自動用正確檔名）
+  // v0.3.72：GitHub 已有正確檔名 hero_sword_attack_v2_04.png（優先使用）；舊的 shero_ 檔名只在正確檔名載入失敗時才備援
   altPaths: { 3: ['assets/adventure/hero/hero_shero_sword_attack_v2_04.png'] } };
-var heroRunMode = 'A', heroSwordMode = 'A';
+// v0.3.72：使用者實機驗收通過 → 正式預設改為 B（跑步 v3、揮劍 v2）；A（跑步 v2／原本揮劍）只留給開發工具比較
+var heroRunMode = 'B', heroSwordMode = 'B';
 const heroAnimSets = {};   // { v2: { imgs:{run01..}, failed:[], loading }, v3: …, swordV2: { imgs:[…], used:[], failed:[] } }
 try {
   if (ADVENTURE_TEST_TOOLS_ENABLED) {
-    // v0.3.71：A/B 的意義改了（A＝v2、B＝v3）→ 用新的記錄鍵，不沿用舊的「B＝v2」選擇
-    const m = /[?&]run=([ab])\b/i.exec(location.search); const ls = localStorage.getItem('balloonV_dev_runAB_v371');
-    if ((m ? m[1] : ls || 'A').toUpperCase() === 'B') heroRunMode = 'B';
-    const s = /[?&]sword=([ab])\b/i.exec(location.search); const ls2 = localStorage.getItem('balloonV_dev_swordAB_v371');
-    if ((s ? s[1] : ls2 || 'A').toUpperCase() === 'B') heroSwordMode = 'B';
+    // v0.3.72：預設改成 B（正式）；只有開發工具（?devtools=1）時才讀取比較用的選擇，且改用新記錄鍵（不沿用 v0.3.71 測試期間存下的 A）
+    const devOn = (typeof H2_DEVTOOLS !== 'undefined') ? H2_DEVTOOLS : /[?&]devtools=1\b/.test(location.search);
+    const m = /[?&]run=([ab])\b/i.exec(location.search); const ls = devOn ? localStorage.getItem('balloonV_dev_runAB_v372') : null;
+    if ((m ? m[1] : ls || 'B').toUpperCase() === 'A') heroRunMode = 'A';
+    const s = /[?&]sword=([ab])\b/i.exec(location.search); const ls2 = devOn ? localStorage.getItem('balloonV_dev_swordAB_v372') : null;
+    if ((s ? s[1] : ls2 || 'B').toUpperCase() === 'A') heroSwordMode = 'A';
   }
 } catch (e) {}
 function heroAnimLoadImg(path, alt, onOk, onFail, tag) {
@@ -22114,12 +22122,12 @@ function heroAnimTestImg(key) {
   return null;
 }
 function heroRunBImg(key) { return key && key.indexOf('runB') === 0 ? heroAnimTestImg(key) : null; }   // 舊名稱保留（相容）
-const HERO_RUN_LABEL = { A: '🏃 跑步動畫：A（v2，已確認）⇄', B: '🏃 跑步動畫：B（v3，新候選）⇄' };
-const HERO_SWORD_LABEL = { A: '⚔️ 揮劍動畫：A（目前）⇄', B: '⚔️ 揮劍動畫：B（v2，新素材）⇄' };
+const HERO_RUN_LABEL = { A: '🏃 跑步動畫：A（v2，舊版比較）⇄', B: '🏃 跑步動畫：B（v3，正式）⇄' };
+const HERO_SWORD_LABEL = { A: '⚔️ 揮劍動畫：A（舊版比較）⇄', B: '⚔️ 揮劍動畫：B（v2，正式）⇄' };
 // 切換只換圖和繪製設定：不重設位置、HP、金幣、進度、攻擊狀態
 function setHeroRunMode(m) {
   heroRunMode = (String(m).toUpperCase() === 'B') ? 'B' : 'A';
-  try { localStorage.setItem('balloonV_dev_runAB_v371', heroRunMode); } catch (e) {}
+  try { localStorage.setItem('balloonV_dev_runAB_v372', heroRunMode); } catch (e) {}
   heroRunLoadSet(heroRunSetId());
   _hrbLastPhase = null;
   const b = h2$('btn-pause-run-ab'); if (b) b.textContent = HERO_RUN_LABEL[heroRunMode] + (heroRunIsB() ? '' : '（載入中…）');
@@ -22127,13 +22135,12 @@ function setHeroRunMode(m) {
 }
 function setHeroSwordMode(m) {
   heroSwordMode = (String(m).toUpperCase() === 'B') ? 'B' : 'A';
-  try { localStorage.setItem('balloonV_dev_swordAB_v371', heroSwordMode); } catch (e) {}
+  try { localStorage.setItem('balloonV_dev_swordAB_v372', heroSwordMode); } catch (e) {}
   if (heroSwordMode === 'B') heroSwordLoadV2();
   const b = h2$('btn-pause-sword-ab'); if (b) b.textContent = HERO_SWORD_LABEL[heroSwordMode] + (heroSwordMode === 'B' && !heroSwordV2Ready() ? '（載入中…）' : '');
   return heroSwordMode;
 }
-heroRunLoadSet('v2');                      // 預設 A＝v2：一開機就載
-if (heroRunMode === 'B') heroRunLoadSet('v3');
+heroRunLoadSet(heroRunSetId());           // v0.3.72：正式預設＝v3（開發工具選 A 時才載 v2）
 if (heroSwordMode === 'B') heroSwordLoadV2();
 if (typeof window !== 'undefined') {
   window.debugAnimAB = function () {
