@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>氣球小V・動態漫畫編輯器</title>
+<!-- motion-comic-editor-v0.2.0-test-1 -->
+<link rel="stylesheet" href="../player/motion-comic-player.css">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">氣球小V・動態漫畫編輯器 <small>v0.2.0-test-1</small></div>
+    <input id="projTitle" class="title-input" type="text" spellcheck="false" title="專案名稱">
+    <span id="dirtyTag" class="dirty" hidden>● 尚未儲存</span>
+    <span id="validTag" class="valid-tag"></span>
+    <div class="spacer"></div>
+    <button class="tb" id="undoBtn" title="復原（Ctrl+Z）">↶ 復原</button>
+    <button class="tb" id="redoBtn" title="重做（Ctrl+Shift+Z）">↷ 重做</button>
+    <span class="sep"></span>
+    <button class="tb" id="saveBtn" title="儲存到這台電腦的瀏覽器（Ctrl+S）">💾 儲存</button>
+    <button class="tb" id="importBtn">匯入 JSON</button>
+    <button class="tb" id="exportBtn">匯出 JSON</button>
+    <button class="tb" id="playerBtn" title="用正式播放頁播放已儲存的版本">在播放頁開啟</button>
+    <button class="tb warn" id="resetBtn" title="載入不可變的基準專案">還原初始範例</button>
+    <input type="file" id="importInput" accept=".json,application/json" hidden>
+    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" hidden>
+    <input type="file" id="relinkInput" accept="image/png,image/jpeg,image/webp" hidden>
+  </header>
+
+  <aside id="scenesPanel">
+    <div class="panel-head">場景清單</div>
+    <div id="sceneList"></div>
+    <button class="btn-wide" id="addSceneBtn">＋ 新增場景</button>
+    <button class="btn-wide ghost" id="projectBtn">專案與素材管理</button>
+  </aside>
+
+  <main id="previewWrap">
+    <div id="preview"></div>
+    <div id="hud"></div>
+  </main>
+
+  <aside id="propsPanel">
+    <div id="props"></div>
+  </aside>
+
+  <div id="transport">
+    <button class="tp" id="toStartBtn" title="回到範圍開頭（Home）">⏮</button>
+    <button class="tp big" id="playBtn" title="播放／暫停（空白鍵）">▶</button>
+    <button class="tp" id="replayBtn" title="從範圍開頭重播">↺ 重播</button>
+    <button class="tp" id="skipBtn" title="略過目前這一幕">⏭ 略過本幕</button>
+    <input id="timecode" class="timecode" type="text" spellcheck="false" title="輸入秒數或 分:秒.毫秒 後按 Enter 跳轉">
+    <span id="totalTime" class="muted"></span>
+    <span class="sep"></span>
+    <label class="tp-field">範圍
+      <select id="rangeSel">
+        <option value="all">全部幕次</option>
+        <option value="ready">只播有素材的幕次</option>
+        <option value="scene">只播選定的幕</option>
+      </select>
+    </label>
+    <label class="tp-field">模式
+      <select id="modeSel">
+        <option value="edit">時間軸編輯預覽（對話不暫停）</option>
+        <option value="play">正式播放預覽（等待型對話會暫停）</option>
+      </select>
+    </label>
+    <label class="tp-field">速度
+      <select id="speedSel">
+        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option><option value="2">2×</option>
+      </select>
+    </label>
+    <span class="sep"></span>
+    <label class="tp-field" title="拖曳節點或修改節拍長度時，後面的節點與關鍵影格一起往後移">
+      <input type="checkbox" id="rippleChk" checked> 順延後續事件</label>
+    <label class="tp-field">時間縮放 <input type="range" id="zoomRange" min="20" max="600" step="5"></label>
+  </div>
+
+  <section id="timeline">
+    <div id="tlScroll"><div id="tlContent"></div></div>
+  </section>
+</div>
+
+<div id="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="../player/motion-comic-player.js"></script>
+<script src="../projects/party-island-opening-baseline.js"></script>
+<script src="../projects/party-island-opening-baseline-v0.2.0.js"></script>
+<script src="../projects/party-island-opening.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>
