@@ -3,7 +3,7 @@ window.MC_PROJECT = {
   "schemaVersion": "1.0",
   "projectId": "party-island-opening",
   "title": "派對島大作戰・開場",
-  "editorVersion": "motion-comic-editor-v0.3.2-test-1",
+  "editorVersion": "motion-comic-editor-v0.3.2.1-test-1",
   "contentVersion": 4,
   "stage": {
     "width": 1672,
@@ -120,7 +120,7 @@ window.MC_PROJECT = {
       "name": "第一人稱醒來",
       "status": "ready",
       "note": "移植自 opening-test v0.2.0 第一幕（已驗收）",
-      "durationMs": 10950,
+      "durationMs": 9380,
       "transitionIn": {
         "type": "cut"
       },
@@ -138,22 +138,22 @@ window.MC_PROJECT = {
         {
           "id": "blink2",
           "label": "第二次眨眼",
-          "t": 6900
+          "t": 6030
         },
         {
           "id": "settle",
           "label": "完全清晰／鏡頭開始穩定",
-          "t": 8300
+          "t": 7430
         },
         {
           "id": "settleEnd",
           "label": "鏡頭穩定完成",
-          "t": 10400
+          "t": 8970
         },
         {
           "id": "animEnd",
           "label": "第一幕演出結束",
-          "t": 10800
+          "t": 9370
         }
       ],
       "layers": [
@@ -423,7 +423,7 @@ window.MC_PROJECT = {
       "name": "小V坐在床側，從揉眼到驚訝",
       "status": "ready",
       "note": "v0.3.1：床＋小V再放大、更靠近鏡頭、往左（床頭出框）；「……咦……？」→ 按繼續 → 2A→2B 交叉淡化 → 「我家在飛……？」；不做鏡頭推近（背景不放大）",
-      "durationMs": 2700,
+      "durationMs": 5140,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 160,
@@ -449,12 +449,12 @@ window.MC_PROJECT = {
         {
           "id": "bShown",
           "label": "2B 完全取代 2A",
-          "t": 1850
+          "t": 2400
         },
         {
           "id": "s2_d2",
           "label": "第二句「我家在飛……？」（等待繼續）",
-          "t": 2200
+          "t": 3010
         }
       ],
       "layers": [
@@ -476,16 +476,16 @@ window.MC_PROJECT = {
           "assetB": "scene2_char_2b",
           "switchFrom": {
             "m": "switch",
-            "o": 0
+            "o": 183
           },
           "switchTo": {
             "m": "bShown",
-            "o": 0
+            "o": 183
           },
           "crossfade": "dissolve",
-          "foregroundScale": 0.84,
-          "foregroundX": 0.227,
-          "foregroundY": 1.0,
+          "foregroundScale": 0.68,
+          "foregroundX": 0.168,
+          "foregroundY": 1,
           "foregroundAnchorX": 0.4366,
           "foregroundAnchorY": 0.908,
           "bAlign": {
@@ -582,7 +582,7 @@ window.MC_PROJECT = {
           "styleType": "rpg_box_no_portrait",
           "at": {
             "m": "s2_d2",
-            "o": 0
+            "o": -360
           },
           "mode": "wait",
           "autoMs": 0,
@@ -597,7 +597,7 @@ window.MC_PROJECT = {
       "name": "透過拱窗看見氣球森林",
       "status": "ready",
       "note": "v0.3.0：木牌更小更低；人物淡入；兩句對話等待玩家繼續；3A→3B 真正交叉淡化",
-      "durationMs": 3700,
+      "durationMs": 6060,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 120,
@@ -623,17 +623,17 @@ window.MC_PROJECT = {
         {
           "id": "s3_cross",
           "label": "03-04 按繼續後：3A→3B 交叉淡化開始",
-          "t": 1700
+          "t": 2360
         },
         {
           "id": "s3_curious",
           "label": "03-05 3B 好奇（疊化完成）",
-          "t": 2300
+          "t": 2960
         },
         {
           "id": "s3_d2",
           "label": "03-06 第二句「氣球森林……？」",
-          "t": 3000
+          "t": 3660
         }
       ],
       "layers": [
@@ -644,68 +644,15 @@ window.MC_PROJECT = {
           "role": "far",
           "asset": "intro_scene03_outside",
           "visible": true,
-          "x": 0.5,
-          "y": 0.5,
-          "scale": 1.0,
+          "x": 0.575,
+          "y": 0.52,
+          "scale": 0.945,
           "anchorX": 0.5,
           "anchorY": 0.5,
           "opacity": 1,
           "rotation": 0,
           "tracks": {},
           "note": "窗框右上角有一個小透光孔（x 0.965～1、y 0～0.074）；主窗外層縮小後蓋不到，用同一張圖原尺寸墊在下面，避免露出底色"
-        },
-        {
-          "id": "s3_outside",
-          "name": "窗外景色（主拱窗，可獨立運鏡）",
-          "type": "image",
-          "role": "far",
-          "asset": "intro_scene03_outside",
-          "visible": true,
-          "x": 0.612,
-          "y": 0.52,
-          "scale": 0.95,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "opacity": 1,
-          "rotation": 0,
-          "tracks": {
-            "scale": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.95,
-                "label": "初始推拉值"
-              },
-              {
-                "m": "end",
-                "o": 0,
-                "v": 0.96,
-                "e": "out",
-                "label": "非常輕微的慢推（到本幕結束）"
-              }
-            ],
-            "x": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.612,
-                "label": "初始位置"
-              },
-              {
-                "m": "s3_cross",
-                "o": 0,
-                "v": 0.612,
-                "label": "轉頭前維持不動"
-              },
-              {
-                "m": "s3_d2",
-                "o": 0,
-                "v": 0.616,
-                "e": "inOut",
-                "label": "微平移：把視線帶到較低處的木牌"
-              }
-            ]
-          }
         },
         {
           "id": "s3_window",
@@ -736,11 +683,11 @@ window.MC_PROJECT = {
           "crossfade": "dissolve",
           "switchFrom": {
             "m": "s3_cross",
-            "o": 0
+            "o": 273
           },
           "switchTo": {
             "m": "s3_curious",
-            "o": 0
+            "o": 373
           },
           "foregroundScale": 0.46,
           "foregroundX": 0.66,
@@ -748,7 +695,7 @@ window.MC_PROJECT = {
           "foregroundAnchorX": 0.4955,
           "foregroundAnchorY": 0.5492,
           "bAlign": {
-            "scale": 1.0,
+            "scale": 1,
             "x": -2,
             "y": 48,
             "note": "3B 圖上的點 (u,v) → 3A 圖上 (u*scale+x, v*scale+y)。兩張圖人物大小相同（皮帶到鞋底 599／598px），以皮帶中央對齊；3B 的頭比 3A 低約 50px 是「往左下看」的姿勢，不是誤差。"
@@ -815,7 +762,7 @@ window.MC_PROJECT = {
           "styleType": "rpg_box_no_portrait",
           "at": {
             "m": "s3_d2",
-            "o": 0
+            "o": 160
           },
           "mode": "wait",
           "autoMs": 0,
@@ -830,7 +777,7 @@ window.MC_PROJECT = {
       "name": "第四幕A：深入氣球森林",
       "status": "ready",
       "note": "v0.3.1：定點分鏡——背景固定；近景小V（偏右、較大）淡出 → 遠景小V（偏左、較小）淡入；人物不移動、不起伏；結束後全畫面淡出進第四幕B",
-      "durationMs": 7000,
+      "durationMs": 4030,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 300,
@@ -846,22 +793,22 @@ window.MC_PROJECT = {
         {
           "id": "a_nearOut",
           "label": "4A-2 近景開始淡出",
-          "t": 3000
+          "t": 1620
         },
         {
           "id": "a_farIn",
           "label": "4A-2 遠景開始淡入",
-          "t": 3600
+          "t": 2190
         },
         {
           "id": "a_nearGone",
           "label": "4A-2 近景完全消失",
-          "t": 3900
+          "t": 2730
         },
         {
           "id": "a_farShown",
           "label": "4A-3 遠景小V（偏左、較小）完全出現",
-          "t": 4500
+          "t": 3720
         }
       ],
       "layers": [
@@ -880,9 +827,9 @@ window.MC_PROJECT = {
           "role": "character",
           "asset": "intro_scene04a_v_near",
           "visible": true,
-          "x": 0.68,
+          "x": 0.52,
           "y": 0.985,
-          "scale": 0.268,
+          "scale": 0.26,
           "anchorX": 0.436,
           "anchorY": 0.9883,
           "opacity": 0,
@@ -893,24 +840,34 @@ window.MC_PROJECT = {
             "opacity": [
               {
                 "m": "start",
-                "o": 0,
-                "v": 1,
+                "o": 680,
+                "v": 0,
                 "label": "隨背景一起淡入"
               },
               {
                 "m": "a_nearOut",
-                "o": 0,
+                "o": -30,
                 "v": 1,
                 "label": "停留"
               },
               {
                 "m": "a_nearGone",
-                "o": 0,
+                "o": -400,
                 "v": 0,
                 "e": "inOut",
                 "label": "淡出"
+              },
+              {
+                "m": "a_nearIn",
+                "o": 520,
+                "v": 1,
+                "e": "inOut"
               }
             ]
+          },
+          "start": {
+            "m": "start",
+            "o": 0
           }
         },
         {
@@ -920,9 +877,9 @@ window.MC_PROJECT = {
           "role": "character",
           "asset": "intro_scene04a_v_far",
           "visible": true,
-          "x": 0.52,
-          "y": 0.775,
-          "scale": 0.1052,
+          "x": 0.565,
+          "y": 0.735,
+          "scale": 0.09,
           "anchorX": 0.4385,
           "anchorY": 0.9486,
           "opacity": 0,
@@ -933,20 +890,20 @@ window.MC_PROJECT = {
             "opacity": [
               {
                 "m": "a_farIn",
-                "o": 0,
+                "o": -380,
                 "v": 0,
                 "label": "還沒出現"
               },
               {
                 "m": "a_farShown",
-                "o": 0,
+                "o": -750,
                 "v": 1,
                 "e": "inOut",
                 "label": "淡入"
               },
               {
                 "m": "end",
-                "o": 0,
+                "o": -260,
                 "v": 1,
                 "label": "停留到本幕結束"
               }
@@ -990,7 +947,7 @@ window.MC_PROJECT = {
       "name": "第四幕B：90° 側面森林小徑（被窺視感）",
       "status": "ready",
       "note": "v0.3.1：定點分鏡——三張固定構圖依序淡入淡出：步行（左、遠）→ 回頭仰望（中、稍近）→ 抬頭張望（右、稍遠）；前景失焦樹木固定在最上層遮擋；不做人物平移／起伏",
-      "durationMs": 9800,
+      "durationMs": 5780,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 700,
@@ -1011,42 +968,42 @@ window.MC_PROJECT = {
         {
           "id": "b_walkOut",
           "label": "4B-1 步行 淡出開始",
-          "t": 3100
+          "t": 1950
         },
         {
           "id": "b_backIn",
           "label": "4B-2 回頭仰望 淡入開始",
-          "t": 3500
+          "t": 2350
         },
         {
           "id": "b_walkGone",
           "label": "4B-1 步行 完全消失",
-          "t": 3800
+          "t": 2650
         },
         {
           "id": "b_backShown",
           "label": "4B-2 回頭仰望（中、稍近）完全出現",
-          "t": 4300
+          "t": 3150
         },
         {
           "id": "b_backOut",
           "label": "4B-2 回頭仰望 淡出開始",
-          "t": 6300
+          "t": 3920
         },
         {
           "id": "b_upIn",
           "label": "4B-3 抬頭張望 淡入開始",
-          "t": 6700
+          "t": 4320
         },
         {
           "id": "b_backGone",
           "label": "4B-2 回頭仰望 完全消失",
-          "t": 7000
+          "t": 4620
         },
         {
           "id": "b_upShown",
           "label": "4B-3 抬頭張望（右、稍遠）完全出現",
-          "t": 7500
+          "t": 5120
         }
       ],
       "layers": [
@@ -1059,7 +1016,7 @@ window.MC_PROJECT = {
           "visible": true,
           "x": 0.5,
           "y": 0.5,
-          "scale": 1.0,
+          "scale": 1,
           "anchorX": 0.5,
           "anchorY": 0.5,
           "opacity": 1,
@@ -1074,8 +1031,8 @@ window.MC_PROJECT = {
           "asset": "intro_scene04b_v_walk",
           "visible": true,
           "x": 0.205,
-          "y": 0.69,
-          "scale": 0.1635,
+          "y": 0.7,
+          "scale": 0.17,
           "anchorX": 0.5055,
           "anchorY": 0.9703,
           "opacity": 0,
@@ -1120,9 +1077,9 @@ window.MC_PROJECT = {
           "role": "character",
           "asset": "intro_scene04b_v_look_back_up",
           "visible": true,
-          "x": 0.48,
-          "y": 0.745,
-          "scale": 0.1644,
+          "x": 0.525,
+          "y": 0.765,
+          "scale": 0.195,
           "anchorX": 0.5557,
           "anchorY": 0.9792,
           "opacity": 0,
@@ -1168,7 +1125,7 @@ window.MC_PROJECT = {
           "asset": "intro_scene04b_v_look_up",
           "visible": true,
           "x": 0.845,
-          "y": 0.7,
+          "y": 0.695,
           "scale": 0.1726,
           "anchorX": 0.5357,
           "anchorY": 0.99,
@@ -1231,7 +1188,7 @@ window.MC_PROJECT = {
       "name": "第五幕：第一人稱森林探索",
       "status": "ready",
       "note": "v0.3.1：運鏡幅度加大（左右約 ±12%、上下約 ±11%）；正前 → 左 → 左上 →〔第一句〕→ 右 → 右下 → 右上 →〔第二句〕；對話時視線停住、呼吸持續，按繼續從原位接續",
-      "durationMs": 14200,
+      "durationMs": 12710,
       "transitionIn": {
         "type": "crossfade",
         "durMs": 900
@@ -1326,13 +1283,13 @@ window.MC_PROJECT = {
             {
               "m": "start",
               "o": 0,
-              "v": 0.0,
+              "v": 0,
               "label": "5-1 前方"
             },
             {
               "m": "c_settle",
               "o": 0,
-              "v": 0.0
+              "v": 0
             },
             {
               "m": "c_settle",
@@ -1378,7 +1335,7 @@ window.MC_PROJECT = {
             {
               "m": "c_d1",
               "o": 1700,
-              "v": 0.0,
+              "v": 0,
               "e": "inOut",
               "label": "轉頭途中"
             },
@@ -1441,7 +1398,7 @@ window.MC_PROJECT = {
             {
               "m": "c_settle",
               "o": 0,
-              "v": 0.0,
+              "v": 0,
               "e": "inOut",
               "label": "回到前方"
             },
@@ -1479,7 +1436,7 @@ window.MC_PROJECT = {
             {
               "m": "c_right",
               "o": 0,
-              "v": 0.0,
+              "v": 0,
               "e": "inOut"
             },
             {
@@ -1541,7 +1498,7 @@ window.MC_PROJECT = {
             {
               "m": "c_d1",
               "o": 1700,
-              "v": 0.0,
+              "v": 0,
               "e": "inOut"
             },
             {
@@ -1641,7 +1598,7 @@ window.MC_PROJECT = {
           "styleType": "rpg_box_no_portrait",
           "at": {
             "m": "c_d2",
-            "o": 0
+            "o": -1790
           },
           "mode": "wait",
           "autoMs": 0,
@@ -1661,7 +1618,299 @@ window.MC_PROJECT = {
       "sfx": 0.9,
       "voice": 1
     },
-    "assets": {},
-    "clips": []
-  }
+    "assets": {
+      "a_freesound_community-man-waking-up-from": {
+        "src": "assets/freesound_community-man-waking-up-from-sleep-6338.mp3",
+        "label": "freesound_community-man-waking-up-from-sleep-6338.mp3"
+      },
+      "a_Floating_Home_in_the_Clouds": {
+        "src": "assets/Floating Home in the Clouds.mp3",
+        "label": "Floating Home in the Clouds.mp3"
+      },
+      "a_wind-blowing-sfx-06-423674": {
+        "src": "assets/wind-blowing-sfx-06-423674.mp3",
+        "label": "wind-blowing-sfx-06-423674.mp3"
+      },
+      "a_bird-chirps-in-the-distance-577042": {
+        "src": "assets/bird-chirps-in-the-distance-577042.mp3",
+        "label": "bird-chirps-in-the-distance-577042.mp3"
+      },
+      "a_bird-chirps-343624": {
+        "src": "assets/bird-chirps-343624.mp3",
+        "label": "bird-chirps-343624.mp3"
+      },
+      "a_Balloon_Forest": {
+        "src": "assets/Balloon Forest.mp3",
+        "label": "Balloon Forest.mp3"
+      },
+      "a_ui_button_click": {
+        "src": "assets/ui_button_click.mp3",
+        "label": "ui_button_click.mp3"
+      },
+      "a_footstep-grass-leaf-38778": {
+        "src": "assets/footstep-grass-leaf-38778.mp3",
+        "label": "footstep-grass-leaf-38778.mp3"
+      }
+    },
+    "clips": [
+      {
+        "id": "ambient_1",
+        "type": "ambient",
+        "name": "環境音",
+        "asset": "a_freesound_community-man-waking-up-from",
+        "enabled": true,
+        "volume": 1,
+        "loop": true,
+        "fadeInMs": 500,
+        "fadeOutMs": 1000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene01",
+          "m": "open1",
+          "o": 1240
+        },
+        "end": {
+          "scene": "intro_scene02",
+          "m": "start",
+          "o": -40
+        }
+      },
+      {
+        "id": "bgm_1",
+        "type": "bgm",
+        "name": "背景音樂",
+        "asset": "a_Floating_Home_in_the_Clouds",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": true,
+        "fadeInMs": 6000,
+        "fadeOutMs": 4000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene01",
+          "m": "start",
+          "o": 0
+        },
+        "crossfadeMs": 0,
+        "end": {
+          "scene": "intro_scene03",
+          "m": "s3_d2",
+          "o": 690
+        }
+      },
+      {
+        "id": "ambient_2",
+        "type": "ambient",
+        "name": "環境音",
+        "asset": "a_wind-blowing-sfx-06-423674",
+        "enabled": true,
+        "volume": 0.4,
+        "loop": true,
+        "fadeInMs": 1000,
+        "fadeOutMs": 1000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene02",
+          "m": "start",
+          "o": -30
+        },
+        "end": {
+          "scene": "intro_scene03",
+          "m": "start",
+          "o": -120
+        }
+      },
+      {
+        "id": "ambient_3",
+        "type": "ambient",
+        "name": "環境音",
+        "asset": "a_bird-chirps-in-the-distance-577042",
+        "enabled": true,
+        "volume": 0.2,
+        "loop": true,
+        "fadeInMs": 1000,
+        "fadeOutMs": 1000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene03",
+          "m": "start",
+          "o": -80
+        },
+        "end": {
+          "scene": "intro_scene04a",
+          "m": "start",
+          "o": -180
+        }
+      },
+      {
+        "id": "ambient_4",
+        "type": "ambient",
+        "name": "環境音",
+        "asset": "a_bird-chirps-343624",
+        "enabled": true,
+        "volume": 0.15,
+        "loop": false,
+        "fadeInMs": 2000,
+        "fadeOutMs": 1000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene04a",
+          "m": "start",
+          "o": -130
+        },
+        "end": {
+          "scene": "intro_scene05",
+          "m": "end",
+          "o": 0
+        }
+      },
+      {
+        "id": "bgm_2",
+        "type": "bgm",
+        "name": "背景音樂",
+        "asset": "a_Balloon_Forest",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": true,
+        "fadeInMs": 1000,
+        "fadeOutMs": 1000,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene03",
+          "m": "s3_d2",
+          "o": 740
+        },
+        "crossfadeMs": 0,
+        "end": {
+          "scene": "intro_scene05",
+          "m": "end",
+          "o": 0
+        }
+      },
+      {
+        "id": "sfx_1",
+        "type": "sfx",
+        "name": "對話音效",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "dialogue": "s2_d1",
+          "o": 0
+        }
+      },
+      {
+        "id": "sfx_2",
+        "type": "sfx",
+        "name": "對話音效",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene02",
+          "m": "bShown",
+          "o": 250
+        }
+      },
+      {
+        "id": "sfx_3",
+        "type": "sfx",
+        "name": "對話音效（複製）",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene03",
+          "m": "s3_vin",
+          "o": 280
+        }
+      },
+      {
+        "id": "sfx_4",
+        "type": "sfx",
+        "name": "對話音效（複製）（複製）",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene03",
+          "m": "s3_d2",
+          "o": 140
+        }
+      },
+      {
+        "id": "sfx_5",
+        "type": "sfx",
+        "name": "音效",
+        "asset": "a_footstep-grass-leaf-38778",
+        "enabled": true,
+        "volume": 1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene04a",
+          "m": "a_nearIn",
+          "o": 490
+        },
+        "end": {
+          "scene": "intro_scene04b",
+          "m": "b_upShown",
+          "o": 820
+        }
+      },
+      {
+        "id": "sfx_6",
+        "type": "sfx",
+        "name": "對話音效（複製）（複製）（複製）",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene05",
+          "m": "c_leftUp",
+          "o": 240
+        }
+      },
+      {
+        "id": "sfx_7",
+        "type": "sfx",
+        "name": "對話音效（複製）（複製）（複製）（複製）",
+        "asset": "a_ui_button_click",
+        "enabled": true,
+        "volume": 0.1,
+        "loop": false,
+        "fadeInMs": 0,
+        "fadeOutMs": 0,
+        "offsetMs": 0,
+        "at": {
+          "scene": "intro_scene05",
+          "m": "c_rightDown",
+          "o": 470
+        }
+      }
+    ]
+  },
+  "exportedAt": "2026-10-24T15:58:48.694Z"
 };
