@@ -1,6 +1,8 @@
 /*
   氣球小V・動態漫畫播放器
-  motion-comic-player v0.3.1-test-1
+  motion-comic-player v0.3.2-test-1
+    v0.3.2：音訊掛鉤（選用）。沒有掛上音訊引擎（player.audio）或專案沒有 audio 時，行為與 v0.3.1 完全相同；
+           對話：配音可設定「文字一次顯示」「等配音播完才可繼續」，由 motion-comic-audio.js 決定。
     v0.3.1：播放核心沒有新增功能（第四幕改用一般圖片圖層做定點分鏡；第二幕對話用既有對話系統）；版本號同步
     v0.2.0：新增第三幕所需的「遠景」圖層用途、對話 styleType、自動對話可停留到本幕結束
     v0.3.0：第四、五幕所需的擴充（全部向下相容；第一幕的渲染路徑完全沒變）
@@ -30,7 +32,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = 'motion-comic-player v0.3.1-test-1';
+  const VERSION = 'motion-comic-player v0.3.2-test-1';
 
   /* ===================== 插值（逐字沿用 v0.2.0） ===================== */
   const EASE = {
@@ -163,6 +165,8 @@
       this.onEnd = opts.onEnd || null;
       this.onDialogue = opts.onDialogue || null;
       this.view = { W: 0, H: 0 };
+      this.audio = null;              // v0.3.2：音訊引擎（MotionComic.AudioEngine.attach 會設定）
+      this._dlgView = null;           // v0.3.2：目前對話框顯示到第幾個字（打字音用）
       this.scenes = [];
       this.structureKey = '';
 
@@ -213,6 +217,7 @@
       this.layout();
       this.t = Math.min(this.t, this.tl.total);
       this.renderAt(this.t, true);
+      if (this.audio) this.audio.setProject(project);
     }
 
     loadAssets() {
@@ -833,8 +838,11 @@
       if (this.blocked) {
         const b = this.blocked;
         const chars = Array.from(b.d.text || '');
-        const n = b.revealAll ? chars.length : Math.floor((performance.now() - b.since) / Math.max(1, b.d.charMs || 45));
-        box.show(b.d.speaker, chars.slice(0, n).join(''), n >= chars.length, { waiting: true, styleType: b.d.styleType });
+        const instant = !!(this.audio && this.audio.textInstant(b.d));
+        const n = (b.revealAll || instant) ? chars.length : Math.floor((performance.now() - b.since) / Math.max(1, b.d.charMs || 45));
+        this._dlgView = { id: b.d.id, n: Math.min(n, chars.length), len: chars.length, chars };
+        const ready = !this.audio || this.audio.continueReady(b.d);
+        box.show(b.d.speaker, chars.slice(0, n).join(''), n >= chars.length && ready, { waiting: true, styleType: b.d.styleType });
         return;
       }
       const T = this.t;
@@ -850,9 +858,10 @@
         const inside = T < until || (T === x.segEnd && until === x.segEnd);   // 本幕最後一格仍顯示（停在結尾時不消失）
         if (T >= x.g && inside && (!cur || x.g >= cur.g)) cur = x;
       });
-      if (!cur) { box.hide(); return; }
+      if (!cur) { this._dlgView = null; box.hide(); return; }
       const chars = Array.from(cur.d.text || '');
-      const n = Math.floor((T - cur.g) / Math.max(1, cur.d.charMs || 45));
+      const n = (this.audio && this.audio.textInstant(cur.d)) ? chars.length : Math.floor((T - cur.g) / Math.max(1, cur.d.charMs || 45));
+      this._dlgView = { id: cur.d.id, n: Math.min(n, chars.length), len: chars.length, chars };
       box.show(cur.d.speaker, chars.slice(0, n).join(''), n >= chars.length,
         { preview: cur.d.mode === 'wait', waiting: false, styleType: cur.d.styleType });
     }
@@ -861,8 +870,11 @@
       const b = this.blocked;
       if (!b) return;
       const len = Array.from(b.d.text || '').length;
-      const n = Math.floor((performance.now() - b.since) / Math.max(1, b.d.charMs || 45));
+      const instant = !!(this.audio && this.audio.textInstant(b.d));
+      const n = instant ? len : Math.floor((performance.now() - b.since) / Math.max(1, b.d.charMs || 45));
       if (!b.revealAll && n < len) { b.revealAll = true; this._renderDialogue(); return; }  // 先把字顯示完
+      if (this.audio && !this.audio.allowContinue(b.d)) return;                            // v0.3.2：設定「等配音播完才可繼續」
+      if (this.audio) this.audio.onContinue(b.d);
       this.blocked = null;
       this.dialogue.hide();
       this._lastNow = performance.now();
@@ -878,9 +890,14 @@
     /* ---------- 播放控制 ---------- */
     _raf(now) {
       requestAnimationFrame(this._raf);
+      this._step(now);
+      if (this.audio && this.tl) this.audio.tick();   // v0.3.2：音訊每格同步（播放、對話等待、暫停時都會呼叫）
+    }
+
+    _step(now) {
       let dt = now - (this._lastNow || now);
       this._lastNow = now;
-      dt = Math.min(dt, 50);
+      dt = Math.max(0, Math.min(dt, 50));   // v0.3.2：按繼續／播放的同一格裡 dt 可能是負的（時間倒退幾毫秒）→ 不讓時間倒退
       if (!this.tl) return;
       if (this.playing) this.ambient += dt;
       if (this.playing && !this.blocked && !document.hidden && !this.portraitBlocked()) {
@@ -973,6 +990,7 @@
       this.t = this._rangeStart();
       this._resetFired(this.t, false);
       this.renderAt(this.t, true);
+      if (this.audio) this.audio.onJump('replay');
       if (this.onTime) this.onTime(this.t);
       this._setPlaying(true);
     }
@@ -984,6 +1002,7 @@
       this.t = Math.max(0, Math.min(this.tl.total, T));
       this._resetFired(this.t, false);
       this.renderAt(this.t, true);
+      if (this.audio) this.audio.onJump('seek');
       if (this.onTime) this.onTime(this.t);
     }
 
@@ -1002,6 +1021,7 @@
       this.t = target;
       this._resetFired(this.t, true);
       this.renderAt(this.t, true);
+      if (this.audio) this.audio.onJump('skip');
       if (this.onTime) this.onTime(this.t);
       if (this.t >= this._rangeEnd()) { this._setPlaying(false); if (this.onEnd) this.onEnd(); }
     }
@@ -1013,12 +1033,13 @@
       this.t = this._rangeEnd();
       this._resetFired(this.t, true);
       this.renderAt(this.t, true);
+      if (this.audio) this.audio.onJump('skip');
       this._setPlaying(false);
       if (this.onTime) this.onTime(this.t);
       if (this.onEnd) this.onEnd();
     }
 
-    setMode(m) { this.mode = m === 'edit' ? 'edit' : 'play'; this.blocked = null; this.dialogue.hide(); this.renderAt(this.t, true); }
+    setMode(m) { this.mode = m === 'edit' ? 'edit' : 'play'; this.blocked = null; this.dialogue.hide(); this.renderAt(this.t, true); if (this.audio) this.audio.onJump('mode'); }
     setSpeed(s) { this.speed = s; }
     setSwapView(v) { this.swapView = v; this.renderAt(this.t, true); }
     setPoseView(i) { this.poseView = (i == null || i < 0) ? null : i; this.renderAt(this.t, true); }
@@ -1173,12 +1194,16 @@
       const tr = s.transitionIn;
       if (tr && !TRANSITIONS.includes(tr.type)) errors.push(`${tag} 轉場「${tr.type}」不支援`);
     });
+    // v0.3.2：音訊設定（選用；問題只列為警告，不會讓動態漫畫無法播放）
+    if (p.audio != null && global.MotionComic && global.MotionComic.validateAudio) {
+      try { warnings.push(...global.MotionComic.validateAudio(p).warnings); } catch (e) { warnings.push('音訊設定檢查失敗：' + e.message); }
+    }
     return { errors, warnings };
   }
 
-  global.MotionComic = {
+  global.MotionComic = Object.assign(global.MotionComic || {}, {
     VERSION, SCHEMA_VERSION, EASE, EASE_LABELS, EASES, TRANSITIONS, DIALOG_STYLES, LAYER_ROLES, TRACK_DEFAULTS, CAMERA_DEFAULTS, LAYER_TRACKS, LAYER_DEFAULTS, XF_MODES, HAS_PLUS_LIGHTER,
     sample, compileTrack, compileScene, buildTimeline, markerTimes, refTime, validateProject,
     Player: MotionComicPlayer, DialogueBox,
-  };
+  });
 })(window);

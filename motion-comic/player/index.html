@@ -7,7 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>動態漫畫播放器（測試）</title>
 <!--
-  氣球小V・動態漫畫播放器 正式播放頁  motion-comic v0.3.1-test-1（播放核心 motion-comic-player v0.3.1-test-1）
+  氣球小V・動態漫畫播放器 正式播放頁  motion-comic-v0.3.2-audio-foundation-test-1（播放核心 motion-comic-player v0.3.2-test-1＋音訊 motion-comic-audio v0.3.2-test-1）
+  聲音：手機瀏覽器只允許「使用者點擊之後」才有聲音，所以要先按「▶ 開始故事」。右上角「🔊」可靜音、調整音量（只存在這台裝置）。
   網址參數：
     ?range=ready   只播有素材的幕次（預設）
     ?range=all     播放全部幕次（缺素材的幕會顯示「尚未配置素材」）
@@ -38,6 +39,12 @@
   .overlay p { font-size: 14px; opacity: .75; line-height: 1.7; }
   #startBtn { font-size: 17px; padding: 12px 34px; background: rgba(255, 207, 107, .14); border-color: rgba(255, 207, 107, .55); }
   #startBtn:disabled { opacity: .35; }
+  .snd { display: inline-flex; align-items: center; gap: 6px; }
+  .snd[hidden] { display: none; }
+  #volRange { width: 84px; accent-color: var(--accent); }
+  @media (max-height: 500px) { #volRange { width: 64px; } }
+  #soundBtn.off { opacity: .7; }
+  #soundBtn.locked { border-color: rgba(255, 207, 107, .8); }
   .bar { width: min(260px, 60vw); height: 3px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
   .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
   #endTag { position: fixed; z-index: 20; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -57,6 +64,10 @@
   <button class="btn" id="skipBtn" type="button">略過本幕 ⏭</button>
   <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
   <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
+  <span class="snd" id="sndBox" hidden>
+    <button class="btn" id="soundBtn" type="button" title="聲音開／關">🔊 聲音</button>
+    <input type="range" id="volRange" min="0" max="1" step="0.05" value="1" title="音量" aria-label="音量">
+  </span>
 </div>
 <div id="endTag">開場播放完畢（測試版：之後要接飛行屋地圖／第一關，尚未接通）</div>
 
@@ -64,11 +75,13 @@
   <h1 id="title">動態漫畫</h1>
   <p id="loadMsg">正在讀取專案…</p>
   <div class="bar"><i id="loadBar"></i></div>
-  <button class="btn" id="startBtn" type="button" disabled>▶ 開始播放</button>
+  <button class="btn" id="startBtn" type="button" disabled>▶ 開始故事</button>
+  <p id="audioMsg" hidden></p>
 </div>
 <div id="rotate"><div class="phone"></div><p>請將手機轉為橫向觀看</p></div>
 
 <script src="motion-comic-player.js"></script>
+<script src="motion-comic-audio.js"></script>
 <script src="../projects/party-island-opening.js"></script>
 <script>
 (async () => {
@@ -105,6 +118,15 @@
     onPlayState: p => { $('pauseBtn').textContent = p ? '暫停 ⏸' : '繼續 ▶'; },
   });
   window.mcPlayer = player;
+  // v0.3.2：音訊引擎（專案沒有 audio 時不做任何事）
+  // 播放頁的音量／靜音只存在這台裝置
+  const AKEY = 'mc-player-audio';
+  let pref = { muted: false, volume: 1 };
+  try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(AKEY) || '{}')); } catch (_) {}
+  const savePref = () => { try { localStorage.setItem(AKEY, JSON.stringify(pref)); } catch (_) {} };
+  const audio = new MotionComic.AudioEngine({ onStatus: () => { if (typeof updateSound === 'function') updateSound(); } });
+  window.mcAudio = audio;
+  audio.attach(player);
   player.setProject(project);
   $('loadMsg').textContent = '正在載入圖片…';
   $('loadBar').style.width = '30%';
@@ -124,6 +146,32 @@
   player.seek(player.range ? player.range.from : 0);
   $('startBtn').disabled = false;
 
+  /* ---------- 聲音（v0.3.2） ---------- */
+  audio.setMuted(pref.muted); audio.setUserVolume(pref.volume);
+  $('volRange').value = pref.volume;
+  function updateSound() {
+    const has = audio.hasAudio();
+    $('sndBox').hidden = !has;
+    if (!has) return;
+    const st = audio.status(), b = $('soundBtn');
+    b.classList.toggle('locked', st === 'locked'); b.classList.toggle('off', pref.muted);
+    b.textContent = st === 'locked' ? '🔈 點我開啟聲音' : (pref.muted ? '🔇 靜音' : '🔊 聲音');
+  }
+  $('soundBtn').addEventListener('click', () => {
+    if (audio.status() === 'locked') { audio.unlock().then(updateSound); pref.muted = false; audio.setMuted(false); savePref(); updateSound(); return; }
+    pref.muted = !pref.muted; audio.setMuted(pref.muted); savePref(); updateSound();
+  });
+  $('volRange').addEventListener('input', e => { pref.volume = +e.target.value; audio.setUserVolume(pref.volume); if (pref.volume > 0 && pref.muted) { pref.muted = false; audio.setMuted(false); } savePref(); updateSound(); });
+  if (audio.hasAudio()) {
+    // 音檔在背景載入，不會擋住圖片與「開始故事」
+    $('audioMsg').hidden = false; $('audioMsg').textContent = '聲音載入中…';
+    audio.loadAssets().then(rep => {
+      const bad = rep.filter(r => !r.ok);
+      $('audioMsg').textContent = `聲音 ${rep.length - bad.length} / ${rep.length} 個可用` + (bad.length ? `（缺少：${bad.map(b => b.label).join('、')}，其他照常播放）` : '');
+    });
+  }
+  updateSound();
+
   async function enterMobileLandscape() {
     if (!matchMedia('(pointer: coarse)').matches) return;
     try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
@@ -131,6 +179,7 @@
   }
   $('startBtn').addEventListener('click', async () => {
     $('startBtn').disabled = true;
+    if (audio.hasAudio()) audio.unlock().then(updateSound);   // 必須在點擊當下呼叫（在 await 之前），手機才會允許有聲音
     await enterMobileLandscape();
     $('startScreen').hidden = true;
     endTag.classList.remove('show');
@@ -139,6 +188,9 @@
   $('replayBtn').addEventListener('click', () => { endTag.classList.remove('show'); player.replay(); });
   $('skipBtn').addEventListener('click', () => player.skipScene());
   $('pauseBtn').addEventListener('click', () => { if (player.t < player._rangeEnd()) player.togglePlay(); });
+  const tryUnlock = () => { if (audio.hasAudio() && audio.status() === 'locked' && $('startScreen').hidden) audio.unlock().then(updateSound); };
+  document.addEventListener('pointerdown', tryUnlock, true);   // 開始後的任何一次點擊／按鍵都會嘗試重新開啟聲音（例如 iPhone 來電中斷後）
+  document.addEventListener('keydown', tryUnlock, true);
   window.addEventListener('keydown', e => {
     if (!$('startScreen').hidden) return;
     if (e.key === ' ' || e.key === 'Enter') {
