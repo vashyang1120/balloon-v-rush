@@ -1,6 +1,14 @@
 /*
   氣球小V・動態漫畫播放器
-  motion-comic-player v0.2.0-test-1（v0.2.0：新增第三幕所需的「遠景」圖層用途、對話 styleType、自動對話可停留到本幕結束）
+  motion-comic-player v0.3.0-test-1
+    v0.2.0：新增第三幕所需的「遠景」圖層用途、對話 styleType、自動對話可停留到本幕結束
+    v0.3.0：第四、五幕所需的擴充（全部向下相容；第一幕的渲染路徑完全沒變）
+      - swapPair.crossfade：'dissolve'＝真正的交叉淡化（A 1→0、B 0→1 同步，用 plus-lighter 合成，人物不會變透明）
+      - swapPair 可用圖層軌道 opacity（人物淡入）
+      - 新圖層類型 poseSeq：同一個人物依時間切換多個姿勢（共用位置／縮放軌道，以腳底為錨點，人物大小以身高正規化）
+      - 圖層軌道 blur（模糊，舞台高度比例）
+      - 霧插件 fog（非破壞性的霧氣覆蓋，強度用特效軌道 fog 控制）
+      - 呼吸插件 BREATH_CLOCK:'ambient'：呼吸改用裝飾時鐘，等待型對話暫停劇情時仍會輕微呼吸
 
   這是「唯一」的渲染核心：編輯器預覽與正式播放頁都用這一份，不另做簡化版預覽。
 
@@ -21,7 +29,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = 'motion-comic-player v0.2.0-test-1';
+  const VERSION = 'motion-comic-player v0.3.0-test-1';
 
   /* ===================== 插值（逐字沿用 v0.2.0） ===================== */
   const EASE = {
@@ -52,9 +60,12 @@
 
   /* ===================== 效果軌道定義 ===================== */
   // 沒有關鍵影格時的預設值（＝不產生任何效果）
-  const TRACK_DEFAULTS = { open: 1, tremor: 0, blur: 0, exposure: 1, breath: 0, overscan: 1 };
+  const TRACK_DEFAULTS = { open: 1, tremor: 0, blur: 0, exposure: 1, breath: 0, overscan: 1, fog: 0 };
   const CAMERA_DEFAULTS = { x: 0, y: 0, scale: 1, rotation: 0 };
-  const LAYER_TRACKS = ['x', 'y', 'scale', 'opacity', 'rotation'];
+  const LAYER_TRACKS = ['x', 'y', 'scale', 'opacity', 'rotation', 'blur'];
+  const LAYER_DEFAULTS = { x: 0.5, y: 0.5, scale: 0.4, opacity: 1, rotation: 0, blur: 0 };
+  const XF_MODES = ['legacy', 'sync', 'dissolve'];   // swapPair／poseSeq 的疊化方式
+  const HAS_PLUS_LIGHTER = !!(global.CSS && CSS.supports && CSS.supports('mix-blend-mode', 'plus-lighter'));
 
   /* ===================== 時間解析 ===================== */
   function markerTimes(scene) {
@@ -91,6 +102,9 @@
       if (L.type === 'swapPair') {
         c.switchT = refTime(L.switchFrom, mm, 0);
         c.switchEndT = refTime(L.switchTo, mm, c.switchT);
+      }
+      if (L.type === 'poseSeq') {
+        c.switches = (L.switches || []).map(sw => { const a = refTime(sw.from, mm, 0); return [a, Math.max(a, refTime(sw.to, mm, a))]; });
       }
       return c;
     });
@@ -184,8 +198,9 @@
       this.project = project;
       this.tl = buildTimeline(project);
       const key = JSON.stringify((project.scenes || []).map(s => [s.id,
-        (s.layers || []).map(L => [L.id, L.type, L.role, L.asset, L.assetA, L.assetB]),
+        (s.layers || []).map(L => [L.id, L.type, L.role, L.asset, L.assetA, L.assetB, (L.poses || []).map(q => q.asset).join(',')]),
         !!(s.effects && s.effects.eyelids && s.effects.eyelids.enabled !== false),
+        !!(s.effects && s.effects.fog && s.effects.fog.enabled !== false),
         !!(s.effects && s.effects.breath && s.effects.breath.enabled !== false),
         !!(s.tracks && (s.tracks.blur || s.tracks.exposure))]));
       if (key !== this.structureKey) {
@@ -236,7 +251,7 @@
     sceneStatus(i) {
       const scene = this.project.scenes[i];
       const ids = [];
-      (scene.layers || []).forEach(L => { [L.asset, L.assetA, L.assetB].forEach(id => { if (id) ids.push(id); }); });
+      (scene.layers || []).forEach(L => { [L.asset, L.assetA, L.assetB].concat((L.poses || []).map(q => q.asset)).forEach(id => { if (id) ids.push(id); }); });
       const missing = ids.filter(id => !(this.assetState[id] && this.assetState[id].ok));
       const pending = ids.filter(id => this.assetState[id] && this.assetState[id].loading);
       const hasLayers = (scene.layers || []).length > 0;
@@ -260,6 +275,7 @@
         (scene.layers || []).forEach(L => {
           let el;
           if (L.type === 'swapPair') el = this._makeSwap(L);
+          else if (L.type === 'poseSeq') el = this._makePoseSeq(L);
           else {
             const img = document.createElement('img');
             img.alt = ''; img.draggable = false;
@@ -270,6 +286,12 @@
           S.layerEls.push(el);
           shake.appendChild(el.root);
         });
+        if (scene.effects && scene.effects.fog && scene.effects.fog.enabled !== false) {   // v0.3.0：霧（在本幕圖層之上，跟著鏡頭）
+          const fog = document.createElement('div');
+          fog.className = 'mc-fog';
+          shake.appendChild(fog);
+          S.fog = fog;
+        }
         if (scene.effects && scene.effects.eyelids && scene.effects.eyelids.enabled !== false) {
           const c = document.createElement('canvas');
           c.className = 'mc-lids';
@@ -297,10 +319,25 @@
       const imgA = document.createElement('img');
       const imgB = document.createElement('img');
       [imgA, imgB].forEach(i => { i.alt = ''; i.draggable = false; });
-      wrap.append(imgA, imgB);
-      return { type: 'swapPair', root: wrap, svg: wrap.querySelector('svg'), imgA, imgB, uid,
+      // v0.3.0：A、B 放在獨立的合成群組裡（真正交叉淡化時 B 用 plus-lighter 疊在 A 上，不會透出背景）
+      const xf = document.createElement('div');
+      xf.className = 'mc-xf';
+      xf.append(imgA, imgB);
+      wrap.append(xf);
+      return { type: 'swapPair', root: wrap, svg: wrap.querySelector('svg'), imgA, imgB, xf, uid,
         shBed: wrap.querySelector('.shBed'), shShoesA: wrap.querySelector('.shShoesA'), shShoesB: wrap.querySelector('.shShoesB'),
         shadowKey: '' };
+    }
+
+    // v0.3.0：多姿勢人物（同一個人物依時間換姿勢；共用位置／縮放軌道）
+    _makePoseSeq(L) {
+      const wrap = document.createElement('div');
+      wrap.className = 'mc-pose';
+      const xf = document.createElement('div');
+      xf.className = 'mc-xf';
+      const imgs = (L.poses || []).map(() => { const i = document.createElement('img'); i.alt = ''; i.draggable = false; xf.appendChild(i); return i; });
+      wrap.appendChild(xf);
+      return { type: 'poseSeq', root: wrap, xf, imgs };
     }
 
     _applyAssets() {
@@ -316,6 +353,7 @@
             if (!want && img.getAttribute('src')) img.removeAttribute('src');
           };
           if (el.type === 'swapPair') { set(el.imgA, L.assetA); set(el.imgB, L.assetB); }
+          else if (el.type === 'poseSeq') (L.poses || []).forEach((q, qi) => { if (el.imgs[qi]) set(el.imgs[qi], q.asset); });
           else set(el.img, L.asset);
         });
       });
@@ -432,24 +470,92 @@
     }
 
     _renderSwap(L, el, c, t) {
-      let aOp, bOp;
+      let aOp, bOp, plus = false;
       const v = this.swapView;
+      const mode = XF_MODES.includes(L.crossfade) ? L.crossfade : 'legacy';
       if (v === 'A') { aOp = 1; bOp = 0; }
       else if (v === 'B') { aOp = 0; bOp = 1; }
       else if (v === 'overlay') { aOp = 1; bOp = 0.5; }
       else {
         const SW = c.switchEndT - c.switchT;
         const p = SW > 0 ? clamp01((t - c.switchT) / SW) : (t >= c.switchT ? 1 : 0);
-        bOp = EASE.inOut(p);
-        aOp = 1 - clamp01((p - 0.6) / 0.4);
+        if (mode === 'legacy') {               // v0.1.0／v0.2.0：B 慢慢疊上，A 在後 40% 才淡出
+          bOp = EASE.inOut(p);
+          aOp = 1 - clamp01((p - 0.6) / 0.4);
+        } else {                               // v0.3.0：A 1→0、B 0→1 在同一段時間同步
+          const k = EASE.inOut(p);
+          aOp = 1 - k; bOp = k;
+          plus = mode === 'dissolve' && HAS_PLUS_LIGHTER && k > 0 && k < 1;
+        }
       }
-      const op = (L.look && L.look.opacity != null) ? L.look.opacity : 1;
+      el.imgB.style.mixBlendMode = plus ? 'plus-lighter' : '';
+      const trOp = c.tracks.opacity ? clamp01(sample(c.tracks.opacity, t)) : 1;   // v0.3.0：人物淡入／淡出
+      const op = ((L.look && L.look.opacity != null) ? L.look.opacity : 1) * trOp;
       el.imgA.style.opacity = (aOp * op).toFixed(3);
       el.imgB.style.opacity = (bOp * op).toFixed(3);
       el.imgA.style.visibility = aOp > 0 ? 'visible' : 'hidden';
       el.imgB.style.visibility = bOp > 0 ? 'visible' : 'hidden';
       el.shShoesA.style.opacity = (v === 'overlay' ? 1 : 1 - bOp).toFixed(3);
       el.shShoesB.style.opacity = (v === 'overlay' ? 0 : bOp).toFixed(3);
+    }
+
+    /* ---------- poseSeq（v0.3.0） ----------
+       L.poses[i] = { asset, label, footX, footY, figTop, figBottom, scaleAdj }（footX/footY/figTop/figBottom＝原圖像素）
+       scale＝人物身高（figTop→figBottom）÷ 舞台高度；x／y＝腳底在舞台上的位置（0～1）
+       L.switches[j] = { from, to }：姿勢 j → j+1 的疊化時間 */
+    _poseWeights(n, sw, t) {
+      const w = new Array(n).fill(0);
+      let a = 0;
+      while (a < sw.length && a < n - 1 && t >= sw[a][1]) a++;
+      if (a < n - 1 && a < sw.length && t >= sw[a][0] && t < sw[a][1]) {
+        const k = EASE.inOut(clamp01((t - sw[a][0]) / Math.max(1, sw[a][1] - sw[a][0])));
+        w[a] = 1 - k; w[a + 1] = k;
+        return { w, from: a, to: a + 1, k };
+      }
+      w[Math.min(a, n - 1)] = 1;
+      return { w, from: Math.min(a, n - 1), to: -1, k: 0 };
+    }
+    _renderPoseSeq(L, el, c, t) {
+      const { W, H } = this.view;
+      const lv = k => (c.tracks[k] ? sample(c.tracks[k], t) : (L[k] != null ? +L[k] : LAYER_DEFAULTS[k]));
+      let x = lv('x') * W, y = lv('y') * H, rot = lv('rotation');
+      const sw = L.sway;
+      if (sw && sw.periodMs > 0) {
+        const ph = (2 * Math.PI * this.ambient) / sw.periodMs;
+        const amp = sw.relative ? Math.max(0, lv('scale')) : 1;   // relative：幅度＝人物身高的比例（走遠變小時起伏也跟著變小）
+        x += (sw.x || 0) * amp * W * Math.sin(ph);
+        y -= (sw.y || 0) * amp * H * Math.abs(Math.sin(ph * 0.5));   // 走路的上下起伏（每步一次，往上）
+        rot += (sw.rot || 0) * Math.sin(ph * 0.5 + 0.4);
+      }
+      const poses = L.poses || [];
+      const view = this.poseView;   // 編輯器：只看某一個姿勢（null＝正常播放）
+      const pw = (view != null && view >= 0 && view < poses.length)
+        ? (() => { const w = new Array(poses.length).fill(0); w[view] = 1; return { w, from: view, to: -1, k: 0 }; })()
+        : this._poseWeights(poses.length, c.switches || [], t);
+      const mode = XF_MODES.includes(L.crossfade) ? L.crossfade : 'dissolve';
+      const sc = Math.max(0.0001, lv('scale'));
+      poses.forEach((q, qi) => {
+        const img = el.imgs[qi]; if (!img) return;
+        let op = pw.w[qi];
+        if (mode === 'legacy' && pw.to >= 0) op = qi === pw.to ? EASE.inOut(pw.k) : (qi === pw.from ? 1 - clamp01((pw.k - 0.6) / 0.4) : 0);
+        const st = img.style;
+        if (op <= 0.0005) { st.visibility = 'hidden'; st.opacity = '0'; return; }
+        const sz = this.assetSize(q.asset);
+        const figH = Math.max(1, (q.figBottom != null ? q.figBottom : sz.h) - (q.figTop || 0));
+        const k = sc * H * (q.scaleAdj || 1) / figH;
+        const fx = q.footX != null ? q.footX : sz.w / 2, fy = q.footY != null ? q.footY : (q.figBottom != null ? q.figBottom : sz.h);
+        st.visibility = 'visible';
+        st.width = (sz.w * k).toFixed(2) + 'px'; st.height = (sz.h * k).toFixed(2) + 'px';
+        st.left = (x - fx * k + (q.dx || 0) * W).toFixed(2) + 'px'; st.top = (y - fy * k + (q.dy || 0) * H).toFixed(2) + 'px';
+        st.opacity = op.toFixed(3);
+        st.mixBlendMode = (mode === 'dissolve' && HAS_PLUS_LIGHTER && qi === pw.to && pw.k > 0 && pw.k < 1) ? 'plus-lighter' : '';
+      });
+      const r = el.root.style;
+      r.transformOrigin = `${x.toFixed(2)}px ${y.toFixed(2)}px`;
+      r.transform = Math.abs(rot) > 1e-4 ? `rotate(${rot.toFixed(3)}deg)` : 'none';
+      r.opacity = clamp01(lv('opacity')).toFixed(3);
+      const bl = lv('blur') * H;
+      r.filter = bl > 0.05 ? `blur(${bl.toFixed(2)}px)` : '';
     }
 
     /* ---------- 單幕渲染 ---------- */
@@ -493,10 +599,11 @@
         const breath = val('breath');
         const overscan = val('overscan');
         const w = (2 * Math.PI) / P.BREATH_PERIOD;
-        const by = Math.sin(sec * w) * P.BREATH_Y * H * breath;
-        const bx = Math.sin(sec * w * 0.79 + 1.1) * P.BREATH_X * W * breath;
-        const brr = Math.sin(sec * w * 0.68 + 0.4) * P.BREATH_ROT * breath;
-        const bs = overscan + (0.5 + 0.5 * Math.sin(sec * w + 0.9)) * P.BREATH_SCALE * breath;
+        const bsec = P.BREATH_CLOCK === 'ambient' ? this.ambient / 1000 : sec;   // v0.3.0：ambient＝對話暫停劇情時仍呼吸（第一幕沒有設定，照舊）
+        const by = Math.sin(bsec * w) * P.BREATH_Y * H * breath;
+        const bx = Math.sin(bsec * w * 0.79 + 1.1) * P.BREATH_X * W * breath;
+        const brr = Math.sin(bsec * w * 0.68 + 0.4) * P.BREATH_ROT * breath;
+        const bs = overscan + (0.5 + 0.5 * Math.sin(bsec * w + 0.9)) * P.BREATH_SCALE * breath;
         S.shake.style.transform = breath > 0.0005
           ? `translate3d(${bx.toFixed(2)}px, ${by.toFixed(2)}px, 0) rotate(${brr.toFixed(4)}deg) scale(${bs.toFixed(5)})`
           : (overscan > 1.0001 ? `scale(${overscan.toFixed(5)})` : 'none');
@@ -519,6 +626,7 @@
         el.root.style.display = vis ? '' : 'none';
         if (!vis) return;
         if (el.type === 'swapPair') { this._renderSwap(L, el, lc, t); return; }
+        if (el.type === 'poseSeq') { this._renderPoseSeq(L, el, lc, t); return; }
         if (L.role === 'background') {
           const bo = lc.tracks.opacity ? sample(lc.tracks.opacity, t) : (L.opacity != null ? +L.opacity : 1);
           el.img.style.opacity = bo < 1 ? clamp01(bo).toFixed(3) : '';
@@ -543,7 +651,26 @@
         s.transformOrigin = `${ax * 100}% ${ay * 100}%`;
         s.transform = Math.abs(rot) > 1e-4 ? `rotate(${rot.toFixed(3)}deg)` : 'none';
         s.opacity = clamp01(lv('opacity')).toFixed(3);
+        const bl = lc.tracks.blur || L.blur ? lv('blur') * H : 0;              // v0.3.0：圖層模糊（例如走進霧裡）
+        s.filter = bl > 0.05 ? `blur(${bl.toFixed(2)}px)` : '';
       });
+
+      // 5a) 霧插件（v0.3.0）
+      if (S.fog) {
+        const F = scene.effects.fog.params || {};
+        const fv = clamp01(val('fog'));
+        const key = JSON.stringify(F);
+        if (S.fogKey !== key) {
+          S.fogKey = key;
+          const col = F.COLOR || '235, 240, 236';
+          S.fog.style.background =
+            `radial-gradient(ellipse ${((F.RX ?? 0.32) * 100).toFixed(1)}% ${((F.RY ?? 0.24) * 100).toFixed(1)}% at ${((F.CX ?? 0.5) * 100).toFixed(1)}% ${((F.CY ?? 0.55) * 100).toFixed(1)}%, ` +
+            `rgba(${col}, ${F.CORE ?? 0.92}) 0%, rgba(${col}, ${(F.CORE ?? 0.92) * 0.55}) 45%, rgba(${col}, 0) 100%), ` +
+            `linear-gradient(rgba(${col}, ${F.HAZE ?? 0.12}), rgba(${col}, ${F.HAZE ?? 0.12}))`;
+        }
+        S.fog.style.opacity = fv.toFixed(3);
+        S.fog.style.display = fv > 0.001 ? '' : 'none';
+      }
 
       // 5) 眼皮插件
       if (S.lids) this._drawLids(S, val('open'), sec, val('tremor'));
@@ -637,7 +764,7 @@
         // 淡黑轉場的淡出＋全黑（兩幕之間）
         const tr = seg.tr, d = T - seg.transStart;
         const out = Math.max(0, +tr.outMs || 0);
-        if (d < out) {
+        if (d < out && i > 0) {
           cut = EASE.inOut(clamp01(d / Math.max(1, out)));
           show.push([i - 1, this.tl.segs[i - 1].scene.durationMs, 1]);
         } else {
@@ -786,12 +913,15 @@
         if (this.onTime) this.onTime(this.t);
       } else if (this.blocked) {
         this._renderDialogue();
-        if (this._hasSway()) this.renderAt(this.t);   // 劇情暫停時，裝飾動畫仍可繼續
+        if (this._hasSway() || this._hasAmbientBreath()) this.renderAt(this.t);   // 劇情暫停時，裝飾動畫／呼吸仍可繼續
       }
     }
 
     _hasSway() {
       return (this.project.scenes || []).some(s => (s.layers || []).some(L => L.sway && L.sway.periodMs > 0));
+    }
+    _hasAmbientBreath() {
+      return (this.project.scenes || []).some(s => s.effects && s.effects.breath && s.effects.breath.enabled !== false && s.effects.breath.params && s.effects.breath.params.BREATH_CLOCK === 'ambient');
     }
 
     _rangeEnd() { return this.range && this.range.to != null ? Math.min(this.range.to, this.tl.total) : this.tl.total; }
@@ -890,6 +1020,7 @@
     setMode(m) { this.mode = m === 'edit' ? 'edit' : 'play'; this.blocked = null; this.dialogue.hide(); this.renderAt(this.t, true); }
     setSpeed(s) { this.speed = s; }
     setSwapView(v) { this.swapView = v; this.renderAt(this.t, true); }
+    setPoseView(i) { this.poseView = (i == null || i < 0) ? null : i; this.renderAt(this.t, true); }
     get total() { return this.tl ? this.tl.total : 0; }
     get current() { return this._current; }
   }
@@ -1008,10 +1139,20 @@
           checkRef(L.switchFrom, `${lt} 切換開始`); checkRef(L.switchTo, `${lt} 切換結束`);
           ['foregroundScale', 'foregroundX', 'foregroundY', 'foregroundAnchorX', 'foregroundAnchorY'].forEach(k => { if (!isNum(L[k])) errors.push(`${tag} ${lt} ${k} 必須是數字`); });
           if (!L.bAlign || !isNum(L.bAlign.scale) || !isNum(L.bAlign.x) || !isNum(L.bAlign.y)) errors.push(`${tag} ${lt} bAlign 必須包含 scale / x / y 數字`);
+        } else if (L.type === 'poseSeq') {
+          if (!Array.isArray(L.poses) || !L.poses.length) errors.push(`${tag} ${lt} poses 必須是非空陣列`);
+          (L.poses || []).forEach((q, qi) => {
+            if (!p.assets || !p.assets[q.asset]) errors.push(`${tag} ${lt} 姿勢 ${qi + 1} 的素材「${q.asset}」不在 assets 中`);
+            ['footX', 'footY', 'figTop', 'figBottom', 'scaleAdj', 'dx', 'dy'].forEach(k => { if (q[k] != null && !isNum(q[k])) errors.push(`${tag} ${lt} 姿勢 ${qi + 1} ${k} 必須是數字`); });
+          });
+          (L.switches || []).forEach((sw, j) => { checkRef(sw.from, `${lt} 第 ${j + 1} 次換姿勢開始`); checkRef(sw.to, `${lt} 第 ${j + 1} 次換姿勢結束`); });
+          if ((L.switches || []).length > Math.max(0, (L.poses || []).length - 1)) warnings.push(`${tag} ${lt} 換姿勢次數多於姿勢數 −1，多的會被忽略`);
+          if (L.crossfade != null && !XF_MODES.includes(L.crossfade)) errors.push(`${tag} ${lt} crossfade「${L.crossfade}」不支援`);
         } else if (L.type === 'image') {
           if (!p.assets || !p.assets[L.asset]) errors.push(`${tag} ${lt} 的素材「${L.asset}」不在 assets 中`);
           if (!LAYER_ROLES.includes(L.role)) errors.push(`${tag} ${lt} role「${L.role}」不支援（可用 ${LAYER_ROLES.join(' / ')}）`);
-        } else errors.push(`${tag} ${lt} type「${L.type}」不支援（可用 image / swapPair）`);
+        } else errors.push(`${tag} ${lt} type「${L.type}」不支援（可用 image / swapPair / poseSeq）`);
+        if (L.type === 'swapPair' && L.crossfade != null && !XF_MODES.includes(L.crossfade)) errors.push(`${tag} ${lt} crossfade「${L.crossfade}」不支援`);
         checkRef(L.start, `${lt} 開始`); checkRef(L.end, `${lt} 結束`);
         Object.keys(L.tracks || {}).forEach(k => {
           if (!LAYER_TRACKS.includes(k)) warnings.push(`${tag} ${lt} 軌道「${k}」不會被使用`);
@@ -1035,7 +1176,7 @@
   }
 
   global.MotionComic = {
-    VERSION, SCHEMA_VERSION, EASE, EASE_LABELS, EASES, TRANSITIONS, DIALOG_STYLES, LAYER_ROLES, TRACK_DEFAULTS, CAMERA_DEFAULTS, LAYER_TRACKS,
+    VERSION, SCHEMA_VERSION, EASE, EASE_LABELS, EASES, TRANSITIONS, DIALOG_STYLES, LAYER_ROLES, TRACK_DEFAULTS, CAMERA_DEFAULTS, LAYER_TRACKS, LAYER_DEFAULTS, XF_MODES, HAS_PLUS_LIGHTER,
     sample, compileTrack, compileScene, buildTimeline, markerTimes, refTime, validateProject,
     Player: MotionComicPlayer, DialogueBox,
   };

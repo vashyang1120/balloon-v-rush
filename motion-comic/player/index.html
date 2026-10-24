@@ -7,11 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>動態漫畫播放器（測試）</title>
 <!--
-  氣球小V・動態漫畫播放器 正式播放頁  motion-comic-editor-v0.1.0-test-1
+  氣球小V・動態漫畫播放器 正式播放頁  motion-comic v0.3.0-test-1（播放核心 motion-comic-player v0.3.0-test-1）
   網址參數：
     ?range=ready   只播有素材的幕次（預設）
     ?range=all     播放全部幕次（缺素材的幕會顯示「尚未配置素材」）
-    ?scene=2       只播第 2 幕
+    ?scene=2       只播第 2 個場景（v0.3.0 起共 6 個場景：1 第一幕、2 第二幕、3 第三幕、4 第四幕A、5 第四幕B、6 第五幕）
     ?source=local  播放編輯器在這台電腦「儲存」的版本（同一個網站來源才讀得到）
     ?project=../projects/xxx.json   指定專案檔（需要 HTTP 伺服器）
 -->
@@ -58,7 +58,7 @@
   <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
   <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
 </div>
-<div id="endTag">播放完畢</div>
+<div id="endTag">開場播放完畢（測試版：之後要接飛行屋地圖／第一關，尚未接通）</div>
 
 <div class="overlay" id="startScreen">
   <h1 id="title">動態漫畫</h1>
