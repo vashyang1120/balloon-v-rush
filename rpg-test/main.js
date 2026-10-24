@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.73-opening-comic-integration-test-1';
-const BUILD_TIME   = '2026-10-25 01:30';
+const GAME_VERSION = 'adventure-v0.3.74-sword-royal-cutin-test-1';
+const BUILD_TIME   = '2026-10-25 03:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -603,6 +603,20 @@ const ADVENTURE_HERO_ASSETS = {
   royalSwordAttack04: 'assets/adventure/hero/hero_sword_attack_04_royal.png',
 };
 const ROYAL_SWORD_HERO_KEYS = ['royalSwordAttack01', 'royalSwordAttack02', 'royalSwordAttack03', 'royalSwordAttack04'];
+// v0.3.74：王權劍 v2（依 Royal-v2-game-test.zip 的 animation.json／manifest.json／alignment.json）
+//   ・7 張校準 PNG（hero_royal_v2_01～07），但 timeline 只播 01→02→03→04→05→07（06 目前不播，也不載入）
+//   ・每張 6 邏輯步（100ms），共 36 步／600ms，播一次（playbackMode once）
+//   ・繪製：一般主角公式（寬 120 × drawWidthMultiplier 1.69378 ≈ 203.25 遊戲 px、腳底 88.3%、drawOffsetY 0），每張用自己的寬高比例
+//   ・和一般氣球劍 v2 是不同的動畫定義（不共用、不覆蓋）；只在 2-4 撿到金色油管環後（isRoyalSwordActive）使用
+//   ・載入失敗 → 自動退回原本的王權劍圖（hero_sword_attack_0N_royal）
+const HERO_ROYAL_V2 = { label: '王權劍 v2', stepsPerFrame: 6, timeline: [1, 2, 3, 4, 5, 7], widthMul: 1.69378, footOffsetY: 0,
+  files: { 1: 'assets/adventure/hero/hero_royal_v2_01.png', 2: 'assets/adventure/hero/hero_royal_v2_02.png', 3: 'assets/adventure/hero/hero_royal_v2_03.png',
+           4: 'assets/adventure/hero/hero_royal_v2_04.png', 5: 'assets/adventure/hero/hero_royal_v2_05.png', 6: 'assets/adventure/hero/hero_royal_v2_06.png',
+           7: 'assets/adventure/hero/hero_royal_v2_07.png' } };
+const royalV2Imgs = {};   // 編號 → Image（只載 timeline 用到的）
+// v0.3.74：王權劍覺醒 Cut-in 主視覺（正式素材，和未來正式版共用）
+const ROYAL_SWORD_CUTIN_PATH = 'assets/adventure/hero/royal_sword_awaken_cutin.png';
+let royalCutinImg = null;
 
 // 圖片快取（key → Image 物件，只載入一次）
 const adventureImages = {};
@@ -721,8 +735,10 @@ function computeHeroArtKey() {
   // 播放順序：01→02→03→02→01（5段，各 6 幀，共 30 幀）不使用 swordAttack04
   if (player.swordAnimTimer > 0) {
     _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false;
-    const t = 30 - player.swordAnimTimer; // 已過幀數 0~29
-    const _sv2 = (typeof heroSwordV2Key === 'function') ? heroSwordV2Key(t) : null; // v0.3.71：揮劍 B（v2）01→02→03→04→05 各 100ms，播一次
+    const t = (player.swordAnimTotal || 30) - player.swordAnimTimer; // 已過幀數（v0.3.74：長度依這次使用的動畫：揮劍 v2 25、王權劍 v2 36、舊圖 30）
+    const _rv2 = (typeof heroRoyalV2Key === 'function') ? heroRoyalV2Key(t) : null; // v0.3.74：王權劍 v2 01→02→03→04→05→07 各 100ms
+    if (_rv2) return _rv2;
+    const _sv2 = (typeof heroSwordV2Key === 'function') ? heroSwordV2Key(t) : null; // v0.3.74：揮劍 v2 01→02→03→04→05 各 5 步（83.33ms），播一次
     if (_sv2) return _sv2;
     if (t < 6)  return 'swordAttack01';   //  0~5  : 6 幀（起手）
     if (t < 12) return 'swordAttack02';   //  6~11 : 6 幀（揮出）
@@ -5645,7 +5661,8 @@ function updatePlayer(dt) {
       player.meleeActive    = CONFIG.BASIC_SWORD_ATTACK_DURATION;
       player.meleeHit       = false;
       player.swordSwingId   = (player.swordSwingId || 0) + 1; // v0.3.18-test-2：新揮劍 ID
-      player.swordAnimTimer = 30; // 視覺動畫獨立計時（30 幀）
+      player.swordAnimTotal = (typeof heroSwordAnimTotal === 'function') ? heroSwordAnimTotal() : 30; // v0.3.74：視覺長度依動畫（只影響畫面）
+      player.swordAnimTimer = player.swordAnimTotal; // 視覺動畫獨立計時（攻擊判定、冷卻不受影響）
       try { sfxOnAttackStart('sword'); } catch (e) {} // v0.3.64
     } else {
       player.attackCooldown = 30;
@@ -18338,6 +18355,10 @@ function buildAssetManifest() {
     () => { orangeKingBossImgStatus[key] = 'error'; },
     (ORANGE_KING_BOSS_ASSET_FALLBACKS[key] || [])));
   ROYAL_SWORD_HERO_KEYS.forEach(key => img('orangeKingBoss', ADVENTURE_HERO_ASSETS[key], true, 'royal:' + key, im => { adventureImages[key] = im; }));
+  // v0.3.74：王權劍 v2（只載 timeline 用到的 01～05、07）＋ 王權劍覺醒 Cut-in 圖（optional：失敗不擋進關，自動退回舊王權劍圖／只顯示文字）
+  HERO_ROYAL_V2.timeline.forEach(n => img('orangeKingBoss', HERO_ROYAL_V2.files[n], false, 'royalV2:0' + n, im => {
+    im._heroWidthMul = HERO_ROYAL_V2.widthMul; im._heroFootY = HERO_ROYAL_V2.footOffsetY; im._heroSet = 'royalV2'; royalV2Imgs[n] = im; }));
+  img('orangeKingBoss', ROYAL_SWORD_CUTIN_PATH, false, 'cutin:royalSwordAwaken', im => { royalCutinImg = im; });
   M.orangeKingBoss.push({ path: ORANGE_KING_BGM_PATH, type: 'audio', critical: false, soft: true, label: 'bgm:orangeKing',
     start: () => initOrangeKingBgm(), status: () => (orangeKingBgmStatus === 'ok(備用路徑)' ? 'ok' : orangeKingBgmStatus) });
   M.orangeKingBoss.push({ path: ORANGE_KING_VICTORY_JINGLE_PATH, type: 'audio', critical: false, soft: true, label: 'sfx:victoryJingle',
@@ -22030,10 +22051,10 @@ function h2BindOnce() {
 //    ・繪製：寬 120 遊戲 px（= 碰撞盒寬 × 2）、腳底 88.3%、再往上 4.76px（drawOffsetY −4.76）
 //    ・PNG 已含校準結果 → 不再套 alignment.json 的矩陣；每張用自己的寬高比例（v3 第 3 張比較高，不假設同高）
 //  揮劍  A＝目前的揮劍（hero_sword_attack_01～04，01→02→03→02→01，每張 6 邏輯幀）← 預設
-//        B＝揮劍 v2（hero_sword_attack_v2_01～05，01→02→03→04→05，每張 100ms＝6 邏輯幀，共 500ms，播一次）
+//        B＝揮劍 v2（hero_sword_attack_v2_01～05，01→02→03→04→05，v0.3.74 起每張 5 邏輯步＝83.33ms，共 25 步／416.67ms，播一次）
 //    ・繪製：寬 120 × 1.38756 ≈ 166.51 遊戲 px（素材畫布比較寬，不是把小V放大），drawOffsetY 0，維持原圖比例
-//    ・時間長度和原本的揮劍視覺計時（swordAnimTimer = 30 邏輯幀）一樣 → 攻擊判定（14 幀）、冷卻（28 幀）完全沿用
-//    ・2-4 王權劍（金色油管環）期間照舊使用王權劍圖（v2 沒有王權劍版本）
+//    ・v0.3.74：視覺計時 swordAnimTimer 依動畫長度（揮劍 v2 25 步、王權劍 v2 36 步）；攻擊判定（14 幀）、冷卻（28 幀）完全沿用
+//    ・2-4 王權劍（金色油管環）期間改用王權劍 v2（HERO_ROYAL_V2，獨立定義；載不到 → 舊王權劍圖）
 // ════════════════════════════════════════════════════════════════════
 const HERO_ANIM_STEP_MS = 161.55;
 const HERO_RUN_SETS = {
@@ -22046,7 +22067,8 @@ const HERO_RUN_SETS = {
 };
 const HERO_RUN_LOOP = ['run03', 'run04', 'run05', 'run04', 'run03', 'run02', 'run01', 'run02'];
 var HERO_RUN_B = { fps: 1000 / HERO_ANIM_STEP_MS, footOffsetY: -4.76, loop: HERO_RUN_LOOP, files: HERO_RUN_SETS.v2.files };   // 舊名稱保留（相容）
-const HERO_SWORD_V2 = { label: '揮劍 v2', frameMs: 100, frames: 5, widthMul: 1.38756, footOffsetY: 0,
+// v0.3.74：依最新 Sword-v2-game-test.zip 的 animation.json → 每張 5 步（83.33ms），共 25 步／416.67ms，播一次（舊版每張 100ms 不再使用）
+const HERO_SWORD_V2 = { label: '揮劍 v2', stepsPerFrame: 5, frameMs: 5 * 1000 / 60, frames: 5, widthMul: 1.38756, footOffsetY: 0,
   files: ['assets/adventure/hero/hero_sword_attack_v2_01.png', 'assets/adventure/hero/hero_sword_attack_v2_02.png', 'assets/adventure/hero/hero_sword_attack_v2_03.png',
           'assets/adventure/hero/hero_sword_attack_v2_04.png', 'assets/adventure/hero/hero_sword_attack_v2_05.png'],
   // v0.3.72：GitHub 已有正確檔名 hero_sword_attack_v2_04.png（優先使用）；舊的 shero_ 檔名只在正確檔名載入失敗時才備援
@@ -22111,14 +22133,31 @@ function heroSwordV2Ready() { const st = heroAnimSets.swordV2; return !!st && [0
 function heroSwordV2Key(t) {
   if (heroSwordMode !== 'B' || !heroSwordV2Ready()) return null;
   if ((typeof isRoyalSwordActive === 'function' && isRoyalSwordActive()) || (typeof getRoyalSwordCalibFrame === 'function' && getRoyalSwordCalibFrame())) return null;
-  const per = HERO_SWORD_V2.frameMs / FIXED_STEP_MS;   // 100ms ＝ 6 邏輯幀
+  const per = HERO_SWORD_V2.stepsPerFrame;   // v0.3.74：每張 5 邏輯步（83.33ms）
   return 'swordAttackV2_0' + (Math.min(HERO_SWORD_V2.frames - 1, Math.floor(Math.max(0, t) / per)) + 1);
+}
+// v0.3.74：王權劍 v2（獨立動畫定義；依 animation.json timeline：01→02→03→04→05→07，每張 6 步）
+function heroRoyalV2Ready() { return HERO_ROYAL_V2.timeline.every(n => royalV2Imgs[n] && royalV2Imgs[n].naturalWidth > 0); }
+function heroRoyalV2Key(t) {
+  if (!(typeof isRoyalSwordActive === 'function' && isRoyalSwordActive()) || !heroRoyalV2Ready()) return null;
+  if (typeof getRoyalSwordCalibFrame === 'function' && getRoyalSwordCalibFrame()) return null;   // F4 舊王權劍定位預覽照舊
+  const tl = HERO_ROYAL_V2.timeline, i = Math.min(tl.length - 1, Math.floor(Math.max(0, t) / HERO_ROYAL_V2.stepsPerFrame));
+  return 'swordAttackRoyalV2_0' + tl[i];   // 以 swordAttack 開頭：小狗等「揮劍中」判斷照舊
+}
+// v0.3.74：這次揮劍的視覺長度（邏輯步）— 王權劍 v2 36、揮劍 v2 25、舊圖 30；只影響畫面，攻擊判定（meleeActive）與冷卻不變
+function heroSwordAnimTotal() {
+  if (typeof isRoyalSwordActive === 'function' && isRoyalSwordActive()) {
+    return (heroRoyalV2Ready() && !getRoyalSwordCalibFrame()) ? HERO_ROYAL_V2.timeline.length * HERO_ROYAL_V2.stepsPerFrame : 30;
+  }
+  if (heroSwordMode === 'B' && heroSwordV2Ready() && !getRoyalSwordCalibFrame()) return HERO_SWORD_V2.frames * HERO_SWORD_V2.stepsPerFrame;
+  return 30;
 }
 // 繪製時取圖：跑步 v2／v3、揮劍 v2（其他動作照舊）
 function heroAnimTestImg(key) {
   if (!key) return null;
   if (key.indexOf('runB') === 0) { const st = heroAnimSets[heroRunSetId()]; return (st && st.imgs['run' + key.slice(4)]) || null; }
   if (key.indexOf('swordAttackV2_0') === 0) { const st = heroAnimSets.swordV2; return (st && st.imgs[Number(key.slice(-1)) - 1]) || null; }
+  if (key.indexOf('swordAttackRoyalV2_0') === 0) return royalV2Imgs[Number(key.slice(-1))] || null;   // v0.3.74
   return null;
 }
 function heroRunBImg(key) { return key && key.indexOf('runB') === 0 ? heroAnimTestImg(key) : null; }   // 舊名稱保留（相容）
@@ -22145,7 +22184,8 @@ if (heroSwordMode === 'B') heroSwordLoadV2();
 if (typeof window !== 'undefined') {
   window.debugAnimAB = function () {
     const o = { run: { mode: heroRunMode, set: heroRunSetId(), usingNewArt: heroRunIsB(), stepMs: HERO_RUN_SETS[heroRunSetId()].stepMs, failed: Object.keys(heroAnimSets).reduce((a, k) => a.concat(heroAnimSets[k].failed || []), []) },
-      sword: { mode: heroSwordMode, v2Ready: heroSwordV2Ready(), used: ((heroAnimSets.swordV2 || {}).used || []).slice() } };
+      sword: { mode: heroSwordMode, v2Ready: heroSwordV2Ready(), stepsPerFrame: HERO_SWORD_V2.stepsPerFrame, totalSteps: HERO_SWORD_V2.frames * HERO_SWORD_V2.stepsPerFrame, used: ((heroAnimSets.swordV2 || {}).used || []).slice() },
+      royal: { v2Ready: heroRoyalV2Ready(), timeline: HERO_ROYAL_V2.timeline.slice(), stepsPerFrame: HERO_ROYAL_V2.stepsPerFrame, widthMul: HERO_ROYAL_V2.widthMul, loaded: Object.keys(royalV2Imgs).map(Number), cutinImg: !!royalCutinImg } };
     console.log('[AnimAB]', o); return o;
   };
 }
@@ -23256,3 +23296,146 @@ if (typeof window !== 'undefined') {
   });
 })();
 
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.74：王權劍覺醒 Cut-in（2-4 撿到金色油管環、氣球劍變成王權劍的那一刻）
+//  流程：原本的撿取（collectOrangeKingRing：音效、ringActive、activeSlot＝劍、小V身上金色光圈 ringAuraMs）照舊執行
+//        → 武器已經是王權劍之後才開始 Cut-in：
+//          0～350ms   世界凍結，原本的金色光圈繼續播（畫面慢慢變暗）
+//          350～1450ms Cut-in 本體 1.1 秒：金色閃光 → 斜向金色帶滑入 → royal_sword_awaken_cutin.png 滑入 →「王權劍覺醒！」→ 淡出
+//        → 回到戰鬥（光圈此時也剛好播完）
+//  ・Cut-in 期間遊戲世界完全不更新（玩家操作、橘子王、油彈、傷害判定、計時都停）：沿用主迴圈既有的「阻擋遊戲」檢查（advIsBlockingGame）
+//  ・按暫停（Esc／暫停鈕）→ Cut-in 跟著停住，繼續冒險後接著播完
+//  ・每次真正撿到金色油管環都會播（重新挑戰再撿一次也會播）；同一次撿取只播一次；重新開始／換關立刻清除
+//  ・全部用 canvas 畫在遊戲畫面上（和全螢幕、手機縮放一致；不新增 HTML 圖層，不影響開場漫畫）
+//  ・圖片沒載到 → 只顯示金色帶與文字（不擋遊戲）
+// ════════════════════════════════════════════════════════════════════
+const ROYAL_CUTIN = { leadMs: 350, cutMs: 1100, text: '王權劍覺醒！' };
+let royalCutin = null;   // { t, last, id }
+let royalCutinCount = 0;
+function royalCutinStart() {
+  if (royalCutin) return;
+  royalCutinCount++;
+  royalCutin = { t: 0, last: 0, id: royalCutinCount };
+  console.log('[RoyalCutin] 王權劍覺醒 Cut-in 開始（第 ' + royalCutinCount + ' 次）' + (royalCutinImg ? '' : '（Cut-in 圖還沒載到 → 只顯示文字）'));
+}
+function royalCutinEnd(reason) {
+  if (!royalCutin) return;
+  royalCutin = null;
+  console.log('[RoyalCutin] 結束（' + (reason || 'done') + '）→ 回到戰鬥');
+}
+function royalCutinTick() {
+  const c = royalCutin; if (!c) return;
+  const now = performance.now();
+  const dt = c.last ? Math.min(50, Math.max(0, now - c.last)) : FIXED_STEP_MS;
+  c.last = now;
+  const hidden = typeof document !== 'undefined' && document.hidden;
+  if (gameState !== 'playing' || hidden) return;   // 暫停中：Cut-in 也停住
+  c.t += dt;
+  try { if (orangeKingBoss && orangeKingBoss.ringAuraMs > 0) orangeKingBoss.ringAuraMs -= dt; } catch (e) {}   // 原本的金色光圈在凍結期間照樣播
+  if (c.t >= ROYAL_CUTIN.leadMs + ROYAL_CUTIN.cutMs) royalCutinEnd('done');
+}
+function royalCutinDraw() {
+  const c = royalCutin; if (!c || (gameState !== 'playing' && gameState !== 'paused')) return;
+  const W = CANVAS_W, H = CANVAS_H, L = ROYAL_CUTIN.leadMs, D = ROYAL_CUTIN.cutMs;
+  const ct = c.t - L;
+  const clamp = v => Math.max(0, Math.min(1, v));
+  const easeOut = p => 1 - Math.pow(1 - p, 3);
+  const easeBack = p => { const s = 1.6; p = p - 1; return 1 + p * p * ((s + 1) * p + s); };
+  const out = ct > D - 220 ? clamp((D - ct) / 220) : 1;   // 最後 0.22 秒淡出
+  ctx.save();
+  // 壓暗（前導期間慢慢變暗，Cut-in 時更暗，結束時淡出）
+  const dim = ct < 0 ? 0.28 * clamp(c.t / L) : (0.28 + 0.3 * clamp(ct / 120)) * out;
+  ctx.fillStyle = 'rgba(18,6,0,' + dim.toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+  if (ct < 0) { ctx.restore(); return; }
+  // 金色閃光
+  if (ct < 220) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255,226,130,' + (0.7 * (1 - ct / 220)).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.globalAlpha = out;
+  // 斜向金色帶（從右邊滑入）
+  const bx = (1 - easeOut(clamp(ct / 200))) * W;
+  const y1 = H * 0.33, y2 = H * 0.71, slant = 34;
+  ctx.save();
+  ctx.translate(bx, 0);
+  ctx.beginPath();
+  ctx.moveTo(-60, y1 + slant); ctx.lineTo(W + 60, y1 - slant); ctx.lineTo(W + 60, y2 - slant); ctx.lineTo(-60, y2 + slant); ctx.closePath();
+  const g = ctx.createLinearGradient(0, y1 - slant, 0, y2 + slant);
+  g.addColorStop(0, 'rgba(70,30,0,0.92)'); g.addColorStop(0.5, 'rgba(120,58,0,0.92)'); g.addColorStop(1, 'rgba(70,30,0,0.92)');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.save(); ctx.clip();
+  // 速度線（往左流動）
+  ctx.strokeStyle = 'rgba(255,230,150,0.28)'; ctx.lineWidth = 2;
+  for (let i = 0; i < 12; i++) {
+    const yy = y1 - slant + 10 + i * ((y2 - y1 + 2 * slant) / 12);
+    const len = 90 + (i * 53) % 140;
+    const xx = W + 200 - ((i * 211 + ct * 1.8) % (W + 400));
+    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + len, yy - len * (2 * slant / (W + 120))); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.shadowColor = 'rgba(255,215,90,0.95)'; ctx.shadowBlur = 14; ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(-60, y1 + slant); ctx.lineTo(W + 60, y1 - slant); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-60, y2 + slant); ctx.lineTo(W + 60, y2 - slant); ctx.stroke();
+  ctx.restore();
+  // 主視覺圖（從右邊彈入，之後緩慢前移）
+  const pi = clamp((ct - 60) / 260);
+  if (royalCutinImg && pi > 0) {
+    const size = H * 0.7, cx = W * 0.74 - ct * 0.02 + (1 - easeBack(pi)) * W * 0.5, cy = H * 0.5;
+    const sc = 1.1 - 0.1 * easeOut(pi);
+    const rg = ctx.createRadialGradient(cx, cy, 10, cx, cy, size * 0.6);
+    rg.addColorStop(0, 'rgba(255,235,150,' + (0.55 * pi).toFixed(3) + ')'); rg.addColorStop(1, 'rgba(255,200,60,0)');
+    ctx.fillStyle = rg; ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(royalCutinImg, cx - size * sc / 2, cy - size * sc / 2, size * sc, size * sc);
+  }
+  // 文字「王權劍覺醒！」（放大後縮回定位）
+  const pt = clamp((ct - 140) / 200);
+  if (pt > 0) {
+    const tx = W * 0.3, ty = H * 0.52, s = 1.45 - 0.45 * easeOut(pt);
+    ctx.save();
+    ctx.globalAlpha = out * pt;
+    ctx.translate(tx, ty); ctx.scale(s, s);
+    ctx.font = '900 66px "Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#3a1600';
+    ctx.strokeText(ROYAL_CUTIN.text, 0, 0);
+    const tg = ctx.createLinearGradient(0, -34, 0, 34);
+    tg.addColorStop(0, '#fffbe0'); tg.addColorStop(0.45, '#ffd23f'); tg.addColorStop(1, '#e07a00');
+    ctx.shadowColor = 'rgba(255,210,80,0.9)'; ctx.shadowBlur = 18;
+    ctx.fillStyle = tg; ctx.fillText(ROYAL_CUTIN.text, 0, 0);
+    // 光澤掃過
+    const sw = clamp((ct - 420) / 320);
+    if (sw > 0 && sw < 1) {   // 只在文字本身上掃過（再寫一次同樣的字，填色是一條移動的白光）
+      ctx.shadowBlur = 0;
+      const sx = -260 + sw * 520;
+      const sg = ctx.createLinearGradient(sx - 40, 0, sx + 40, 0);
+      sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.85)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg; ctx.fillText(ROYAL_CUTIN.text, 0, 0);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+if (typeof window !== 'undefined') {
+  window.debugRoyalCutin = function () {
+    const r = { active: !!royalCutin, t: royalCutin ? Math.round(royalCutin.t) : null, count: royalCutinCount, imgReady: !!(royalCutinImg && royalCutinImg.naturalWidth > 0), totalMs: ROYAL_CUTIN.leadMs + ROYAL_CUTIN.cutMs, cutMs: ROYAL_CUTIN.cutMs, path: ROYAL_SWORD_CUTIN_PATH };
+    console.log('[RoyalCutin]', r); return r;
+  };
+}
+(function v374Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v374) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v374 = true; globalThis[name] = w; };
+  // 撿到金色油管環：原本的處理（含金色光圈）先做完、武器已經是王權劍 → 才開始 Cut-in
+  wrapFn('collectOrangeKingRing', o => function () { const r = o.apply(this, arguments); try { if (isRoyalSwordActive()) royalCutinStart(); } catch (e) {} return r; });
+  // Cut-in 期間：主迴圈不跑 update（世界凍結）、循環音效停
+  wrapFn('advIsBlockingGame', o => function () { return o.apply(this, arguments) || !!royalCutin; });
+  // 畫面：原本畫完之後，Cut-in 疊在最上面
+  wrapFn('draw', o => function () { try { royalCutinTick(); } catch (e) {} const r = o.apply(this, arguments); try { royalCutinDraw(); } catch (e) { console.warn('[RoyalCutin] draw', e); } return r; });
+  // 重新開始／換關：立刻清除（不把 Cut-in 帶到下一次）
+  wrapFn('restart', o => function () { royalCutinEnd('restart'); return o.apply(this, arguments); });
+  wrapFn('loadLevel', o => function () { royalCutinEnd('loadLevel'); return o.apply(this, arguments); });
+})();
