@@ -1,21 +1,35 @@
 # 由 opening-test v0.2.0 的常數產生專案 JSON（只在開發時使用）
+# v0.3.1-test-1：第二幕（放大＋兩句對話）、第四幕（定點分鏡）、第五幕（大幅張望）
 import json, os
 def K(m,o,v,e=None):
     k={"m":m,"o":o,"v":v}
     if e: k["e"]=e
     return k
 # =====================================================================
-# SCENE2（v0.3.0 修改）：床＋小V組放大、往左、靠近鏡頭（左側出框）；2A→2B 真正交叉淡化
-#   床畫在人物圖 scene2_char_2a/2b 裡（不是背景），所以可以整組放大移動；背景 scene2_bg 沒有床，不動
+# SCENE2（v0.3.1 修改）：床＋小V組再放大、更靠近鏡頭、往左（床頭局部出框）；兩句對話；2A→2B 真正交叉淡化
+#   床畫在人物圖 scene2_char_2a/2b 裡（不是背景），所以整組放大移動；背景 scene2_bg 不動、也不再做鏡頭推近（背景不會被放大）
+#   幾何（2A 原圖 1448×1086）：床頭柱在 x≈52～200，小V在 x≈340～770、頭頂 y≈28、鞋底 y≈1000
+#   縮放 0.84（v0.2.0：0.56、v0.3.0：0.72）→ 小V頭頂距上緣約 1%、鞋底剛好貼齊下緣；畫面左緣切在原圖 x≈240（床頭柱與床頭板左半出框；小V頭髮左緣距畫面左緣約 6%）
 # =====================================================================
 SCENE2 = {
-  "BED_SCALE": 0.72,   # 2A 圖寬 ÷ 舞台寬（v0.2.0：0.56）→ 床與小V放大約 1.29 倍
-  "BED_X": 0.200,      # 錨點（前側兩隻床腳著地點中間）的水平位置（v0.2.0：0.255）→ 往左，床尾超出畫面左側
-  "BED_Y": 0.975,      # 錨點的垂直位置（v0.2.0：0.945）→ 床腳更靠近畫面下緣＝更靠近鏡頭
-  "SWITCH_AT": 1640,   # 2A 揉眼停留到這裡（同 v0.2.0）
-  "CROSS_MS": 600,     # 2A→2B 交叉淡化長度（v0.2.0：120ms，看起來像換圖）
-  "HOLD_B_MS": 1800,   # 2B 驚訝停留（同 v0.2.0）
+  "BED_SCALE": 0.84,   # 2A 圖寬 ÷ 舞台寬（v0.3.0：0.72）→ 再放大約 1.17 倍（比 v0.2.0 大 1.5 倍）
+  "BED_X": 0.227,      # 錨點（前側兩隻床腳著地點中間）的水平位置（v0.3.0：0.200；因為放大，同樣位置會更靠左）→ 畫面左緣切在原圖 x≈240
+  "BED_Y": 1.000,      # 錨點的垂直位置（床腳落在畫面下緣之外＝更靠近鏡頭）
+  # ---- 節拍（本幕毫秒；0＝第二幕開始淡入）----
+  "SHOWN": 240,        # 2A 淡入完成
+  "D1_AT": 900,        # 第一句「……咦……？」（等玩家按繼續）
+  "CROSS_DELAY": 250,  # 按繼續後，隔多久開始 2A→2B
+  "CROSS_MS": 700,     # 2A→2B 交叉淡化長度
+  "D2_AFTER": 350,     # 2B 完全出現後幾毫秒，出現第二句
+  "TAIL_MS": 500,      # 第二句按繼續後，停留多久接第三幕
+  "D1_TEXT": "……咦……？",
+  "D2_TEXT": "我家在飛……？",
 }
+c2 = SCENE2
+t2_switch = c2["D1_AT"] + c2["CROSS_DELAY"]
+t2_b = t2_switch + c2["CROSS_MS"]
+t2_d2 = t2_b + c2["D2_AFTER"]
+t2_end = t2_d2 + c2["TAIL_MS"]
 scene1 = {
   "id":"intro_scene01","name":"第一人稱醒來","status":"ready",
   "note":"移植自 opening-test v0.2.0 第一幕（已驗收）",
@@ -54,13 +68,15 @@ scene1 = {
 }
 scene2 = {
   "id":"intro_scene02","name":"小V坐在床側，從揉眼到驚訝","status":"ready",
-  "note":"v0.3.0：床＋小V放大、往左、局部出框（床畫在人物圖裡，可整組移動）；2A→2B 改為真正交叉淡化 600ms",
-  "durationMs":SCENE2["SWITCH_AT"]+SCENE2["CROSS_MS"]+SCENE2["HOLD_B_MS"],
+  "note":"v0.3.1：床＋小V再放大、更靠近鏡頭、往左（床頭出框）；「……咦……？」→ 按繼續 → 2A→2B 交叉淡化 → 「我家在飛……？」；不做鏡頭推近（背景不放大）",
+  "durationMs":t2_end,
   "transitionIn":{"type":"fadeBlack","outMs":160,"holdMs":60,"inMs":240},
   "markers":[
-    {"id":"shown","label":"淡入完成（2A 完全可見）","t":240},
-    {"id":"switch","label":"2A → 2B 開始（交叉淡化）","t":SCENE2["SWITCH_AT"]},
-    {"id":"bShown","label":"2B 完全取代 2A","t":SCENE2["SWITCH_AT"]+SCENE2["CROSS_MS"]}
+    {"id":"shown","label":"淡入完成（2A 揉眼）","t":c2["SHOWN"]},
+    {"id":"s2_d1","label":"第一句「……咦……？」（等待繼續）","t":c2["D1_AT"]},
+    {"id":"switch","label":"按繼續後：2A → 2B 交叉淡化開始","t":t2_switch},
+    {"id":"bShown","label":"2B 完全取代 2A","t":t2_b},
+    {"id":"s2_d2","label":"第二句「我家在飛……？」（等待繼續）","t":t2_d2}
   ],
   "layers":[
     {"id":"s2_bg","name":"第二幕背景","type":"image","role":"background","asset":"scene2_bg","visible":True},
@@ -78,11 +94,14 @@ scene2 = {
                "shoesA":[[400,968,95,16],[540,994,85,15]],
                "shoesB":[[411,946,95,16],[583,1020,85,15]]}}
   ],
-  "camera":{"originX":0.40,"originY":0.52,"tracks":{
-    "scale":[K("switch",0,1),K("switch",1400,1.025,"out")]}},
+  "camera":{"originX":0.40,"originY":0.52,"tracks":{}},
   "effects":{},
   "tracks":{},
-  "dialogues":[]
+  "dialogues":[
+    {"id":"s2_d1","speaker":"小V","text":c2["D1_TEXT"],"styleType":"rpg_box_no_portrait",
+     "at":{"m":"s2_d1","o":0},"mode":"wait","autoMs":0,"charMs":90,"after":"resume","enabled":True},
+    {"id":"s2_d2","speaker":"小V","text":c2["D2_TEXT"],"styleType":"rpg_box_no_portrait",
+     "at":{"m":"s2_d2","o":0},"mode":"wait","autoMs":0,"charMs":70,"after":"resume","enabled":True}]
 }
 def draft(i, sid, name, dlg):
     return {"id":sid,"name":name,"status":"draft","note":"尚未製作正式素材",
@@ -176,117 +195,128 @@ scene3 = {
 }
 
 # =====================================================================
-# SCENE4A（v0.3.0 新增）：第三人稱、從小V後方看他走進霧中的森林小徑（沒有台詞）
-#   poseSeq：近景背影 → 遠景；x／y＝腳底位置、scale＝人物身高 ÷ 舞台高度
+# v0.3.1：第四幕改成「定點插畫分鏡」——每張人物圖都是固定構圖（固定位置／大小），只靠淡入淡出切換；
+#   不再讓人物圖位移、起伏、抖動來模擬走路。人物用一般圖片圖層（role＝character），
+#   錨點設在腳底：位置 X／Y＝腳底在畫面上的位置；縮放＝圖寬 ÷ 舞台寬（由「人物身高 ÷ 舞台高」換算）。
 # =====================================================================
+STAGE_W, STAGE_H = 1672, 941
+def still(lid, name, asset, imgW, imgH, footX, footY, figTop, x, y, height, opacity_keys, note=""):
+    """固定構圖的人物圖層。height＝人物身高（頭頂到腳底）÷ 舞台高度。"""
+    sc = imgW * height * STAGE_H / ((footY - figTop) * STAGE_W)
+    return {"id":lid,"name":name,"type":"image","role":"character","asset":asset,"visible":True,
+            "x":x,"y":y,"scale":round(sc,4),"anchorX":round(footX/imgW,4),"anchorY":round(footY/imgH,4),
+            "opacity":0,"rotation":0,"blur":0,
+            "note":note or f"固定構圖：腳底在畫面 ({x}, {y})，人物身高約 {height} 個舞台高；只做淡入淡出、不移動",
+            "tracks":{"opacity":opacity_keys}}
+def op(m, v, e=None, label=None, o=0):
+    k = {"m":m,"o":o,"v":v}
+    if e: k["e"] = e
+    if label: k["label"] = label
+    return k
+
+# ---------------- 第四幕A：深入氣球森林（背景固定；近景偏右較大 → 淡出；遠景偏左較小 → 淡入）----------------
 A4 = {
-  "IN": {"type":"fadeBlack","outMs":300,"holdMs":200,"inMs":600},
-  "T_WALK": 600, "T_SWAP": 3200, "T_FAR": 3600, "T_DEEP": 6200, "T_GONE": 8000, "DUR": 8700,
-  # 腳底路徑（沿著小徑往消失點 0.56, 0.63 走）
-  "X": [0.605, 0.584, 0.578, 0.566, 0.562], "Y": [1.090, 0.860, 0.832, 0.716, 0.674],
-  "S": [0.760, 0.400, 0.368, 0.190, 0.100],   # 身高 ÷ 舞台高：越走越遠越小
+  "IN": {"type":"fadeBlack","outMs":300,"holdMs":200,"inMs":600},   # 從第三幕進來（同 v0.3.0）
+  # 節拍（本幕毫秒）
+  "NEAR_IN": 600,      # 背景淡入完成，近景小V同時完整出現
+  "NEAR_OUT": 3000,    # 近景開始淡出
+  "NEAR_GONE": 3900,   # 近景完全消失
+  "FAR_IN": 3600,      # 遠景開始淡入（和近景淡出重疊 300ms）
+  "FAR_SHOWN": 4500,   # 遠景完全出現
+  "DUR": 7000,         # 遠景停留到本幕結束 → 全畫面淡出進第四幕B
+  # 固定構圖（腳底位置、身高）
+  "NEAR": {"x":0.680, "y":0.985, "h":0.70},   # 畫面偏右、靠近鏡頭、較大（小徑右半）
+  "FAR":  {"x":0.520, "y":0.775, "h":0.25},   # 畫面偏左、小徑深處、較小（小徑左半）
 }
 scene4a = {
   "id":"intro_scene04a","name":"第四幕A：深入氣球森林","status":"ready",
-  "note":"v0.3.0：從小V後方看他走過木牌、沿小徑走進霧裡（近景→遠景交叉淡化；霧用霧插件產生，不新增圖片）",
+  "note":"v0.3.1：定點分鏡——背景固定；近景小V（偏右、較大）淡出 → 遠景小V（偏左、較小）淡入；人物不移動、不起伏；結束後全畫面淡出進第四幕B",
   "durationMs":A4["DUR"], "transitionIn":A4["IN"],
   "markers":[
-    {"id":"a_walk","label":"4A-1 淡入完成，小V開始往深處走（近景）","t":A4["T_WALK"]},
-    {"id":"a_swap","label":"4A-2 近景 → 遠景開始","t":A4["T_SWAP"]},
-    {"id":"a_far","label":"4A-2 遠景完全取代近景","t":A4["T_FAR"]},
-    {"id":"a_deep","label":"4A-3 開始被霧吞沒","t":A4["T_DEEP"]},
-    {"id":"a_gone","label":"4A-3 消失在霧中","t":A4["T_GONE"]}],
+    {"id":"a_nearIn","label":"4A-1 近景小V（偏右、較大）","t":A4["NEAR_IN"]},
+    {"id":"a_nearOut","label":"4A-2 近景開始淡出","t":A4["NEAR_OUT"]},
+    {"id":"a_farIn","label":"4A-2 遠景開始淡入","t":A4["FAR_IN"]},
+    {"id":"a_nearGone","label":"4A-2 近景完全消失","t":A4["NEAR_GONE"]},
+    {"id":"a_farShown","label":"4A-3 遠景小V（偏左、較小）完全出現","t":A4["FAR_SHOWN"]}],
   "layers":[
-    {"id":"a_bg","name":"森林小徑背景","type":"image","role":"background","asset":"intro_scene04a_bg","visible":True},
-    {"id":"a_v","name":"小V（近景背影 → 遠景）","type":"poseSeq","role":"character","visible":True,"crossfade":"dissolve",
-     "poses":[{"asset":"intro_scene04a_v_near","label":"近景","footX":446.5,"footY":1518,"figTop":13,"figBottom":1518,"scaleAdj":1},
-              {"asset":"intro_scene04a_v_far","label":"遠景","footX":449,"footY":1457,"figTop":87,"figBottom":1457,"scaleAdj":1}],
-     "switches":[{"from":{"m":"a_swap","o":0},"to":{"m":"a_far","o":0}}],
-     "x":A4["X"][0],"y":A4["Y"][0],"scale":A4["S"][0],"opacity":1,"rotation":0,"blur":0,
-     "sway":{"periodMs":1100,"x":0,"y":0.025,"rot":0.6,"relative":True},
-     "tracks":{
-       "x":[{"m":"start","o":0,"v":A4["X"][0],"label":"近景起點"},{"m":"a_swap","o":0,"v":A4["X"][1],"e":"out"},{"m":"a_far","o":0,"v":A4["X"][2]},
-            {"m":"a_deep","o":0,"v":A4["X"][3],"e":"out"},{"m":"a_gone","o":0,"v":A4["X"][4],"e":"out","label":"霧中"}],
-       "y":[{"m":"start","o":0,"v":A4["Y"][0],"label":"近景起點（靠近鏡頭）"},{"m":"a_swap","o":0,"v":A4["Y"][1],"e":"out"},{"m":"a_far","o":0,"v":A4["Y"][2]},
-            {"m":"a_deep","o":0,"v":A4["Y"][3],"e":"out"},{"m":"a_gone","o":0,"v":A4["Y"][4],"e":"out","label":"霧中"}],
-       "scale":[{"m":"start","o":0,"v":A4["S"][0],"label":"近景身高"},{"m":"a_swap","o":0,"v":A4["S"][1],"e":"out"},{"m":"a_far","o":0,"v":A4["S"][2]},
-                {"m":"a_deep","o":0,"v":A4["S"][3],"e":"out"},{"m":"a_gone","o":0,"v":A4["S"][4],"e":"out","label":"很小、很遠"}],
-       "opacity":[{"m":"a_deep","o":0,"v":1,"label":"還清楚"},{"m":"a_gone","o":0,"v":0,"e":"in","label":"被霧吞沒"}],
-       "blur":[{"m":"a_deep","o":0,"v":0},{"m":"a_gone","o":0,"v":0.004,"e":"in","label":"被霧模糊"}]}}],
-  "camera":{"originX":0.56,"originY":0.62,"tracks":{
-    "scale":[{"m":"start","o":0,"v":1.0,"label":"原始鏡位"},{"m":"end","o":0,"v":1.05,"e":"inOut","label":"非常輕微的前推"}]}},
+    {"id":"a_bg","name":"森林小徑背景（固定）","type":"image","role":"background","asset":"intro_scene04a_bg","visible":True},
+    still("a_near","小V 近景（偏右、較大）","intro_scene04a_v_near",1024,1536,446.5,1518,13,
+          A4["NEAR"]["x"],A4["NEAR"]["y"],A4["NEAR"]["h"],
+          [op("start",1,None,"隨背景一起淡入"),op("a_nearOut",1,None,"停留"),op("a_nearGone",0,"inOut","淡出")]),
+    still("a_far","小V 遠景（偏左、較小）","intro_scene04a_v_far",1024,1536,449,1457,87,
+          A4["FAR"]["x"],A4["FAR"]["y"],A4["FAR"]["h"],
+          [op("a_farIn",0,None,"還沒出現"),op("a_farShown",1,"inOut","淡入"),op("end",1,None,"停留到本幕結束")])],
+  "camera":{"originX":0.5,"originY":0.5,"tracks":{}},
   "effects":{
-    "breath":{"enabled":True,"params":{"BREATH_Y":0.0025,"BREATH_X":0.0012,"BREATH_ROT":0.06,"BREATH_SCALE":0.002,"BREATH_PERIOD":4.6,"BREATH_CLOCK":"ambient"}},
     "fog":{"enabled":True,"params":{"CX":0.56,"CY":0.60,"RX":0.30,"RY":0.20,"CORE":0.90,"HAZE":0.10,"COLOR":"236, 240, 234"}}},
   "tracks":{
-    "breath":[{"m":"start","o":0,"v":1,"label":"輕微呼吸感"}],
-    "overscan":[{"m":"start","o":0,"v":1.012,"label":"預留放大（呼吸不露邊）"}],
-    "fog":[{"m":"start","o":0,"v":0.12,"label":"遠處薄霧"},{"m":"a_deep","o":0,"v":0.35,"e":"inOut"},
-           {"m":"a_gone","o":0,"v":0.85,"e":"inOut","label":"濃霧吞沒小V"},{"m":"end","o":0,"v":0.9}]},
+    "fog":[{"m":"start","o":0,"v":0.12,"label":"遠處薄霧（固定，不再吞沒小V）"}]},
   "dialogues":[]
 }
 
-# =====================================================================
-# SCENE4B（v0.3.0 新增）：90° 側面鏡位；小V由左往右：步行 → 回頭仰望 → 抬頭張望（沒有台詞）
-#   圖層順序（下→上）：背景（遠景，慢移）→ 小V（poseSeq）→ 前景失焦樹木（快移）＝視差
-# =====================================================================
+# ---------------- 第四幕B：90° 側面森林小徑（被窺視感）----------------
+#   圖層（下→上）：背景（固定）→ 小V 三張固定構圖（依序淡入淡出）→ 前景失焦樹木（固定，最上層遮擋）
+#   遠 → 稍近 → 稍遠：步行（左、較小、腳底較高）→ 回頭仰望（中、略大、腳底較低）→ 抬頭張望（右、和步行差不多大）
 B4 = {
-  "IN": {"type":"crossfade","durMs":700},
-  "T_TURN": 3000, "T_BACK": 3400, "T_UP": 6000, "T_UPSHOWN": 6400, "T_PUSH": 8800, "DUR": 10400,
-  "X": [0.080, 0.400, 0.425, 0.465, 0.490, 0.760],   # 腳底 x：start、turn、back、up、upShown、end（連續的一條路徑）
-  "FOOT_Y": 0.735,
-  "S0": 0.400, "S1": 0.420,                          # 身高 ÷ 舞台高：整段只變大 5%（輕微遠近）
+  "IN": {"type":"fadeBlack","outMs":700,"holdMs":250,"inMs":700},   # 第四幕A 結束：全畫面淡出 → 淡入第四幕B
+  "FG_X": 0.49, "FG_Y": 0.47, "FG_SCALE": 1.06,   # 前景樹木：左側樹幹遮到步行、右側枝葉遮到抬頭張望；下緣剛好貼齊畫面下緣
+  # 節拍（本幕毫秒）
+  "WALK_IN": 500, "WALK_SHOWN": 1300, "WALK_OUT": 3100, "WALK_GONE": 3800,
+  "BACK_IN": 3500, "BACK_SHOWN": 4300, "BACK_OUT": 6300, "BACK_GONE": 7000,
+  "UP_IN": 6700, "UP_SHOWN": 7500, "DUR": 9800,
+  "WALK": {"x":0.205, "y":0.690, "h":0.36},   # 被左側前景樹遮住約 1／4
+  "BACK": {"x":0.480, "y":0.745, "h":0.42},
+  "UP":   {"x":0.845, "y":0.700, "h":0.37},   # 被右側前景枝葉遮住約 1／6
 }
+b = B4
 scene4b = {
   "id":"intro_scene04b","name":"第四幕B：90° 側面森林小徑（被窺視感）","status":"ready",
-  "note":"v0.3.0：同一個小V依時間換姿勢 walk → look_back_up → look_up，腳底錨點連續左→右；前景失焦樹木在小V之前、移動較快",
-  "durationMs":B4["DUR"], "transitionIn":B4["IN"],
+  "note":"v0.3.1：定點分鏡——三張固定構圖依序淡入淡出：步行（左、遠）→ 回頭仰望（中、稍近）→ 抬頭張望（右、稍遠）；前景失焦樹木固定在最上層遮擋；不做人物平移／起伏",
+  "durationMs":b["DUR"], "transitionIn":b["IN"],
   "markers":[
-    {"id":"b_turn","label":"4B-2 步行 → 回頭仰望 開始","t":B4["T_TURN"]},
-    {"id":"b_back","label":"4B-2 回頭仰望（放慢）","t":B4["T_BACK"]},
-    {"id":"b_up","label":"4B-3 回頭仰望 → 抬頭張望 開始","t":B4["T_UP"]},
-    {"id":"b_upShown","label":"4B-3 抬頭張望，繼續往右","t":B4["T_UPSHOWN"]},
-    {"id":"b_push","label":"鏡頭推近小V（銜接第一人稱）","t":B4["T_PUSH"]}],
+    {"id":"b_walkIn","label":"4B-1 步行 淡入開始","t":b["WALK_IN"]},
+    {"id":"b_walkShown","label":"4B-1 步行（左、較遠）完全出現","t":b["WALK_SHOWN"]},
+    {"id":"b_walkOut","label":"4B-1 步行 淡出開始","t":b["WALK_OUT"]},
+    {"id":"b_backIn","label":"4B-2 回頭仰望 淡入開始","t":b["BACK_IN"]},
+    {"id":"b_walkGone","label":"4B-1 步行 完全消失","t":b["WALK_GONE"]},
+    {"id":"b_backShown","label":"4B-2 回頭仰望（中、稍近）完全出現","t":b["BACK_SHOWN"]},
+    {"id":"b_backOut","label":"4B-2 回頭仰望 淡出開始","t":b["BACK_OUT"]},
+    {"id":"b_upIn","label":"4B-3 抬頭張望 淡入開始","t":b["UP_IN"]},
+    {"id":"b_backGone","label":"4B-2 回頭仰望 完全消失","t":b["BACK_GONE"]},
+    {"id":"b_upShown","label":"4B-3 抬頭張望（右、稍遠）完全出現","t":b["UP_SHOWN"]}],
   "layers":[
-    {"id":"b_bg","name":"側面森林背景（遠景，慢移）","type":"image","role":"far","asset":"intro_scene04b_bg","visible":True,
-     "x":0.51,"y":0.5,"scale":1.06,"anchorX":0.5,"anchorY":0.5,"opacity":1,"rotation":0,
-     "tracks":{"x":[{"m":"start","o":0,"v":0.51,"label":"背景慢移（視差：最慢）"},{"m":"end","o":0,"v":0.49}]}},
-    {"id":"b_v","name":"小V（步行 → 回頭仰望 → 抬頭張望）","type":"poseSeq","role":"character","visible":True,"crossfade":"dissolve",
-     "poses":[{"asset":"intro_scene04b_v_walk","label":"1 步行","footX":549,"footY":1405,"figTop":59,"figBottom":1405,"scaleAdj":1},
-              {"asset":"intro_scene04b_v_look_back_up","label":"2 回頭仰望","footX":569,"footY":1504,"figTop":32,"figBottom":1504,"scaleAdj":1},
-              {"asset":"intro_scene04b_v_look_up","label":"3 抬頭張望","footX":601,"footY":1388,"figTop":34,"figBottom":1388,"scaleAdj":1}],
-     "switches":[{"from":{"m":"b_turn","o":0},"to":{"m":"b_back","o":0}},{"from":{"m":"b_up","o":0},"to":{"m":"b_upShown","o":0}}],
-     "x":B4["X"][0],"y":B4["FOOT_Y"],"scale":B4["S0"],"opacity":1,"rotation":0,"blur":0,
-     "sway":{"periodMs":1000,"x":0,"y":0.012,"rot":0,"relative":True},
-     "tracks":{
-       "x":[{"m":"start","o":0,"v":B4["X"][0],"label":"從左側（前景樹後）走出"},{"m":"b_turn","o":0,"v":B4["X"][1]},
-            {"m":"b_back","o":0,"v":B4["X"][2],"label":"回頭仰望：放慢"},{"m":"b_up","o":0,"v":B4["X"][3]},
-            {"m":"b_upShown","o":0,"v":B4["X"][4]},{"m":"end","o":0,"v":B4["X"][5],"label":"繼續往右探索"}],
-       "scale":[{"m":"start","o":0,"v":B4["S0"]},{"m":"end","o":0,"v":B4["S1"],"label":"輕微變近（+5%）"}]}},
-    {"id":"b_fg","name":"前景失焦樹木（最前，快移）","type":"image","role":"foreground","asset":"intro_scene04b_fg_trees","visible":True,
-     "x":0.57,"y":0.5,"scale":1.14,"anchorX":0.5,"anchorY":0.5,"opacity":1,"rotation":0,
-     "tracks":{"x":[{"m":"start","o":0,"v":0.57,"label":"前景快移（視差：最快）"},{"m":"end","o":0,"v":0.43}]}}],
-  "camera":{"originX":0.76,"originY":0.40,"tracks":{
-    "scale":[{"m":"b_push","o":0,"v":1.0,"label":"推近開始"},{"m":"end","o":0,"v":1.10,"e":"in","label":"推近小V，銜接第一人稱"}]}},
+    {"id":"b_bg","name":"側面森林背景（固定）","type":"image","role":"far","asset":"intro_scene04b_bg","visible":True,
+     "x":0.5,"y":0.5,"scale":1.0,"anchorX":0.5,"anchorY":0.5,"opacity":1,"rotation":0,"tracks":{}},
+    still("b_walk","小V 1 步行（左、較遠）","intro_scene04b_v_walk",1086,1448,549,1405,59,
+          b["WALK"]["x"],b["WALK"]["y"],b["WALK"]["h"],
+          [op("b_walkIn",0,None,"還沒出現"),op("b_walkShown",1,"inOut","淡入"),op("b_walkOut",1,None,"停留"),op("b_walkGone",0,"inOut","淡出")]),
+    still("b_back","小V 2 回頭仰望（中、稍近）","intro_scene04b_v_look_back_up",1024,1536,569,1504,32,
+          b["BACK"]["x"],b["BACK"]["y"],b["BACK"]["h"],
+          [op("b_backIn",0,None,"還沒出現"),op("b_backShown",1,"inOut","淡入"),op("b_backOut",1,None,"停留"),op("b_backGone",0,"inOut","淡出")]),
+    still("b_up","小V 3 抬頭張望（右、稍遠）","intro_scene04b_v_look_up",1122,1402,601,1388,34,
+          b["UP"]["x"],b["UP"]["y"],b["UP"]["h"],
+          [op("b_upIn",0,None,"還沒出現"),op("b_upShown",1,"inOut","淡入"),op("end",1,None,"停留到本幕結束 → 第五幕")]),
+    {"id":"b_fg","name":"前景失焦樹木（固定，最上層遮擋）","type":"image","role":"foreground","asset":"intro_scene04b_fg_trees","visible":True,
+     "x":b["FG_X"],"y":b["FG_Y"],"scale":b["FG_SCALE"],"anchorX":0.5,"anchorY":0.5,"opacity":1,"rotation":0,"tracks":{}}],
+  "camera":{"originX":0.5,"originY":0.5,"tracks":{}},
   "effects":{},"tracks":{},"dialogues":[]
 }
 
 # =====================================================================
-# SCENE5（v0.3.0 新增）：第一人稱東張西望（只有一張背景；鏡頭 x／y／旋轉的關鍵影格＋呼吸）
+# SCENE5（v0.3.1 修改）：第一人稱東張西望——運鏡幅度加大，含上下視線；路徑走曲線、有過頭再回正的小停頓
 #   鏡頭 x 正值＝畫面往右移＝視線往左看；y 正值＝畫面往下移＝視線往上看
-#   安全範圍：鏡頭放大 1.16 → 每邊多 8%；|x| ≤ 0.066、|y| ≤ 0.05、旋轉 ≤ 0.4° 時不露邊（含呼吸）
+#   安全範圍：鏡頭放大 1.30 → 每邊多 15%；|x| ≤ 0.13、|y| ≤ 0.12、旋轉 ≤ 0.8°（含呼吸）不露邊
 # =====================================================================
 C5 = {
-  "IN": {"type":"crossfade","durMs":800},
-  "SCALE": 1.16,
-  # 視線關鍵點（本幕毫秒）
-  "T_SETTLE": 1100, "T_LEFT": 2700, "T_LEFTUP": 4200, "T_D1": 4500,
-  "T_RIGHT": 7300, "T_RIGHTDOWN": 8900, "T_RIGHTUP": 10800, "T_D2": 11100, "T_END_LOOK": 13000, "DUR": 14000,
+  "IN": {"type":"crossfade","durMs":900},
+  "SCALE": 1.30, "SCALE_LEAN": 1.33,   # 第二句前微微往前湊（疑惑加深）
+  "T_SETTLE": 1000, "T_LEFT": 2700, "T_LEFTUP": 4300, "T_D1": 4600,
+  "T_RIGHT": 7100, "T_RIGHTDOWN": 8900, "T_RIGHTUP": 10900, "T_D2": 11200, "T_END_LOOK": 12700, "DUR": 14200,
 }
 k5 = lambda m, o, v, e=None, label=None: dict({"m":m,"o":o,"v":v}, **({"e":e} if e else {}), **({"label":label} if label else {}))
 scene5 = {
   "id":"intro_scene05","name":"第五幕：第一人稱森林探索","status":"ready",
-  "note":"v0.3.0：只有一張背景，靠鏡頭左右上下張望＋呼吸；兩句台詞穿插在運鏡中（左上看完出第一句、右上看完出第二句）",
+  "note":"v0.3.1：運鏡幅度加大（左右約 ±12%、上下約 ±11%）；正前 → 左 → 左上 →〔第一句〕→ 右 → 右下 → 右上 →〔第二句〕；對話時視線停住、呼吸持續，按繼續從原位接續",
   "durationMs":C5["DUR"], "transitionIn":C5["IN"],
   "markers":[
     {"id":"c_settle","label":"5-1 看向前方（承接 4B 的抬頭）","t":C5["T_SETTLE"]},
@@ -301,25 +331,32 @@ scene5 = {
   "layers":[
     {"id":"c_bg","name":"第一人稱森林背景","type":"image","role":"background","asset":"intro_scene05_bg","visible":True}],
   "camera":{"originX":0.5,"originY":0.5,"tracks":{
-    "scale":[k5("start",0,C5["SCALE"],None,"放大 1.16（預留張望空間）")],
+    "scale":[k5("start",0,C5["SCALE"],None,"放大 1.30（預留大幅張望空間）"), k5("c_rightDown",0,C5["SCALE"]),
+             k5("c_d2",0,C5["SCALE_LEAN"],"inOut","往前湊近一點（疑惑加深）"), k5("end",0,C5["SCALE_LEAN"])],
     "x":[k5("start",0,0.000,None,"5-1 前方"), k5("c_settle",0,0.000),
-         k5("c_left",0,0.050,"inOut","5-2 往左"), k5("c_leftUp",0,0.062,"inOut","5-3 左上"), k5("c_d1",0,0.062,None,"第一句：停住（只剩呼吸）"),
-         k5("c_right",0,-0.052,"inOut","5-5 轉向右"), k5("c_rightDown",0,-0.062,"inOut","5-6 右下"),
-         k5("c_rightDown",950,-0.066,"inOut","往上抬時視線微微外擺（曲線）"), k5("c_rightUp",0,-0.060,"inOut","5-7 右上"),
-         k5("c_d2",0,-0.060,None,"第二句：停住"), k5("c_endLook",0,-0.020,"inOut","視線收回")],
-    "y":[k5("start",0,0.030,None,"承接 4B 抬頭（稍微往上）"), k5("c_settle",0,0.012,"inOut","回到前方"),
-         k5("c_left",0,0.008,"inOut"), k5("c_leftUp",0,0.050,"inOut","往上看樹冠"), k5("c_d1",0,0.050),
-         k5("c_d1",1400,0.012,"inOut","轉頭途中視線先回到水平（曲線）"), k5("c_right",0,0.010,"inOut"),
-         k5("c_rightDown",0,-0.048,"inOut","往下看小徑"), k5("c_rightUp",0,0.048,"inOut","往上看高處"),
-         k5("c_d2",0,0.048), k5("c_endLook",0,0.015,"inOut")],
-    "rotation":[k5("start",0,0), k5("c_left",0,-0.15,"inOut"), k5("c_leftUp",0,-0.35,"inOut","頭微微側傾"), k5("c_d1",0,-0.35),
-                k5("c_right",0,0.15,"inOut"), k5("c_rightDown",0,0.30,"inOut"), k5("c_rightUp",0,0.40,"inOut"), k5("c_d2",0,0.40),
-                k5("c_endLook",0,0.10,"inOut")]}},
+         k5("c_settle",500,-0.018,"inOut","先往右瞄一下（猶豫）"),
+         k5("c_left",0,0.118,"inOut","5-2 往左（轉過頭一點）"), k5("c_left",450,0.105,"inOut","回正一點"),
+         k5("c_leftUp",0,0.125,"inOut","5-3 左上"), k5("c_d1",0,0.125,None,"第一句：停住（只剩呼吸）"),
+         k5("c_d1",900,0.090,"inOut","慢慢收回"), k5("c_d1",1700,0.000,"inOut","轉頭途中"),
+         k5("c_right",0,-0.118,"inOut","5-5 轉向右（轉過頭一點）"), k5("c_right",450,-0.106,"inOut","回正一點"),
+         k5("c_rightDown",0,-0.122,"inOut","5-6 右下"), k5("c_rightDown",1000,-0.128,"inOut","往上抬時視線往外擺（曲線）"),
+         k5("c_rightUp",0,-0.100,"inOut","5-7 右上"), k5("c_d2",0,-0.100,None,"第二句：停住"),
+         k5("c_endLook",0,-0.030,"inOut","視線收回")],
+    "y":[k5("start",0,0.060,None,"承接 4B 抬頭（往上）"), k5("c_settle",0,0.000,"inOut","回到前方"),
+         k5("c_left",0,0.020,"inOut"), k5("c_leftUp",0,0.112,"inOut","往上看樹冠"), k5("c_d1",0,0.112),
+         k5("c_d1",900,0.060,"inOut"), k5("c_d1",1700,-0.030,"inOut","轉頭時視線往下沉（弧線）"),
+         k5("c_right",0,0.000,"inOut"),
+         k5("c_rightDown",0,-0.110,"inOut","往下看小徑"), k5("c_rightDown",500,-0.110,None,"停一下"),
+         k5("c_rightUp",0,0.115,"inOut","往上看高處"), k5("c_d2",0,0.115),
+         k5("c_endLook",0,0.030,"inOut")],
+    "rotation":[k5("start",0,0), k5("c_left",0,-0.35,"inOut"), k5("c_leftUp",0,-0.60,"inOut","頭微微側傾"), k5("c_d1",0,-0.60),
+                k5("c_d1",1700,0.00,"inOut"), k5("c_right",0,0.30,"inOut"), k5("c_rightDown",0,0.50,"inOut"),
+                k5("c_rightUp",0,0.70,"inOut"), k5("c_d2",0,0.70), k5("c_endLook",0,0.15,"inOut")]}},
   "effects":{
-    "breath":{"enabled":True,"params":{"BREATH_Y":0.0035,"BREATH_X":0.0018,"BREATH_ROT":0.09,"BREATH_SCALE":0.0025,"BREATH_PERIOD":4.4,"BREATH_CLOCK":"ambient"}}},
+    "breath":{"enabled":True,"params":{"BREATH_Y":0.0040,"BREATH_X":0.0020,"BREATH_ROT":0.10,"BREATH_SCALE":0.0025,"BREATH_PERIOD":4.2,"BREATH_CLOCK":"ambient"}}},
   "tracks":{
     "breath":[k5("start",0,1,None,"呼吸感（對話時也持續）")],
-    "exposure":[k5("start",0,1), k5("c_endLook",200,1), k5("end",0,0,"in","結尾淡出（之後接飛行屋地圖／第一關；目前未接通）")]},
+    "exposure":[k5("start",0,1), k5("c_endLook",500,1), k5("end",0,0,"in","結尾淡出（之後接飛行屋地圖／第一關；本輪不接）")]},
   "dialogues":[
     {"id":"s5_d1","speaker":"小V","text":"這裡不是叫氣球森林嗎……？","styleType":"rpg_box_no_portrait",
      "at":{"m":"c_d1","o":0},"mode":"wait","autoMs":0,"charMs":60,"after":"resume","enabled":True},
@@ -330,8 +367,8 @@ project = {
   "schemaVersion":"1.0",
   "projectId":"party-island-opening",
   "title":"派對島大作戰・開場",
-  "editorVersion":"motion-comic-editor-v0.3.0-test-1",
-  "contentVersion":3,
+  "editorVersion":"motion-comic-editor-v0.3.1-test-1",
+  "contentVersion":4,
   "stage":{"width":1672,"height":941,"fit":"contain"},
   "assets":{
     "scene1_bg":{"src":"assets/scene1_bg.png","label":"第一幕背景","width":1672,"height":941},
@@ -364,14 +401,12 @@ LABELS = {
 for k,arr in LABELS.items():
     for kf,lab in zip(scene1['tracks'][k],arr): kf['label']=lab
     assert len(arr)==len(scene1['tracks'][k]),k
-scene2['camera']['tracks']['scale'][0]['label']='推近開始（2B 出現時）'
-scene2['camera']['tracks']['scale'][1]['label']='推近完成'
 out=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','projects')
-# v0.3.0：不覆寫 v0.1.0／v0.2.0 的基準檔，另外產生 v0.3.0 基準檔
-for name in ['party-island-opening','party-island-opening-baseline-v0.3.0']:
+# v0.3.1：不覆寫 v0.1.0／v0.2.0／v0.3.0 的基準檔，另外產生 v0.3.1 基準檔
+for name in ['party-island-opening','party-island-opening-baseline-v0.3.1']:
     s=json.dumps(project,ensure_ascii=False,indent=2)
     open(f'{out}/{name}.json','w',encoding='utf8').write(s+'\n')
-    var='MC_BASELINE_V3' if 'baseline' in name else 'MC_PROJECT'
+    var='MC_BASELINE_V31' if 'baseline' in name else 'MC_PROJECT'
     open(f'{out}/{name}.js','w',encoding='utf8').write(
       f'/* 自動產生：與 {name}.json 內容相同。供 file:// 直接開啟時使用（瀏覽器在 file:// 下不允許讀取 JSON）。 */\n'
       f'window.{var} = {s};\n')
