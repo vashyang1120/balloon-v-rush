@@ -1,4 +1,4 @@
-/* 氣球小V・動態漫畫編輯器 v0.3.1-test-1 — 深色工作介面 */
+/* 氣球小V・動態漫畫編輯器 v0.3.2-test-1 — 深色工作介面 */
 :root {
   --bg0: #121418;
   --bg1: #181b21;
@@ -215,3 +215,33 @@ table.kft .x:hover { color: var(--err); }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #000; color: #fff; padding: 8px 14px;
   border-radius: 8px; z-index: 500; opacity: 0; transition: opacity .25s; pointer-events: none; font-size: 13px; }
 #toast.show { opacity: .92; }
+
+/* ===== v0.3.2：音訊音軌 ===== */
+.tl-aclip { position: absolute; height: 15px; border-radius: 4px; font-size: 10.5px; line-height: 15px; padding: 0 6px; white-space: nowrap; overflow: hidden;
+  color: #10131a; cursor: grab; border: 1px solid rgba(0,0,0,.35); box-sizing: border-box; }
+.tl-aclip.t-bgm { background: #d98cff; } .tl-aclip.t-ambient { background: #7fd1a8; }
+.tl-aclip.t-sfx { background: #ffc857; } .tl-aclip.t-voice { background: #7fb8ff; cursor: pointer; }
+.tl-aclip.off { opacity: .4; text-decoration: line-through; }
+.tl-aclip.bad { background-image: repeating-linear-gradient(45deg, rgba(255,80,80,.35) 0 6px, transparent 6px 12px); }
+.tl-aclip.open { -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent); mask-image: linear-gradient(90deg, #000 70%, transparent); }
+.tl-aclip.sel { box-shadow: 0 0 0 2px var(--sel) inset; }
+.tl-aclip .eh { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.tl-aclip .eh.l { left: 0; } .tl-aclip .eh.r { right: 0; }
+.tl-aclip .fade { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.tl-aclip .fade.in { left: 0; background: linear-gradient(90deg, rgba(0,0,0,.35), transparent); }
+.tl-aclip .fade.out { right: 0; background: linear-gradient(270deg, rgba(0,0,0,.35), transparent); }
+.audio-st { font-size: 12px; opacity: .85; }
+.audio-st.locked { color: var(--accent); }
+.asset-row.audio .aicon { width: 44px; height: 32px; display: flex; align-items: center; justify-content: center; background: #1f2633; border-radius: 3px; font-size: 18px; }
+.asset-row.audio .f { margin: 2px 0; }
+
+/* ===== v0.3.2：小螢幕／手機橫向（編輯器以桌機操作為主；小螢幕時工具列改為可左右滑動，不撐破頁面） ===== */
+#topbar, #transport { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+#topbar > *, #transport > * { flex-shrink: 0; }
+@media (max-width: 1100px) {
+  #app { grid-template-columns: 160px minmax(0, 1fr) 300px; }
+}
+@media (max-width: 900px), (max-height: 500px) {
+  #app { grid-template-columns: 130px minmax(0, 1fr) 260px; grid-template-rows: 40px minmax(120px, 1fr) 40px minmax(120px, 34vh); }
+  .brand small { display: none; }
+}

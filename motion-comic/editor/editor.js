@@ -1,11 +1,11 @@
 /*
-  氣球小V・動態漫畫編輯器  motion-comic-editor-v0.2.0-test-1（v0.2.0：第三幕正式接入、遠景圖層、對話 styleType、A/B 人物切換通用化）
+  氣球小V・動態漫畫編輯器  motion-comic-editor-v0.3.2-test-1（v0.3.2：音訊時間軸 BGM／環境音／事件音效／人物配音；v0.2.0：第三幕正式接入、遠景圖層、對話 styleType、A/B 人物切換通用化）
   只負責「修改專案資料」。畫面一律交給共用播放器 MotionComic.Player 渲染。
 */
 (() => {
   'use strict';
   const MC = window.MotionComic;
-  const EDITOR_VERSION = 'motion-comic-editor-v0.3.1-test-1';
+  const EDITOR_VERSION = 'motion-comic-editor-v0.3.2-test-1';
   const LS_KEY = 'mc-editor-project-v1';
   const LS_META = 'mc-editor-project-v1-meta';
   const $ = id => document.getElementById(id);
@@ -63,7 +63,8 @@
   /* ===================== 狀態 ===================== */
   const state = {
     project: null,
-    baseline: clone(window.MC_BASELINE_V31 || window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.1 基準（定點分鏡修正版）
+    baseline: clone(window.MC_BASELINE_V32 || window.MC_BASELINE_V31 || window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.2 基準（v0.3.1 畫面＋空的音訊設定）
+    baselineV31: clone(window.MC_BASELINE_V31 || window.MC_BASELINE_V3 || window.MC_BASELINE),   // v0.3.1 基準（定點分鏡修正版，沒有音訊欄位）
     baselineV3: clone(window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.0 基準（五幕完整初版）
     baselineV2: clone(window.MC_BASELINE_V2 || window.MC_BASELINE),                          // v0.2.0 基準（含第三幕）
     baselineV1: clone(window.MC_BASELINE),                          // v0.1.0 基準（只有第一、二幕成功版）
@@ -83,7 +84,12 @@
     onEnd: () => {},
     onDialogue: () => {},
   });
-  window.mcEditor = { state, player };   // 供測試與除錯
+  // v0.3.2：音訊引擎（與正式播放頁同一套；拖曳時間軸時可靜音）
+  const aud = new MC.AudioEngine({ onStatus: () => updateAudioStatus() });
+  aud.scrubMute = true;
+  aud.attach(player);
+  aud.onAssets = () => { if (!state.project) return; renderTimeline(); if (state.sel && ['project', 'audio'].includes(state.sel.kind)) renderProps(); };
+  window.mcEditor = { state, player, audio: aud };   // 供測試與除錯
 
   /* ===================== 專案載入 / 變更 ===================== */
   function setProject(p, opts = {}) {
@@ -377,6 +383,7 @@
     if (s.kind === 'kf' || s.kind === 'track') return box.append(trackPanel(s));
     if (s.kind === 'layer') return box.append(layerPanel(s.si, s.layerId));
     if (s.kind === 'dialogue') return box.append(dialoguePanel(s.si, s.id));
+    if (s.kind === 'audio') return box.append(audioPanel(s.id));
     box.append(projectPanel());
   }
 
@@ -408,7 +415,8 @@
               el('button', { class: 'sb', onclick: () => relinkAsset(r.id) }, '重新連結'),
               used.has(r.id) ? null : el('button', { class: 'sb danger', onclick: () => edit(pp => { delete pp.assets[r.id]; }) }, '移除')));
         }),
-        el('div', { class: 'row-btns' }, el('button', { class: 'sb', onclick: () => importImage(null) }, '＋ 匯入圖片到素材庫'))));
+        el('div', { class: 'row-btns' }, el('button', { class: 'sb', onclick: () => importImage(null) }, '＋ 匯入圖片到素材庫'))),
+      audioAssetsSection());
   }
 
   /* ---------- 場景 ---------- */
@@ -900,6 +908,7 @@
       checkField('啟用', d.enabled !== false, v => up(x => { x.enabled = v; })),
       checkField('草稿', !!d.draft, v => up(x => { x.draft = v; })),
       hint('等待型對話：只在「正式播放預覽」與正式播放頁會暫停劇情；拖曳播放頭或「時間軸編輯預覽」只顯示、不暫停。'),
+      dialogueAudioSection(d),
       el('div', { class: 'row-btns' },
         el('button', { class: 'sb', onclick: () => { player.seek(seg(si).start + local); } }, '跳到這句'),
         el('button', { class: 'sb', onclick: () => testDialogue(si, local) }, '正式播放測試這句'),
@@ -1008,8 +1017,14 @@
     p.editorVersion = EDITOR_VERSION;
     p.exportedAt = new Date().toISOString();
     const locals = Object.entries(p.assets).filter(([, a]) => a.local || String(a.src).startsWith('blob:'));
+    const aLocals = Object.keys(aud.localFiles).filter(id => p.audio && p.audio.assets && p.audio.assets[id]);
+    const aBad = aud.assetReport().filter(r => r.status === 'error' && !aud.localFiles[r.id]);
     const body = el('div', {},
-      el('p', {}, '會匯出完整專案（全部場景、節點、關鍵影格、圖層、對話、第一幕特殊參數、第二幕對位與陰影設定）。'),
+      el('p', {}, '會匯出完整專案（全部場景、節點、關鍵影格、圖層、對話、第一幕特殊參數、第二幕對位與陰影設定、v0.3.2 音訊設定）。'),
+      aLocals.length ? el('div', {}, el('p', { class: 'hint warn' }, `有 ${aLocals.length} 個音檔只在這台電腦預覽，GitHub 上還沒有。請把下列檔案上傳到 GitHub 的 motion-comic/assets/（JSON 內已寫好路徑）：`),
+        el('ul', {}, aLocals.map(id => el('li', {}, `${aud.localFiles[id].name} → ${p.audio.assets[id].src}`)))) : null,
+      aBad.length ? el('div', {}, el('p', { class: 'hint warn' }, `有 ${aBad.length} 個音檔目前讀不到（正式播放時這些聲音會略過，畫面照常）：`),
+        el('ul', {}, aBad.map(r => el('li', {}, `${r.label}（${r.src}）：${r.error}`)))) : null,
       locals.length ? el('div', {}, el('p', { class: 'hint warn' }, `有 ${locals.length} 張臨時本機圖片：`),
         el('ul', {}, locals.map(([id, a]) => el('li', {}, `${a.label || id}（${a.fileName || ''}）`)))) : null);
     let embed = false;
@@ -1066,7 +1081,8 @@
       state.savedJSON = snapshot();
       updateTop();
       const locals = Object.values(state.project.assets).some(a => String(a.src).startsWith('blob:'));
-      toast(locals ? '已儲存（臨時本機圖片重新開啟後需要重新連結）' : '已儲存到這台電腦的瀏覽器');
+      const aLoc = Object.keys(aud.localFiles).length;
+      toast(locals ? '已儲存（臨時本機圖片重新開啟後需要重新連結）' : aLoc ? `已儲存（${aLoc} 個本機預覽音檔不會被儲存，請上傳到 GitHub 的 motion-comic/assets/）` : '已儲存到這台電腦的瀏覽器');
     } catch (err) {
       modal('儲存失敗', `<p class="hint err">瀏覽器空間不足或被封鎖：${escapeHtml(err.message)}</p><p>請改用「匯出 JSON」保存。</p>`);
     }
@@ -1074,13 +1090,14 @@
 
   function resetToBaseline() {
     const go = (b, msg) => { pushUndo(); state.sel = null; setProject(clone(b)); player.seek(0); toast(msg); };
-    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.3.1（定點分鏡修正版）</b>：第一、三幕同 v0.3.0；第二幕放大＋兩句對話、第四幕定點分鏡、第五幕大幅張望。</li><li><b>v0.3.0（五幕完整初版）</b>：第四幕用人物位移的舊版本。</li><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
+    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.3.2（目前版本）</b>：畫面與 v0.3.1 完全相同，加上空的音訊設定（尚無任何音檔）。</li><li><b>v0.3.1（定點分鏡修正版）</b>：第一、三幕同 v0.3.0；第二幕放大＋兩句對話、第四幕定點分鏡、第五幕大幅張望；沒有音訊欄位。</li><li><b>v0.3.0（五幕完整初版）</b>：第四幕用人物位移的舊版本。</li><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
       '<li><b>v0.1.0</b>：只有第一、二幕成功版，第三～五幕是空白結構。</li></ul><p>目前的修改可以用「復原」找回；基準檔本身不會被改動。</p>',
       [{ label: '取消' },
        { label: '還原 v0.1.0', fn: () => go(state.baselineV1, '已還原 v0.1.0 基準') },
        { label: '還原 v0.2.0（含第三幕）', fn: () => go(state.baselineV2, '已還原 v0.2.0 基準（含第三幕）') },
        { label: '還原 v0.3.0', fn: () => go(state.baselineV3, '已還原 v0.3.0 基準') },
-       { label: '還原 v0.3.1（目前版本）', fn: () => go(state.baseline, '已還原 v0.3.1 基準') }]);
+       { label: '還原 v0.3.1', fn: () => go(state.baselineV31, '已還原 v0.3.1 基準') },
+       { label: '還原 v0.3.2（目前版本）', fn: () => go(state.baseline, '已還原 v0.3.2 基準') }]);
   }
 
   /* ===================== 範圍與播放 ===================== */
@@ -1227,9 +1244,8 @@
         onmousedown: e => dragDialogue(e, si, d.id) }, d.mode === 'wait' ? '⏸ ' : '💬 ', `${d.speaker ? d.speaker + '：' : ''}${d.text}`));
     });
 
-    // 音效（預留）
-    const aLane = row('音效（預留）', 22, { noSeek: true });
-    aLane.append(el('div', { class: 'tl-reserved' }, '第一版尚未支援音效'));
+    // v0.3.2：音訊（BGM／環境音／音效／配音），以整段時間軸為準，可跨幕
+    renderAudioLanes(row);
 
     tlEls.playhead = el('div', { id: 'tlPlayhead' });
     content.append(tlEls.playhead);
@@ -1303,12 +1319,13 @@
     let moved = false;
     const mv = ev => {
       if (!moved && Math.abs(ev.clientX - x0) < 3) return;
-      if (!moved) { moved = true; pushUndo(); }
+      if (!moved) { moved = true; pushUndo(); aud.setScrubbing(true); }
       onMove(ev);
     };
     const up = ev => {
       document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
       hideTip();
+      aud.setScrubbing(false);
       if (onEnd) onEnd(moved, ev);
       if (moved) renderAll();
     };
@@ -1316,11 +1333,16 @@
   }
   function scrubStart(e) {
     e.preventDefault();
+    const wasPlaying = player.playing;
     player.pause();
+    aud.setScrubbing(true);
     const go = ev => player.seek(Math.max(0, snap(Tfrom(laneX(ev)), ev.shiftKey)));
     go(e);
     const mv = ev => go(ev);
-    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+      aud.setScrubbing(false);
+      if (wasPlaying && $('scrubResumeChk').checked) player.play();   // v0.3.2：拖曳結束後從新位置繼續播放（聲音也從新位置開始）
+    };
     document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
   }
   function dragKf(e, ref) {
@@ -1385,6 +1407,321 @@
     });
   }
 
+  /* ===================== v0.3.2 音訊（BGM／環境音／事件音效／人物配音） ===================== */
+  const A_TYPES = MC.AUDIO_TYPES;
+  const A_LABEL = { bgm: 'BGM', ambient: '環境音', sfx: '音效', voice: '配音' };
+  const A_ICON = { bgm: '🎵', ambient: '🍃', sfx: '✨', voice: '🗣' };
+  const A_COLOR = { bgm: '#d98cff', ambient: '#7fd1a8', sfx: '#ffc857', voice: '#7fb8ff' };
+  const ensureAudio = p => { if (!p.audio || typeof p.audio !== 'object') p.audio = MC.emptyAudio(); p.audio.assets = p.audio.assets || {}; p.audio.clips = p.audio.clips || []; p.audio.mix = Object.assign({}, MC.AUDIO_MIX_DEFAULTS, p.audio.mix || {}); return p.audio; };
+  const aClip = id => ((state.project.audio && state.project.audio.clips) || []).find(c => c.id === id);
+  const aComp = id => aud.byId[id];
+  const aAssets = () => (state.project.audio && state.project.audio.assets) || {};
+  const allDialogues = () => {
+    const out = [];
+    player.tl.segs.forEach(sg => (sg.scene.dialogues || []).forEach(d => out.push({ d, si: sg.index, g: sg.start + Math.min(MC.refTime(d.at, player.scenes[sg.index].c.mm, 0), sg.scene.durationMs) })));
+    return out.sort((a, b) => a.g - b.g);
+  };
+  const dlgLabel = x => `S${String(x.si + 1).padStart(2, '0')}｜${x.d.text.slice(0, 16)}${x.d.text.length > 16 ? '…' : ''}`;
+  function newClipId(type) { let n = 1, id; const ids = new Set(((state.project.audio && state.project.audio.clips) || []).map(c => c.id)); do { id = `${type}_${n++}`; } while (ids.has(id)); return id; }
+
+  function updateAudioStatus() {
+    const st = aud.status(), b = $('audioStat');
+    if (!b) return;
+    const txt = { none: '🔈 尚無音訊', locked: '🔈 點一下播放鍵即可啟用聲音', running: '🔊 聲音已啟用', media: '🔊 聲音（相容模式）' }[st] || st;
+    b.textContent = txt; b.className = 'tp-field audio-st ' + st;
+    $('muteBtn').textContent = aud.muted ? '🔇 靜音中' : '🔊';
+  }
+  // 編輯器裡任何一次點擊都可解鎖聲音（瀏覽器規則：要有使用者手勢）
+  document.addEventListener('pointerdown', () => { if (aud.status() === 'locked' && Object.keys(aAssets()).length) aud.unlock().then(updateAudioStatus); }, true);
+
+  /* ---------- 時間軸音軌 ---------- */
+  function renderAudioLanes(row) {
+    const tl = player.tl;
+    A_TYPES.forEach(type => {
+      const list = aud.clips.filter(r => r.type === type && r.T0 != null)
+        .map(r => {
+          const s = aud.assets[r.asset];
+          let T1 = r.T1;
+          if (r.typing) { const x = allDialogues().find(q => q.d.id === r.dialogue); T1 = r.T0 + (x ? Array.from(x.d.text).length * (x.d.charMs || 45) : 1000); }
+          else if (!isFinite(T1)) T1 = r.T0 + (s && s.duration ? Math.max(0.2, s.duration - r.offset / 1000) * 1000 : 1000);
+          return { r, T0: r.T0, T1: Math.min(T1, tl.total + 2000), open: !isFinite(r.T1) && !r.typing && !(s && s.duration) };
+        }).sort((a, b) => a.T0 - b.T0);
+      const subs = [];
+      list.forEach(it => { let k = subs.findIndex(e => e <= it.T0 + 1); if (k < 0) { k = subs.length; subs.push(0); } subs[k] = it.T1; it.sub = k; });
+      const n = Math.max(1, subs.length);
+      const lane = row(`${A_ICON[type]} ${A_LABEL[type]} ＋`, n * 18 + 6, { color: A_COLOR[type], title: `點一下：在播放頭新增一段「${MC.AUDIO_TYPE_LABELS[type]}」`, onLabel: () => addClip(type) });
+      lane.classList.add('tl-alane');
+      if (!list.length) lane.append(el('div', { class: 'tl-reserved' }, type === 'voice' ? '尚無配音（可在對話面板「＋ 配音」）' : '尚無片段（點左邊標籤新增）'));
+      list.forEach(it => {
+        const r = it.r, s = aud.assets[r.asset];
+        const isSel = state.sel && state.sel.kind === 'audio' && state.sel.id === r.id;
+        const bad = r.problem || (s && s.status === 'error');
+        const fixed = r.type === 'voice' || r.typing;
+        const bar = el('div', { class: `tl-aclip t-${type}${r.enabled ? '' : ' off'}${bad ? ' bad' : ''}${isSel ? ' sel' : ''}${it.open ? ' open' : ''}`,
+          style: `left:${X(it.T0)}px;width:${Math.max(6, X(it.T1 - it.T0))}px;top:${3 + it.sub * 18}px`,
+          title: `${r.clip.name || r.id}（${MC.AUDIO_TYPE_LABELS[type]}）\n${fmt(it.T0)} → ${isFinite(r.T1) ? fmt(r.T1) : (r.typing ? '逐字期間' : '播完為止')}${r.loop ? '・循環' : ''}${bad ? '\n⚠ ' + (r.problem || s.error) : ''}${fixed ? '\n跟著對話時間（拖曳對話即可移動）' : '\n拖曳移動；拖曳兩端調整開始／結束'}`,
+          onmousedown: e => { if (e.target.classList.contains('eh')) return; if (fixed) { select({ kind: 'audio', id: r.id }); e.stopPropagation(); return; } dragClip(e, r.id, 'move'); } },
+        r.typing ? '⌨ ' : '', r.clip.name || r.id, r.loop ? ' 🔁' : '', bad ? ' ⚠' : '');
+        if (!fixed) bar.append(el('div', { class: 'eh l', onmousedown: e => dragClip(e, r.id, 'start') }), el('div', { class: 'eh r', onmousedown: e => dragClip(e, r.id, 'end') }));
+        if (r.fadeIn > 0) bar.append(el('div', { class: 'fade in', style: `width:${Math.min(X(r.fadeIn), X(it.T1 - it.T0))}px` }));
+        if (r.fadeOut > 0 && isFinite(r.T1)) bar.append(el('div', { class: 'fade out', style: `width:${Math.min(X(r.fadeOut), X(it.T1 - it.T0))}px` }));
+        lane.append(bar);
+      });
+    });
+  }
+
+  // 拖曳音訊片段：move＝整段移動；start＝調整開始（同時調整音檔起點，聲音內容對齊不變）；end＝調整結束
+  function dragClip(e, id, mode) {
+    select({ kind: 'audio', id });
+    const r0 = aComp(id); if (!r0 || r0.T0 == null) return;
+    const c0 = clone(aClip(id));
+    const T0 = r0.T0, rawEnd = MC.resolveAudioRef(c0.end, player.tl, {}) ;
+    const endAbs = c0.end ? (c0.end.dialogue ? r0.T1 : rawEnd) : null;
+    const x0 = laneX(e);
+    aud.setScrubbing(true);
+    drag(e, ev => {
+      const dT = snap(Tfrom(laneX(ev) - x0), ev.shiftKey);
+      const c = aClip(id);
+      const setAt = T => {
+        T = Math.max(0, Math.min(player.tl.total, T));
+        if (c0.at && c0.at.dialogue != null) { const x = allDialogues().find(q => q.d.id === c0.at.dialogue); c.at = { dialogue: c0.at.dialogue, o: Math.round(T - (x ? x.g : 0)) }; }
+        else if (c0.at && c0.at.t != null) c.at = { t: Math.round(T) };
+        else c.at = MC.audioRefFromGlobal(T, player.tl);
+        return T;
+      };
+      if (mode === 'move') {
+        const T = setAt(T0 + dT);
+        if (endAbs != null) c.end = MC.audioRefFromGlobal(Math.max(T + 50, endAbs + dT), player.tl);
+        showTip(ev, `開始 ${fmt(T)}`);
+      } else if (mode === 'start') {
+        let d = dT;
+        if ((c0.offsetMs || 0) + d < 0) d = -(c0.offsetMs || 0);
+        const lim = (endAbs != null ? endAbs : (isFinite(r0.T1) ? r0.T1 : Infinity)) - 50;
+        if (T0 + d > lim) d = lim - T0;
+        const T = setAt(T0 + d);
+        c.offsetMs = Math.round((c0.offsetMs || 0) + d);
+        showTip(ev, `開始 ${fmt(T)}（音檔從 ${sec(c.offsetMs)} 開始）`);
+      } else {
+        const base = endAbs != null ? endAbs : (isFinite(r0.T1) ? r0.T1 : T0 + 2000);
+        const T = Math.max(T0 + 50, Math.min(player.tl.total, base + dT));
+        c.end = MC.audioRefFromGlobal(T, player.tl);
+        showTip(ev, `結束 ${fmt(T)}`);
+      }
+      afterChange({ light: true });
+    }, () => { aud.setScrubbing(false); });
+  }
+
+  function addClip(type, extra) {
+    if (!player.tl) return;
+    const id = newClipId(type);
+    const T = player.t;
+    const dl = allDialogues();
+    const near = dl.filter(x => x.g >= T - 50).concat(dl.slice().reverse())[0];
+    edit(p => {
+      const A = ensureAudio(p);
+      const c = { id, type, name: { bgm: '背景音樂', ambient: '環境音', sfx: '音效', voice: '配音' }[type], asset: '', enabled: true, volume: type === 'voice' ? 1 : 0.8,
+        loop: type === 'bgm' || type === 'ambient', fadeInMs: type === 'bgm' || type === 'ambient' ? 1000 : 0, fadeOutMs: type === 'bgm' || type === 'ambient' ? 1000 : 0, offsetMs: 0 };
+      if (type === 'voice') Object.assign(c, { dialogue: near ? near.d.id : '', text: 'type', waitEnd: false, onContinue: 'stop' });
+      else c.at = MC.audioRefFromGlobal(T, player.tl);
+      if (type === 'bgm') c.crossfadeMs = 0;
+      Object.assign(c, extra || {});
+      if (c.dialogue && type === 'voice') c.name = '配音：' + ((dl.find(x => x.d.id === c.dialogue) || {}).d || { text: '' }).text.slice(0, 10);
+      A.clips.push(c);
+      state.sel = { kind: 'audio', id };
+    });
+    toast(`已新增「${MC.AUDIO_TYPE_LABELS[type]}」：請在右側選擇音檔`);
+  }
+
+  /* ---------- 音訊素材 ---------- */
+  let pendingAudioAsset = null;   // { clipId?, relinkId? }
+  const safeId = name => ('a_' + String(name).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-一-鿿]+/g, '_')).slice(0, 40);
+  function addAudioAssetModal(clipId) {
+    const pathIn = el('input', { type: 'text', value: 'assets/', style: 'width:100%' });
+    modal('新增音訊素材', el('div', {},
+      el('p', {}, el('b', {}, 'A．從這台電腦選擇音檔（本機預覽）')),
+      el('p', { class: 'hint' }, '只會在這台電腦、這個分頁裡預覽；', el('b', {}, '不會'), '自動上傳到 GitHub。專案 JSON 會記錄成 assets/檔名，正式播放前請把同名檔案上傳到 GitHub 的 motion-comic/assets/。'),
+      el('p', {}, el('b', {}, 'B．輸入 GitHub 上已存在的檔案路徑')),
+      el('p', { class: 'hint' }, '例如 assets/forest_bgm.mp3（相對於 motion-comic/）。建議格式：MP3 或 M4A（AAC）；WAV 檔案較大；OGG 在 iPhone 上可能無法播放。'),
+      pathIn),
+      [{ label: '取消' },
+       { label: 'A．選擇本機音檔…', fn: () => { pendingAudioAsset = { clipId }; $('audioInput').value = ''; $('audioInput').click(); } },
+       { label: 'B．使用這個路徑', fn: () => {
+         const src = pathIn.value.trim();
+         if (!/\.(mp3|m4a|aac|wav|ogg|oga|opus|webm)$/i.test(src)) { toast('請輸入音檔路徑，例如 assets/forest_bgm.mp3'); return; }
+         const name = src.split('/').pop();
+         let id = safeId(name); while (aAssets()[id]) id += '_2';
+         edit(p => { const A = ensureAudio(p); A.assets[id] = { src, label: name }; if (clipId) { const c = A.clips.find(x => x.id === clipId); if (c) c.asset = id; } });
+         toast('已加入音訊素材：' + src);
+       } }]);
+  }
+  $('audioInput').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    const tgt = pendingAudioAsset; pendingAudioAsset = null;
+    if (!file || !tgt) return;
+    let id = tgt.relinkId;
+    if (!id) { id = safeId(file.name); while (aAssets()[id]) id += '_2'; }
+    const src = 'assets/' + file.name;
+    aud.setLocalFile(id, file);
+    edit(p => {
+      const A = ensureAudio(p);
+      if (tgt.relinkId) { A.assets[id].src = src; }
+      else A.assets[id] = { src, label: file.name };
+      if (tgt.clipId) { const c = A.clips.find(x => x.id === tgt.clipId); if (c) c.asset = id; }
+    });
+    modal('本機音檔只用來預覽', el('div', {},
+      el('p', {}, `已在這台電腦載入「${file.name}」，可以在編輯器裡試聽與排時間。`),
+      el('p', { class: 'hint warn' }, `正式網站（GitHub Pages）還沒有這個檔案。請把「${file.name}」上傳到 GitHub 的 motion-comic/assets/，專案裡記錄的路徑是 ${src}。`),
+      el('p', { class: 'hint' }, '重新整理或下次打開編輯器時，本機預覽會消失；檔案上傳到 GitHub 後就會自動讀到。')));
+  });
+  function audioAssetsSection() {
+    const A = state.project.audio || {};
+    const rep = aud.assetReport();
+    const used = new Set(((A.clips) || []).map(c => c.asset).filter(Boolean));
+    const mix = Object.assign({}, MC.AUDIO_MIX_DEFAULTS, A.mix || {});
+    const upMix = (k, v) => edit(p => { ensureAudio(p).mix[k] = Math.max(0, Math.min(1, v)); }, { light: true });
+    return [
+      el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '音訊混音（專案預設，0～1）'),
+        hint('最後音量＝片段音量 × 類型音量 × 總音量 × 玩家在播放頁調的音量。多條同時播放時另有輕微限幅，避免爆音。'),
+        [['master', '總音量'], ['bgm', 'BGM 整體'], ['ambient', '環境音整體'], ['sfx', '音效整體'], ['voice', '配音整體']].map(([k, lab]) =>
+          numField(lab, mix[k], v => upMix(k, v), { step: 0.05, min: 0, max: 1 }))),
+      el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, `音訊素材（${rep.length}）`),
+        hint('音檔一律放在 motion-comic/assets/（不另外建立資料夾）。「本機預覽」只在這台電腦有效，正式播放需要把檔案上傳到 GitHub。'),
+        rep.length ? rep.map(r => {
+          const a = A.assets[r.id];
+          const st = r.status === 'ok' ? `✓ 可用 ${r.duration.toFixed(2)} 秒${r.backend === 'media' ? '（相容模式）' : ''}` : r.status === 'loading' ? '載入中…' : r.status === 'error' ? '✕ ' + r.error : '尚未載入';
+          return el('div', { class: 'asset-row audio' },
+            el('div', { class: 'aicon' }, '🎧'),
+            el('div', {},
+              el('div', { class: 'an' }, a.label || r.id, ' ', el('span', { class: 'unit' }, `（${r.id}）`)),
+              textField('路徑', a.src, v => edit(p => { ensureAudio(p).assets[r.id].src = v.trim(); })),
+              r.local ? el('div', { class: 'hint warn' }, `本機預覽中：${r.local}（尚未上傳；正式路徑 ${a.src}）`) : null,
+              el('div', { class: r.status === 'ok' ? 'st-ok' : (r.status === 'error' ? 'st-bad' : ''), style: 'font-size:11px' }, st)),
+            el('div', { class: 'row-btns', style: 'flex-direction:column' },
+              el('button', { class: 'sb', disabled: r.status !== 'ok', onclick: () => aud.unlock().then(() => aud.preview(r.id)) }, '▶ 試聽'),
+              el('button', { class: 'sb', onclick: () => { pendingAudioAsset = { relinkId: r.id }; $('audioInput').value = ''; $('audioInput').click(); } }, '本機檔案預覽'),
+              used.has(r.id) ? el('span', { class: 'unit' }, '使用中') : el('button', { class: 'sb danger', onclick: () => edit(p => { delete ensureAudio(p).assets[r.id]; aud.setLocalFile(r.id, null); }) }, '移除')));
+        }) : hint('還沒有任何音訊素材。'),
+        el('div', { class: 'row-btns' },
+          el('button', { class: 'sb', onclick: () => addAudioAssetModal(null) }, '＋ 新增音訊素材'),
+          rep.some(r => !used.has(r.id)) ? el('button', { class: 'sb danger', onclick: () => edit(p => { const AA = ensureAudio(p); Object.keys(AA.assets).forEach(id => { if (!used.has(id)) { delete AA.assets[id]; aud.setLocalFile(id, null); } }); }) }, '移除所有未使用的音訊素材') : null)),
+    ];
+  }
+
+  /* ---------- 音訊片段面板 ---------- */
+  function refMode(ref) { return !ref ? 'auto' : ref.dialogue != null ? 'dialogue' : ref.t != null ? 'time' : 'scene'; }
+  function refEditor(si_unused, ref, label, onSet, opts = {}) {
+    const mode = refMode(ref);
+    const segs = player.tl.segs;
+    const cur = ref ? MC.resolveAudioRef(ref, player.tl, Object.fromEntries(allDialogues().map(x => [x.d.id, { g: x.g }]))) : null;
+    const modes = [['scene', '某一幕的節點＋偏移'], ['dialogue', '某句對話出現時＋偏移'], ['time', '整段時間（毫秒）']];
+    if (opts.allowAuto) modes.unshift(['auto', opts.autoLabel || '自動']);
+    const out = [selectField(label, mode, modes, v => {
+      if (v === mode) return;
+      const T = cur != null ? cur : (opts.fallbackT != null ? opts.fallbackT : player.t);
+      if (v === 'auto') onSet(null);
+      else if (v === 'time') onSet({ t: Math.round(T) });
+      else if (v === 'scene') onSet(MC.audioRefFromGlobal(T, player.tl));
+      else { const dl = allDialogues(); const x = dl.filter(q => q.g <= T + 1).pop() || dl[0]; if (x) onSet({ dialogue: x.d.id, o: Math.round(T - x.g) }); else toast('專案裡沒有對話'); }
+    })];
+    if (mode === 'scene') {
+      const si = Math.max(0, segs.findIndex(s => s.scene.id === ref.scene));
+      out.push(selectField('　幕次', String(si), segs.map(s => [String(s.index), `Scene ${String(s.index + 1).padStart(2, '0')}｜${s.scene.name}`]), v => onSet({ scene: segs[+v].scene.id, m: 'start', o: 0 })),
+        selectField('　節點', ref.m || 'start', markerOptions(si), v => onSet({ scene: ref.scene, m: v, o: ref.o || 0 })),
+        numField('　偏移', ref.o || 0, v => onSet({ scene: ref.scene, m: ref.m || 'start', o: Math.round(v) }), { step: 100, unit: 'ms', int: true }));
+    } else if (mode === 'dialogue') {
+      out.push(selectField('　對話', ref.dialogue, allDialogues().map(x => [x.d.id, dlgLabel(x)]), v => onSet({ dialogue: v, o: ref.o || 0 })),
+        numField('　偏移', ref.o || 0, v => onSet({ dialogue: ref.dialogue, o: Math.round(v) }), { step: 100, unit: 'ms（負數＝提早）', int: true }));
+    } else if (mode === 'time') {
+      out.push(numField('　整段時間', ref.t, v => onSet({ t: Math.max(0, Math.round(v)) }), { step: 100, unit: 'ms', int: true }));
+    }
+    return out;
+  }
+  function audioPanel(id) {
+    const c = aClip(id);
+    if (!c) return projectPanel();
+    const r = aComp(id) || {};
+    const up = fn => edit(p => fn(ensureAudio(p).clips.find(x => x.id === id)));
+    const A = state.project.audio;
+    const s = aud.assets[c.asset];
+    const assetOpts = [['', '（未指定）']].concat(Object.keys(A.assets).map(k => [k, `${A.assets[k].label || k}（${A.assets[k].src}）`]));
+    const dl = allDialogues();
+    const isTyping = c.type === 'sfx' && c.trigger === 'typing';
+    const trig = c.type === 'voice' ? 'voice' : isTyping ? 'typing' : (c.at && c.at.dialogue != null ? 'dialogue' : 'time');
+    const st = !c.asset ? '尚未選擇音檔' : !s ? '尚未載入' : s.status === 'ok' ? `✓ 音檔 ${s.duration.toFixed(2)} 秒` : s.status === 'loading' ? '載入中…' : '✕ ' + s.error;
+    return el('div', {},
+      el('div', { class: 'p-title' }, `${A_ICON[c.type]} ${MC.AUDIO_TYPE_LABELS[c.type]}`),
+      el('div', { class: 'p-sub' }, `${c.id}${r.T0 != null ? ` · 開始 ${fmt(r.T0)}` : ''}${r.T0 != null ? ` · 結束 ${isFinite(r.T1) ? fmt(r.T1) : (c.type === 'voice' || isTyping ? '跟著對話' : (c.loop ? '整段結束' : '音檔播完'))}` : ''}`),
+      r.problem ? hint('⚠ ' + r.problem, 'warn') : null,
+      textField('名稱', c.name || '', v => up(x => { x.name = v; })),
+      selectField('類型', c.type, A_TYPES.map(t => [t, MC.AUDIO_TYPE_LABELS[t]]), v => up(x => {
+        x.type = v;
+        if (v === 'voice') { delete x.at; delete x.end; delete x.trigger; x.loop = false; x.dialogue = x.dialogue || (dl[0] && dl[0].d.id) || ''; x.text = x.text || 'type'; x.onContinue = x.onContinue || 'stop'; }
+        else if (!x.at) { x.at = r.T0 != null ? MC.audioRefFromGlobal(r.T0, player.tl) : MC.audioRefFromGlobal(player.t, player.tl); delete x.dialogue; delete x.text; delete x.waitEnd; delete x.onContinue; }
+      })),
+      el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '音檔'),
+        selectField('音訊素材', c.asset || '', assetOpts, v => up(x => { x.asset = v; })),
+        el('div', { class: s && s.status === 'ok' ? 'st-ok' : 'st-bad', style: 'font-size:11px;margin:-2px 0 6px' }, st),
+        s && aud.localFiles[c.asset] ? hint(`本機預覽中（${aud.localFiles[c.asset].name}）：正式播放前請上傳到 GitHub 的 motion-comic/assets/`, 'warn') : null,
+        el('div', { class: 'row-btns' },
+          el('button', { class: 'sb', onclick: () => addAudioAssetModal(id) }, '＋ 新增音訊素材…'),
+          el('button', { class: 'sb', disabled: !(s && s.status === 'ok'), onclick: () => aud.unlock().then(() => aud.preview(c)) }, '▶ 單獨試聽'),
+          el('button', { class: 'sb', onclick: () => aud._stopPreview() }, '■ 停止試聽'))),
+      el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '什麼時候播放'),
+        c.type === 'voice' ? [
+          selectField('綁定的對話', c.dialogue || '', [['', '（未指定）']].concat(dl.map(x => [x.d.id, dlgLabel(x)])), v => up(x => { x.dialogue = v; })),
+          hint('配音在這句對話出現時開始。移動對話的時間，配音會跟著移動。'),
+        ] : [
+          c.type === 'sfx' ? selectField('觸發方式', trig, [['time', '在指定時間（節點／整段時間）'], ['dialogue', '某句對話出現時'], ['typing', '對話逐字出現時（打字音）']], v => up(x => {
+            if (v === 'typing') { x.trigger = 'typing'; x.dialogue = x.dialogue || (dl[0] && dl[0].d.id) || ''; x.every = x.every || 2; x.loop = false; delete x.end; }
+            else { delete x.trigger; delete x.every; if (v === 'dialogue') { const d0 = dl.find(q => q.d.id === x.dialogue) || dl[0]; x.at = { dialogue: d0 ? d0.d.id : '', o: 0 }; } else x.at = MC.audioRefFromGlobal(r.T0 != null ? r.T0 : player.t, player.tl); delete x.dialogue; }
+          })) : null,
+          isTyping ? [
+            selectField('哪一句對話', c.dialogue || '', [['', '（未指定）']].concat(dl.map(x => [x.d.id, dlgLabel(x)])), v => up(x => { x.dialogue = v; })),
+            numField('每幾個字響一次', c.every || 2, v => up(x => { x.every = Math.max(1, Math.round(v)); }), { step: 1, int: true }),
+            hint('只在文字真的一個字一個字出現時響；標點與空白不出聲；對話等待中不會重複。'),
+          ] : [
+            refEditor(null, c.at, '開始', ref => up(x => { x.at = ref; })),
+            c.type !== 'sfx' || c.loop ? refEditor(null, c.end, '結束', ref => up(x => { if (ref) x.end = ref; else delete x.end; }), { allowAuto: true, autoLabel: c.loop ? '自動（循環到整段結束）' : '自動（音檔播完）',
+              fallbackT: isFinite(r.T1) ? r.T1 : (r.T0 != null && s && s.duration && !c.loop ? r.T0 + (s.duration * 1000 - (c.offsetMs || 0)) : player.tl.total) }) : null,
+            hint('提示：也可以在時間軸上直接拖曳片段（移動）或拖曳兩端（調整開始／結束）。'),
+          ],
+        ]),
+      el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '音量與淡入淡出'),
+        numField('音量（0～1）', c.volume ?? 1, v => up(x => { x.volume = Math.max(0, Math.min(1, +v.toFixed(3))); }), { step: 0.05, min: 0, max: 1 }),
+        c.type === 'voice' || isTyping ? null : checkField('循環播放', !!c.loop, v => up(x => { x.loop = v; })),
+        numField('淡入', c.fadeInMs || 0, v => up(x => { x.fadeInMs = Math.max(0, Math.round(v)); }), { step: 100, unit: 'ms', int: true }),
+        numField('淡出', c.fadeOutMs || 0, v => up(x => { x.fadeOutMs = Math.max(0, Math.round(v)); }), { step: 100, unit: 'ms（在結束時間前淡出）', int: true }),
+        numField('音檔起點', c.offsetMs || 0, v => up(x => { x.offsetMs = Math.max(0, Math.round(v)); }), { step: 100, unit: 'ms（從音檔第幾毫秒開始）', int: true }),
+        c.type === 'bgm' ? numField('與前一首 BGM 交叉淡化', c.crossfadeMs || 0, v => up(x => { x.crossfadeMs = Math.max(0, Math.round(v)); }), { step: 100, unit: 'ms（0＝不使用）', int: true }) : null,
+        c.type === 'bgm' ? hint('設定後：這首開始時，還在播的上一首 BGM 會在這段時間內淡出，這首同時淡入。') : null),
+      c.type === 'voice' ? el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '配音與對話框同步'),
+        selectField('文字顯示', c.text || 'type', [['type', '配音開始時，文字逐字出現（速度＝對話的逐字速度）'], ['instant', '配音開始時，整句文字一次顯示']], v => up(x => { x.text = v; })),
+        checkField('等配音播完才可按繼續', !!c.waitEnd, v => up(x => { x.waitEnd = v; })),
+        selectField('配音還沒播完就按繼續時', c.onContinue || 'stop', [['stop', '停止配音'], ['keep', '讓它播完（下一句開始時一定會停）']], v => up(x => { x.onContinue = v; })),
+        hint('音檔還沒上傳或讀不到時：只顯示文字，玩家照常可以繼續。')) : null,
+      el('div', { class: 'p-sec' },
+        checkField('啟用', c.enabled !== false, v => up(x => { x.enabled = v; })),
+        el('div', { class: 'row-btns' },
+          r.T0 != null ? el('button', { class: 'sb', onclick: () => { applyRange(); aud.unlock(); player.seek(Math.max(0, r.T0 - 800)); player.play(); } }, '▶ 在動畫中播放這段') : null,
+          el('button', { class: 'sb', onclick: () => { const nid = newClipId(c.type); edit(p => { const cc = clone(c); cc.id = nid; cc.name = (c.name || c.id) + '（複製）'; if (cc.type === 'voice') cc.dialogue = ''; ensureAudio(p).clips.push(cc); state.sel = { kind: 'audio', id: nid }; }); toast(c.type === 'voice' ? '已複製（配音請重新選擇綁定的對話）' : '已複製'); } }, '複製'),
+          el('button', { class: 'sb danger', onclick: () => edit(p => { const A2 = ensureAudio(p); A2.clips = A2.clips.filter(x => x.id !== id); state.sel = null; }) }, '刪除'))));
+  }
+
+  /* ---------- 對話面板：這句的聲音 ---------- */
+  function dialogueAudioSection(d) {
+    const clips = ((state.project.audio && state.project.audio.clips) || []).filter(c => (c.type === 'voice' && c.dialogue === d.id) || (c.trigger === 'typing' && c.dialogue === d.id) || (c.at && c.at.dialogue === d.id));
+    const hasV = clips.some(c => c.type === 'voice' && c.enabled !== false), hasT = clips.some(c => c.trigger === 'typing' && c.enabled !== false), hasS = clips.some(c => c.type === 'sfx' && c.trigger !== 'typing' && c.enabled !== false);
+    const mode = hasV ? (hasS || hasT ? 'D．文字＋配音＋音效' : 'C．文字＋人物配音') : (hasT || hasS ? 'B．文字＋打字音／音效' : 'A．純文字');
+    return el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, `聲音（目前：${mode}）`),
+      clips.length ? clips.map(c => el('div', {}, el('a', { href: '#', onclick: e => { e.preventDefault(); select({ kind: 'audio', id: c.id }); } },
+        `${c.trigger === 'typing' ? '⌨' : A_ICON[c.type]} ${c.name || c.id}`), el('span', { class: 'unit' }, ` ${(aAssets()[c.asset] || {}).src || '（尚未選擇音檔）'}${c.enabled === false ? '・停用' : ''}`))) : hint('這句目前是純文字。'),
+      el('div', { class: 'row-btns' },
+        hasV ? null : el('button', { class: 'sb', onclick: () => addClip('voice', { dialogue: d.id }) }, '＋ 配音'),
+        hasT ? null : el('button', { class: 'sb', onclick: () => addClip('sfx', { name: '打字音', trigger: 'typing', dialogue: d.id, every: 2, volume: 0.5, at: undefined, loop: false, fadeInMs: 0, fadeOutMs: 0 }) }, '＋ 打字音'),
+        el('button', { class: 'sb', onclick: () => addClip('sfx', { name: '對話音效', at: { dialogue: d.id, o: 0 }, loop: false, fadeInMs: 0, fadeOutMs: 0 }) }, '＋ 出現時音效')),
+      hint('配音、打字音都綁定這句的對話 ID；不需要另一套對話系統。'));
+  }
+
   /* ===================== 事件綁定 ===================== */
   $('undoBtn').onclick = undo;
   $('redoBtn').onclick = redo;
@@ -1408,8 +1745,10 @@
   $('projTitle').addEventListener('change', () => edit(p => { p.title = $('projTitle').value; }));
   $('validTag').onclick = () => select({ kind: 'project' });
 
-  $('playBtn').onclick = () => { applyRange(); player.togglePlay(); };
-  $('replayBtn').onclick = () => { applyRange(); player.replay(); };
+  $('playBtn').onclick = () => { aud.unlock(); applyRange(); player.togglePlay(); };
+  $('replayBtn').onclick = () => { aud.unlock(); applyRange(); player.replay(); };
+  $('muteBtn').onclick = () => { aud.setMuted(!aud.muted); updateAudioStatus(); };
+  $('scrubMuteChk').onchange = e => { aud.scrubMute = e.target.checked; };
   $('toStartBtn').onclick = () => { applyRange(); player.pause(); player.seek(player.range ? player.range.from : 0); };
   $('skipBtn').onclick = () => player.skipScene();
   $('timecode').addEventListener('keydown', e => {

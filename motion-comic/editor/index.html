@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>氣球小V・動態漫畫編輯器</title>
-<!-- motion-comic-editor-v0.3.1-test-1 -->
+<!-- motion-comic-editor-v0.3.2-test-1（motion-comic-v0.3.2-audio-foundation-test-1） -->
 <link rel="stylesheet" href="../player/motion-comic-player.css">
 <link rel="stylesheet" href="editor.css">
 </head>
 <body>
 <div id="app">
   <header id="topbar">
-    <div class="brand">氣球小V・動態漫畫編輯器 <small>v0.3.1-test-1</small></div>
+    <div class="brand">氣球小V・動態漫畫編輯器 <small>v0.3.2-test-1・音訊</small></div>
     <input id="projTitle" class="title-input" type="text" spellcheck="false" title="專案名稱">
     <span id="dirtyTag" class="dirty" hidden>● 尚未儲存</span>
     <span id="validTag" class="valid-tag"></span>
@@ -27,6 +27,7 @@
     <input type="file" id="importInput" accept=".json,application/json" hidden>
     <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" hidden>
     <input type="file" id="relinkInput" accept="image/png,image/jpeg,image/webp" hidden>
+    <input type="file" id="audioInput" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.oga,.opus" hidden>
   </header>
 
   <aside id="scenesPanel">
@@ -76,6 +77,11 @@
     <label class="tp-field" title="拖曳節點或修改節拍長度時，後面的節點與關鍵影格一起往後移">
       <input type="checkbox" id="rippleChk" checked> 順延後續事件</label>
     <label class="tp-field">時間縮放 <input type="range" id="zoomRange" min="20" max="600" step="5"></label>
+    <span class="sep"></span>
+    <button class="tp" id="muteBtn" title="編輯器靜音（只影響這個分頁）">🔊</button>
+    <label class="tp-field" title="拖曳時間軸、節點、關鍵影格或音訊片段時暫時靜音，避免雜音"><input type="checkbox" id="scrubMuteChk" checked> 拖曳時靜音</label>
+    <label class="tp-field" title="播放中拖曳時間軸，放開後從新位置繼續播放（聲音也從新位置開始）"><input type="checkbox" id="scrubResumeChk"> 拖曳後繼續播放</label>
+    <span class="tp-field audio-st" id="audioStat"></span>
   </div>
 
   <section id="timeline">
@@ -93,10 +99,12 @@
 <div id="toast"></div>
 
 <script src="../player/motion-comic-player.js"></script>
+<script src="../player/motion-comic-audio.js"></script>
 <script src="../projects/party-island-opening-baseline.js"></script>
 <script src="../projects/party-island-opening-baseline-v0.2.0.js"></script>
 <script src="../projects/party-island-opening-baseline-v0.3.0.js"></script>
 <script src="../projects/party-island-opening-baseline-v0.3.1.js"></script>
+<script src="../projects/party-island-opening-baseline-v0.3.2.js"></script>
 <script src="../projects/party-island-opening.js"></script>
 <script src="editor.js"></script>
 </body>
