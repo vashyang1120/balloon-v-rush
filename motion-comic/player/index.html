@@ -8,6 +8,7 @@
 <title>動態漫畫播放器（測試）</title>
 <!--
   氣球小V・動態漫畫播放器 正式播放頁  motion-comic-v0.3.2.1-audio-loading-fix-test-1（播放核心 motion-comic-player v0.3.2-test-1＋音訊 motion-comic-audio v0.3.2.1-test-1）
+  ＋ v0.3.73 嵌入介面（adventure-v0.3.73-opening-comic-integration-test-1）：只在 ?embed=1 時作用，漫畫內容與播放邏輯不變
   聲音：手機瀏覽器只允許「使用者點擊之後」才有聲音，所以要先按「▶ 開始故事」。右上角「🔊」可靜音、調整音量（只存在這台裝置）。
   網址參數：
     ?range=ready   只播有素材的幕次（預設）
@@ -15,6 +16,11 @@
     ?scene=2       只播第 2 個場景（v0.3.0 起共 6 個場景：1 第一幕、2 第二幕、3 第三幕、4 第四幕A、5 第四幕B、6 第五幕）
     ?source=local  播放編輯器在這台電腦「儲存」的版本（同一個網站來源才讀得到）
     ?project=../projects/xxx.json   指定專案檔（需要 HTTP 伺服器）
+    ?embed=1&session=…&autostart=1  v0.3.73：嵌入冒險遊戲（iframe）用。只有帶 embed=1 才會：
+                    多一顆「略過整段故事」、不切全螢幕（交給遊戲）、不顯示結尾提示，
+                    播完／略過整段時先停掉所有漫畫聲音，再用 postMessage 通知遊戲（同網站來源＋session 驗證）。
+                    autostart=1：瀏覽器允許出聲時自動開始；不允許時保留「▶ 開始故事」讓玩家點一下開啟聲音。
+                    單獨開啟播放器（沒有 embed）時，行為與 v0.3.2.1 完全相同。
 -->
 <link rel="stylesheet" href="motion-comic-player.css">
 <style>
@@ -56,11 +62,18 @@
   #rotate .phone { width: 46px; height: 76px; border: 3px solid var(--ui-text); border-radius: 9px; animation: turn 1.8s ease-in-out infinite; }
   @keyframes turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+  /* v0.3.73：嵌入冒險遊戲時才出現 */
+  .embed-only { display: none !important; }
+  body.mc-embed .embed-only { display: inline-block !important; }
+  body.mc-embed #endTag { display: none; }
+  #skipAllStart { font-size: 13px; padding: 7px 18px; opacity: .8; }
+  #startHint { font-size: 13px; opacity: .85; }
 </style>
 </head>
 <body>
 <div id="host"></div>
 <div class="ctrl">
+  <button class="btn embed-only" id="skipAllBtn" type="button" title="略過整段開場故事，直接開始冒險">略過整段故事 ⏭⏭</button>
   <button class="btn" id="skipBtn" type="button">略過本幕 ⏭</button>
   <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
   <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
@@ -76,6 +89,8 @@
   <p id="loadMsg">正在讀取專案…</p>
   <div class="bar"><i id="loadBar"></i></div>
   <button class="btn" id="startBtn" type="button" disabled>▶ 開始故事</button>
+  <p id="startHint" hidden></p>
+  <button class="btn embed-only" id="skipAllStart" type="button">略過整段故事，直接開始冒險 ⏭⏭</button>
   <p id="audioMsg" hidden></p>
 </div>
 <div id="rotate"><div class="phone"></div><p>請將手機轉為橫向觀看</p></div>
@@ -89,6 +104,12 @@
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const LS_KEY = 'mc-editor-project-v1';
+  // v0.3.73：嵌入冒險遊戲（iframe）。只有 embed=1 才會啟用；單獨開啟時以下都不作用
+  const EMBED = params.get('embed') === '1' && window.parent !== window;
+  const SESSION = params.get('session') || '';
+  const TARGET = location.origin && location.origin !== 'null' ? location.origin : '*';
+  const post = (event, data) => { if (!EMBED) return; try { window.parent.postMessage(Object.assign({ type: 'mc-embed', session: SESSION, event }, data || {}), TARGET); } catch (_) {} };
+  if (EMBED) { document.body.classList.add('mc-embed'); post('alive'); }
 
   // 讀取專案：本機儲存 → 指定 JSON（HTTP）→ 內建專案（file:// 也能用）
   async function loadProject() {
@@ -107,6 +128,7 @@
   const check = MotionComic.validateProject(project);
   if (check.errors.length) {
     $('loadMsg').innerHTML = '專案格式錯誤：<br>' + check.errors.slice(0, 6).join('<br>');
+    post('error', { reason: 'invalid-project' });
     return;
   }
   $('title').textContent = project.title || '動態漫畫';
@@ -114,7 +136,7 @@
   const endTag = $('endTag');
   const player = new MotionComic.Player($('host'), {
     baseUrl: '../', mode: 'play',
-    onEnd: () => endTag.classList.add('show'),
+    onEnd: () => { endTag.classList.add('show'); if (EMBED) finishEmbed('ended'); },
     onPlayState: p => { $('pauseBtn').textContent = p ? '暫停 ⏸' : '繼續 ▶'; },
   });
   window.mcPlayer = player;
@@ -173,19 +195,60 @@
   }
   updateSound();
 
+  // v0.3.73：嵌入模式結束（播完 ended／略過整段 skipped）：先停掉所有漫畫聲音，再通知遊戲（只通知一次）
+  let embedDone = false;
+  function finishEmbed(how) {
+    if (!EMBED || embedDone) return;
+    embedDone = true;
+    try { player.pause(); } catch (_) {}
+    try { audio.stopAll(0); audio._stopPreview(); audio.setMuted(true); } catch (_) {}
+    post('done', { how });
+  }
+  if (EMBED) {
+    $('skipAllBtn').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    $('skipAllStart').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    window.addEventListener('message', e => {   // 遊戲要求停止（例如遊戲要關掉漫畫時）
+      if (e.source !== window.parent || (TARGET !== '*' && e.origin !== location.origin)) return;
+      const d = e.data || {};
+      if (d.type !== 'mc-host' || d.session !== SESSION) return;
+      if (d.cmd === 'stop') { embedDone = true; try { player.pause(); audio.stopAll(0); audio.setMuted(true); } catch (_) {} }
+    });
+  }
+
   async function enterMobileLandscape() {
+    if (EMBED) return;   // v0.3.73：嵌入時全螢幕／橫向交給遊戲（iframe 內切全螢幕會讓遊戲離開全螢幕）
     if (!matchMedia('(pointer: coarse)').matches) return;
     try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
     try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+  }
+  function beginStory() {
+    $('startScreen').hidden = true;
+    endTag.classList.remove('show');
+    player.replay();
+    post('started', { audio: audio.status() });
   }
   $('startBtn').addEventListener('click', async () => {
     $('startBtn').disabled = true;
     if (audio.hasAudio()) audio.unlock().then(updateSound);   // 必須在點擊當下呼叫（在 await 之前），手機才會允許有聲音
     await enterMobileLandscape();
-    $('startScreen').hidden = true;
-    endTag.classList.remove('show');
-    player.replay();
+    beginStory();
   });
+  if (EMBED) {
+    post('ready', { audio: audio.status(), images: report.length - failed.length, imagesTotal: report.length });
+    // autostart：瀏覽器已允許出聲（例如玩家剛在遊戲裡點過）→ 直接開始；否則保留「▶ 開始故事」（點一下才會有聲音，不會無聲播放）
+    if (params.get('autostart') === '1') {
+      const canStart = !audio.hasAudio() ? Promise.resolve(true)
+        : Promise.race([audio.unlock().then(() => audio.status() === 'running'), new Promise(r => setTimeout(() => r(false), 350))]).then(ok => ok || audio.status() === 'running');
+      canStart.then(ok => {
+        if (embedDone || $('startScreen').hidden) return;   // 玩家已經自己按了開始，或已略過整段
+        if (ok) { updateSound(); beginStory(); return; }
+        $('startHint').hidden = false;
+        $('startHint').textContent = '點一下「▶ 開始故事」開始（瀏覽器需要點一下才能播放聲音）';
+        post('needTap');
+      });
+    }
+    try { window.focus(); } catch (_) {}
+  }
   $('replayBtn').addEventListener('click', () => { endTag.classList.remove('show'); player.replay(); });
   $('skipBtn').addEventListener('click', () => player.skipScene());
   $('pauseBtn').addEventListener('click', () => { if (player.t < player._rangeEnd()) player.togglePlay(); });
