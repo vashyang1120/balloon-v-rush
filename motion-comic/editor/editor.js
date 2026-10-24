@@ -5,7 +5,7 @@
 (() => {
   'use strict';
   const MC = window.MotionComic;
-  const EDITOR_VERSION = 'motion-comic-editor-v0.2.0-test-1';
+  const EDITOR_VERSION = 'motion-comic-editor-v0.3.0-test-1';
   const LS_KEY = 'mc-editor-project-v1';
   const LS_META = 'mc-editor-project-v1-meta';
   const $ = id => document.getElementById(id);
@@ -63,7 +63,8 @@
   /* ===================== 狀態 ===================== */
   const state = {
     project: null,
-    baseline: clone(window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.2.0 基準（含第三幕）
+    baseline: clone(window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.0 基準（五幕完整）
+    baselineV2: clone(window.MC_BASELINE_V2 || window.MC_BASELINE),                          // v0.2.0 基準（含第三幕）
     baselineV1: clone(window.MC_BASELINE),                          // v0.1.0 基準（只有第一、二幕成功版）
     sel: null,          // { kind, si, ... }
     undo: [], redo: [],
@@ -167,6 +168,7 @@
       exposure: { label: '曝光', step: 0.01, hint: '1＝原始亮度；1.16＝剛醒來偏亮', color: 'var(--c-exposure)' },
       breath: { label: '呼吸', step: 0.05, hint: '鏡頭呼吸強度（0～1），需要啟用呼吸插件', color: 'var(--c-breath)' },
       overscan: { label: '預留放大', step: 0.001, hint: '呼吸期間預留的放大量（≥1），呼吸收束時一起回到 1', color: 'var(--c-overscan)' },
+      fog: { label: '霧氣', step: 0.05, hint: '霧插件的濃度（0～1），需要啟用霧插件', color: '#cfd8d2' },
     },
     cam: {
       x: { label: '水平平移', step: 0.005, hint: '舞台寬度比例，正值＝畫面往右移', color: 'var(--c-camera)' },
@@ -180,9 +182,11 @@
       scale: { label: '縮放', step: 0.005, hint: '圖寬 ÷ 舞台寬（保持原圖比例）' },
       opacity: { label: '透明度', step: 0.05, hint: '0～1' },
       rotation: { label: '旋轉', step: 0.5, hint: '度' },
+      blur: { label: '模糊', step: 0.0005, hint: '舞台高度比例：0.004 ≈ 輕微失焦（例如走進霧裡）' },
     },
   };
-  const FX_ROWS = ['open', 'tremor', 'blur', 'exposure', 'breath', 'overscan'];
+  const FX_ROWS = ['open', 'tremor', 'blur', 'exposure', 'breath', 'overscan', 'fog'];
+  const POSE_TRACKS = ['x', 'y', 'scale', 'opacity', 'rotation', 'blur'];
 
   function trackHost(p, d, create) {
     const s = p.scenes[d.si];
@@ -215,7 +219,7 @@
     if (d.scope === 'fx') return MC.TRACK_DEFAULTS[d.track];
     if (d.scope === 'cam') return MC.CAMERA_DEFAULTS[d.track];
     const L = p.scenes[d.si].layers.find(l => l.id === d.layerId);
-    return L && L[d.track] != null ? L[d.track] : ({ x: 0.5, y: 0.5, scale: 0.4, opacity: 1, rotation: 0 })[d.track];
+    return L && L[d.track] != null ? L[d.track] : MC.LAYER_DEFAULTS[d.track];
   }
 
   /* ===================== 全部重繪 ===================== */
@@ -381,7 +385,7 @@
     const v = MC.validateProject(p);
     const report = player.assetReport();
     const used = new Set();
-    p.scenes.forEach(sc => (sc.layers || []).forEach(L => [L.asset, L.assetA, L.assetB].forEach(a => a && used.add(a))));
+    p.scenes.forEach(sc => (sc.layers || []).forEach(L => [L.asset, L.assetA, L.assetB].concat((L.poses || []).map(q => q.asset)).forEach(a => a && used.add(a))));
     return el('div', {},
       el('div', { class: 'p-title' }, '專案與素材管理'),
       el('div', { class: 'p-sub' }, `${p.projectId} · schema ${p.schemaVersion} · 舞台 ${p.stage.width}×${p.stage.height}`),
@@ -528,9 +532,20 @@
           if (v) e.breath = e.breath || { enabled: true, params: clone(state.baseline.scenes[0].effects.breath.params) };
           if (e.breath) e.breath.enabled = v;
         })),
-        eff.breath && eff.breath.enabled !== false ? paramsBlock(si, 'breath', [
+        eff.breath && eff.breath.enabled !== false ? [paramsBlock(si, 'breath', [
           ['BREATH_Y', '上下幅度', 0.0005, '舞台高度比例'], ['BREATH_X', '左右幅度', 0.0005], ['BREATH_ROT', '旋轉幅度', 0.01, '度'],
-          ['BREATH_SCALE', '縮放起伏', 0.0005], ['BREATH_PERIOD', '呼吸週期', 0.1, '秒']]) : null),
+          ['BREATH_SCALE', '縮放起伏', 0.0005], ['BREATH_PERIOD', '呼吸週期', 0.1, '秒']]),
+          selectField('呼吸時鐘', eff.breath.params.BREATH_CLOCK === 'ambient' ? 'ambient' : 'scene', [['scene', '跟著劇情（對話暫停時呼吸也停；第一幕用這個）'], ['ambient', '持續（對話暫停劇情時仍輕微呼吸）']],
+            v => edit(pp => { const P = pp.scenes[si].effects.breath.params; if (v === 'ambient') P.BREATH_CLOCK = 'ambient'; else delete P.BREATH_CLOCK; }))] : null,
+        checkField('霧插件', eff.fog && eff.fog.enabled !== false, v => edit(pp => {
+          const e = pp.scenes[si].effects = pp.scenes[si].effects || {};
+          if (v) e.fog = e.fog || { enabled: true, params: { CX: 0.5, CY: 0.55, RX: 0.3, RY: 0.2, CORE: 0.9, HAZE: 0.1, COLOR: '236, 240, 234' } };
+          if (e.fog) e.fog.enabled = v;
+        })),
+        eff.fog && eff.fog.enabled !== false ? [paramsBlock(si, 'fog', [
+          ['CX', '霧中心 X', 0.01, '舞台寬度比例'], ['CY', '霧中心 Y', 0.01, '舞台高度比例'], ['RX', '霧寬', 0.01], ['RY', '霧高', 0.01],
+          ['CORE', '中心濃度', 0.05, '0～1'], ['HAZE', '整體薄霧', 0.01, '0～1'], ['COLOR', '霧的顏色（R, G, B）', 'text']]),
+          hint('霧的濃淡隨時間變化：用下方「特效軌道 → 霧氣」。霧在本幕所有圖層之上，會跟著鏡頭移動。')] : null),
 
       el('details', { class: 'p-sec', open: !!Object.keys(s.tracks || {}).length }, el('summary', {}, '特效軌道（眨眼／模糊／曝光／呼吸）'),
         FX_ROWS.map(k => trackEditor({ si, scope: 'fx', track: k }))),
@@ -553,7 +568,9 @@
   const ROLE_OPTIONS = [['background', '背景（填滿舞台，可套模糊／曝光）'], ['far', '遠景（例如窗外，可位移縮放運鏡）'], ['character', '人物'], ['foreground', '前景物件（例如窗框）']];
   const swapLabels = L => [L.labelA || '2A', L.labelB || '2B'];
   const isBedPair = L => !!(L.shadow && Array.isArray(L.shadow.bedFeet) && L.shadow.bedFeet.length);
-  const roleLabel = L => L.type === 'swapPair' ? `${isBedPair(L) ? '人物＋床組' : '人物'}（${swapLabels(L).join('→')}）` : (ROLE_NAMES[L.role] || L.role);
+  const roleLabel = L => L.type === 'swapPair' ? `${isBedPair(L) ? '人物＋床組' : '人物'}（${swapLabels(L).join('→')}）`
+    : L.type === 'poseSeq' ? `人物（${(L.poses || []).map((q, i) => q.label || ('姿勢' + (i + 1))).join('→')}）` : (ROLE_NAMES[L.role] || L.role);
+  const XF_OPTIONS = [['dissolve', '真正交叉淡化（A 1→0、B 0→1 同步；建議）'], ['sync', '同步淡化（簡易版，中間會略透明）'], ['legacy', '舊版（B 疊上、A 最後 40% 才淡出）']];
 
   function markerRefCounts(s) {
     const c = {};
@@ -665,7 +682,10 @@
           selectField(`素材 ${nB}`, L.assetB, assetOpts, v => up(l => { l.assetB = v; })),
           timeRef('疊化開始', L.switchFrom, 'switchFrom', 0),
           timeRef('疊化結束', L.switchTo, 'switchTo', 0),
-          hint(`疊化方式：${nB} 從透明慢慢疊上來，${nA} 在後 40% 才淡出，所以疊化過程中人物不會變透明。疊化開始／結束掛在本幕「節拍」的節點上；要改停留時間或疊化長度，請到本幕「節拍」調整，後面會自動順延。`)),
+          selectField('疊化方式', MC.XF_MODES.includes(L.crossfade) ? L.crossfade : 'legacy', XF_OPTIONS, v => up(l => { l.crossfade = v; })),
+          hint(`真正交叉淡化：${nA} 由 1 淡到 0、${nB} 由 0 淡到 1，在同一段時間同步進行，兩張相加剛好不透明（不會透出背景）。疊化開始／結束掛在本幕「節拍」的節點上；要改停留時間或疊化長度，請到本幕「節拍」調整，後面會自動順延。`)),
+        el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '人物淡入／淡出（關鍵影格）'),
+          trackEditor({ si, scope: 'layer', layerId: id, track: 'opacity' })),
         el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, `${bed ? '人物＋床組' : '人物'}定位（${nA}、${nB} 共用）`),
           numField('縮放 Scale', L.foregroundScale, v => up(l => { l.foregroundScale = v; }), { step: 0.005, hint: `${nA} 圖寬 ÷ 舞台寬` }),
           numField('X', L.foregroundX, v => up(l => { l.foregroundX = v; }), { step: 0.002 }),
@@ -685,6 +705,46 @@
           numField('飽和度', (L.look || {}).saturate ?? 1, v => up(l => { l.look = l.look || {}; l.look.saturate = v; }), { step: 0.01 }),
           numField('色溫偏暖', (L.look || {}).warmth ?? 0, v => up(l => { l.look = l.look || {}; l.look.warmth = v; }), { step: 0.01, hint: '0～0.3' }),
           numField('不透明度', (L.look || {}).opacity ?? 1, v => up(l => { l.look = l.look || {}; l.look.opacity = v; }), { step: 0.01 })),
+      ];
+    } else if (L.type === 'poseSeq') {
+      const poses = L.poses || [];
+      const pv = i => el('button', { class: 'sb' + ((player.poseView ?? null) === i ? ' on' : ''), onclick: () => { player.setPoseView(i); renderProps(); } },
+        i == null ? '回到正常播放' : `只看 ${poses[i].label || '姿勢' + (i + 1)}`);
+      body = [
+        el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '姿勢（依時間順序）'),
+          hint('同一個人物依時間換姿勢，共用下方的位置／縮放軌道，所以換圖時不會跳位。位置 X／Y＝腳底在畫面上的位置；縮放＝人物身高 ÷ 舞台高度（每張圖用自己的「人物頂端～腳底」換算，人物大小一致）。'),
+          poses.map((q, qi) => el('details', { class: 'p-sec', open: qi === 0 }, el('summary', {}, `${qi + 1}. ${q.label || ''}（${(p.assets[q.asset] || {}).label || q.asset}）`),
+            textField('名稱', q.label || '', v => up(l => { l.poses[qi].label = v; })),
+            selectField('圖片', q.asset, assetOpts, v => up(l => { l.poses[qi].asset = v; })),
+            numField('腳底 X（原圖 px）', q.footX, v => up(l => { l.poses[qi].footX = v; }), { step: 1 }),
+            numField('腳底 Y（原圖 px）', q.footY, v => up(l => { l.poses[qi].footY = v; }), { step: 1 }),
+            numField('人物頂端（原圖 px）', q.figTop, v => up(l => { l.poses[qi].figTop = v; }), { step: 1 }),
+            numField('人物底端（原圖 px）', q.figBottom, v => up(l => { l.poses[qi].figBottom = v; }), { step: 1 }),
+            numField('大小微調', q.scaleAdj ?? 1, v => up(l => { l.poses[qi].scaleAdj = v; }), { step: 0.005, hint: '1＝依身高自動一致；姿勢本身比較高／矮時可微調' }),
+            numField('位置微調 X', q.dx || 0, v => up(l => { l.poses[qi].dx = v; }), { step: 0.002, unit: '舞台寬度比例' }),
+            numField('位置微調 Y', q.dy || 0, v => up(l => { l.poses[qi].dy = v; }), { step: 0.002, unit: '舞台高度比例' }))),
+          el('div', { class: 'row-btns' }, poses.map((_, i) => pv(i)), pv(null))),
+        el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '換姿勢（交叉淡化）'),
+          (L.switches || []).map((sw, j) => el('div', {},
+            el('div', { class: 'p-h', style: 'font-size:12px' }, `${poses[j] ? poses[j].label : j + 1} → ${poses[j + 1] ? poses[j + 1].label : j + 2}`),
+            numField('開始', Math.round(refT(si, sw.from, 0)), v => up(l => { l.switches[j].from = refFromLocal(si, Math.max(0, Math.min(scene.durationMs, v))); }), { step: 10, unit: 'ms（本幕時間）', int: true }),
+            numField('結束', Math.round(refT(si, sw.to, 0)), v => up(l => { l.switches[j].to = refFromLocal(si, Math.max(0, Math.min(scene.durationMs, v))); }), { step: 10, unit: 'ms（本幕時間）', int: true }))),
+          selectField('疊化方式', MC.XF_MODES.includes(L.crossfade) ? L.crossfade : 'dissolve', XF_OPTIONS, v => up(l => { l.crossfade = v; })),
+          hint('換姿勢的時間通常掛在本幕「節拍」的節點上；在節拍表調整長度時會一起順延。')),
+        el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '位置與外觀'),
+          trackedField(L, 'x', '腳底位置 X', 0.5, 0.005, 'add', up),
+          trackedField(L, 'y', '腳底位置 Y', 0.9, 0.005, 'add', up),
+          trackedField(L, 'scale', '人物身高（÷ 舞台高）', 0.4, 0.005, 'mul', up),
+          trackedField(L, 'opacity', '透明度', 1, 0.05, 'add', up),
+          trackedField(L, 'blur', '模糊', 0, 0.0005, 'add', up, '舞台高度比例')),
+        el('details', { class: 'p-sec' }, el('summary', {}, '走路起伏（對話暫停劇情時仍會繼續）'),
+          numField('上下起伏', (L.sway && L.sway.y) || 0, v => up(l => { l.sway = l.sway || { periodMs: 1000, relative: true }; l.sway.y = v; }), { step: 0.001, hint: '人物身高的比例（勾「跟著人物大小」時）' }),
+          numField('左右擺動', (L.sway && L.sway.x) || 0, v => up(l => { l.sway = l.sway || { periodMs: 1000, relative: true }; l.sway.x = v; }), { step: 0.001 }),
+          numField('傾斜', (L.sway && L.sway.rot) || 0, v => up(l => { l.sway = l.sway || { periodMs: 1000, relative: true }; l.sway.rot = v; }), { step: 0.1, unit: '度' }),
+          numField('一步的時間', (L.sway && L.sway.periodMs) || 0, v => up(l => { l.sway = l.sway || { relative: true }; l.sway.periodMs = v; }), { step: 50, unit: 'ms（0＝關閉）', int: true }),
+          checkField('幅度跟著人物大小', !!(L.sway && L.sway.relative), v => up(l => { l.sway = l.sway || { periodMs: 1000 }; l.sway.relative = v; }))),
+        el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '圖層動畫（關鍵影格）'),
+          POSE_TRACKS.map(k => trackEditor({ si, scope: 'layer', layerId: id, track: k }))),
       ];
     } else {
       body = [
@@ -707,7 +767,8 @@
             numField('錨點 X', L.anchorX ?? 0.5, v => up(l => { l.anchorX = v; }), { step: 0.01 }),
             numField('錨點 Y', L.anchorY ?? 1, v => up(l => { l.anchorY = v; }), { step: 0.01 }),
             trackedField(L, 'opacity', '透明度', 1, 0.05, 'add', up),
-            trackedField(L, 'rotation', '旋轉', 0, 0.5, 'add', up, '度')),
+            trackedField(L, 'rotation', '旋轉', 0, 0.5, 'add', up, '度'),
+            trackedField(L, 'blur', '模糊', 0, 0.0005, 'add', up, '舞台高度比例')),
         L.role !== 'background' ? el('details', { class: 'p-sec' }, el('summary', {}, '裝飾動畫（對話暫停劇情時仍會繼續）'),
           numField('飄動 X', (L.sway && L.sway.x) || 0, v => up(l => { l.sway = l.sway || { periodMs: 4000 }; l.sway.x = v; }), { step: 0.001 }),
           numField('飄動 Y', (L.sway && L.sway.y) || 0, v => up(l => { l.sway = l.sway || { periodMs: 4000 }; l.sway.y = v; }), { step: 0.001 }),
@@ -715,7 +776,7 @@
           numField('週期', (L.sway && L.sway.periodMs) || 0, v => up(l => { l.sway = l.sway || {}; l.sway.periodMs = v; }), { step: 100, unit: 'ms', int: true }),
           hint('適合雲朵、光影等裝飾。0＝關閉。')) : null,
         L.role !== 'background' ? el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '圖層動畫（關鍵影格）'),
-          ['x', 'y', 'scale', 'opacity', 'rotation'].map(k => trackEditor({ si, scope: 'layer', layerId: id, track: k }))) : null,
+          ['x', 'y', 'scale', 'opacity', 'rotation', 'blur'].map(k => trackEditor({ si, scope: 'layer', layerId: id, track: k }))) : null,
       ];
     }
     return el('div', {},
@@ -748,6 +809,8 @@
   // 把新版內建專案中，使用者版本沒有的「正式幕次」與素材加進來（目前用於第三幕）
   function mergeNewScenes(mine, builtin) {
     Object.entries(builtin.assets || {}).forEach(([id, a]) => { if (!mine.assets[id]) mine.assets[id] = a; });
+    // v0.3.0：舊的空白草稿幕（例如舊的 intro_scene04）已被正式幕取代 → 移除（只移除「沒有任何圖層、新版也沒有這個 id」的幕）
+    mine.scenes = mine.scenes.filter(s => (s.layers || []).length || builtin.scenes.some(b => b.id === s.id));
     builtin.scenes.forEach((bs, bi) => {
       if (bs.status !== 'ready') return;
       const mi = mine.scenes.findIndex(s => s.id === bs.id);
@@ -992,11 +1055,12 @@
 
   function resetToBaseline() {
     const go = (b, msg) => { pushUndo(); state.sel = null; setProject(clone(b)); player.seek(0); toast(msg); };
-    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
+    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.3.0（五幕完整）</b>：第一幕成功版＋第二～五幕本次版本。</li><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
       '<li><b>v0.1.0</b>：只有第一、二幕成功版，第三～五幕是空白結構。</li></ul><p>目前的修改可以用「復原」找回；基準檔本身不會被改動。</p>',
       [{ label: '取消' },
        { label: '還原 v0.1.0', fn: () => go(state.baselineV1, '已還原 v0.1.0 基準') },
-       { label: '還原 v0.2.0（含第三幕）', fn: () => go(state.baseline, '已還原 v0.2.0 基準（含第三幕）') }]);
+       { label: '還原 v0.2.0（含第三幕）', fn: () => go(state.baselineV2, '已還原 v0.2.0 基準（含第三幕）') },
+       { label: '還原 v0.3.0（五幕完整）', fn: () => go(state.baseline, '已還原 v0.3.0 基準（五幕完整）') }]);
   }
 
   /* ===================== 範圍與播放 ===================== */
@@ -1084,8 +1148,14 @@
           style: `left:${X(t0)}px;width:${Math.max(4, X(t1 - t0))}px;top:${3 + (lanes - 1 - li) * 19}px`,
           title: `${L.name}（${roleLabel(L)}）`, onclick: () => select({ kind: 'layer', si: sg.index, layerId: L.id }) },
         L.name || L.id);
-        if (L.type === 'swapPair') {
-          bar.append(el('div', { class: 'sw', style: `left:${X(lc.switchT - Math.max(0, lc.startT))}px;width:${Math.max(2, X(lc.switchEndT - lc.switchT))}px`, title: '2A → 2B 切換' }));
+        if (L.type === 'swapPair' || L.type === 'poseSeq') {
+          if (L.type === 'swapPair') bar.append(el('div', { class: 'sw', style: `left:${X(lc.switchT - Math.max(0, lc.startT))}px;width:${Math.max(2, X(lc.switchEndT - lc.switchT))}px`, title: `${swapLabels(L).join(' → ')} 切換` }));
+          else (lc.switches || []).forEach(([a, b], j) => bar.append(el('div', { class: 'sw', style: `left:${X(a - Math.max(0, lc.startT))}px;width:${Math.max(2, X(b - a))}px`,
+            title: `${((L.poses || [])[j] || {}).label || j + 1} → ${((L.poses || [])[j + 1] || {}).label || j + 2}` })));
+          Object.keys(L.tracks || {}).forEach(k => (L.tracks[k] || []).forEach((kf, ki) => {
+            const t = sg.start + MC.refTime(kf, c.mm, 0);
+            bar.append(kfEl(t - t0, '#fff', { si: sg.index, scope: 'layer', layerId: L.id, track: k, idx: ki }, 'scale(.7) rotate(45deg)'));
+          }));
         } else {
           bar.append(el('div', { class: 'eh l', onmousedown: e => dragLayerEdge(e, sg.index, L.id, 'start') }),
             el('div', { class: 'eh r', onmousedown: e => dragLayerEdge(e, sg.index, L.id, 'end') }));
@@ -1389,13 +1459,13 @@
     setProject(p, { saved: true, reportAssets: !needUpgrade });
     player.seek(0);
     if (needUpgrade) {
-      modal('發現新版內容：第三幕正式版', '<p>這台電腦上儲存的是舊版專案（沒有第三幕正式素材）。要怎麼處理？</p>' +
-        '<ul><li><b>把第三幕加進我的版本（建議）</b>：保留你調整過的第一、二幕，只把第三幕換成正式版，並加入第三幕素材。</li>' +
-        '<li><b>改用新版內建專案</b>：整個換成新版（你之前的修改可以用「復原」找回）。</li>' +
+      modal('發現新版內容：v0.3.0 五幕完整版', '<p>這台電腦上儲存的是舊版專案。新版修改了<b>第二幕</b>（床放大、往左、交叉淡化）與<b>第三幕</b>（木牌、淡入、兩句對話），並新增<b>第四幕 A／B、第五幕</b>。要怎麼處理？</p>' +
+        '<ul><li><b>改用新版內建專案（建議）</b>：整個換成新版，才看得到第二、三幕的修改（你之前的修改可以用「復原」找回）。</li>' +
+        '<li><b>只把新幕次加進我的版本</b>：保留你調整過的第一～三幕，只加入第四幕 A／B、第五幕與素材（第二、三幕的新修改不會套用）。</li>' +
         '<li><b>維持我的版本</b>：什麼都不改。</li></ul>',
         [{ label: '維持我的版本' },
-         { label: '改用新版內建專案', fn: () => { pushUndo(); setProject(clone(builtin)); toast('已改用新版內建專案'); } },
-         { label: '把第三幕加進我的版本', fn: () => { pushUndo(); setProject(mergeNewScenes(clone(state.project), clone(builtin))); toast('已把第三幕正式版加入你的專案（記得儲存）'); } }]);
+         { label: '只把新幕次加進我的版本', fn: () => { pushUndo(); setProject(mergeNewScenes(clone(state.project), clone(builtin))); toast('已把第四、五幕加入你的專案（記得儲存）'); } },
+         { label: '改用新版內建專案', fn: () => { pushUndo(); setProject(clone(builtin)); toast('已改用新版內建專案'); } }]);
       return;
     }
     if (from === 'local') {
