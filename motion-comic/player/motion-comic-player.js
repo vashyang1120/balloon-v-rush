@@ -1,6 +1,7 @@
 /*
   氣球小V・動態漫畫播放器
-  motion-comic-player v0.3.0-test-1
+  motion-comic-player v0.3.1-test-1
+    v0.3.1：播放核心沒有新增功能（第四幕改用一般圖片圖層做定點分鏡；第二幕對話用既有對話系統）；版本號同步
     v0.2.0：新增第三幕所需的「遠景」圖層用途、對話 styleType、自動對話可停留到本幕結束
     v0.3.0：第四、五幕所需的擴充（全部向下相容；第一幕的渲染路徑完全沒變）
       - swapPair.crossfade：'dissolve'＝真正的交叉淡化（A 1→0、B 0→1 同步，用 plus-lighter 合成，人物不會變透明）
@@ -29,7 +30,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = 'motion-comic-player v0.3.0-test-1';
+  const VERSION = 'motion-comic-player v0.3.1-test-1';
 
   /* ===================== 插值（逐字沿用 v0.2.0） ===================== */
   const EASE = {
