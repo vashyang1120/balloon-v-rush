@@ -5,7 +5,7 @@
 (() => {
   'use strict';
   const MC = window.MotionComic;
-  const EDITOR_VERSION = 'motion-comic-editor-v0.3.2-test-1';
+  const EDITOR_VERSION = 'motion-comic-editor-v0.3.2.1-test-1';
   const LS_KEY = 'mc-editor-project-v1';
   const LS_META = 'mc-editor-project-v1-meta';
   const $ = id => document.getElementById(id);
@@ -1532,78 +1532,210 @@
     toast(`已新增「${MC.AUDIO_TYPE_LABELS[type]}」：請在右側選擇音檔`);
   }
 
-  /* ---------- 音訊素材 ---------- */
+  /* ---------- 音訊素材（v0.3.2.1：路徑解析一致、顯示實際網址與錯誤原因、重新載入、避免重複、整理素材） ---------- */
   let pendingAudioAsset = null;   // { clipId?, relinkId? }
   const safeId = name => ('a_' + String(name).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-一-鿿]+/g, '_')).slice(0, 40);
+  const aRoot = () => aud.projectRoot();
+  const canon = src => MC.canonicalAudioSrc(src, aRoot());
+  const keyOf = src => MC.audioAssetKey(src, aRoot());
+  const findSame = (src, exceptId) => Object.entries(aAssets()).find(([id, a]) => id !== exceptId && keyOf(a.src) === keyOf(src));
+  const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|webm)(\?.*)?$/i;
+  const fileName = src => decodeURIComponent(String(src).split('?')[0].split('/').pop() || '');
+  function assetStatusText(r) {
+    if (!r) return '尚未載入';
+    if (r.status === 'ok') return `✓ 可用 ${r.duration.toFixed(2)} 秒${r.backend === 'media' ? '（相容模式）' : ''}${r.local ? '（本機預覽）' : ''}`;
+    if (r.status === 'loading') return '載入中…';
+    if (r.status === 'idle') return '尚未載入';
+    return `✕ ${MC.AUDIO_ERROR_KINDS[r.kind] || '讀取失敗'}${r.httpStatus ? `（HTTP ${r.httpStatus}）` : ''}：${r.error}`;
+  }
+  function useAssetForClip(clipId, id) {
+    if (!clipId) return;
+    edit(p => { const c = ensureAudio(p).clips.find(x => x.id === clipId); if (c) c.asset = id; });
+  }
+  function createAssetFromPath(src, clipId) {
+    const name = fileName(src) || 'audio';
+    let id = safeId(name); while (aAssets()[id]) id += '_2';
+    edit(p => { const A = ensureAudio(p); A.assets[id] = { src, label: name }; if (clipId) { const c = A.clips.find(x => x.id === clipId); if (c) c.asset = id; } });
+    toast('已加入音訊素材：' + src);
+    return id;
+  }
+  function addByPath(raw, clipId) {
+    const src = canon(raw);
+    if (!AUDIO_EXT.test(src)) { toast('請輸入音檔路徑，例如 assets/chapter1_balloon_forest_bgm.mp3'); return; }
+    const same = findSame(src);
+    if (same) {
+      const [sid, sa] = same;
+      modal('已經有相同的音訊素材', el('div', {},
+        el('p', {}, `「${src}」和現有素材「${sa.label || sid}」（${sa.src}）指向同一個檔案。`),
+        el('p', { class: 'hint' }, '建議直接使用既有素材，避免下拉選單出現重複項目。若它之前讀取失敗，會順便重新載入一次。')),
+        [{ label: '取消' },
+         { label: '仍然新增一筆', fn: () => createAssetFromPath(src, clipId) },
+         { label: '使用既有素材', fn: () => { useAssetForClip(clipId, sid); aud.reloadAssets([sid], { onlyFailed: true }); toast(`使用既有素材「${sa.label || sid}」`); } }]);
+      return;
+    }
+    createAssetFromPath(src, clipId);
+  }
   function addAudioAssetModal(clipId) {
-    const pathIn = el('input', { type: 'text', value: 'assets/', style: 'width:100%' });
+    const pathIn = el('input', { type: 'text', value: 'assets/', style: 'width:100%', spellcheck: 'false' });
+    const prev = el('div', { class: 'hint', style: 'margin-top:6px;word-break:break-all' });
+    const upd = () => {
+      const raw = pathIn.value.trim(), c = canon(raw);
+      if (!raw || raw === 'assets/') { prev.textContent = `會讀取：${MC.resolveAudioUrl('assets/檔名.mp3', aRoot())}`; return; }
+      const same = AUDIO_EXT.test(c) && findSame(c);
+      prev.innerHTML = '';
+      prev.append(c !== raw ? el('div', {}, `會自動改成建議寫法：${c}`) : null,
+        el('div', {}, '實際讀取網址：', el('a', { href: MC.resolveAudioUrl(c, aRoot()), target: '_blank', rel: 'noopener' }, MC.resolveAudioUrl(c, aRoot()))),
+        same ? el('div', { class: 'warn' }, `⚠ 已經有相同的素材「${same[1].label || same[0]}」`) : null);
+    };
+    pathIn.addEventListener('input', upd); upd();
     modal('新增音訊素材', el('div', {},
-      el('p', {}, el('b', {}, 'A．從這台電腦選擇音檔（本機預覽）')),
-      el('p', { class: 'hint' }, '只會在這台電腦、這個分頁裡預覽；', el('b', {}, '不會'), '自動上傳到 GitHub。專案 JSON 會記錄成 assets/檔名，正式播放前請把同名檔案上傳到 GitHub 的 motion-comic/assets/。'),
-      el('p', {}, el('b', {}, 'B．輸入 GitHub 上已存在的檔案路徑')),
-      el('p', { class: 'hint' }, '例如 assets/forest_bgm.mp3（相對於 motion-comic/）。建議格式：MP3 或 M4A（AAC）；WAV 檔案較大；OGG 在 iPhone 上可能無法播放。'),
-      pathIn),
+      el('p', {}, el('b', {}, 'B．輸入 GitHub 上的檔案路徑（建議）')),
+      el('p', { class: 'hint' }, '寫成相對於 motion-comic/ 的路徑，例如 assets/chapter1_balloon_forest_bgm.mp3。也可以貼上完整的 https:// 網址；如果就是這個網站的檔案，會自動改成相對路徑（專案搬家也能用）。'),
+      pathIn, prev,
+      el('p', { style: 'margin-top:12px' }, el('b', {}, 'A．從這台電腦選擇音檔（本機預覽）')),
+      el('p', { class: 'hint' }, '只在這台電腦、這個分頁裡預覽；', el('b', {}, '不會'), '自動上傳到 GitHub。請另外把檔案上傳到 GitHub 的 motion-comic/assets/。'),
+      el('p', { class: 'hint' }, '建議格式：MP3 或 M4A（AAC）；WAV 檔案較大；OGG 在 iPhone 上可能無法播放。')),
       [{ label: '取消' },
        { label: 'A．選擇本機音檔…', fn: () => { pendingAudioAsset = { clipId }; $('audioInput').value = ''; $('audioInput').click(); } },
-       { label: 'B．使用這個路徑', fn: () => {
-         const src = pathIn.value.trim();
-         if (!/\.(mp3|m4a|aac|wav|ogg|oga|opus|webm)$/i.test(src)) { toast('請輸入音檔路徑，例如 assets/forest_bgm.mp3'); return; }
-         const name = src.split('/').pop();
-         let id = safeId(name); while (aAssets()[id]) id += '_2';
-         edit(p => { const A = ensureAudio(p); A.assets[id] = { src, label: name }; if (clipId) { const c = A.clips.find(x => x.id === clipId); if (c) c.asset = id; } });
-         toast('已加入音訊素材：' + src);
-       } }]);
+       { label: 'B．使用這個路徑', fn: () => addByPath(pathIn.value, clipId) }]);
+    setTimeout(() => { try { pathIn.focus(); pathIn.setSelectionRange(pathIn.value.length, pathIn.value.length); } catch (_) {} }, 50);
   }
   $('audioInput').addEventListener('change', e => {
     const file = e.target.files && e.target.files[0];
     const tgt = pendingAudioAsset; pendingAudioAsset = null;
     if (!file || !tgt) return;
-    let id = tgt.relinkId;
-    if (!id) { id = safeId(file.name); while (aAssets()[id]) id += '_2'; }
-    const src = 'assets/' + file.name;
-    aud.setLocalFile(id, file);
+    let id = tgt.relinkId, src;
+    if (id) src = aAssets()[id].src;                       // 對既有素材做本機預覽：正式路徑保持不變
+    else {
+      src = 'assets/' + file.name;
+      const same = findSame(src);
+      if (same) id = same[0];                               // 已經有這個路徑的素材：直接用它，不再新增一筆
+      else { id = safeId(file.name); while (aAssets()[id]) id += '_2'; }
+    }
+    const isNew = !aAssets()[id];
     edit(p => {
       const A = ensureAudio(p);
-      if (tgt.relinkId) { A.assets[id].src = src; }
-      else A.assets[id] = { src, label: file.name };
+      if (isNew) A.assets[id] = { src, label: file.name };
       if (tgt.clipId) { const c = A.clips.find(x => x.id === tgt.clipId); if (c) c.asset = id; }
     });
+    aud.setLocalFile(id, file, src);
     modal('本機音檔只用來預覽', el('div', {},
       el('p', {}, `已在這台電腦載入「${file.name}」，可以在編輯器裡試聽與排時間。`),
-      el('p', { class: 'hint warn' }, `正式網站（GitHub Pages）還沒有這個檔案。請把「${file.name}」上傳到 GitHub 的 motion-comic/assets/，專案裡記錄的路徑是 ${src}。`),
-      el('p', { class: 'hint' }, '重新整理或下次打開編輯器時，本機預覽會消失；檔案上傳到 GitHub 後就會自動讀到。')));
+      el('p', { class: 'hint warn' }, `正式網站（GitHub Pages）讀的是 ${src}。請把檔案以這個名稱上傳到 GitHub 的 motion-comic/assets/。`),
+      el('p', { class: 'hint' }, '上傳後，在「專案與素材管理 → 音訊素材」按「停止本機預覽，改讀正式檔案」（或重新整理）即可改用 GitHub 上的檔案，片段設定都會保留。')));
   });
+
+  /* ---------- 整理音訊素材：找出重複、讀不到的變體與未使用素材；套用前讓使用者確認，可復原 ---------- */
+  function cleanupPlan() {
+    const A = aAssets(), clips = (state.project.audio && state.project.audio.clips) || [];
+    const rep = {}; aud.assetReport().forEach(r => { rep[r.id] = r; });
+    const used = {}; clips.forEach(c => { if (c.asset) used[c.asset] = (used[c.asset] || 0) + 1; });
+    const score = id => (rep[id] && rep[id].ok ? 8 : 0) + (/^https?:/i.test(A[id].src) ? 0 : 4) + (canon(A[id].src) === A[id].src ? 2 : 0) + (used[id] ? 1 : 0);
+    const actions = [], handled = new Set();
+    const groupBy = f => { const g = {}; Object.keys(A).forEach(id => { const k = f(id); (g[k] = g[k] || []).push(id); }); return Object.values(g).filter(x => x.length > 1); };
+    // 1) 同一個檔案（解析後網址相同）
+    groupBy(id => keyOf(A[id].src)).forEach(ids => {
+      const keep = ids.slice().sort((a, b) => score(b) - score(a))[0];
+      ids.filter(id => id !== keep).forEach(id => { handled.add(id); actions.push({ id, kind: 'dup', keep, clips: used[id] || 0, checked: true, why: '和保留的素材是同一個檔案' }); });
+      handled.add(keep);
+    });
+    // 2) 同一個檔名、但路徑不同：保留可用的那個；讀不到的變體（例如 assets/audio/bgm/…、motion-comic/assets/…）合併過去
+    groupBy(id => fileName(A[id].src).toLowerCase()).forEach(ids => {
+      const ok = ids.filter(id => rep[id] && rep[id].ok && !actions.some(a => a.id === id));
+      if (!ok.length) return;
+      const keep = ok.sort((a, b) => score(b) - score(a))[0];
+      ids.filter(id => id !== keep && !actions.some(a => a.id === id)).forEach(id => {
+        const bad = rep[id] && rep[id].status === 'error';
+        actions.push({ id, kind: 'variant', keep, clips: used[id] || 0, checked: bad, why: bad ? `同檔名但讀不到（${MC.AUDIO_ERROR_KINDS[rep[id].kind] || '讀取失敗'}），改用可用的那個` : '同檔名、不同位置（兩個都讀得到，可能是不同檔案；預設不動）' });
+      });
+    });
+    // 3) 沒有任何片段使用的素材（合併後會被使用的「保留素材」除外）
+    const keepers = new Set(actions.filter(a => a.checked && a.keep).map(a => a.keep));
+    Object.keys(A).forEach(id => { if (!used[id] && !keepers.has(id) && !actions.some(a => a.id === id)) actions.push({ id, kind: 'unused', keep: null, clips: 0, checked: true, why: '沒有任何音訊片段使用' }); });
+    return actions;
+  }
+  function cleanupModal() {
+    const A = aAssets();
+    const acts = cleanupPlan();
+    if (!acts.length) { modal('整理音訊素材', '<p>沒有需要整理的音訊素材：沒有重複，也沒有未使用的項目。</p>'); return; }
+    const rows = acts.map(a => {
+      const cb = el('input', { type: 'checkbox', checked: a.checked });
+      cb.addEventListener('change', () => { a.checked = cb.checked; });
+      return el('tr', {}, el('td', {}, cb),
+        el('td', {}, el('b', {}, A[a.id].label || a.id), el('div', { class: 'unit', style: 'word-break:break-all' }, A[a.id].src)),
+        el('td', {}, a.keep ? `刪除，${a.clips ? `${a.clips} 個片段改用` : '改用'}「${A[a.keep].label || a.keep}」（${A[a.keep].src}）` : '刪除', el('div', { class: 'unit' }, a.why)));
+    });
+    const backup = () => {
+      const blob = new Blob([JSON.stringify(state.project, null, 2)], { type: 'application/json' });
+      const x = el('a', { href: URL.createObjectURL(blob), download: `${state.project.projectId || 'motion-comic'}-整理前備份.json` }); document.body.append(x); x.click(); x.remove();
+      toast('已下載整理前的完整專案備份');
+    };
+    modal('整理音訊素材（套用前請確認）', el('div', {},
+      el('p', {}, '以下是建議的整理項目。只會改「片段使用哪一個音訊素材」與刪除素材紀錄；片段的開始／結束時間、音量、循環、淡入淡出', el('b', {}, '都不會改變'), '。仍被片段使用的素材不會在沒有替代的情況下被刪除。'),
+      el('table', { class: 'kft', style: 'width:100%' }, el('tr', {}, el('th', {}), el('th', {}, '素材'), el('th', {}, '處理方式')), rows),
+      el('p', { class: 'hint' }, '套用後可以按上方「↶ 復原」還原；也可以先下載一份整理前的專案備份。')),
+      [{ label: '取消' }, { label: '下載備份 JSON', fn: () => { backup(); setTimeout(cleanupModal, 50); } },
+       { label: '套用整理', fn: () => {
+         const go = acts.filter(a => a.checked);
+         if (!go.length) { toast('沒有勾選任何項目'); return; }
+         try { localStorage.setItem('mc-editor-audio-backup', JSON.stringify({ savedAt: new Date().toISOString(), audio: state.project.audio })); } catch (_) {}
+         edit(p => {
+           const AA = ensureAudio(p);
+           go.forEach(a => {
+             if (a.keep) AA.clips.forEach(c => { if (c.asset === a.id) c.asset = a.keep; });
+             if (!AA.clips.some(c => c.asset === a.id)) delete AA.assets[a.id];
+           });
+         });
+         go.forEach(a => { if (!aAssets()[a.id] && aud.localFiles[a.id]) aud.setLocalFile(a.id, null); });
+         toast(`已整理 ${go.length} 個音訊素材（可按「↶ 復原」還原）`);
+       } }]);
+  }
+
   function audioAssetsSection() {
     const A = state.project.audio || {};
     const rep = aud.assetReport();
     const used = new Set(((A.clips) || []).map(c => c.asset).filter(Boolean));
     const mix = Object.assign({}, MC.AUDIO_MIX_DEFAULTS, A.mix || {});
     const upMix = (k, v) => edit(p => { ensureAudio(p).mix[k] = Math.max(0, Math.min(1, v)); }, { light: true });
+    const plan = rep.length ? cleanupPlan() : [];
+    const dupN = plan.filter(a => a.kind !== 'unused' && a.checked).length, unusedN = plan.filter(a => a.kind === 'unused').length;
     return [
       el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '音訊混音（專案預設，0～1）'),
         hint('最後音量＝片段音量 × 類型音量 × 總音量 × 玩家在播放頁調的音量。多條同時播放時另有輕微限幅，避免爆音。'),
         [['master', '總音量'], ['bgm', 'BGM 整體'], ['ambient', '環境音整體'], ['sfx', '音效整體'], ['voice', '配音整體']].map(([k, lab]) =>
           numField(lab, mix[k], v => upMix(k, v), { step: 0.05, min: 0, max: 1 }))),
       el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, `音訊素材（${rep.length}）`),
-        hint('音檔一律放在 motion-comic/assets/（不另外建立資料夾）。「本機預覽」只在這台電腦有效，正式播放需要把檔案上傳到 GitHub。'),
-        rep.length ? rep.map(r => {
-          const a = A.assets[r.id];
-          const st = r.status === 'ok' ? `✓ 可用 ${r.duration.toFixed(2)} 秒${r.backend === 'media' ? '（相容模式）' : ''}` : r.status === 'loading' ? '載入中…' : r.status === 'error' ? '✕ ' + r.error : '尚未載入';
-          return el('div', { class: 'asset-row audio' },
-            el('div', { class: 'aicon' }, '🎧'),
-            el('div', {},
-              el('div', { class: 'an' }, a.label || r.id, ' ', el('span', { class: 'unit' }, `（${r.id}）`)),
-              textField('路徑', a.src, v => edit(p => { ensureAudio(p).assets[r.id].src = v.trim(); })),
-              r.local ? el('div', { class: 'hint warn' }, `本機預覽中：${r.local}（尚未上傳；正式路徑 ${a.src}）`) : null,
-              el('div', { class: r.status === 'ok' ? 'st-ok' : (r.status === 'error' ? 'st-bad' : ''), style: 'font-size:11px' }, st)),
-            el('div', { class: 'row-btns', style: 'flex-direction:column' },
-              el('button', { class: 'sb', disabled: r.status !== 'ok', onclick: () => aud.unlock().then(() => aud.preview(r.id)) }, '▶ 試聽'),
-              el('button', { class: 'sb', onclick: () => { pendingAudioAsset = { relinkId: r.id }; $('audioInput').value = ''; $('audioInput').click(); } }, '本機檔案預覽'),
-              used.has(r.id) ? el('span', { class: 'unit' }, '使用中') : el('button', { class: 'sb danger', onclick: () => edit(p => { delete ensureAudio(p).assets[r.id]; aud.setLocalFile(r.id, null); }) }, '移除')));
-        }) : hint('還沒有任何音訊素材。'),
+        hint(`音檔放在 motion-comic/assets/，路徑寫成 assets/檔名.mp3。實際讀取位置：${MC.resolveAudioUrl('assets/', aRoot())}…`),
+        aud.status() === 'locked' && rep.length ? hint('瀏覽器尚未允許播放聲音（這不是檔案問題）：按一下播放鍵或任何按鈕即可。', 'warn') : null,
+        dupN || unusedN ? el('div', { class: 'hint warn' }, `發現 ${dupN ? dupN + ' 個重複／讀不到的變體' : ''}${dupN && unusedN ? '、' : ''}${unusedN ? unusedN + ' 個未使用' : ''}的音訊素材。`, el('button', { class: 'sb', style: 'margin-left:6px', onclick: cleanupModal }, '整理…')) : null,
         el('div', { class: 'row-btns' },
           el('button', { class: 'sb', onclick: () => addAudioAssetModal(null) }, '＋ 新增音訊素材'),
-          rep.some(r => !used.has(r.id)) ? el('button', { class: 'sb danger', onclick: () => edit(p => { const AA = ensureAudio(p); Object.keys(AA.assets).forEach(id => { if (!used.has(id)) { delete AA.assets[id]; aud.setLocalFile(id, null); } }); }) }, '移除所有未使用的音訊素材') : null)),
+          rep.length ? el('button', { class: 'sb', onclick: () => { aud.reloadAssets(); toast('重新載入全部音訊（不使用舊的快取）'); } }, '↻ 重新載入全部音訊') : null,
+          rep.length ? el('button', { class: 'sb', onclick: cleanupModal }, '整理音訊素材…') : null),
+        rep.length ? rep.map(r => {
+          const a = A.assets[r.id];
+          const same = findSame(a.src, r.id);
+          return el('div', { class: 'asset-row audio' },
+            el('div', { class: 'aicon' }, r.status === 'ok' ? '🎧' : r.status === 'error' ? '⚠' : '⏳'),
+            el('div', { style: 'min-width:0' },
+              el('div', { class: 'an' }, a.label || r.id, ' ', el('span', { class: 'unit' }, `（${r.id}${used.has(r.id) ? '・使用中' : '・未使用'}）`)),
+              textField('原始路徑', a.src, v => {
+                const nv = canon(v);
+                if (nv === a.src) { aud.reloadAssets([r.id]); toast('重新載入：' + nv); return; }
+                if (nv !== v.trim()) toast(`已改成建議寫法：${nv}`);
+                edit(p => { ensureAudio(p).assets[r.id].src = nv; });
+              }),
+              el('div', { class: 'unit', style: 'word-break:break-all;margin:2px 0' }, '實際網址：', r.local ? `本機預覽檔「${r.local}」（正式網址：` : '',
+                el('a', { href: MC.resolveAudioUrl(a.src, aRoot()), target: '_blank', rel: 'noopener' }, MC.resolveAudioUrl(a.src, aRoot())), r.local ? '）' : ''),
+              el('div', { class: r.status === 'ok' ? 'st-ok' : (r.status === 'error' ? 'st-bad' : ''), style: 'font-size:11px;word-break:break-all' }, assetStatusText(r)),
+              same ? el('div', { class: 'hint warn' }, `與「${same[1].label || same[0]}」是同一個檔案（可用「整理音訊素材」合併）`) : null),
+            el('div', { class: 'row-btns', style: 'flex-direction:column' },
+              el('button', { class: 'sb', title: '重新向伺服器讀取（不使用舊的快取結果）', onclick: () => { aud.reloadAssets([r.id]); toast('重新載入：' + (r.local ? r.local : a.src)); } }, '↻ 重新載入'),
+              el('button', { class: 'sb', disabled: r.status !== 'ok', onclick: () => aud.unlock().then(() => aud.preview(r.id)) }, '▶ 試聽'),
+              r.local ? el('button', { class: 'sb', onclick: () => { aud.setLocalFile(r.id, null); toast('已停止本機預覽，改讀 ' + a.src); } }, '停止本機預覽，改讀正式檔案')
+                : el('button', { class: 'sb', onclick: () => { pendingAudioAsset = { relinkId: r.id }; $('audioInput').value = ''; $('audioInput').click(); } }, '本機檔案預覽'),
+              used.has(r.id) ? null : el('button', { class: 'sb danger', onclick: () => edit(p => { delete ensureAudio(p).assets[r.id]; aud.setLocalFile(r.id, null); }) }, '移除')));
+        }) : hint('還沒有任何音訊素材。')),
     ];
   }
 
@@ -1643,7 +1775,8 @@
     const up = fn => edit(p => fn(ensureAudio(p).clips.find(x => x.id === id)));
     const A = state.project.audio;
     const s = aud.assets[c.asset];
-    const assetOpts = [['', '（未指定）']].concat(Object.keys(A.assets).map(k => [k, `${A.assets[k].label || k}（${A.assets[k].src}）`]));
+    const repMap = {}; aud.assetReport().forEach(x => { repMap[x.id] = x; });
+    const assetOpts = [['', '（未指定）']].concat(Object.keys(A.assets).map(k => [k, `${repMap[k] && repMap[k].ok ? '✓' : repMap[k] && repMap[k].status === 'error' ? '✕' : '…'} ${A.assets[k].label || k}（${A.assets[k].src}）`]));
     const dl = allDialogues();
     const isTyping = c.type === 'sfx' && c.trigger === 'typing';
     const trig = c.type === 'voice' ? 'voice' : isTyping ? 'typing' : (c.at && c.at.dialogue != null ? 'dialogue' : 'time');
@@ -1660,10 +1793,12 @@
       })),
       el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '音檔'),
         selectField('音訊素材', c.asset || '', assetOpts, v => up(x => { x.asset = v; })),
-        el('div', { class: s && s.status === 'ok' ? 'st-ok' : 'st-bad', style: 'font-size:11px;margin:-2px 0 6px' }, st),
+        el('div', { class: s && s.status === 'ok' ? 'st-ok' : 'st-bad', style: 'font-size:11px;margin:-2px 0 2px;word-break:break-all' }, c.asset ? assetStatusText(aud.assetReport().find(x => x.id === c.asset)) : st),
+        c.asset && A.assets[c.asset] ? el('div', { class: 'unit', style: 'word-break:break-all;margin-bottom:6px' }, '實際網址：', el('a', { href: MC.resolveAudioUrl(A.assets[c.asset].src, aRoot()), target: '_blank', rel: 'noopener' }, MC.resolveAudioUrl(A.assets[c.asset].src, aRoot()))) : null,
         s && aud.localFiles[c.asset] ? hint(`本機預覽中（${aud.localFiles[c.asset].name}）：正式播放前請上傳到 GitHub 的 motion-comic/assets/`, 'warn') : null,
         el('div', { class: 'row-btns' },
           el('button', { class: 'sb', onclick: () => addAudioAssetModal(id) }, '＋ 新增音訊素材…'),
+          c.asset ? el('button', { class: 'sb', onclick: () => { aud.reloadAssets([c.asset]); toast('重新載入音檔'); } }, '↻ 重新載入') : null,
           el('button', { class: 'sb', disabled: !(s && s.status === 'ok'), onclick: () => aud.unlock().then(() => aud.preview(c)) }, '▶ 單獨試聽'),
           el('button', { class: 'sb', onclick: () => aud._stopPreview() }, '■ 停止試聽'))),
       el('div', { class: 'p-sec' }, el('div', { class: 'p-h' }, '什麼時候播放'),

@@ -245,3 +245,11 @@ table.kft .x:hover { color: var(--err); }
   #app { grid-template-columns: 130px minmax(0, 1fr) 260px; grid-template-rows: 40px minmax(120px, 1fr) 40px minmax(120px, 34vh); }
   .brand small { display: none; }
 }
+
+/* ===== v0.3.2.1：音訊素材列改為「上：圖示＋資訊（全寬）／下：按鈕列」，路徑與實際網址看得完整 ===== */
+.asset-row.audio { grid-template-columns: 30px minmax(0, 1fr); align-items: start; }
+.asset-row.audio .aicon { width: 30px; height: 30px; font-size: 16px; }
+.asset-row.audio .f { grid-template-columns: 64px minmax(0, 1fr); }
+.asset-row.audio .f input[type=text] { width: 100%; font-size: 11.5px; }
+.asset-row.audio > .row-btns { grid-column: 1 / -1; flex-direction: row !important; flex-wrap: wrap; gap: 4px; }
+.asset-row.audio a { color: #8fb8ff; }
