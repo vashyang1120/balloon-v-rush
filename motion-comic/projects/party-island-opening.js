@@ -3,8 +3,8 @@ window.MC_PROJECT = {
   "schemaVersion": "1.0",
   "projectId": "party-island-opening",
   "title": "派對島大作戰・開場",
-  "editorVersion": "motion-comic-editor-v0.3.0-test-1",
-  "contentVersion": 3,
+  "editorVersion": "motion-comic-editor-v0.3.1-test-1",
+  "contentVersion": 4,
   "stage": {
     "width": 1672,
     "height": 941,
@@ -422,8 +422,8 @@ window.MC_PROJECT = {
       "id": "intro_scene02",
       "name": "小V坐在床側，從揉眼到驚訝",
       "status": "ready",
-      "note": "v0.3.0：床＋小V放大、往左、局部出框（床畫在人物圖裡，可整組移動）；2A→2B 改為真正交叉淡化 600ms",
-      "durationMs": 4040,
+      "note": "v0.3.1：床＋小V再放大、更靠近鏡頭、往左（床頭出框）；「……咦……？」→ 按繼續 → 2A→2B 交叉淡化 → 「我家在飛……？」；不做鏡頭推近（背景不放大）",
+      "durationMs": 2700,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 160,
@@ -433,18 +433,28 @@ window.MC_PROJECT = {
       "markers": [
         {
           "id": "shown",
-          "label": "淡入完成（2A 完全可見）",
+          "label": "淡入完成（2A 揉眼）",
           "t": 240
         },
         {
+          "id": "s2_d1",
+          "label": "第一句「……咦……？」（等待繼續）",
+          "t": 900
+        },
+        {
           "id": "switch",
-          "label": "2A → 2B 開始（交叉淡化）",
-          "t": 1640
+          "label": "按繼續後：2A → 2B 交叉淡化開始",
+          "t": 1150
         },
         {
           "id": "bShown",
           "label": "2B 完全取代 2A",
-          "t": 2240
+          "t": 1850
+        },
+        {
+          "id": "s2_d2",
+          "label": "第二句「我家在飛……？」（等待繼續）",
+          "t": 2200
         }
       ],
       "layers": [
@@ -473,9 +483,9 @@ window.MC_PROJECT = {
             "o": 0
           },
           "crossfade": "dissolve",
-          "foregroundScale": 0.72,
-          "foregroundX": 0.2,
-          "foregroundY": 0.975,
+          "foregroundScale": 0.84,
+          "foregroundX": 0.227,
+          "foregroundY": 1.0,
           "foregroundAnchorX": 0.4366,
           "foregroundAnchorY": 0.908,
           "bAlign": {
@@ -545,27 +555,42 @@ window.MC_PROJECT = {
       "camera": {
         "originX": 0.4,
         "originY": 0.52,
-        "tracks": {
-          "scale": [
-            {
-              "m": "switch",
-              "o": 0,
-              "v": 1,
-              "label": "推近開始（2B 出現時）"
-            },
-            {
-              "m": "switch",
-              "o": 1400,
-              "v": 1.025,
-              "e": "out",
-              "label": "推近完成"
-            }
-          ]
-        }
+        "tracks": {}
       },
       "effects": {},
       "tracks": {},
-      "dialogues": []
+      "dialogues": [
+        {
+          "id": "s2_d1",
+          "speaker": "小V",
+          "text": "……咦……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s2_d1",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 90,
+          "after": "resume",
+          "enabled": true
+        },
+        {
+          "id": "s2_d2",
+          "speaker": "小V",
+          "text": "我家在飛……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s2_d2",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 70,
+          "after": "resume",
+          "enabled": true
+        }
+      ]
     },
     {
       "id": "intro_scene03",
@@ -804,8 +829,8 @@ window.MC_PROJECT = {
       "id": "intro_scene04a",
       "name": "第四幕A：深入氣球森林",
       "status": "ready",
-      "note": "v0.3.0：從小V後方看他走過木牌、沿小徑走進霧裡（近景→遠景交叉淡化；霧用霧插件產生，不新增圖片）",
-      "durationMs": 8700,
+      "note": "v0.3.1：定點分鏡——背景固定；近景小V（偏右、較大）淡出 → 遠景小V（偏左、較小）淡入；人物不移動、不起伏；結束後全畫面淡出進第四幕B",
+      "durationMs": 7000,
       "transitionIn": {
         "type": "fadeBlack",
         "outMs": 300,
@@ -814,254 +839,127 @@ window.MC_PROJECT = {
       },
       "markers": [
         {
-          "id": "a_walk",
-          "label": "4A-1 淡入完成，小V開始往深處走（近景）",
+          "id": "a_nearIn",
+          "label": "4A-1 近景小V（偏右、較大）",
           "t": 600
         },
         {
-          "id": "a_swap",
-          "label": "4A-2 近景 → 遠景開始",
-          "t": 3200
+          "id": "a_nearOut",
+          "label": "4A-2 近景開始淡出",
+          "t": 3000
         },
         {
-          "id": "a_far",
-          "label": "4A-2 遠景完全取代近景",
+          "id": "a_farIn",
+          "label": "4A-2 遠景開始淡入",
           "t": 3600
         },
         {
-          "id": "a_deep",
-          "label": "4A-3 開始被霧吞沒",
-          "t": 6200
+          "id": "a_nearGone",
+          "label": "4A-2 近景完全消失",
+          "t": 3900
         },
         {
-          "id": "a_gone",
-          "label": "4A-3 消失在霧中",
-          "t": 8000
+          "id": "a_farShown",
+          "label": "4A-3 遠景小V（偏左、較小）完全出現",
+          "t": 4500
         }
       ],
       "layers": [
         {
           "id": "a_bg",
-          "name": "森林小徑背景",
+          "name": "森林小徑背景（固定）",
           "type": "image",
           "role": "background",
           "asset": "intro_scene04a_bg",
           "visible": true
         },
         {
-          "id": "a_v",
-          "name": "小V（近景背影 → 遠景）",
-          "type": "poseSeq",
+          "id": "a_near",
+          "name": "小V 近景（偏右、較大）",
+          "type": "image",
           "role": "character",
+          "asset": "intro_scene04a_v_near",
           "visible": true,
-          "crossfade": "dissolve",
-          "poses": [
-            {
-              "asset": "intro_scene04a_v_near",
-              "label": "近景",
-              "footX": 446.5,
-              "footY": 1518,
-              "figTop": 13,
-              "figBottom": 1518,
-              "scaleAdj": 1
-            },
-            {
-              "asset": "intro_scene04a_v_far",
-              "label": "遠景",
-              "footX": 449,
-              "footY": 1457,
-              "figTop": 87,
-              "figBottom": 1457,
-              "scaleAdj": 1
-            }
-          ],
-          "switches": [
-            {
-              "from": {
-                "m": "a_swap",
-                "o": 0
-              },
-              "to": {
-                "m": "a_far",
-                "o": 0
-              }
-            }
-          ],
-          "x": 0.605,
-          "y": 1.09,
-          "scale": 0.76,
-          "opacity": 1,
+          "x": 0.68,
+          "y": 0.985,
+          "scale": 0.268,
+          "anchorX": 0.436,
+          "anchorY": 0.9883,
+          "opacity": 0,
           "rotation": 0,
           "blur": 0,
-          "sway": {
-            "periodMs": 1100,
-            "x": 0,
-            "y": 0.025,
-            "rot": 0.6,
-            "relative": true
-          },
+          "note": "固定構圖：腳底在畫面 (0.68, 0.985)，人物身高約 0.7 個舞台高；只做淡入淡出、不移動",
           "tracks": {
-            "x": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.605,
-                "label": "近景起點"
-              },
-              {
-                "m": "a_swap",
-                "o": 0,
-                "v": 0.584,
-                "e": "out"
-              },
-              {
-                "m": "a_far",
-                "o": 0,
-                "v": 0.578
-              },
-              {
-                "m": "a_deep",
-                "o": 0,
-                "v": 0.566,
-                "e": "out"
-              },
-              {
-                "m": "a_gone",
-                "o": 0,
-                "v": 0.562,
-                "e": "out",
-                "label": "霧中"
-              }
-            ],
-            "y": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 1.09,
-                "label": "近景起點（靠近鏡頭）"
-              },
-              {
-                "m": "a_swap",
-                "o": 0,
-                "v": 0.86,
-                "e": "out"
-              },
-              {
-                "m": "a_far",
-                "o": 0,
-                "v": 0.832
-              },
-              {
-                "m": "a_deep",
-                "o": 0,
-                "v": 0.716,
-                "e": "out"
-              },
-              {
-                "m": "a_gone",
-                "o": 0,
-                "v": 0.674,
-                "e": "out",
-                "label": "霧中"
-              }
-            ],
-            "scale": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.76,
-                "label": "近景身高"
-              },
-              {
-                "m": "a_swap",
-                "o": 0,
-                "v": 0.4,
-                "e": "out"
-              },
-              {
-                "m": "a_far",
-                "o": 0,
-                "v": 0.368
-              },
-              {
-                "m": "a_deep",
-                "o": 0,
-                "v": 0.19,
-                "e": "out"
-              },
-              {
-                "m": "a_gone",
-                "o": 0,
-                "v": 0.1,
-                "e": "out",
-                "label": "很小、很遠"
-              }
-            ],
             "opacity": [
               {
-                "m": "a_deep",
+                "m": "start",
                 "o": 0,
                 "v": 1,
-                "label": "還清楚"
+                "label": "隨背景一起淡入"
               },
               {
-                "m": "a_gone",
+                "m": "a_nearOut",
+                "o": 0,
+                "v": 1,
+                "label": "停留"
+              },
+              {
+                "m": "a_nearGone",
                 "o": 0,
                 "v": 0,
-                "e": "in",
-                "label": "被霧吞沒"
+                "e": "inOut",
+                "label": "淡出"
               }
-            ],
-            "blur": [
+            ]
+          }
+        },
+        {
+          "id": "a_far",
+          "name": "小V 遠景（偏左、較小）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04a_v_far",
+          "visible": true,
+          "x": 0.52,
+          "y": 0.775,
+          "scale": 0.1052,
+          "anchorX": 0.4385,
+          "anchorY": 0.9486,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.52, 0.775)，人物身高約 0.25 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
               {
-                "m": "a_deep",
+                "m": "a_farIn",
                 "o": 0,
-                "v": 0
+                "v": 0,
+                "label": "還沒出現"
               },
               {
-                "m": "a_gone",
+                "m": "a_farShown",
                 "o": 0,
-                "v": 0.004,
-                "e": "in",
-                "label": "被霧模糊"
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "end",
+                "o": 0,
+                "v": 1,
+                "label": "停留到本幕結束"
               }
             ]
           }
         }
       ],
       "camera": {
-        "originX": 0.56,
-        "originY": 0.62,
-        "tracks": {
-          "scale": [
-            {
-              "m": "start",
-              "o": 0,
-              "v": 1.0,
-              "label": "原始鏡位"
-            },
-            {
-              "m": "end",
-              "o": 0,
-              "v": 1.05,
-              "e": "inOut",
-              "label": "非常輕微的前推"
-            }
-          ]
-        }
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
       },
       "effects": {
-        "breath": {
-          "enabled": true,
-          "params": {
-            "BREATH_Y": 0.0025,
-            "BREATH_X": 0.0012,
-            "BREATH_ROT": 0.06,
-            "BREATH_SCALE": 0.002,
-            "BREATH_PERIOD": 4.6,
-            "BREATH_CLOCK": "ambient"
-          }
-        },
         "fog": {
           "enabled": true,
           "params": {
@@ -1076,46 +974,12 @@ window.MC_PROJECT = {
         }
       },
       "tracks": {
-        "breath": [
-          {
-            "m": "start",
-            "o": 0,
-            "v": 1,
-            "label": "輕微呼吸感"
-          }
-        ],
-        "overscan": [
-          {
-            "m": "start",
-            "o": 0,
-            "v": 1.012,
-            "label": "預留放大（呼吸不露邊）"
-          }
-        ],
         "fog": [
           {
             "m": "start",
             "o": 0,
             "v": 0.12,
-            "label": "遠處薄霧"
-          },
-          {
-            "m": "a_deep",
-            "o": 0,
-            "v": 0.35,
-            "e": "inOut"
-          },
-          {
-            "m": "a_gone",
-            "o": 0,
-            "v": 0.85,
-            "e": "inOut",
-            "label": "濃霧吞沒小V"
-          },
-          {
-            "m": "end",
-            "o": 0,
-            "v": 0.9
+            "label": "遠處薄霧（固定，不再吞沒小V）"
           }
         ]
       },
@@ -1125,243 +989,238 @@ window.MC_PROJECT = {
       "id": "intro_scene04b",
       "name": "第四幕B：90° 側面森林小徑（被窺視感）",
       "status": "ready",
-      "note": "v0.3.0：同一個小V依時間換姿勢 walk → look_back_up → look_up，腳底錨點連續左→右；前景失焦樹木在小V之前、移動較快",
-      "durationMs": 10400,
+      "note": "v0.3.1：定點分鏡——三張固定構圖依序淡入淡出：步行（左、遠）→ 回頭仰望（中、稍近）→ 抬頭張望（右、稍遠）；前景失焦樹木固定在最上層遮擋；不做人物平移／起伏",
+      "durationMs": 9800,
       "transitionIn": {
-        "type": "crossfade",
-        "durMs": 700
+        "type": "fadeBlack",
+        "outMs": 700,
+        "holdMs": 250,
+        "inMs": 700
       },
       "markers": [
         {
-          "id": "b_turn",
-          "label": "4B-2 步行 → 回頭仰望 開始",
-          "t": 3000
+          "id": "b_walkIn",
+          "label": "4B-1 步行 淡入開始",
+          "t": 500
         },
         {
-          "id": "b_back",
-          "label": "4B-2 回頭仰望（放慢）",
-          "t": 3400
+          "id": "b_walkShown",
+          "label": "4B-1 步行（左、較遠）完全出現",
+          "t": 1300
         },
         {
-          "id": "b_up",
-          "label": "4B-3 回頭仰望 → 抬頭張望 開始",
-          "t": 6000
+          "id": "b_walkOut",
+          "label": "4B-1 步行 淡出開始",
+          "t": 3100
+        },
+        {
+          "id": "b_backIn",
+          "label": "4B-2 回頭仰望 淡入開始",
+          "t": 3500
+        },
+        {
+          "id": "b_walkGone",
+          "label": "4B-1 步行 完全消失",
+          "t": 3800
+        },
+        {
+          "id": "b_backShown",
+          "label": "4B-2 回頭仰望（中、稍近）完全出現",
+          "t": 4300
+        },
+        {
+          "id": "b_backOut",
+          "label": "4B-2 回頭仰望 淡出開始",
+          "t": 6300
+        },
+        {
+          "id": "b_upIn",
+          "label": "4B-3 抬頭張望 淡入開始",
+          "t": 6700
+        },
+        {
+          "id": "b_backGone",
+          "label": "4B-2 回頭仰望 完全消失",
+          "t": 7000
         },
         {
           "id": "b_upShown",
-          "label": "4B-3 抬頭張望，繼續往右",
-          "t": 6400
-        },
-        {
-          "id": "b_push",
-          "label": "鏡頭推近小V（銜接第一人稱）",
-          "t": 8800
+          "label": "4B-3 抬頭張望（右、稍遠）完全出現",
+          "t": 7500
         }
       ],
       "layers": [
         {
           "id": "b_bg",
-          "name": "側面森林背景（遠景，慢移）",
+          "name": "側面森林背景（固定）",
           "type": "image",
           "role": "far",
           "asset": "intro_scene04b_bg",
           "visible": true,
-          "x": 0.51,
+          "x": 0.5,
           "y": 0.5,
-          "scale": 1.06,
+          "scale": 1.0,
           "anchorX": 0.5,
           "anchorY": 0.5,
           "opacity": 1,
           "rotation": 0,
+          "tracks": {}
+        },
+        {
+          "id": "b_walk",
+          "name": "小V 1 步行（左、較遠）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04b_v_walk",
+          "visible": true,
+          "x": 0.205,
+          "y": 0.69,
+          "scale": 0.1635,
+          "anchorX": 0.5055,
+          "anchorY": 0.9703,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.205, 0.69)，人物身高約 0.36 個舞台高；只做淡入淡出、不移動",
           "tracks": {
-            "x": [
+            "opacity": [
               {
-                "m": "start",
+                "m": "b_walkIn",
                 "o": 0,
-                "v": 0.51,
-                "label": "背景慢移（視差：最慢）"
+                "v": 0,
+                "label": "還沒出現"
               },
               {
-                "m": "end",
+                "m": "b_walkShown",
                 "o": 0,
-                "v": 0.49
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "b_walkOut",
+                "o": 0,
+                "v": 1,
+                "label": "停留"
+              },
+              {
+                "m": "b_walkGone",
+                "o": 0,
+                "v": 0,
+                "e": "inOut",
+                "label": "淡出"
               }
             ]
           }
         },
         {
-          "id": "b_v",
-          "name": "小V（步行 → 回頭仰望 → 抬頭張望）",
-          "type": "poseSeq",
+          "id": "b_back",
+          "name": "小V 2 回頭仰望（中、稍近）",
+          "type": "image",
           "role": "character",
+          "asset": "intro_scene04b_v_look_back_up",
           "visible": true,
-          "crossfade": "dissolve",
-          "poses": [
-            {
-              "asset": "intro_scene04b_v_walk",
-              "label": "1 步行",
-              "footX": 549,
-              "footY": 1405,
-              "figTop": 59,
-              "figBottom": 1405,
-              "scaleAdj": 1
-            },
-            {
-              "asset": "intro_scene04b_v_look_back_up",
-              "label": "2 回頭仰望",
-              "footX": 569,
-              "footY": 1504,
-              "figTop": 32,
-              "figBottom": 1504,
-              "scaleAdj": 1
-            },
-            {
-              "asset": "intro_scene04b_v_look_up",
-              "label": "3 抬頭張望",
-              "footX": 601,
-              "footY": 1388,
-              "figTop": 34,
-              "figBottom": 1388,
-              "scaleAdj": 1
-            }
-          ],
-          "switches": [
-            {
-              "from": {
-                "m": "b_turn",
-                "o": 0
-              },
-              "to": {
-                "m": "b_back",
-                "o": 0
-              }
-            },
-            {
-              "from": {
-                "m": "b_up",
-                "o": 0
-              },
-              "to": {
-                "m": "b_upShown",
-                "o": 0
-              }
-            }
-          ],
-          "x": 0.08,
-          "y": 0.735,
-          "scale": 0.4,
-          "opacity": 1,
+          "x": 0.48,
+          "y": 0.745,
+          "scale": 0.1644,
+          "anchorX": 0.5557,
+          "anchorY": 0.9792,
+          "opacity": 0,
           "rotation": 0,
           "blur": 0,
-          "sway": {
-            "periodMs": 1000,
-            "x": 0,
-            "y": 0.012,
-            "rot": 0,
-            "relative": true
-          },
+          "note": "固定構圖：腳底在畫面 (0.48, 0.745)，人物身高約 0.42 個舞台高；只做淡入淡出、不移動",
           "tracks": {
-            "x": [
+            "opacity": [
               {
-                "m": "start",
+                "m": "b_backIn",
                 "o": 0,
-                "v": 0.08,
-                "label": "從左側（前景樹後）走出"
+                "v": 0,
+                "label": "還沒出現"
               },
               {
-                "m": "b_turn",
+                "m": "b_backShown",
                 "o": 0,
-                "v": 0.4
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
               },
               {
-                "m": "b_back",
+                "m": "b_backOut",
                 "o": 0,
-                "v": 0.425,
-                "label": "回頭仰望：放慢"
+                "v": 1,
+                "label": "停留"
               },
               {
-                "m": "b_up",
+                "m": "b_backGone",
                 "o": 0,
-                "v": 0.465
+                "v": 0,
+                "e": "inOut",
+                "label": "淡出"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b_up",
+          "name": "小V 3 抬頭張望（右、稍遠）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04b_v_look_up",
+          "visible": true,
+          "x": 0.845,
+          "y": 0.7,
+          "scale": 0.1726,
+          "anchorX": 0.5357,
+          "anchorY": 0.99,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.845, 0.7)，人物身高約 0.37 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "b_upIn",
+                "o": 0,
+                "v": 0,
+                "label": "還沒出現"
               },
               {
                 "m": "b_upShown",
                 "o": 0,
-                "v": 0.49
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
               },
               {
                 "m": "end",
                 "o": 0,
-                "v": 0.76,
-                "label": "繼續往右探索"
-              }
-            ],
-            "scale": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.4
-              },
-              {
-                "m": "end",
-                "o": 0,
-                "v": 0.42,
-                "label": "輕微變近（+5%）"
+                "v": 1,
+                "label": "停留到本幕結束 → 第五幕"
               }
             ]
           }
         },
         {
           "id": "b_fg",
-          "name": "前景失焦樹木（最前，快移）",
+          "name": "前景失焦樹木（固定，最上層遮擋）",
           "type": "image",
           "role": "foreground",
           "asset": "intro_scene04b_fg_trees",
           "visible": true,
-          "x": 0.57,
-          "y": 0.5,
-          "scale": 1.14,
+          "x": 0.49,
+          "y": 0.47,
+          "scale": 1.06,
           "anchorX": 0.5,
           "anchorY": 0.5,
           "opacity": 1,
           "rotation": 0,
-          "tracks": {
-            "x": [
-              {
-                "m": "start",
-                "o": 0,
-                "v": 0.57,
-                "label": "前景快移（視差：最快）"
-              },
-              {
-                "m": "end",
-                "o": 0,
-                "v": 0.43
-              }
-            ]
-          }
+          "tracks": {}
         }
       ],
       "camera": {
-        "originX": 0.76,
-        "originY": 0.4,
-        "tracks": {
-          "scale": [
-            {
-              "m": "b_push",
-              "o": 0,
-              "v": 1.0,
-              "label": "推近開始"
-            },
-            {
-              "m": "end",
-              "o": 0,
-              "v": 1.1,
-              "e": "in",
-              "label": "推近小V，銜接第一人稱"
-            }
-          ]
-        }
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
       },
       "effects": {},
       "tracks": {},
@@ -1371,17 +1230,17 @@ window.MC_PROJECT = {
       "id": "intro_scene05",
       "name": "第五幕：第一人稱森林探索",
       "status": "ready",
-      "note": "v0.3.0：只有一張背景，靠鏡頭左右上下張望＋呼吸；兩句台詞穿插在運鏡中（左上看完出第一句、右上看完出第二句）",
-      "durationMs": 14000,
+      "note": "v0.3.1：運鏡幅度加大（左右約 ±12%、上下約 ±11%）；正前 → 左 → 左上 →〔第一句〕→ 右 → 右下 → 右上 →〔第二句〕；對話時視線停住、呼吸持續，按繼續從原位接續",
+      "durationMs": 14200,
       "transitionIn": {
         "type": "crossfade",
-        "durMs": 800
+        "durMs": 900
       },
       "markers": [
         {
           "id": "c_settle",
           "label": "5-1 看向前方（承接 4B 的抬頭）",
-          "t": 1100
+          "t": 1000
         },
         {
           "id": "c_left",
@@ -1391,17 +1250,17 @@ window.MC_PROJECT = {
         {
           "id": "c_leftUp",
           "label": "5-3 往左上看樹冠",
-          "t": 4200
+          "t": 4300
         },
         {
           "id": "c_d1",
           "label": "5-4 左上停留：第一句",
-          "t": 4500
+          "t": 4600
         },
         {
           "id": "c_right",
           "label": "5-5 轉向右邊",
-          "t": 7300
+          "t": 7100
         },
         {
           "id": "c_rightDown",
@@ -1411,17 +1270,17 @@ window.MC_PROJECT = {
         {
           "id": "c_rightUp",
           "label": "5-7 往右上看高處",
-          "t": 10800
+          "t": 10900
         },
         {
           "id": "c_d2",
           "label": "5-8 右上停留：第二句",
-          "t": 11100
+          "t": 11200
         },
         {
           "id": "c_endLook",
           "label": "結尾：視線收回",
-          "t": 13000
+          "t": 12700
         }
       ],
       "layers": [
@@ -1442,8 +1301,25 @@ window.MC_PROJECT = {
             {
               "m": "start",
               "o": 0,
-              "v": 1.16,
-              "label": "放大 1.16（預留張望空間）"
+              "v": 1.3,
+              "label": "放大 1.30（預留大幅張望空間）"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": 1.3
+            },
+            {
+              "m": "c_d2",
+              "o": 0,
+              "v": 1.33,
+              "e": "inOut",
+              "label": "往前湊近一點（疑惑加深）"
+            },
+            {
+              "m": "end",
+              "o": 0,
+              "v": 1.33
             }
           ],
           "x": [
@@ -1459,63 +1335,98 @@ window.MC_PROJECT = {
               "v": 0.0
             },
             {
+              "m": "c_settle",
+              "o": 500,
+              "v": -0.018,
+              "e": "inOut",
+              "label": "先往右瞄一下（猶豫）"
+            },
+            {
               "m": "c_left",
               "o": 0,
-              "v": 0.05,
+              "v": 0.118,
               "e": "inOut",
-              "label": "5-2 往左"
+              "label": "5-2 往左（轉過頭一點）"
+            },
+            {
+              "m": "c_left",
+              "o": 450,
+              "v": 0.105,
+              "e": "inOut",
+              "label": "回正一點"
             },
             {
               "m": "c_leftUp",
               "o": 0,
-              "v": 0.062,
+              "v": 0.125,
               "e": "inOut",
               "label": "5-3 左上"
             },
             {
               "m": "c_d1",
               "o": 0,
-              "v": 0.062,
+              "v": 0.125,
               "label": "第一句：停住（只剩呼吸）"
+            },
+            {
+              "m": "c_d1",
+              "o": 900,
+              "v": 0.09,
+              "e": "inOut",
+              "label": "慢慢收回"
+            },
+            {
+              "m": "c_d1",
+              "o": 1700,
+              "v": 0.0,
+              "e": "inOut",
+              "label": "轉頭途中"
             },
             {
               "m": "c_right",
               "o": 0,
-              "v": -0.052,
+              "v": -0.118,
               "e": "inOut",
-              "label": "5-5 轉向右"
+              "label": "5-5 轉向右（轉過頭一點）"
+            },
+            {
+              "m": "c_right",
+              "o": 450,
+              "v": -0.106,
+              "e": "inOut",
+              "label": "回正一點"
             },
             {
               "m": "c_rightDown",
               "o": 0,
-              "v": -0.062,
+              "v": -0.122,
               "e": "inOut",
               "label": "5-6 右下"
             },
             {
               "m": "c_rightDown",
-              "o": 950,
-              "v": -0.066,
+              "o": 1000,
+              "v": -0.128,
               "e": "inOut",
-              "label": "往上抬時視線微微外擺（曲線）"
+              "label": "往上抬時視線往外擺（曲線）"
             },
             {
               "m": "c_rightUp",
               "o": 0,
-              "v": -0.06,
+              "v": -0.1,
               "e": "inOut",
               "label": "5-7 右上"
             },
             {
               "m": "c_d2",
               "o": 0,
-              "v": -0.06,
+              "v": -0.1,
               "label": "第二句：停住"
             },
             {
               "m": "c_endLook",
               "o": 0,
-              "v": -0.02,
+              "v": -0.03,
               "e": "inOut",
               "label": "視線收回"
             }
@@ -1524,70 +1435,82 @@ window.MC_PROJECT = {
             {
               "m": "start",
               "o": 0,
-              "v": 0.03,
-              "label": "承接 4B 抬頭（稍微往上）"
+              "v": 0.06,
+              "label": "承接 4B 抬頭（往上）"
             },
             {
               "m": "c_settle",
               "o": 0,
-              "v": 0.012,
+              "v": 0.0,
               "e": "inOut",
               "label": "回到前方"
             },
             {
               "m": "c_left",
               "o": 0,
-              "v": 0.008,
+              "v": 0.02,
               "e": "inOut"
             },
             {
               "m": "c_leftUp",
               "o": 0,
-              "v": 0.05,
+              "v": 0.112,
               "e": "inOut",
               "label": "往上看樹冠"
             },
             {
               "m": "c_d1",
               "o": 0,
-              "v": 0.05
+              "v": 0.112
             },
             {
               "m": "c_d1",
-              "o": 1400,
-              "v": 0.012,
+              "o": 900,
+              "v": 0.06,
+              "e": "inOut"
+            },
+            {
+              "m": "c_d1",
+              "o": 1700,
+              "v": -0.03,
               "e": "inOut",
-              "label": "轉頭途中視線先回到水平（曲線）"
+              "label": "轉頭時視線往下沉（弧線）"
             },
             {
               "m": "c_right",
               "o": 0,
-              "v": 0.01,
+              "v": 0.0,
               "e": "inOut"
             },
             {
               "m": "c_rightDown",
               "o": 0,
-              "v": -0.048,
+              "v": -0.11,
               "e": "inOut",
               "label": "往下看小徑"
             },
             {
+              "m": "c_rightDown",
+              "o": 500,
+              "v": -0.11,
+              "label": "停一下"
+            },
+            {
               "m": "c_rightUp",
               "o": 0,
-              "v": 0.048,
+              "v": 0.115,
               "e": "inOut",
               "label": "往上看高處"
             },
             {
               "m": "c_d2",
               "o": 0,
-              "v": 0.048
+              "v": 0.115
             },
             {
               "m": "c_endLook",
               "o": 0,
-              "v": 0.015,
+              "v": 0.03,
               "e": "inOut"
             }
           ],
@@ -1600,48 +1523,54 @@ window.MC_PROJECT = {
             {
               "m": "c_left",
               "o": 0,
-              "v": -0.15,
+              "v": -0.35,
               "e": "inOut"
             },
             {
               "m": "c_leftUp",
               "o": 0,
-              "v": -0.35,
+              "v": -0.6,
               "e": "inOut",
               "label": "頭微微側傾"
             },
             {
               "m": "c_d1",
               "o": 0,
-              "v": -0.35
+              "v": -0.6
             },
             {
-              "m": "c_right",
-              "o": 0,
-              "v": 0.15,
+              "m": "c_d1",
+              "o": 1700,
+              "v": 0.0,
               "e": "inOut"
             },
             {
-              "m": "c_rightDown",
+              "m": "c_right",
               "o": 0,
               "v": 0.3,
               "e": "inOut"
             },
             {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": 0.5,
+              "e": "inOut"
+            },
+            {
               "m": "c_rightUp",
               "o": 0,
-              "v": 0.4,
+              "v": 0.7,
               "e": "inOut"
             },
             {
               "m": "c_d2",
               "o": 0,
-              "v": 0.4
+              "v": 0.7
             },
             {
               "m": "c_endLook",
               "o": 0,
-              "v": 0.1,
+              "v": 0.15,
               "e": "inOut"
             }
           ]
@@ -1651,11 +1580,11 @@ window.MC_PROJECT = {
         "breath": {
           "enabled": true,
           "params": {
-            "BREATH_Y": 0.0035,
-            "BREATH_X": 0.0018,
-            "BREATH_ROT": 0.09,
+            "BREATH_Y": 0.004,
+            "BREATH_X": 0.002,
+            "BREATH_ROT": 0.1,
             "BREATH_SCALE": 0.0025,
-            "BREATH_PERIOD": 4.4,
+            "BREATH_PERIOD": 4.2,
             "BREATH_CLOCK": "ambient"
           }
         }
@@ -1677,7 +1606,7 @@ window.MC_PROJECT = {
           },
           {
             "m": "c_endLook",
-            "o": 200,
+            "o": 500,
             "v": 1
           },
           {
@@ -1685,7 +1614,7 @@ window.MC_PROJECT = {
             "o": 0,
             "v": 0,
             "e": "in",
-            "label": "結尾淡出（之後接飛行屋地圖／第一關；目前未接通）"
+            "label": "結尾淡出（之後接飛行屋地圖／第一關；本輪不接）"
           }
         ]
       },
