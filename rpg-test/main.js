@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.72-run-v3-sword-v2-default-test-1';
-const BUILD_TIME   = '2026-10-24 06:30';
+const GAME_VERSION = 'adventure-v0.3.73-opening-comic-integration-test-1';
+const BUILD_TIME   = '2026-10-25 01:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -22985,6 +22985,9 @@ function advIntroShouldPlay() {
     if (typeof advResumePromptOpen !== 'undefined' && advResumePromptOpen) return false;
     if (elapsedSec > 0.5) return false;
     const d = rpgLoad();
+    // v0.3.73：開場漫畫串接後，每次「從世界地圖進入 1-1」（這次開啟遊戲第一次開始 1-1、或重新開始測試）都先播飛行屋抵達，
+    //          抵達後再依觀看紀錄：第一次 → 播漫畫；看過 → 故事選擇。關卡內死亡重新挑戰不會走到這裡（advIntroChecked 只檢查一次）
+    if (typeof ocEnabled === 'function' && ocEnabled()) return true;
     if (d.worldIntro === 'done') return false;
     if (d.worldIntro === 'pending') return true;
     let legacy = Object.keys(d.seen || {}).length > 0 || Object.keys(d.notes || {}).length > 0;
@@ -22994,15 +22997,21 @@ function advIntroShouldPlay() {
   } catch (e) { return false; }
 }
 function advIntroRunInLevel() {
-  if (advIntroActive) return;
+  if (advIntroActive || (typeof ocActive !== 'undefined' && ocActive)) return;
   if (gameState === 'playing') gameState = 'paused';                        // 入場演出期間：不計時、不觸發關卡對話（不開暫停選單）
   advIntroPlay(played => {
     if (played) { const d = rpgLoad(); d.worldIntro = 'done'; rpgSave(); }
-    if (gameState === 'paused' && !(typeof rpgIsActive === 'function' && rpgIsActive())) {
-      gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
-      if ((typeof document !== 'undefined' && document.hidden) || (isTouchPlayDevice() && isPortraitNow())) pauseGame();   // 演出時切到背景／轉直向 → 停在暫停選單
-    }
-    console.log('[Intro] 首次入場演出結束 → 直接開始 1-1', played ? '' : '（地圖沒載好，略過演出）');
+    console.log('[Intro] 飛行屋抵達 1-1', played ? '' : '（地圖沒載好，略過演出）');
+    // v0.3.73：抵達 1-1 → 開場漫畫（第一次）／故事選擇（看過）→ 下面原本「開始 1-1」的程式
+    const startLevel = how => {
+      if (gameState === 'paused' && !(typeof rpgIsActive === 'function' && rpgIsActive())) {
+        gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+        if ((typeof document !== 'undefined' && document.hidden) || (isTouchPlayDevice() && isPortraitNow())) pauseGame();   // 演出時切到背景／轉直向 → 停在暫停選單
+      }
+      if (how && how !== 'none' && typeof ocResumeGameBgm === 'function') ocResumeGameBgm();
+      console.log('[Intro] 入場演出結束 → 開始 1-1', how && how !== 'none' ? '（開場漫畫：' + how + '）' : '');
+    };
+    if (typeof ocAfterArrival === 'function') ocAfterArrival(startLevel); else startLevel('none');
   });
 }
 function advIntroPlay(done) {
@@ -23090,3 +23099,160 @@ function advIntroPlay(done) {
   });
 })();
 if (typeof window !== 'undefined') Object.assign(window, { advIntroShouldPlay, advIntroRunInLevel, weaponSnapSync, rpgPopCount, h2FloatDeltas });
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.73：開場動態漫畫（motion-comic-v0.3.2.1）正式串接 1-1
+//  流程：世界地圖・飛行屋飛到 1-1（advIntroPlay，原有）→【這裡】→ 原本「開始 1-1」的程式（advIntroRunInLevel 的回呼：gameState = 'playing'）
+//   ・還沒看過：自動播放五幕漫畫（嵌入 motion-comic/player，iframe）→ 播完或「略過整段故事」→ 1-1
+//   ・看過了：顯示「氣球森林・開場故事」選擇 → 再次觀看故事（從第一幕）／直接開始冒險（不載入漫畫）
+//   ・1-1 死亡後重新挑戰：沿用原本的 retryCurrentLevelFromStart（不經過這裡 → 不重播地圖、不重播漫畫、不顯示選擇）
+//  觀看紀錄：沿用冒險 RPG 進度存檔（balloonV_adventureRpg_v1__<playerKey>，依玩家分開）的 openingComic 欄位
+//   ・只有「完整播完」或「主動略過整段」才記為看過；開始播放、中途關閉頁面、載入失敗都不記
+//   ・「重新開始測試」會一併清除（可以重新體驗第一次）
+//  漫畫本身（畫面、時間軸、對話、音訊設定）完全不改：只讀 motion-comic/projects/party-island-opening.json
+//  音訊：漫畫的 BGM／環境音／音效都在 iframe 裡；結束時先由播放器停止全部聲音，再移除 iframe（聲音一定不殘留），
+//        之後才回到遊戲 → 第一章 BGM（chapter1_balloon_forest_bgm.mp3）由原本的 syncChapter1Bgm 播放
+// ════════════════════════════════════════════════════════════════════
+const OPENING_COMIC = {
+  enabled: true,
+  stageId: '1-1',
+  path: '../motion-comic/player/index.html',     // 相對於 rpg-test/index.html → /balloon-v-rush/motion-comic/player/
+  comicVersion: 'motion-comic-v0.3.2.1',
+  aliveTimeoutMs: 15000,                         // 15 秒內播放器沒有回應（例如檔案不存在）→ 不擋遊戲，直接開始 1-1（不記為看過）
+};
+let ocActive = false, ocSession = null;
+function ocEnabled() {
+  try {
+    if (!OPENING_COMIC.enabled) return false;
+    if (typeof location !== 'undefined' && /[?&]nocomic=1/.test(location.search)) return false;   // 開發測試用：?nocomic=1
+    return (LEVELS[currentLevelIndex] || {}).stageId === OPENING_COMIC.stageId;
+  } catch (e) { return false; }
+}
+function ocState() { try { return rpgLoad().openingComic || null; } catch (e) { return null; } }
+function ocSeen() { const s = ocState(); return !!(s && s.status === 'done'); }
+function ocMarkSeen(how) {
+  try {
+    const d = rpgLoad(), prev = d.openingComic || {};
+    d.openingComic = { status: 'done', how, firstAt: prev.firstAt || new Date().toISOString(), lastAt: new Date().toISOString(), count: (prev.count || 0) + 1, comic: OPENING_COMIC.comicVersion, game: GAME_VERSION };
+    rpgSave();
+    console.log('[OpeningComic] 記錄為已觀看（' + how + '）→ ' + rpgStorageKey());
+  } catch (e) { console.warn('[OpeningComic] 觀看紀錄存檔失敗', e && e.message); }
+}
+function ocClearInput() {
+  try { Object.keys(keys).forEach(k => { keys[k] = false; }); Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; }); } catch (e) {}
+}
+// 飛行屋抵達 1-1 之後呼叫；done(how) 之後由呼叫端照原本方式開始 1-1
+function ocAfterArrival(done) {
+  if (!ocEnabled() || ocActive) { done('none'); return; }
+  if (ocSeen()) ocChooser(done); else ocPlay(done, 'first');
+}
+// ── 已看過：選擇介面（沿用小V之家／暫停選單的木框 h2-skin 樣式）──
+function ocChooser(done) {
+  ocActive = true;
+  try { if (typeof h2PreloadCore === 'function') h2PreloadCore(); } catch (e) {}   // 木框、按鈕素材（與暫停選單同一套）
+  let ov = document.getElementById('oc-choose');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'oc-choose'; ov.className = 'oc-choose h2-skin'; document.body.appendChild(ov); }
+  ov.innerHTML = '<section class="h2-card p2-confirm-card oc-card" role="dialog" aria-modal="true" aria-labelledby="oc-title">'
+    + '<div class="h2-head"><span class="h2-plank h2-plank--static" id="oc-title">氣球森林・開場故事</span></div>'
+    + '<div class="p2-confirm-body oc-body"><p>你已經看過這段故事囉！</p></div>'
+    + '<div class="p2-confirm-btns oc-btns"><button type="button" class="h2-pill h2-pill--blue" data-oc="watch">再次觀看故事</button>'
+    + '<button type="button" class="h2-pill h2-pill--green" data-oc="start">直接開始冒險</button></div></section>';
+  ov.classList.add('is-open');
+  let picked = false;
+  const pick = what => {
+    if (picked) return; picked = true;
+    ov.classList.remove('is-open'); ov.onclick = null; ov.innerHTML = '';
+    window.removeEventListener('keydown', onKey, true);
+    if (what === 'watch') { ocActive = false; ocPlay(done, 'replay'); }
+    else { ocActive = false; ocClearInput(); console.log('[OpeningComic] 直接開始冒險（不載入漫畫）'); done('direct'); }
+  };
+  ov.onclick = e => { const b = e.target.closest && e.target.closest('[data-oc]'); if (!b) return; e.preventDefault(); e.stopPropagation(); pick(b.dataset.oc); };
+  const btns = () => Array.from(ov.querySelectorAll('[data-oc]'));
+  const onKey = e => {   // 鍵盤：← → 切換、Enter／空白鍵確定；不讓遊戲收到這些按鍵
+    e.stopImmediatePropagation();
+    const bs = btns(), i = bs.indexOf(document.activeElement);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') { e.preventDefault(); bs[(i + (e.key === 'ArrowLeft' ? -1 : 1) + bs.length) % bs.length].focus(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick((bs[i] || bs[0]).dataset.oc); }
+  };
+  window.addEventListener('keydown', onKey, true);
+  setTimeout(() => { const b = btns()[0]; if (b && !picked) try { b.focus({ preventScroll: true }); } catch (e) {} }, 30);
+  console.log('[OpeningComic] 已看過 → 顯示故事選擇');
+}
+// ── 播放五幕漫畫（嵌入既有的獨立播放器）──
+function ocPlay(done, reason) {
+  ocActive = true;
+  const session = 'oc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  ocSession = session;
+  let host = document.getElementById('oc-host');
+  if (!host) { host = document.createElement('div'); host.id = 'oc-host'; document.body.appendChild(host); }
+  host.innerHTML = '';
+  const fr = document.createElement('iframe');
+  fr.id = 'oc-frame'; fr.title = '開場動態漫畫'; fr.setAttribute('allow', 'autoplay');
+  const url = new URL(OPENING_COMIC.path, location.href);
+  url.searchParams.set('embed', '1'); url.searchParams.set('autostart', '1'); url.searchParams.set('session', session);
+  fr.src = url.href;
+  host.appendChild(fr); host.classList.add('is-open');
+  let alive = false, ended = false;
+  const origin = location.origin;
+  const finish = (how, mark) => {
+    if (ended) return; ended = true;
+    window.removeEventListener('message', onMsg);
+    window.removeEventListener('keydown', blockKeys, true); window.removeEventListener('keyup', blockKeys, true);
+    clearTimeout(tmo);
+    try { if (fr.contentWindow) fr.contentWindow.postMessage({ type: 'mc-host', session, cmd: 'stop' }, origin === 'null' ? '*' : origin); } catch (e) {}   // 保險：先叫播放器停聲音
+    try { fr.src = 'about:blank'; } catch (e) {}
+    host.classList.remove('is-open'); host.innerHTML = '';                       // 移除播放器 → 漫畫的所有聲音與資源一併釋放（不留下看不見的播放器）
+    if (mark) ocMarkSeen(how);
+    ocActive = false; ocSession = null;
+    ocClearInput();
+    try { window.focus(); } catch (e) {}
+    console.log('[OpeningComic] 結束：' + how + (mark ? '（記為已觀看）' : '（不記錄）') + ' → 開始 1-1');
+    done(how);
+  };
+  const onMsg = e => {
+    if (e.source !== fr.contentWindow) return;                                  // 只接受這個 iframe
+    if (origin !== 'null' && e.origin !== origin) return;                        // 只接受同一個網站
+    const d = e.data;
+    if (!d || d.type !== 'mc-embed' || d.session !== session) return;            // 只接受這一次播放
+    if (d.event === 'alive' || d.event === 'ready' || d.event === 'started' || d.event === 'needTap') { alive = true; clearTimeout(tmo); }
+    if (d.event === 'started') console.log('[OpeningComic] 漫畫開始播放（' + reason + '，聲音：' + d.audio + '）');
+    if (d.event === 'needTap') console.log('[OpeningComic] 瀏覽器需要點一下才能出聲 → 顯示「▶ 開始故事」');
+    if (d.event === 'done') finish(d.how === 'skipped' ? 'skipped' : 'ended', true);
+    if (d.event === 'error') finish('error', false);
+  };
+  // 漫畫顯示時，遊戲不接收鍵盤（焦點在遊戲頁面時也一樣）；觸控由全螢幕遮罩擋住
+  const blockKeys = e => { if (!ended) { e.stopImmediatePropagation(); } };
+  window.addEventListener('message', onMsg);
+  window.addEventListener('keydown', blockKeys, true); window.addEventListener('keyup', blockKeys, true);
+  const tmo = setTimeout(() => { if (!alive) { console.warn('[OpeningComic] 播放器沒有回應（' + url.pathname + '）→ 直接開始 1-1'); finish('unavailable', false); } }, OPENING_COMIC.aliveTimeoutMs);
+  fr.addEventListener('load', () => { try { fr.focus(); fr.contentWindow && fr.contentWindow.focus(); } catch (e) {} });
+  console.log('[OpeningComic] 載入開場漫畫（' + reason + '）', url.pathname);
+}
+// 漫畫結束後讓第一章 BGM 重新嘗試播放（玩家在漫畫裡點過畫面，瀏覽器已允許出聲；遊戲原本是等「遊戲頁面」被點一下才重試）
+function ocResumeGameBgm() {
+  try { chapter1BgmBlocked = false; if (chapter1BgmStatus === 'blocked') chapter1BgmStatus = 'ok'; chapter1BgmWantRestart = true; } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  window.debugOpeningComic = function (o) {
+    if (o && o.reset) { const d = rpgLoad(); delete d.openingComic; rpgSave(); }
+    const r = { enabled: ocEnabled(), seen: ocSeen(), state: ocState(), active: ocActive, storageKey: rpgStorageKey() };
+    console.log('[OpeningComic]', r); return r;
+  };
+}
+// 掛上既有流程：漫畫／選擇介面顯示中，遊戲不能被「繼續」或「暫停」；重新開始測試時一併清除觀看紀錄
+(function v373Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v373) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v373 = true; globalThis[name] = w; };
+  wrapFn('resumeGame', o => function () { if (ocActive) return; return o.apply(this, arguments); });
+  wrapFn('pauseGame', o => function () { if (ocActive) return; return o.apply(this, arguments); });
+  wrapFn('rpgResetForTest', o => function () { const r = o.apply(this, arguments); try { const d = rpgLoad(); if (d.openingComic) { delete d.openingComic; rpgSave(); } } catch (e) {} return r; });
+  // 開機時出現「上一趟冒險還沒完成」→ 選「開始新的冒險」＝重新從世界地圖進入 1-1 → 飛行屋 → 漫畫／故事選擇
+  //（選「繼續冒險」是接續上一趟（等同重新挑戰），不播；關卡中的重新挑戰也不播）
+  wrapFn('advDoResume', o => function () { advIntroChecked = true; return o.apply(this, arguments); });   // 接續上一趟：不是從世界地圖進入
+  wrapFn('advDoAbandonAndStart', o => function () {
+    const r = o.apply(this, arguments);
+    try { if (!advIntroActive && !ocActive && advIntroShouldPlay()) { advIntroChecked = true; advIntroRunInLevel(); } } catch (e) {}
+    return r;
+  });
+})();
+

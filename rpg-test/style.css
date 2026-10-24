@@ -3936,3 +3936,15 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 #adv-intro .adv-intro-skip { position: absolute; z-index: 30; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); background: #fff7e0; color: #5a3000; border: 2px solid #8f5627; border-radius: 999px; padding: 0.35em 1em; font-weight: 900; font-size: 1em; cursor: pointer; }
 /* 聚焦 HUD 那一頁：右上角的「冒險提示筆記／略過」暫時移到上方中間，不擋住被圈起來的 HUD */
 #rpg-overlay.rpg--hudfocus .rpg-topbtns { right: auto; left: 50%; transform: translateX(-50%); }
+
+/* ════ v0.3.73：開場動態漫畫（嵌入 motion-comic/player）與「氣球森林・開場故事」選擇 ════ */
+#oc-host { display: none; position: fixed; inset: 0; z-index: 16000; background: #000; }
+#oc-host.is-open { display: block; }
+#oc-host iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #000; }
+.oc-choose { position: fixed; inset: 0; z-index: 16000; display: none; align-items: center; justify-content: center;
+  background: rgba(12, 16, 34, 0.72); padding: 2%; font-size: clamp(13px, 2.4vh, 18px); }
+.oc-choose.is-open { display: flex; }
+.oc-choose .oc-card { width: min(92%, 520px); }
+.oc-choose .oc-body { text-align: center; font-size: 1.15em; padding: 0.6em 0.5em 0.3em; }
+.oc-choose .oc-btns { flex-wrap: wrap; gap: 0.8em; padding: 0.5em 0 0.6em; }
+.oc-choose .oc-btns .h2-pill { min-width: 9.5em; font-size: 1.05em; }
