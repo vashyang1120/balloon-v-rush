@@ -5,7 +5,7 @@
 (() => {
   'use strict';
   const MC = window.MotionComic;
-  const EDITOR_VERSION = 'motion-comic-editor-v0.3.0-test-1';
+  const EDITOR_VERSION = 'motion-comic-editor-v0.3.1-test-1';
   const LS_KEY = 'mc-editor-project-v1';
   const LS_META = 'mc-editor-project-v1-meta';
   const $ = id => document.getElementById(id);
@@ -63,7 +63,8 @@
   /* ===================== 狀態 ===================== */
   const state = {
     project: null,
-    baseline: clone(window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.0 基準（五幕完整）
+    baseline: clone(window.MC_BASELINE_V31 || window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.1 基準（定點分鏡修正版）
+    baselineV3: clone(window.MC_BASELINE_V3 || window.MC_BASELINE_V2 || window.MC_BASELINE),   // v0.3.0 基準（五幕完整初版）
     baselineV2: clone(window.MC_BASELINE_V2 || window.MC_BASELINE),                          // v0.2.0 基準（含第三幕）
     baselineV1: clone(window.MC_BASELINE),                          // v0.1.0 基準（只有第一、二幕成功版）
     sel: null,          // { kind, si, ... }
@@ -639,6 +640,9 @@
     return el('div', {},
       el('div', { class: 'p-title' }, meta.label),
       el('div', { class: 'p-sub' }, `Scene ${String(s.si + 1).padStart(2, '0')}｜${scene.name} · ${where}`),
+      // v0.3.1：鏡頭的四條軌道畫在同一列，同一時間的菱形會重疊 → 提供切換按鈕
+      s.scope === 'cam' ? el('div', { class: 'row-btns' }, ['x', 'y', 'scale', 'rotation'].map(k => el('button', {
+        class: 'sb' + (k === s.track ? ' on' : ''), onclick: () => select({ kind: 'track', si: s.si, scope: 'cam', track: k }) }, TRACK_META.cam[k].label))) : null,
       trackEditor(d, { noTitle: true }),
       hint('時間軸上可以直接拖曳菱形調整時間（每次 10ms；按住 Shift 為 100ms）。關鍵影格掛在「節點」上，移動節點時會一起移動。'),
       el('div', { class: 'row-btns' }, el('button', { class: 'sb', onclick: () => select({ kind: 'scene', si: s.si }) }, '← 回到本幕設定')));
@@ -821,6 +825,21 @@
     mine.contentVersion = builtin.contentVersion;
     return mine;
   }
+
+  // v0.3.1：用新版內建專案「替換」指定的幕次（保留使用者其他幕次的修改）；缺少的正式幕次一併加入
+  function mergeUpdatedScenes(mine, builtin, ids) {
+    mine = mergeNewScenes(mine, builtin);
+    Object.entries(builtin.assets || {}).forEach(([id, a]) => { mine.assets[id] = mine.assets[id] || a; });
+    ids.forEach(id => {
+      const bs = builtin.scenes.find(s => s.id === id); if (!bs) return;
+      const mi = mine.scenes.findIndex(s => s.id === id);
+      if (mi >= 0) mine.scenes[mi] = clone(bs);
+      else mine.scenes.splice(Math.min(builtin.scenes.indexOf(bs), mine.scenes.length), 0, clone(bs));
+    });
+    mine.contentVersion = builtin.contentVersion;
+    return mine;
+  }
+  const V031_UPDATED = ['intro_scene02', 'intro_scene04a', 'intro_scene04b', 'intro_scene05'];
 
   function setSwapAnchor(l, axis, value) {
     const W = player.view.W || 1, H = player.view.H || 1;
@@ -1055,12 +1074,13 @@
 
   function resetToBaseline() {
     const go = (b, msg) => { pushUndo(); state.sel = null; setProject(clone(b)); player.seek(0); toast(msg); };
-    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.3.0（五幕完整）</b>：第一幕成功版＋第二～五幕本次版本。</li><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
+    modal('還原初始範例', '<p>選擇要還原的基準專案：</p><ul><li><b>v0.3.1（定點分鏡修正版）</b>：第一、三幕同 v0.3.0；第二幕放大＋兩句對話、第四幕定點分鏡、第五幕大幅張望。</li><li><b>v0.3.0（五幕完整初版）</b>：第四幕用人物位移的舊版本。</li><li><b>v0.2.0（含第三幕）</b>：第一、二幕成功版＋第三幕正式版＋第四、五幕空白結構。</li>' +
       '<li><b>v0.1.0</b>：只有第一、二幕成功版，第三～五幕是空白結構。</li></ul><p>目前的修改可以用「復原」找回；基準檔本身不會被改動。</p>',
       [{ label: '取消' },
        { label: '還原 v0.1.0', fn: () => go(state.baselineV1, '已還原 v0.1.0 基準') },
        { label: '還原 v0.2.0（含第三幕）', fn: () => go(state.baselineV2, '已還原 v0.2.0 基準（含第三幕）') },
-       { label: '還原 v0.3.0（五幕完整）', fn: () => go(state.baseline, '已還原 v0.3.0 基準（五幕完整）') }]);
+       { label: '還原 v0.3.0', fn: () => go(state.baselineV3, '已還原 v0.3.0 基準') },
+       { label: '還原 v0.3.1（目前版本）', fn: () => go(state.baseline, '已還原 v0.3.1 基準') }]);
   }
 
   /* ===================== 範圍與播放 ===================== */
@@ -1459,12 +1479,12 @@
     setProject(p, { saved: true, reportAssets: !needUpgrade });
     player.seek(0);
     if (needUpgrade) {
-      modal('發現新版內容：v0.3.0 五幕完整版', '<p>這台電腦上儲存的是舊版專案。新版修改了<b>第二幕</b>（床放大、往左、交叉淡化）與<b>第三幕</b>（木牌、淡入、兩句對話），並新增<b>第四幕 A／B、第五幕</b>。要怎麼處理？</p>' +
-        '<ul><li><b>改用新版內建專案（建議）</b>：整個換成新版，才看得到第二、三幕的修改（你之前的修改可以用「復原」找回）。</li>' +
-        '<li><b>只把新幕次加進我的版本</b>：保留你調整過的第一～三幕，只加入第四幕 A／B、第五幕與素材（第二、三幕的新修改不會套用）。</li>' +
+      modal('發現新版內容：v0.3.1 定點分鏡修正版', '<p>這台電腦上儲存的是舊版專案。新版修改了<b>第二幕</b>（床＋小V再放大、兩句對話）、<b>第四幕 A／B</b>（改成固定構圖淡入淡出，人物不再位移）與<b>第五幕</b>（張望幅度加大、含上下）。第一、三幕沒有改。要怎麼處理？</p>' +
+        '<ul><li><b>改用新版內建專案（建議）</b>：整個換成新版（你之前的修改可以用「復原」找回）。</li>' +
+        '<li><b>只更新第二、四、五幕</b>：保留你調整過的第一、三幕，第二、四A、四B、五幕換成新版（缺少的幕次與素材也會補上）。</li>' +
         '<li><b>維持我的版本</b>：什麼都不改。</li></ul>',
         [{ label: '維持我的版本' },
-         { label: '只把新幕次加進我的版本', fn: () => { pushUndo(); setProject(mergeNewScenes(clone(state.project), clone(builtin))); toast('已把第四、五幕加入你的專案（記得儲存）'); } },
+         { label: '只更新第二、四、五幕', fn: () => { pushUndo(); setProject(mergeUpdatedScenes(clone(state.project), clone(builtin), V031_UPDATED)); toast('已把第二、四、五幕換成新版（記得儲存）'); } },
          { label: '改用新版內建專案', fn: () => { pushUndo(); setProject(clone(builtin)); toast('已改用新版內建專案'); } }]);
       return;
     }
