@@ -3,7 +3,7 @@ window.MC_PROJECT = {
   "schemaVersion": "1.0",
   "projectId": "party-island-opening",
   "title": "派對島大作戰・開場",
-  "editorVersion": "motion-comic-editor-v0.3.1-test-1",
+  "editorVersion": "motion-comic-editor-v0.3.2-test-1",
   "contentVersion": 4,
   "stage": {
     "width": 1672,
@@ -1651,5 +1651,17 @@ window.MC_PROJECT = {
         }
       ]
     }
-  ]
+  ],
+  "audio": {
+    "version": 1,
+    "mix": {
+      "master": 1,
+      "bgm": 0.7,
+      "ambient": 0.6,
+      "sfx": 0.9,
+      "voice": 1
+    },
+    "assets": {},
+    "clips": []
+  }
 };
