@@ -1,5 +1,12 @@
 /*
-  氣球小V・動態漫畫 音訊引擎  motion-comic-audio v0.3.2-test-1（motion-comic-v0.3.2-audio-foundation-test-1）
+  氣球小V・動態漫畫 音訊引擎  motion-comic-audio v0.3.2.1-test-1（motion-comic-v0.3.2.1-audio-loading-fix-test-1）
+
+  v0.3.2.1 修正（音訊一直 404）：
+  - 根因：fetch 使用 cache:'force-cache'，瀏覽器會無限期沿用「檔案上傳前」快取到的 404（GitHub Pages 的 404 也帶 max-age=600），
+    之後檔案上傳了、重新整理，都不會再向伺服器請求 → 永遠 404。改為 no-cache（每次向伺服器確認），「重新載入」用 reload。
+  - 失敗狀態不再被永久沿用：可「重新載入」；路徑一改就丟掉舊狀態；本機預覽檔在路徑改成正式檔案後自動停用並釋放。
+  - 錯誤分類：404／HTTP 錯誤／網路／CORS／無法解碼／逾時；記錄實際請求網址與 HTTP 狀態碼。
+  - 路徑解析統一：MC.resolveAudioUrl（完整 https:// 網址不會再加上 baseUrl；相對路徑以 motion-comic/ 為準）。
 
   設計重點
   - 資料驅動：所有聲音都寫在專案 JSON 的 project.audio（可省略；沒有 audio 時完全不做任何事）。
@@ -21,7 +28,7 @@
 (function (global) {
   'use strict';
   const MC = global.MotionComic || (global.MotionComic = {});
-  const VERSION = 'motion-comic-audio v0.3.2-test-1';
+  const VERSION = 'motion-comic-audio v0.3.2.1-test-1';
   const TYPES = ['bgm', 'ambient', 'sfx', 'voice'];
   const TYPE_LABELS = { bgm: '背景音樂 BGM', ambient: '環境音', sfx: '事件音效', voice: '人物配音' };
   const MIX_DEFAULTS = { master: 1, bgm: 0.7, ambient: 0.6, sfx: 0.9, voice: 1 };
@@ -208,6 +215,42 @@
     stop() { if (this.stopped) return; this.stopped = true; try { this.a.pause(); this.a.removeAttribute('src'); this.a.load(); } catch (_) {} }
   }
 
+  /* ===================== 路徑解析（v0.3.2.1；播放器與編輯器共用） =====================
+     規則：
+       blob: / data:                → 原樣（本機預覽、嵌入）
+       http(s)://…                  → 原樣（不會再加上 baseUrl）
+       /開頭（網站根目錄）          → 以目前網站為準
+       其他（例如 assets/x.mp3）     → 相對於「動態漫畫專案根目錄」motion-comic/
+     專案根目錄＝播放器的 baseUrl（編輯器、播放頁都是 '../'）相對於目前網頁解析，
+     例如 https://vashyang1120.github.io/balloon-v-rush/motion-comic/editor/index.html → …/balloon-v-rush/motion-comic/  */
+  function audioProjectRoot(baseUrl) {
+    try { return new URL(baseUrl || './', global.location ? location.href : 'http://localhost/').href; } catch (_) { return baseUrl || ''; }
+  }
+  function resolveAudioUrl(src, rootHref) {
+    src = String(src == null ? '' : src).trim();
+    if (!src) return '';
+    if (/^(blob:|data:)/i.test(src)) return src;
+    if (/^https?:\/\//i.test(src)) return src;
+    try { return new URL(src.replace(/^\.\//, ''), rootHref).href; } catch (_) { return src; }
+  }
+  // 建議的正式寫法：同一個網站、在專案根目錄裡的完整網址 → 相對路徑（例如 assets/x.mp3），專案搬家也能用；其他網站的網址保持原樣
+  //   也會修正常見的多打字：motion-comic/assets/x.mp3、/balloon-v-rush/motion-comic/assets/x.mp3、./assets/x.mp3
+  function canonicalAudioSrc(src, rootHref) {
+    src = String(src == null ? '' : src).trim().replace(/\\/g, '/');
+    if (!src || /^(blob:|data:)/i.test(src)) return src;
+    const m = src.match(/^(?:\.\/)?(?:[^:]*\/)?motion-comic\/(assets\/.+)$/i);
+    if (m && !/^https?:/i.test(src)) return m[1];
+    try {
+      const abs = new URL(src.replace(/^\.\//, ''), rootHref);
+      const root = new URL(rootHref);
+      if (abs.origin === root.origin && abs.pathname.startsWith(root.pathname)) return decodeURI(abs.pathname.slice(root.pathname.length)) + abs.search;
+      return src.replace(/^\.\//, '');
+    } catch (_) { return src; }
+  }
+  // 兩個素材是不是「同一個檔案」（解析後網址相同）
+  const audioAssetKey = (src, rootHref) => { const u = resolveAudioUrl(canonicalAudioSrc(src, rootHref), rootHref); try { const x = new URL(u); return x.origin + decodeURI(x.pathname) + x.search; } catch (_) { return u; } };
+  const ERROR_KIND_LABELS = { notfound: '找不到（404）', http: '伺服器錯誤', network: '網路失敗', cors: '跨網站限制（CORS）', decode: '無法解碼', timeout: '逾時', nosrc: '沒有路徑', unknown: '讀取失敗', 'cors-media': '相容模式' };
+
   /* ===================== 引擎 ===================== */
   class AudioEngine {
     constructor(opts = {}) {
@@ -224,6 +267,7 @@
       this.onStatus = opts.onStatus || null;
       this.previewInst = null;
       this._key = '';
+      this._reloadIds = new Set();
     }
 
     /* ---------- 掛到播放器 ---------- */
@@ -293,7 +337,7 @@
       if (key !== this._key) { this._key = key; this.loadAssets(); }
       this._emitStatus();
     }
-    _sig(r) { const a = (this.project.audio.assets || {})[r.asset] || {}; return JSON.stringify([r.clip, a.src, this.localFiles[r.asset] && this.localFiles[r.asset].url]); }
+    _sig(r) { const a = (this.project.audio.assets || {})[r.asset] || {}; const lf = this._localFor(r.asset); return JSON.stringify([r.clip, a.src, lf && lf.url]); }
     _applyMix(immediate) {
       if (!this.ctx) return;
       const m = Object.assign({}, MIX_DEFAULTS, (this.project && this.project.audio && this.project.audio.mix) || {});
@@ -314,68 +358,117 @@
     _mediaGains() { this.inst.forEach(x => { if (x.i instanceof MediaInst) x.i.setGain(x.lastGain != null ? x.lastGain * this._mixFor(x.r.type) : 0); }); }
 
     /* ---------- 素材 ---------- */
+    // 素材路徑 → 實際請求網址（播放器與編輯器共用同一條規則，見 MC.resolveAudioUrl）
+    projectRoot() { return audioProjectRoot(this.player ? this.player.baseUrl : this.baseUrl); }
     resolveSrc(id) {
-      const lf = this.localFiles[id];
+      const lf = this._localFor(id);
       if (lf) return lf.url;
       const a = (this.project && this.project.audio && this.project.audio.assets || {})[id];
       if (!a || !a.src) return '';
-      if (/^(blob:|data:|https?:|\/)/.test(a.src)) return a.src;
-      return (this.player ? this.player.baseUrl : this.baseUrl) + a.src;
+      return resolveAudioUrl(a.src, this.projectRoot());
     }
-    setLocalFile(id, file) {   // 本機預覽：只在這個瀏覽器分頁有效
+    // 本機預覽檔只在「選檔當時的路徑」有效；之後把路徑改成正式檔案，就自動停止本機預覽並釋放 blob
+    _localFor(id) {
+      const lf = this.localFiles[id];
+      if (!lf) return null;
+      const a = (this.project && this.project.audio && this.project.audio.assets || {})[id];
+      if (a && lf.forSrc != null && a.src !== lf.forSrc) { URL.revokeObjectURL(lf.url); delete this.localFiles[id]; return null; }
+      return lf;
+    }
+    setLocalFile(id, file, forSrc) {   // 本機預覽：只在這個瀏覽器分頁有效
       const old = this.localFiles[id];
       if (old) URL.revokeObjectURL(old.url);
-      if (file) this.localFiles[id] = { url: URL.createObjectURL(file), name: file.name, size: file.size };
+      if (file) this.localFiles[id] = { url: URL.createObjectURL(file), name: file.name, size: file.size, forSrc: forSrc != null ? forSrc : null };
       else delete this.localFiles[id];
+      this._forget(id);
+      return this.loadAssets();
+    }
+    _forget(id) {   // 清掉某素材的載入狀態與正在播的聲音（換路徑、重新載入時）
+      const s = this.assets[id]; if (s) s.dead = true;
       delete this.assets[id];
-      this.inst.forEach((x, k) => { if (x.r.asset === id) this._stopKey(k, 60, 'relink'); });
+      this.inst.forEach((x, k) => { if (x.r.asset === id) this._stopKey(k, 60, 'reload'); });
+    }
+    // 重新載入（不使用瀏覽器快取的舊結果）。ids 省略＝全部；只重試失敗的：{ onlyFailed: true }
+    reloadAssets(ids, opts = {}) {
+      const A = (this.project && this.project.audio && this.project.audio.assets) || {};
+      (ids || Object.keys(A)).forEach(id => { if (!A[id]) return; const st = this.assets[id]; if (opts.onlyFailed && st && st.status !== 'error') return; this._forget(id); this._reloadIds.add(id); });
       return this.loadAssets();
     }
     loadAssets() {
       const A = (this.project && this.project.audio && this.project.audio.assets) || {};
-      Object.keys(this.assets).forEach(id => { if (!A[id]) { delete this.assets[id]; } });   // 移除的素材：釋放記憶體
+      Object.keys(this.assets).forEach(id => { if (!A[id]) this._forget(id); });   // 移除的素材：釋放記憶體
       const jobs = Object.keys(A).map(id => {
         const src = this.resolveSrc(id);
         const st = this.assets[id];
-        if (st && st.src === src && st.status !== 'idle') return st.promise || Promise.resolve();
-        const s = this.assets[id] = { src, status: 'loading', buffer: null, media: false, duration: 0, error: '', local: !!this.localFiles[id] };
-        if (!src) { s.status = 'error'; s.error = '沒有設定音檔路徑'; return Promise.resolve(); }
-        s.promise = this._load(id, s).then(() => { s.promise = null; this._emitStatus(); if (this.onAssets) this.onAssets(); });
+        if (st && st.src === src && (st.status === 'ok' || st.status === 'loading' || st.status === 'error')) return st.promise || Promise.resolve();
+        if (st) this._forget(id);   // 路徑變了：舊狀態（含失敗）全部丟掉
+        const reload = this._reloadIds.delete(id);
+        const s = this.assets[id] = { src, raw: A[id].src || '', status: 'loading', buffer: null, media: false, duration: 0, error: '', kind: '', httpStatus: 0, at: Date.now(), local: !!this.localFiles[id] };
+        if (!src) { s.status = 'error'; s.kind = 'nosrc'; s.error = '沒有設定音檔路徑'; return Promise.resolve(); }
+        s.promise = this._load(id, s, reload).then(() => { s.promise = null; if (s.dead) return; this._emitStatus(); if (this.onAssets) this.onAssets(); });
         return s.promise;
       });
       return Promise.all(jobs).then(() => this.assetReport());
     }
-    async _load(id, s) {
+    async _load(id, s, reload) {
       const ctx = this.ensureContext();
+      const fail = (kind, msg, status) => { if (s.dead) return; s.status = 'error'; s.kind = kind; s.error = msg; if (status) s.httpStatus = status; };
+      const isFile = global.location && location.protocol === 'file:';
       let fetchErr = null;
-      if (ctx && (/^blob:/.test(s.src) || !/^file:/.test(global.location ? location.protocol : ''))) {
+      if (ctx && (/^(blob:|data:)/.test(s.src) || !isFile)) {
+        let r;
         try {
-          const r = await fetch(s.src, { cache: 'force-cache' });
-          if (!r.ok) { s.status = 'error'; s.error = r.status === 404 ? '找不到檔案（404）：請確認已上傳到 motion-comic/assets/' : `讀取失敗（HTTP ${r.status}）`; return; }
-          const buf = await r.arrayBuffer();
-          if (this.assets[id] !== s) return;   // 載入途中素材已被替換
-          s.buffer = await new Promise((res, rej) => { const p = ctx.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); });
-          s.duration = s.buffer.duration; s.status = 'ok'; return;
-        } catch (e) {
-          if (s.status === 'error') return;
-          if (e && /decode|Decod|EncodingError|Unable/i.test(String(e.name || '') + String(e.message || '') + String(e))) { s.status = 'error'; s.error = '無法解碼：格式不支援或檔案損毀（建議用 MP3 或 M4A／AAC）'; return; }
-          fetchErr = e;
+          // v0.3.2.1：不再用 cache:'force-cache'（會無限期沿用「上傳前」被快取的 404）。
+          // no-cache＝每次都向伺服器確認（檔案沒變時只回 304，不會重新下載）；按「重新載入」時用 reload＝完全不用快取
+          r = await fetch(s.src, { cache: /^(blob:|data:)/.test(s.src) ? 'default' : (reload ? 'reload' : 'no-cache') });
+        } catch (e) { fetchErr = e; }
+        if (s.dead) return;
+        if (r) {
+          s.httpStatus = r.status;
+          if (!r.ok) {
+            if (r.status === 404) return fail('notfound', `找不到檔案（HTTP 404）。伺服器上沒有這個網址的檔案；請核對路徑與大小寫，或確認 GitHub 已完成部署（上傳後約需 1～2 分鐘）`, 404);
+            return fail('http', `伺服器回應錯誤（HTTP ${r.status}${r.statusText ? ' ' + r.statusText : ''}）`, r.status);
+          }
+          let buf;
+          try { buf = await r.arrayBuffer(); } catch (e) { return fail('network', '下載途中中斷（網路錯誤）'); }
+          if (s.dead) return;
+          try {
+            s.buffer = await new Promise((res, rej) => { const p = ctx.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); });
+            s.duration = s.buffer.duration; s.status = 'ok'; s.kind = ''; s.backend = 'webaudio'; return;
+          } catch (e) {
+            const ct = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
+            return fail('decode', /text\/html/.test(ct) ? '取得的是網頁而不是音檔（路徑可能指到錯誤頁面）' : '無法解碼：格式不支援或檔案損毀（建議用 MP3 或 M4A／AAC）');
+          }
+        }
+        // fetch 本身失敗：跨網域時先判斷是 CORS 還是網路
+        if (/^https?:/i.test(s.src) && global.location && new URL(s.src).origin !== location.origin) {
+          let reachable = false;
+          try { await fetch(s.src, { mode: 'no-cors', cache: 'no-store' }); reachable = true; } catch (_) {}
+          if (s.dead) return;
+          s.corsBlocked = reachable;
         }
       }
-      // 備援：HTMLAudioElement（file:// 或無法用 fetch 讀取時）
+      // 備援：HTMLAudioElement（file:// 開啟、或其他網站不允許 fetch（CORS）時仍可播放，但 iPhone 上無法調音量）
       await new Promise(res => {
         const a = new Audio(); a.preload = 'metadata';
-        const done = (ok, msg) => { a.onloadedmetadata = a.onerror = null; clearTimeout(tm); if (ok) { s.status = 'ok'; s.media = true; s.duration = a.duration || 0; } else { s.status = 'error'; s.error = msg; } res(); };
-        const tm = setTimeout(() => done(false, '載入逾時'), 15000);
+        const done = (ok, kind, msg) => { a.onloadedmetadata = a.onerror = null; clearTimeout(tm); if (s.dead) return res();
+          if (ok) { s.status = 'ok'; s.media = true; s.backend = 'media'; s.duration = a.duration || 0; s.kind = s.corsBlocked ? 'cors-media' : ''; } else fail(kind, msg); res(); };
+        const tm = setTimeout(() => done(false, 'timeout', '載入逾時（15 秒）：網路太慢或連不到伺服器'), 15000);
         a.onloadedmetadata = () => done(true);
-        a.onerror = () => { const c = a.error && a.error.code; done(false, c === 4 ? '找不到檔案或格式不支援' : c === 2 ? '網路錯誤' : c === 3 ? '無法解碼' : (fetchErr ? '讀取失敗' : '讀取失敗')); };
+        a.onerror = () => {
+          const c = a.error && a.error.code;
+          if (s.corsBlocked) return done(false, 'cors', '伺服器有回應，但不允許跨網站讀取（CORS）；建議把音檔放到 motion-comic/assets/ 用相對路徑');
+          if (fetchErr && !isFile) return done(false, 'network', '網路錯誤：連不到伺服器（請檢查網路或網址）');
+          done(false, c === 4 ? 'notfound' : c === 2 ? 'network' : c === 3 ? 'decode' : 'unknown',
+            c === 4 ? (isFile ? '讀不到檔案（直接開啟本機網頁時，請確認檔案在 motion-comic/assets/）' : '找不到檔案或格式不支援') : c === 2 ? '網路錯誤' : c === 3 ? '無法解碼' : '讀取失敗');
+        };
         a.src = s.src;
       });
     }
     assetReport() {
       const A = (this.project && this.project.audio && this.project.audio.assets) || {};
-      return Object.keys(A).map(id => { const s = this.assets[id] || {}; return { id, label: A[id].label || id, src: A[id].src, local: this.localFiles[id] ? this.localFiles[id].name : '',
-        status: s.status || 'idle', ok: s.status === 'ok', error: s.error || '', duration: s.duration || 0, backend: s.media ? 'media' : (s.buffer ? 'webaudio' : '') }; });
+      return Object.keys(A).map(id => { const s = this.assets[id] || {}; const lf = this._localFor(id); return { id, label: A[id].label || id, src: A[id].src, url: lf ? lf.url : resolveAudioUrl(A[id].src, this.projectRoot()), local: lf ? lf.name : '',
+        status: s.status || 'idle', ok: s.status === 'ok', error: s.error || '', kind: s.kind || '', httpStatus: s.httpStatus || 0, at: s.at || 0, duration: s.duration || 0, backend: s.media ? 'media' : (s.buffer ? 'webaudio' : '') }; });
     }
 
     /* ---------- 實例 ---------- */
@@ -547,6 +640,6 @@
     destroy() { this.stopAll(0); this._stopPreview(); Object.values(this.localFiles).forEach(f => URL.revokeObjectURL(f.url)); this.localFiles = {}; this.assets = {}; if (this.ctx && this.ctx.close) this.ctx.close(); this.ctx = null; }
   }
 
-  Object.assign(MC, { AUDIO_VERSION: VERSION, AUDIO_TYPES: TYPES, AUDIO_TYPE_LABELS: TYPE_LABELS, AUDIO_MIX_DEFAULTS: MIX_DEFAULTS,
+  Object.assign(MC, { resolveAudioUrl, canonicalAudioSrc, audioAssetKey, audioProjectRoot, AUDIO_ERROR_KINDS: ERROR_KIND_LABELS, AUDIO_VERSION: VERSION, AUDIO_TYPES: TYPES, AUDIO_TYPE_LABELS: TYPE_LABELS, AUDIO_MIX_DEFAULTS: MIX_DEFAULTS,
     emptyAudio, compileAudioClips: compileClips, resolveAudioRef: resolveRef, audioRefFromGlobal: refFromGlobal, validateAudio, AudioEngine });
 })(window);
