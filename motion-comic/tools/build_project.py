@@ -1,5 +1,6 @@
 # 由 opening-test v0.2.0 的常數產生專案 JSON（只在開發時使用）
 # v0.3.1-test-1：第二幕（放大＋兩句對話）、第四幕（定點分鏡）、第五幕（大幅張望）
+# v0.3.2-test-1（audio-foundation）：新增空的 audio 區塊（音訊素材＋音訊片段）；五幕視覺資料與 v0.3.1 完全相同
 import json, os
 def K(m,o,v,e=None):
     k={"m":m,"o":o,"v":v}
@@ -367,8 +368,8 @@ project = {
   "schemaVersion":"1.0",
   "projectId":"party-island-opening",
   "title":"派對島大作戰・開場",
-  "editorVersion":"motion-comic-editor-v0.3.1-test-1",
-  "contentVersion":4,
+  "editorVersion":"motion-comic-editor-v0.3.2-test-1",
+  "contentVersion":4,   # 五幕內容與 v0.3.1 相同，所以不升級（已儲存 v0.3.1 專案的使用者不會被要求更新）
   "stage":{"width":1672,"height":941,"fit":"contain"},
   "assets":{
     "scene1_bg":{"src":"assets/scene1_bg.png","label":"第一幕背景","width":1672,"height":941},
@@ -388,7 +389,12 @@ project = {
     "intro_scene04b_v_look_up":{"src":"assets/intro_scene04b_v_look_up.png","label":"第四幕B 小V 抬頭張望","width":1122,"height":1402},
     "intro_scene04b_fg_trees":{"src":"assets/intro_scene04b_fg_trees.png","label":"第四幕B 前景失焦樹木","width":1672,"height":941},
     "intro_scene05_bg":{"src":"assets/intro_scene05_bg.png","label":"第五幕 第一人稱森林","width":1672,"height":941}},
-  "scenes":[scene1,scene2,scene3,scene4a,scene4b,scene5]
+  "scenes":[scene1,scene2,scene3,scene4a,scene4b,scene5],
+  # v0.3.2：音訊（尚未提供任何正式音檔，所以素材與片段都是空的；不放不存在的路徑，避免 404）
+  "audio":{"version":1,
+           "mix":{"master":1,"bgm":0.7,"ambient":0.6,"sfx":0.9,"voice":1},
+           "assets":{},
+           "clips":[]}
 }
 LABELS = {
  'open':['閉眼','開始睜眼','第一次睜眼（半開）','迷濛地再撐開','第一次眨眼前','第一次眨眼：闔上','閉眼停留結束','第二次睜開（較大）','第二次眨眼前','第二次眨眼：闔上','閉眼停留結束','完全睜開'],
@@ -402,11 +408,11 @@ for k,arr in LABELS.items():
     for kf,lab in zip(scene1['tracks'][k],arr): kf['label']=lab
     assert len(arr)==len(scene1['tracks'][k]),k
 out=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','projects')
-# v0.3.1：不覆寫 v0.1.0／v0.2.0／v0.3.0 的基準檔，另外產生 v0.3.1 基準檔
-for name in ['party-island-opening','party-island-opening-baseline-v0.3.1']:
+# v0.3.2：不覆寫 v0.1.0～v0.3.1 的基準檔，另外產生 v0.3.2 基準檔
+for name in ['party-island-opening','party-island-opening-baseline-v0.3.2']:
     s=json.dumps(project,ensure_ascii=False,indent=2)
     open(f'{out}/{name}.json','w',encoding='utf8').write(s+'\n')
-    var='MC_BASELINE_V31' if 'baseline' in name else 'MC_PROJECT'
+    var='MC_BASELINE_V32' if 'baseline' in name else 'MC_PROJECT'
     open(f'{out}/{name}.js','w',encoding='utf8').write(
       f'/* 自動產生：與 {name}.json 內容相同。供 file:// 直接開啟時使用（瀏覽器在 file:// 下不允許讀取 JSON）。 */\n'
       f'window.{var} = {s};\n')
