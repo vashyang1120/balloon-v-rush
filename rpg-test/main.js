@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.75-stability-hud-handbook-home-test-1';
-const BUILD_TIME   = '2026-10-25 10:30';
+const GAME_VERSION = 'adventure-v0.3.76-map-unlock-reload-fix-test-1';
+const BUILD_TIME   = '2026-10-25 12:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -20878,8 +20878,9 @@ initEquippedHammer();
 normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
 // v0.3.69：開機不再自動配發 999 測試武器（原本只要版本名稱有 -test- 就會配發）
 try { weaponSanitizeSave(); initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) { console.warn('[Weapon] 存檔檢查失敗', e); }
-try { advGuardApplyAtBoot(); } catch (e) { console.warn('[Guard] 開機還原失敗', e); } // v0.3.75：上次在關卡中途關閉／重新整理 → 背包回到該關開始前（不複製、不遺失）
-try { advBoot(); } catch (e) { console.warn('[Score] 開機初始化失敗', e); } // v0.3.63：完整冒險挑戰紀錄
+var advBootGuard = null;
+try { advBootGuard = advGuardApplyAtBoot(); } catch (e) { console.warn('[Guard] 開機還原失敗', e); } // v0.3.75：上次在關卡中途關閉／重新整理 → 背包回到該關開始前（不複製、不遺失）
+try { advBootV376(); } catch (e) { console.warn('[Score] 開機初始化失敗', e); try { advBoot(); } catch (e2) {} } // v0.3.76：依上次的模式決定「繼續冒險／回小V的家／新手流程」（原本的 advBoot 照舊用在正式挑戰與新手）
 
 // 測試版：綁定暫停畫面測試按鈕
 (function bindPauseTestBtns() {
@@ -22364,7 +22365,7 @@ function h2MapRender(opts) {
   const nodes = h2$('h2-map-nodes'), fog = h2$('h2-map-fog');
   let nh = '', fh = '';
   c.nodes.forEach((n, i) => {
-    const s = st.cleared.has(n.stageId) ? 'done' : i === st.next ? 'next' : 'locked';
+    const s = i === st.next ? 'next' : st.cleared.has(n.stageId) ? 'done' : 'locked';   // v0.3.76：正式挑戰重新出發時，已永久解鎖的關卡也能標出本趟的「下一站」
     nh += '<button type="button" class="h2-map-node is-' + s + (i === st.cur ? ' is-here' : '') + (n.boss ? ' is-boss' : '') + '" data-stage="' + h2Esc(n.stageId) + '" style="left:' + n.x + '%;top:' + n.y + '%" aria-label="' + h2Esc(n.label + ' ' + h2MapNodeName(n.stageId)) + '">'
       + '<span class="h2-map-dot">' + (s === 'done' ? '✓' : s === 'locked' ? '🔒' : '') + '</span><span class="h2-map-lbl">' + h2Esc(n.label) + '</span></button>';
     if (s === 'locked' && !o.noFog) fh += '<span class="h2-map-cloud" style="left:' + n.x + '%;top:' + n.y + '%"></span>';
@@ -23863,4 +23864,188 @@ function advStoryPlay(id) {
   // ── 預先載入：世界地圖兩張圖（開場飛行屋用）、王權劍 HUD 圖示（進 2-4 時）──
   try { setTimeout(() => { try { const c = h2MapContinent(); h2Load(c.image); h2Load(c.home); } catch (e) {} }, 0); } catch (e) {}
   wrapFn('loadLevel', o => function () { const r = o.apply(this, arguments); try { if (isBossStageLevel(currentLevelIndex)) weaponHudImg('royalSword'); } catch (e) {} return r; });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.76：地圖永久解鎖＋重新整理後的模式與恢復位置
+// ════════════════════════════════════════════════════════════════════
+//  【地圖重新上鎖的根因】h2MapState() 只用「目前所在關卡（currentLevelIndex）＋ gameState」和「進行中的正式挑戰 active.stageResults」推算已通過關卡。
+//    全部通關後，那一趟會移到歷史紀錄（recent／best），active 變成空的 → 地圖只剩 currentLevelIndex 可以推算；
+//    練習 1-3 回家後 currentLevelIndex＝1-3 → 只算到 1-1～1-3，2-1 變「下一站」，2-2～2-4 重新上鎖。
+//    而 advPracticeUnlocked() 另外參考 recent／best → 兩邊判斷不一致。
+//  【修正：三類資料分開】
+//    A. 永久解鎖進度：冒險存檔（balloonV_adventureChallenge_v1test__<playerKey>）新增 progress.cleared（依玩家分開）
+//       ・只有「正式挑戰」通過關卡時加入；完成七關 → 七關都在裡面。練習／重打橘子王／重新整理／重新開始正式挑戰都不會讓它變少
+//       ・舊存檔沒有這個欄位 → 第一次讀取時從既有紀錄保守推算：best／recent 有完整正式成績 → 七關全開；
+//         否則只採計進行中與已放棄的正式挑戰裡真正通過的關卡（測試紀錄不算）
+//    B. 目前所在位置：currentLevelIndex（實際在玩的關卡）；練習／重打橘子王時，地圖上的飛行屋改放在出發前的小V之家位置（advHomeCtx）
+//    C. 本趟正式挑戰進度：原本的 active.stageResults（地圖「下一站」以本趟要打的下一關為準）
+//  【重新整理】冒險存檔新增 session（where：home／stage、mode、出發前的小V之家位置）
+//    ・自選關卡練習／再打一次橘子王進行中 → 回到小V的家（背包先依 v0.3.75 關卡快照回到該關開始前；不建立正式挑戰、不顯示繼續冒險）
+//    ・正式挑戰進行中 → 照原本顯示「繼續冒險」
+//    ・已完成冒險、或上次就在小V的家（且沒有進行中的正式挑戰）→ 回到小V的家（不自動帶著背包從 1-1 開新的正式挑戰、不重播開場）
+//    ・全新玩家／尚無有效進度 → 原本的新手流程（飛行屋 → 開場漫畫 → 1-1）
+var advBootHomePending;   // 開機決定回小V的家（等開機素材載好才打開）
+var advHomeCtx;           // 練習／重打橘子王出發前的小V之家狀態 { levelIndex, gameState, entry, mode }
+function advProgressEnsure(d) {
+  const ids = OFFICIAL_ADVENTURE_STAGE_IDS;
+  if (!d) return { cleared: [] };
+  if (d.progress && Array.isArray(d.progress.cleared)) return d.progress;
+  const set = new Set(), src = [];
+  const fullBest = Object.values(d.best || {}).some(b => b && typeof b.total === 'number');
+  const fullRecent = (d.recent || []).some(r => r && r.status === 'completed' && r.snapshot && r.snapshot.complete !== false && !r.snapshot.testOnly);
+  if (fullBest || fullRecent) { ids.forEach(i => set.add(i)); src.push(fullBest ? 'best' : 'recent'); }
+  const addRun = r => { if (!r || r.status === 'test_only' || !r.stageResults) return; Object.keys(r.stageResults).forEach(k => { if (ids.includes(k)) set.add(k); }); };
+  addRun(d.active); (d.archived || []).forEach(addRun);
+  d.progress = { v: 1, cleared: ids.filter(i => set.has(i)), migratedAt: Date.now(), source: src.join(',') || 'runs' };
+  d._progressNew = true;
+  return d.progress;
+}
+function advProgressGet() {
+  try {
+    const d = advLoad(); const p = advProgressEnsure(d);
+    if (d._progressNew) { delete d._progressNew; advSave(d); console.log('[Progress] 舊存檔遷移：永久解鎖 ' + p.cleared.length + ' 關（' + p.source + '）'); }
+    return new Set(p.cleared);
+  } catch (e) { return new Set(); }
+}
+function advProgressAdd(stageIds) {
+  try {
+    const d = advLoad(); const p = advProgressEnsure(d); delete d._progressNew;
+    const set = new Set(p.cleared); let added = false;
+    stageIds.forEach(s => { if (OFFICIAL_ADVENTURE_STAGE_IDS.includes(s) && !set.has(s)) { set.add(s); added = true; } });
+    p.cleared = OFFICIAL_ADVENTURE_STAGE_IDS.filter(i => set.has(i)); p.updatedAt = Date.now();
+    advSave(d);
+    if (added) console.log('[Progress] 永久解鎖：' + p.cleared.join(','));
+  } catch (e) {}
+}
+function advProgressAllCleared(d) { try { const p = advProgressEnsure(d); return OFFICIAL_ADVENTURE_STAGE_IDS.every(s => p.cleared.includes(s)); } catch (e) { return false; } }
+// 重新整理用：記住現在在哪裡、什麼模式
+function advSessionSave(where) {
+  try {
+    const d = advLoad(); delete d._progressNew;
+    const mode = advPlayMode || 'official';
+    d.session = { v: 1, where, mode, stageId: (LEVELS[currentLevelIndex] || {}).stageId, at: Date.now(), game: GAME_VERSION,
+      homeCtx: mode === 'official' ? (where === 'home' ? { levelIndex: currentLevelIndex, gameState, entry: homeEntryMode, mode: 'official' } : null) : (advHomeCtx || null) };
+    advSave(d);
+  } catch (e) {}
+}
+// 開機（取代原本直接呼叫 advBoot）：依上次的狀態決定去哪裡
+function advBootV376() {
+  let d = null; try { d = advLoad(); } catch (e) {}
+  const s = (d && d.session) || null, g = advBootGuard;
+  const nonOfficial = (g && (g.mode === 'practice' || g.mode === 'bossRematch')) || (!!s && s.where === 'stage' && (s.mode === 'practice' || s.mode === 'bossRematch'));
+  const run = d && d.active, runInProgress = !!(run && run.status === 'in_progress');
+  const complete = advProgressAllCleared(d);
+  if (d && d._progressNew) { delete d._progressNew; advSave(d); }
+  let why = '';
+  if (nonOfficial) why = (g && g.mode || s.mode) === 'bossRematch' ? '再打一次橘子王中重新整理' : '自選關卡練習中重新整理';
+  else if (!runInProgress && s && s.where === 'home') why = '上次在小V的家';
+  else if (!runInProgress && complete) why = '已完成第一大陸冒險';
+  if (!why) { advBoot(); return; }
+  // ── 回小V的家：不建立新的正式挑戰、不顯示繼續冒險、不播入場與開場漫畫 ──
+  try { if (run && run.status === 'test_only') { advArchiveRun(d, run, 'test_only'); d.active = null; advSave(d); } } catch (e) {}
+  try { if (runInProgress && run.live) { const L = run.live; advCommitFailure(run, { stageId: L.stageId, type: 'interrupted', hpLost: L.hpLost || 0, sec: L.sec || 0 }); run.live = null; advSave(d); } } catch (e) {}
+  gameState = 'clear';                 // 不跑 1-1（開素材載好之前也不會觸發入場演出）
+  try { gameStartGateActive = false; } catch (e) {}
+  let ctx = s && s.homeCtx;
+  if (!ctx || typeof ctx.levelIndex !== 'number' || !LEVELS[ctx.levelIndex]) {
+    let idx = -1;
+    if (runInProgress && run.resume && typeof run.resume.levelIndex === 'number') idx = run.resume.levelIndex;
+    else if (complete) idx = LEVELS.findIndex(l => l.stageId === '2-4');
+    ctx = { levelIndex: idx >= 0 ? idx : 0, gameState: 'clear', entry: 'normal', mode: 'official' };
+  }
+  advBootHomePending = { ctx, why };
+  console.log('[Boot] ' + why + ' → 回到小V的家（' + (LEVELS[ctx.levelIndex] || {}).stageId + '）');
+}
+function advBootOpenHome(p) {
+  advIntroChecked = true;
+  advPlayMode = 'official'; advHomeCtx = null;
+  try { gameStartGateActive = false; renderStartGate(); } catch (e) {}
+  const ctx = p.ctx;
+  currentLevelIndex = ctx.levelIndex; loadLevel(ctx.levelIndex);
+  const failed = ctx.gameState === 'failed' || ctx.gameState === 'gameover';
+  gameState = failed ? ctx.gameState : 'clear';
+  try { if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn(); } catch (e) {}
+  openHomeScreen(failed ? 'failed' : 'normal');
+  try { h2HideSummary(); } catch (e) {}
+}
+// 練習／重打橘子王結束回到小V的家 → 回到出發前的小V之家（主線位置、出發按鈕、地圖飛行屋都回到原本的進度）
+function advRestoreHomeCtx() {
+  if (!advHomeCtx || (advPlayMode !== 'practice' && advPlayMode !== 'bossRematch') || gameState !== 'clear') return null;
+  const c = advHomeCtx; advHomeCtx = null;
+  currentLevelIndex = c.levelIndex;
+  advPlayMode = c.mode || 'official';
+  gameState = (c.gameState === 'failed' || c.gameState === 'gameover') ? c.gameState : 'clear';
+  console.log('[Mode] 練習結束 → 回到小V的家（主線位置 ' + (LEVELS[c.levelIndex] || {}).stageId + '）');
+  return c;
+}
+(function v376Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v376) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v376 = true; globalThis[name] = w; };
+  // ── A：永久解鎖 — 正式挑戰通過關卡時加入（練習／重打不會進到這裡：advAttempt 為空）──
+  wrapFn('advOnAttemptCleared', o => function () {
+    const a = advAttempt && !advAttempt.ended ? { sid: advAttempt.stageId, id: advAttempt.challengeId } : null;
+    const r = o.apply(this, arguments);
+    try { if (a && advPlayMode === 'official') { const run = advLoad().active; if (run && run.challengeId === a.id && run.status === 'in_progress' && run.stageResults[a.sid]) advProgressAdd([a.sid]); } } catch (e) {}
+    return r;
+  });
+  // 測試工具「重新開始測試」＝重新體驗第一次 → 永久解鎖與重新整理狀態一起歸零（歷史成績照舊保留）
+  wrapFn('p2DoTestReset', o => function () { const r = o.apply(this, arguments); try { const d = advLoad(); d.progress = { v: 1, cleared: [], resetAt: Date.now(), source: 'test-reset' }; d.session = null; advSave(d); } catch (e) {} return r; });
+  // ── 地圖：已通過＝永久解鎖 ∪ 本趟正式挑戰；下一站＝本趟要打的下一關（沒有進行中的挑戰 → 第一個還沒解鎖的）；飛行屋＝主線位置 ──
+  wrapFn('h2MapState', o => function () {
+    const st = o.apply(this, arguments);
+    try {
+      const cleared = new Set([...advProgressGet()].filter(id => st.ids.includes(id)));
+      const d = advLoad(); const run = d.active && d.active.status === 'in_progress' ? d.active : null;
+      if (run) Object.keys(run.stageResults || {}).forEach(k => { if (st.ids.includes(k)) cleared.add(k); });
+      const practicing = (advPlayMode === 'practice' || advPlayMode === 'bossRematch') && advHomeCtx;
+      const curIdx = practicing ? advHomeCtx.levelIndex : currentLevelIndex;
+      const cur = st.ids.indexOf((LEVELS[curIdx] || {}).stageId);
+      let next;
+      if (run) { const e = advExpectedStage(run); next = e ? st.ids.indexOf(e) : -1; }
+      else next = st.ids.findIndex(id => !cleared.has(id));
+      const practiceAt = practicing ? st.ids.indexOf((LEVELS[currentLevelIndex] || {}).stageId) : -1;
+      return { c: st.c, ids: st.ids, cur, cleared, next, practiceAt };
+    } catch (e) { return st; }
+  });
+  wrapFn('h2MapRender', o => function (opts) {
+    const r = o.apply(this, arguments);
+    try {
+      const st = h2MapState(), info = h2$('h2-map-info');
+      if (info && !(opts && opts.keepInfo) && H2.map && H2.map.mode === 'view' && st.practiceAt >= 0 && st.practiceAt !== st.cur) {
+        const n = st.c.nodes[st.practiceAt]; info.insertAdjacentHTML('beforeend', '<small>🎯 剛剛練習：' + h2Esc(n.label + ' ' + h2MapNodeName(n.stageId)) + '（練習不影響主線進度）</small>');
+      }
+    } catch (e) {}
+    return r;
+  });
+  // 練習選關：和地圖用同一份資料（已解鎖＋下一站）
+  wrapFn('advPracticeUnlocked', o => function () { const st = h2MapState(); const set = new Set(st.cleared); if (st.next >= 0) set.add(st.ids[st.next]); return set; });
+  // ── B：練習／重打橘子王出發前，記住小V之家的狀態；回家時還原 ──
+  const keepCtx = () => { if (advPlayMode !== 'practice' && advPlayMode !== 'bossRematch') advHomeCtx = { levelIndex: currentLevelIndex, gameState, entry: homeEntryMode, mode: advPlayMode || 'official' }; };
+  wrapFn('advStartPractice', o => function () { keepCtx(); return o.apply(this, arguments); });
+  wrapFn('advStartBossRematch', o => function () { keepCtx(); return o.apply(this, arguments); });
+  wrapFn('openHomeScreen', o => function (from) {
+    const c = advRestoreHomeCtx();
+    const args = c ? [(gameState === 'failed' || gameState === 'gameover') ? 'failed' : (from || 'clear')] : arguments;
+    const r = o.apply(this, args);
+    advSessionSave('home');
+    return r;
+  });
+  // ── 重新整理用：進入關卡時記錄模式 ──
+  wrapFn('restart', o => function () { const r = o.apply(this, arguments); advSessionSave('stage'); return r; });
+  wrapFn('advStartOfficialChallenge', o => function () { advHomeCtx = null; return o.apply(this, arguments); });
+  // 小V之家「關卡進度」條：有進行中的正式挑戰 → 本趟進度（照舊）；沒有 → 永久解鎖進度（重新整理後不再顯示成 0）
+  wrapFn('h2OfficialProgress', o => function () {
+    const r = o.apply(this, arguments);
+    try { const d = advLoad(); if (!(d.active && d.active.status === 'in_progress')) { const p = advProgressEnsure(d); delete d._progressNew; r.done = Math.max(r.done, OFFICIAL_ADVENTURE_STAGE_IDS.filter(s => p.cleared.includes(s)).length); } } catch (e) {}
+    return r;
+  });
+  // 開機決定回小V的家 → 等開機素材載好再打開
+  (function waitBootHome() {
+    if (!advBootHomePending) return;
+    if (typeof assetBootReady === 'undefined' || !assetBootReady) { setTimeout(waitBootHome, 100); return; }
+    const p = advBootHomePending; advBootHomePending = null;
+    try { advBootOpenHome(p); } catch (e) { console.warn('[Boot] 回小V的家失敗', e); }
+  })();
+  if (typeof window !== 'undefined') window.debugProgress = function () { const d = advLoad(); const r = { cleared: advProgressEnsure(d).cleared, session: d.session, mode: advPlayMode, homeCtx: advHomeCtx, active: d.active && d.active.status }; console.log('[Progress]', r); return r; };
 })();
