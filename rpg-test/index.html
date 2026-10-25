@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.3.74-sword-royal-cutin-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.3.75-stability-hud-handbook-home-test-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -128,8 +128,8 @@
           </div>
           <nav class="h2-nav">
             <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-map">世界地圖</button>
-            <button type="button" class="h2-pill h2-pill--yellow is-pending" id="h2-nav-practice">自由練習<small>準備中</small></button>
-            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge" data-h2-open="challenge">正式挑戰</button>
+            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-practice">自選關卡練習</button>
+            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge">正式挑戰</button>
             <button type="button" class="h2-pill h2-pill--green h2-go" id="h2-nav-go"><span>出發</span><small id="h2-go-sub"></small></button>
           </nav>
         </main>
@@ -368,7 +368,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.3.74-sword-royal-cutin-test-1 · 2026-10-25
+        adventure-v0.3.75-stability-hud-handbook-home-test-1 · 2026-10-25
       </div>
 
     </div><!-- /#home-panel -->
@@ -402,7 +402,7 @@
             <div class="p2-tool-list">
               <button id="btn-pause-bag" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="openPauseBag()">🎒 背包／補血</button>
               <button id="btn-pause-guidebook" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="openGuidebookFromPause()">📖 氣球秘笈</button>
-              <button id="btn-pause-rpg-notes" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="rpgOpenNotes()">📝 冒險提示筆記</button>
+              <button id="btn-pause-rpg-notes" class="h2-pill h2-pill--yellow h2-pill--sm" onclick="openHandbookFromPause()">📒 冒險手冊</button>
             </div>
           </section>
         </aside>
@@ -529,7 +529,7 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script src="main.js?v=adventure-v0.3.74-sword-royal-cutin-test-1"></script>
+  <script src="main.js?v=adventure-v0.3.75-stability-hud-handbook-home-test-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）

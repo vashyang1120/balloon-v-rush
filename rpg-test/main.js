@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.74-sword-royal-cutin-test-1';
-const BUILD_TIME   = '2026-10-25 03:30';
+const GAME_VERSION = 'adventure-v0.3.75-stability-hud-handbook-home-test-1';
+const BUILD_TIME   = '2026-10-25 10:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ── Canvas setup ──────────────────────────────
@@ -12049,18 +12049,24 @@ const CHAPTER1_TILE = Object.assign({}, CHAPTER1_TILE_DEFAULTS);
 //   ① 底部紅橘色 warning halo（半透明橢圓，寬 = 尖刺圖寬 × 1.35、高 = 寬 × 0.45）
 //   ② 白色細描邊（剪影往 8 個方向偏 1.5px）→ 從花草背景裡跳出來
 //   ③ 紅橘色 glow（shadowBlur 14）
+// v0.3.75：辨識度加強 — 紅色光暈範圍更大、更亮（原本 0.22 / ×1.35 / ×0.45 / blur 14），並在尖刺區塊上方加危險三角形（drawChapter1SpikeWarnings）
 const CHAPTER1_SPIKE_DRAW = {
   glowEnabled: 1,
-  glowColor: 'rgba(255,70,40,0.55)',
-  glowBlur: 14,
+  glowColor: 'rgba(255,60,30,0.72)',
+  glowBlur: 18,
   warningAuraEnabled: 1,
-  warningAuraColor: 'rgba(255,60,40,0.22)',
-  warningAuraScaleX: 1.35,
-  warningAuraScaleY: 0.45,
+  warningAuraColor: 'rgba(255,45,25,0.36)',
+  warningAuraScaleX: 1.9,
+  warningAuraScaleY: 0.62,
+  warnSignEnabled: 1,      // 尖刺上方的危險三角形（相鄰尖刺合成一個區塊，只畫一個）
+  warnSignGroupGap: 56,    // 尖刺之間的空隙小於這個距離 → 視為同一區塊
+  warnSignSize: 26,
+  warnSignLift: 14,        // 三角形底部離尖刺頂端的高度
+  warnSignBob: 3,          // 上下浮動幅度（輕微，不閃爍）
   outlineEnabled: 1,
   outlineColor: 'rgba(255,255,255,0.95)',
   outlineWidth: 1.5,
-  pulse: 0.15, // halo 透明度輕微呼吸（±15%）
+  pulse: 0.18, // halo 透明度輕微呼吸（±18%）
 };
 const chapter1SpikeSilhouetteCache = {};
 function getChapter1SpikeSilhouette(img, w, h, color) {
@@ -12512,6 +12518,36 @@ function drawChapter1SpikeArt(sx, s) {
   ctx.drawImage(img, g.x, g.y, g.w, g.h);
   ctx.restore();
   return true;
+}
+// v0.3.75：第一章尖刺的危險提示三角形（只是畫面提示；尖刺位置、碰撞箱、傷害都不變）
+function drawChapter1SpikeWarnings(cx) {
+  const D = CHAPTER1_SPIKE_DRAW; if (!D.warnSignEnabled || !spikes.length) return;
+  const vis = spikes.filter(s => s.x - cx < CANVAS_W + 60 && s.x + s.w - cx > -60).slice().sort((a, b) => a.x - b.x);
+  if (!vis.length) return;
+  const groups = []; let g = null;
+  vis.forEach(s => {
+    let top = s.y;
+    try { if (getChapter1BgImg('spike')) top = getChapter1SpikeGeom(s.x - cx, s).artTop; } catch (e) {}
+    if (g && s.x - g.x1 <= D.warnSignGroupGap) { g.x1 = Math.max(g.x1, s.x + s.w); g.top = Math.min(g.top, top); }
+    else { g = { x0: s.x, x1: s.x + s.w, top }; groups.push(g); }
+  });
+  const t = (typeof frameCount !== 'undefined' ? frameCount : 0);
+  const sz = D.warnSignSize, h = sz * 0.88;
+  ctx.save();
+  groups.forEach((gr, i) => {
+    const mx = (gr.x0 + gr.x1) / 2 - cx;
+    const bob = Math.sin(t * 0.06 + i * 1.3) * D.warnSignBob;
+    const by = gr.top - D.warnSignLift + bob, ty = by - h;
+    ctx.globalAlpha = 0.86 + 0.14 * Math.sin(t * 0.08 + i);
+    ctx.shadowColor = 'rgba(255,40,20,0.75)'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.moveTo(mx, ty); ctx.lineTo(mx + sz / 2, by); ctx.lineTo(mx - sz / 2, by); ctx.closePath();
+    const fg = ctx.createLinearGradient(0, ty, 0, by); fg.addColorStop(0, '#fff07a'); fg.addColorStop(1, '#ffb300');
+    ctx.fillStyle = fg; ctx.fill();
+    ctx.shadowBlur = 0; ctx.lineJoin = 'round'; ctx.lineWidth = 2.5; ctx.strokeStyle = '#c81e10'; ctx.stroke();
+    ctx.fillStyle = '#b3160a'; ctx.font = '900 ' + Math.round(sz * 0.58) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('!', mx, by - h * 0.36);
+  });
+  ctx.restore();
 }
 function debugChapter1Tiles() {
   const st = k => chapter1BgImgStatus[k] || (getChapter1BgImg(k) ? 'ok' : '-');
@@ -12998,6 +13034,7 @@ function drawWorldInner() {
     drawSpike(sx, s.y, s.w, s.h);
   });
   if (chapter1BgDrawn) ctx.restore();
+  if (chapter1BgDrawn) { try { drawChapter1SpikeWarnings(cx); } catch (e) {} } // v0.3.75：尖刺區塊上方的危險三角形
 
   // v0.3.48：第二章小怪落地陰影（畫在小怪之前；不改 hitbox）
   if (chapter2BgDrawn || chapter1BgDrawn) drawChapter2EnemyShadows(cx); // v0.3.52-fix-1：第一章也有小怪落地陰影
@@ -15124,7 +15161,8 @@ function drawVersionInfo() {
     } else {
       ctx.textAlign = 'right';
       ctx.fillText(
-        '[TEST MODE] F8 畫面暫停｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
+        // v0.3.75：F8 只在開發者模式有作用 → 一般玩家不再顯示「F8 畫面暫停」
+        '[TEST MODE]' + ((typeof advDevHotkeysOn === 'function' && advDevHotkeysOn()) ? ' F8 畫面暫停' : '') + '｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
         CANVAS_W - 14,
         32
       );
@@ -19380,7 +19418,7 @@ function rpgEnsureDom() {
     + '<div class="rpg-side rpg-side--left"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div></div>'
     + '<div class="rpg-target" style="display:none"><div class="rpg-target-glow"></div><div class="rpg-target-arrow">▼</div></div>'
     + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div><div class="rpg-dog-heart">💗</div><div class="rpg-dog-paws"><span>🐾</span><span>🐾</span><span>🐾</span></div></div>'
-    + '<div class="rpg-topbtns"><button type="button" class="rpg-btn" data-act="log">📖 冒險提示筆記</button><button type="button" class="rpg-btn" data-act="skip">⏭ 略過</button></div>'
+    + '<div class="rpg-topbtns"><button type="button" class="rpg-btn" data-act="skip">⏭ 略過</button></div>'   // v0.3.75：對話中不再放「冒險提示筆記」（改到暫停選單／小V的家的「冒險手冊」）
     + '<div class="rpg-box"><div class="rpg-box-bg"></div><div class="rpg-name"></div><div class="rpg-text"></div><button type="button" class="rpg-next" data-act="next">繼續 ▼</button></div>'
     + '<div class="rpg-showcase" style="display:none"><img class="rpg-showcase-img" alt=""><div class="rpg-showcase-err"></div><button type="button" class="hv-ui-btn hv-ui-btn--primary rpg-showcase-done" data-act="showcasedone">看完了</button></div>'
     + '<div class="rpg-log" style="display:none"><div class="rpg-log-panel"><div class="rpg-log-head"><span>📜 對話紀錄</span><button type="button" class="rpg-btn" data-act="logclose">✕ 關閉</button></div><div class="rpg-log-body"></div></div></div>';
@@ -20840,6 +20878,7 @@ initEquippedHammer();
 normalizeActiveWeaponSlot();          // 確保 activeSlot 指向有效武器
 // v0.3.69：開機不再自動配發 999 測試武器（原本只要版本名稱有 -test- 就會配發）
 try { weaponSanitizeSave(); initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) { console.warn('[Weapon] 存檔檢查失敗', e); }
+try { advGuardApplyAtBoot(); } catch (e) { console.warn('[Guard] 開機還原失敗', e); } // v0.3.75：上次在關卡中途關閉／重新整理 → 背包回到該關開始前（不複製、不遺失）
 try { advBoot(); } catch (e) { console.warn('[Score] 開機初始化失敗', e); } // v0.3.63：完整冒險挑戰紀錄
 
 // 測試版：綁定暫停畫面測試按鈕
@@ -22076,16 +22115,7 @@ const HERO_SWORD_V2 = { label: '揮劍 v2', stepsPerFrame: 5, frameMs: 5 * 1000 
 // v0.3.72：使用者實機驗收通過 → 正式預設改為 B（跑步 v3、揮劍 v2）；A（跑步 v2／原本揮劍）只留給開發工具比較
 var heroRunMode = 'B', heroSwordMode = 'B';
 const heroAnimSets = {};   // { v2: { imgs:{run01..}, failed:[], loading }, v3: …, swordV2: { imgs:[…], used:[], failed:[] } }
-try {
-  if (ADVENTURE_TEST_TOOLS_ENABLED) {
-    // v0.3.72：預設改成 B（正式）；只有開發工具（?devtools=1）時才讀取比較用的選擇，且改用新記錄鍵（不沿用 v0.3.71 測試期間存下的 A）
-    const devOn = (typeof H2_DEVTOOLS !== 'undefined') ? H2_DEVTOOLS : /[?&]devtools=1\b/.test(location.search);
-    const m = /[?&]run=([ab])\b/i.exec(location.search); const ls = devOn ? localStorage.getItem('balloonV_dev_runAB_v372') : null;
-    if ((m ? m[1] : ls || 'B').toUpperCase() === 'A') heroRunMode = 'A';
-    const s = /[?&]sword=([ab])\b/i.exec(location.search); const ls2 = devOn ? localStorage.getItem('balloonV_dev_swordAB_v372') : null;
-    if ((s ? s[1] : ls2 || 'B').toUpperCase() === 'A') heroSwordMode = 'A';
-  }
-} catch (e) {}
+// v0.3.75：動畫已定案 → 一律使用跑步 v3、揮劍 v2（不再讀取開發測試期間存下的 A/B 選擇，也不讀 ?run= / ?sword=）
 function heroAnimLoadImg(path, alt, onOk, onFail, tag) {
   const cands = getAssetSourceCandidates(path, alt).map(c => c.url); let i = 0;
   const img = new Image();
@@ -22240,21 +22270,8 @@ if (typeof window !== 'undefined') {
   // 進入關卡一段時間後，先在背景載入小V之家一定會用到的素材（通關時直接進小V之家）
   after('startAdventureFromGate', () => { try { setTimeout(() => h2PreloadCore(), 6000); } catch (e) {} });
   wrap('loadLevel', orig => function () { const r = orig.apply(this, arguments); try { setTimeout(() => { if (gameState === 'playing') h2PreloadCore(); }, 6000); } catch (e) {} return r; });
-  // 開發用：暫停選單的跑步 A/B 切換（只有 ?devtools=1 才看得到）
+  // v0.3.75：跑步 v3／揮劍 v2／王權劍 v2 都已定案 → 開發測試工具不再放「跑步／揮劍動畫切換」（底層的動畫設定保留）
   try {
-    const box = h2$('p2-dev-body');   // v0.3.68：放在暫停選單的「開發測試工具」（只有 ?devtools=1 看得到）
-    if (box && !h2$('btn-pause-run-ab')) {
-      const b = document.createElement('button'); b.id = 'btn-pause-run-ab'; b.className = 'h2-pill h2-pill--purple h2-pill--sm';
-      b.textContent = HERO_RUN_LABEL[heroRunMode];
-      b.addEventListener('click', e => { e.preventDefault(); setHeroRunMode(heroRunMode === 'B' ? 'A' : 'B'); });
-      box.appendChild(b);
-    }
-    if (box && !h2$('btn-pause-sword-ab')) {   // v0.3.71：揮劍 A（目前）／B（v2）
-      const b = document.createElement('button'); b.id = 'btn-pause-sword-ab'; b.className = 'h2-pill h2-pill--purple h2-pill--sm';
-      b.textContent = HERO_SWORD_LABEL[heroSwordMode];
-      b.addEventListener('click', e => { e.preventDefault(); setHeroSwordMode(heroSwordMode === 'B' ? 'A' : 'B'); });
-      box.appendChild(b);
-    }
   } catch (e) {}
 })();
 if (typeof window !== 'undefined') {
@@ -22652,7 +22669,6 @@ if (typeof window !== 'undefined') window.debugChainHit = function () { const o 
   after('closePauseBag', () => { if (gameState === 'paused') p2RenderPause(); });
   after('refreshAllHpDisplays', () => { if (gameState === 'paused') p2RenderPause(); });
   // 跑步 A/B 按鈕（開發用）移到「開發測試工具」
-  try { const body = h2$('p2-dev-body'); ['btn-pause-run-ab', 'btn-pause-sword-ab'].forEach(id => { const ab = h2$(id); if (ab && body) { ab.className = 'h2-pill h2-pill--purple h2-pill--sm'; body.appendChild(ab); } }); } catch (e) {}
   try { const t = h2$('p2-dev-toggle'); if (t) t.addEventListener('click', e => { e.preventDefault(); p2ToggleDev(); }); } catch (e) {}
 })();
 
@@ -22762,11 +22778,16 @@ function weaponHudImg(id) {
   let s = weaponHudImgs[id];
   if (!s) {
     s = weaponHudImgs[id] = { img: new Image(), ok: false, i: 0 };
-    const path = (H2_ICON[id] || {}).path; const cands = path ? getAssetSourceCandidates(path).map(c => c.url) : [];
-    s.img.onload = () => { s.ok = true; }; s.img.onerror = () => { if (s.i < cands.length) s.img.src = cands[s.i++]; };
+    // v0.3.75：王權劍 HUD 圖示（使用者提供：assets/adventure/ui/items/item_royal_sword.png）
+    const path = id === 'royalSword' ? 'assets/adventure/ui/items/item_royal_sword.png' : (H2_ICON[id] || {}).path; const cands = path ? getAssetSourceCandidates(path).map(c => c.url) : [];
+    s.img.onload = () => {
+      // v0.3.75：大圖先縮成 160px 的小圖（HUD 每一幀都要畫；1254px 原圖直接縮會比較糊也比較慢）
+      try { const im = s.img; if (im.naturalWidth > 200) { const cv = document.createElement('canvas'); cv.width = cv.height = 160; const c2 = cv.getContext('2d'); c2.imageSmoothingEnabled = true; c2.imageSmoothingQuality = 'high'; c2.drawImage(im, 0, 0, 160, 160); s.small = cv; } } catch (e) {}
+      s.ok = true; };
+    s.img.onerror = () => { if (s.i < cands.length) s.img.src = cands[s.i++]; };
     if (cands.length) s.img.src = cands[s.i++];
   }
-  return s.ok ? s.img : null;
+  return s.ok ? (s.small || s.img) : null;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -22901,51 +22922,82 @@ function rpgSetHudFocus(on) {
   ov.dataset.hudfocus = Math.round(r.x) + ',' + Math.round(r.y) + ',' + Math.round(r.w) + ',' + Math.round(r.h);
 }
 
-// ── 2. 右上角武器／耐用度與狗狗同行 HUD（放大；沿用畫布繪製）──
-const HUD_WPN_W = 206, HUD_WPN_H = 50, HUD_WPN_Y = 46, HUD_DOG_H = 32;
+// ── 2. 右上角武器／耐用度與狗狗同行 HUD（沿用畫布繪製）──
+//  v0.3.75：武器 HUD 2.0 — 平常就維持放大（約原本 1.4 倍），背板更不透明、外框加粗發光、圖示放在圓形底座、字級與耐用度條加大
+//           2-4 撿到金色油管環變成王權劍（isRoyalSwordActive：依實際武器狀態，不靠 Cut-in 事件）→ 圖示 item_royal_sword.png、名稱「橙煌王權劍」、耐用度 ∞
+const HUD_WPN_SCALE = 1.4;
+const HUD_WPN_W = Math.round(206 * HUD_WPN_SCALE), HUD_WPN_H = Math.round(50 * HUD_WPN_SCALE), HUD_WPN_Y = 46, HUD_DOG_H = Math.round(32 * HUD_WPN_SCALE);
 const hudFx = { slot: null, id: null, dur: null, dog: null, t: 0, kind: '' };
 function drawWeaponDogHud(pad) {
   const slot = activeSlot === 'hammer' ? 'hammer' : 'sword';
   const it = slot === 'hammer' ? equippedHammer : equippedSword;
   const has = !!(it && it.id);
+  const royal = has && slot === 'sword' && (typeof isRoyalSwordActive === 'function') && isRoyalSwordActive();
   const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-  // 數值變化 → 短暫亮一下（切換、耐用度下降、爆裂、狗狗狀態）
-  const sig = slot + '|' + (has ? it.id : '') + '|' + (has ? it.currentDur : -1);
+  // 數值變化 → 短暫亮一下（切換、耐用度下降、爆裂、狗狗狀態、變成王權劍）
+  const sig = slot + '|' + (has ? it.id : '') + '|' + (royal ? 'royal' : (has ? it.currentDur : -1));
   const dogSig = bringBalloonDog ? ('on' + dogNoseLevel) : 'off';
-  if (hudFx.sig !== undefined && hudFx.sig !== sig) { hudFx.t = now; hudFx.kind = !has ? 'gone' : (hudFx.slot !== slot || hudFx.id !== (has ? it.id : '')) ? 'swap' : 'tick'; }
+  if (hudFx.sig !== undefined && hudFx.sig !== sig) { hudFx.t = now; hudFx.kind = !has ? 'gone' : royal ? 'royal' : (hudFx.slot !== slot || hudFx.id !== (has ? it.id : '')) ? 'swap' : 'tick'; }
   if (hudFx.dogSig !== undefined && hudFx.dogSig !== dogSig) hudFx.dogT = now;
   hudFx.sig = sig; hudFx.slot = slot; hudFx.id = has ? it.id : ''; hudFx.dogSig = dogSig;
-  const W = HUD_WPN_W, H = HUD_WPN_H, x = CANVAS_W - pad - W, y = HUD_WPN_Y;
+  const K = HUD_WPN_SCALE, W = HUD_WPN_W, H = HUD_WPN_H, x = CANVAS_W - pad - W, y = HUD_WPN_Y, R = 16;
   const flash = Math.max(0, 1 - (now - hudFx.t) / 450);
   ctx.save();
   ctx.textBaseline = 'middle';
-  // 卡片底
-  ctx.fillStyle = 'rgba(28,16,56,0.66)';
-  ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.fill();
-  const col = !has ? 'rgba(255,255,255,0.45)' : slot === 'hammer' ? '#ffc46b' : '#9fe3ff';
-  ctx.lineWidth = 2.5; ctx.strokeStyle = col;
-  ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.stroke();
-  if (flash > 0) { ctx.globalAlpha = flash * 0.55; ctx.fillStyle = hudFx.kind === 'gone' ? '#ff5a5a' : '#ffffff'; ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.fill(); ctx.globalAlpha = 1; }
+  // 卡片底（更不透明＋陰影，在明亮背景上也看得清楚）
+  const col = !has ? 'rgba(255,255,255,0.55)' : royal ? '#ffd23f' : slot === 'hammer' ? '#ffc46b' : '#9fe3ff';
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+  const bg = ctx.createLinearGradient(0, y, 0, y + H);
+  if (royal) { bg.addColorStop(0, 'rgba(92,48,6,0.92)'); bg.addColorStop(1, 'rgba(48,20,0,0.92)'); }
+  else { bg.addColorStop(0, 'rgba(46,28,92,0.9)'); bg.addColorStop(1, 'rgba(22,12,48,0.9)'); }
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x, y, W, H, R); ctx.fill();
+  ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  // 外框：加粗＋同色外光（王權劍是金色並輕微呼吸）
+  const glow = royal ? 10 + 5 * Math.sin(now / 260) : 7;
+  ctx.lineWidth = 3.5; ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = has ? glow : 0;
+  ctx.beginPath(); ctx.roundRect(x, y, W, H, R); ctx.stroke();
+  ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0;
+  if (flash > 0) { ctx.globalAlpha = flash * 0.55; ctx.fillStyle = hudFx.kind === 'gone' ? '#ff5a5a' : hudFx.kind === 'royal' ? '#ffe9a0' : '#ffffff'; ctx.beginPath(); ctx.roundRect(x, y, W, H, R); ctx.fill(); ctx.globalAlpha = 1; }
   if (has) {
-    const img = (typeof weaponHudImg === 'function') ? weaponHudImg(it.id) : null;
-    if (img) { ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, x + 5, y + 5, 40, 40); ctx.restore(); }
-    else { ctx.font = '28px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(slot === 'hammer' ? '🔨' : '⚔️', x + 25, y + 26); }
+    // 圖示（圓形底座）
+    const icy = y + H / 2;
+    const icR = Math.round(H / 2 - 6);
+    const icX = x + 8 + icR;
+    ctx.fillStyle = royal ? 'rgba(255,214,90,0.28)' : 'rgba(255,255,255,0.16)';
+    ctx.beginPath(); ctx.arc(icX, icy, icR, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = royal ? 'rgba(255,224,120,0.9)' : 'rgba(255,255,255,0.35)'; ctx.stroke();
+    const img = (typeof weaponHudImg === 'function') ? weaponHudImg(royal ? 'royalSword' : it.id) : null;
+    const isz = icR * 2 - 2;
+    if (img) { ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, icX - isz / 2, icy - isz / 2, isz, isz); ctx.restore(); }
+    else { ctx.font = Math.round(30 * K) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(slot === 'hammer' ? '🔨' : royal ? '👑' : '⚔️', icX, icy + 1); }
     const stock = ((playerInventory.craftedItems || {})[it.id]) || 0;
-    const name = (slot === 'hammer' ? '氣球槌' : '氣球劍') + (stock > 1 && !weaponIsTestLoadout(slot) ? ' ×' + stock : '');
-    ctx.textAlign = 'left'; ctx.font = 'bold 17px sans-serif';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.fillStyle = '#ffffff';
-    ctx.strokeText(name, x + 52, y + 16); ctx.fillText(name, x + 52, y + 16);
-    const frac = it.maxDur > 0 ? Math.max(0, Math.min(1, it.currentDur / it.maxDur)) : 0;
-    const dcol = frac > 0.5 ? '#6ff0b0' : frac > 0.25 ? '#ffd166' : '#ff7b7b';
-    const durTxt = it.currentDur + '/' + it.maxDur;
-    ctx.textAlign = 'right'; ctx.font = 'bold 18px monospace';
-    ctx.strokeText(durTxt, x + W - 10, y + 16); ctx.fillStyle = dcol; ctx.fillText(durTxt, x + W - 10, y + 16);
-    const bx = x + 52, bw = W - 62, by = y + 32;
-    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, 9, 4.5); ctx.fill();
-    if (frac > 0) { ctx.fillStyle = dcol; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(9, bw * frac), 9, 4.5); ctx.fill(); }
+    const name = royal ? '橙煌王權劍' : (slot === 'hammer' ? '氣球槌' : '氣球劍') + (stock > 1 && !weaponIsTestLoadout(slot) ? ' ×' + stock : '');
+    const tx = icX + icR + 10, ty = y + H * 0.33;
+    ctx.textAlign = 'left'; ctx.font = '900 ' + Math.round(17 * K) + 'px sans-serif';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.fillStyle = royal ? '#fff2b8' : '#ffffff';
+    ctx.strokeText(name, tx, ty); ctx.fillText(name, tx, ty);
+    const frac = royal ? 1 : (it.maxDur > 0 ? Math.max(0, Math.min(1, it.currentDur / it.maxDur)) : 0);
+    const dcol = royal ? '#ffd23f' : frac > 0.5 ? '#6ff0b0' : frac > 0.25 ? '#ffd166' : '#ff7b7b';
+    const durTxt = royal ? '∞' : it.currentDur + '/' + it.maxDur;
+    ctx.textAlign = 'right'; ctx.font = (royal ? '900 ' + Math.round(26 * K) + 'px sans-serif' : 'bold ' + Math.round(18 * K) + 'px monospace');
+    ctx.strokeText(durTxt, x + W - 12, ty + (royal ? 1 : 0)); ctx.fillStyle = dcol; ctx.fillText(durTxt, x + W - 12, ty + (royal ? 1 : 0));
+    // 耐用度條（王權劍：金色滿條＋流動光澤＝無限耐用）
+    const bx = tx, bw = x + W - 12 - tx, bh = Math.round(9 * K), by = y + H * 0.66 - bh / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.fill();
+    if (frac > 0) {
+      if (royal) { const gg = ctx.createLinearGradient(bx, 0, bx + bw, 0); gg.addColorStop(0, '#ffb300'); gg.addColorStop(0.5, '#ffe680'); gg.addColorStop(1, '#ffb300'); ctx.fillStyle = gg; }
+      else ctx.fillStyle = dcol;
+      ctx.beginPath(); ctx.roundRect(bx, by, Math.max(bh, bw * frac), bh, bh / 2); ctx.fill();
+      if (royal) {
+        ctx.save(); ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.clip();
+        const sx = bx - 40 + ((now / 6) % (bw + 80));
+        const sg = ctx.createLinearGradient(sx - 24, 0, sx + 24, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.85)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sg; ctx.fillRect(sx - 24, by, 48, bh); ctx.restore();
+      }
+    }
   } else {
-    ctx.textAlign = 'left'; ctx.font = 'bold 17px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('🚫 沒有武器', x + 14, y + H / 2);
+    ctx.textAlign = 'left'; ctx.font = 'bold ' + Math.round(17 * K) + 'px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillText('🚫 沒有武器', x + 16, y + H / 2);
   }
   if (typeof adventureTestLoadoutActive !== 'undefined' && adventureTestLoadoutActive) {
     ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.fillStyle = '#ffb35c';
@@ -22956,13 +23008,13 @@ function drawWeaponDogHud(pad) {
   if (bringBalloonDog) {
     const dy = y + H + (adventureTestLoadoutActive ? 22 : 7), dh = HUD_DOG_H;
     const dflash = hudFx.dogT ? Math.max(0, 1 - (now - hudFx.dogT) / 450) : 0;
-    ctx.fillStyle = 'rgba(120,30,80,0.62)'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#ff9fc8'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.stroke();
-    if (dflash > 0) { ctx.globalAlpha = dflash * 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 10); ctx.fill(); ctx.globalAlpha = 1; }
-    ctx.textAlign = 'left'; ctx.font = 'bold 16px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.fillStyle = '#ffe3ef';
-    ctx.strokeText('🐶 小狗同行中', x + 10, dy + dh / 2 + 1); ctx.fillText('🐶 小狗同行中', x + 10, dy + dh / 2 + 1);
+    ctx.fillStyle = 'rgba(120,30,80,0.78)'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 12); ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#ff9fc8'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 12); ctx.stroke();
+    if (dflash > 0) { ctx.globalAlpha = dflash * 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, dy, W, dh, 12); ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.textAlign = 'left'; ctx.font = 'bold ' + Math.round(16 * K) + 'px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.fillStyle = '#ffe3ef';
+    ctx.strokeText('🐶 小狗同行中', x + 12, dy + dh / 2 + 1); ctx.fillText('🐶 小狗同行中', x + 12, dy + dh / 2 + 1);
     const nose = dogNoseLevel >= 3 ? '✨ 就在附近' : dogNoseLevel >= 2 ? '🌟 很近了' : dogNoseLevel >= 1 ? '💡 有寶物' : '';
-    if (nose) { ctx.textAlign = 'right'; ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#fff3a0'; ctx.strokeText(nose, x + W - 8, dy + dh / 2 + 1); ctx.fillText(nose, x + W - 8, dy + dh / 2 + 1); }
+    if (nose) { ctx.textAlign = 'right'; ctx.font = 'bold ' + Math.round(14 * K) + 'px sans-serif'; ctx.fillStyle = '#fff3a0'; ctx.strokeText(nose, x + W - 10, dy + dh / 2 + 1); ctx.fillText(nose, x + W - 10, dy + dh / 2 + 1); }
   }
   ctx.restore();
 }
@@ -23019,6 +23071,7 @@ function h2FloatDeltas(gain, loss, anchorEl) {
 //   紀錄存在冒險 RPG 進度（依 playerKey）：worldIntro = 'done'／'pending'（重新開始測試會設回 pending）
 //   沒有紀錄時：已經玩過的舊玩家（有觀看紀錄、正式挑戰紀錄或通關成果）直接記成 done，不補播
 let advIntroActive = false, advIntroChecked = false;
+let advIntroMapShownAt = 0;   // v0.3.75：地圖與飛行屋真正顯示在畫面上的時間（測試／除錯用）
 function advIntroShouldPlay() {
   try {
     if (currentLevelIndex !== 0 || (LEVELS[0] || {}).stageId !== '1-1') return false;
@@ -23082,20 +23135,36 @@ function advIntroPlay(done) {
     advIntroActive = false;
     done(played);
   };
-  host.onclick = e => { e.preventDefault(); e.stopPropagation(); if (!started) { finish(true); return; } if (H2.map) H2.map.skip = true; };
-  const limit = setTimeout(() => { if (!started) finish(false); }, 6000);
+  // v0.3.75：地圖和飛行屋還沒真正出現在畫面上之前，點畫面／跳過鍵都不會略過（以前一點就直接進漫畫，玩家什麼都沒看到）
+  host.onclick = e => { e.preventDefault(); e.stopPropagation(); if (!started) return; if (H2.map) H2.map.skip = true; };
+  const skipBtn = host.querySelector('.adv-intro-skip'); if (skipBtn) { skipBtn.disabled = true; skipBtn.textContent = '地圖載入中…'; }
+  const info00 = h2$('h2-map-info'); if (info00) info00.innerHTML = '<span>🗺️ 世界地圖載入中…</span><small>網路比較慢時請稍等一下</small>';
+  // v0.3.75：慢速網路最多等 25 秒（原本 6 秒就整段略過）；真的載不到 → 明確告訴玩家，再前往 1-1（不會默默直接切進漫畫）
+  const fallback = () => {
+    if (ended || started) return; started = true;
+    const inf = h2$('h2-map-info'); if (inf) inf.innerHTML = '<span>🗺️ 世界地圖暫時載不出來，直接前往 1-1</span>';
+    setTimeout(() => finish(false), 1400);
+  };
+  const limit = setTimeout(fallback, 25000);
   // 飛行音效也先載好（最多等 2.5 秒；載不到就安靜地飛，不影響演出）
   const sfxReady = new Promise(res => { try { Promise.resolve(sfxLoad('flyingHome')).then(res, res); } catch (e) { res(); } setTimeout(res, 2500); });
   Promise.all([h2Load(c.image), h2Load(c.home), sfxReady]).then(([a, b]) => {
-    clearTimeout(limit);
-    if (ended) return;
-    if (!a || a.status !== 'ok' || !b || b.status !== 'ok') { finish(false); return; }
-    started = true;
+    if (ended || started) return;
+    if (!a || a.status !== 'ok' || !b || b.status !== 'ok') { fallback(); return; }
     wrap.classList.remove('is-loading');
     h2MapRender({ keepHome: true, keepInfo: true });
     const to = c.nodes.find(n => n.stageId === '1-1'); if (!to) { finish(false); return; }
     const from = { x: -14, y: Math.min(92, to.y + 22) };                     // 從地圖左下外側飛進來
     home.style.left = from.x + '%'; home.style.top = from.y + '%'; home.style.display = 'block';
+    // v0.3.75：等兩張圖「解碼完成並真的畫上畫面」（下一個畫面更新之後）才開始；最多再等 4 秒
+    const bgEl = h2$('h2-map-bg');
+    const decoded = el => (el && el.decode) ? el.decode().catch(() => {}) : Promise.resolve();
+    const painted = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return Promise.race([Promise.all([decoded(bgEl), decoded(home)]), new Promise(r => setTimeout(r, 4000))]).then(painted).then(() => {
+    if (ended || started) return;
+    started = true; clearTimeout(limit);
+    advIntroMapShownAt = performance.now();
+    if (skipBtn) { skipBtn.disabled = false; skipBtn.textContent = '跳過 ⏭'; }
     const info = h2$('h2-map-info');
     if (info) info.innerHTML = '<span>🎈 氣球飛行屋飛向 <b>' + h2Esc(to.label + ' ' + h2MapNodeName(to.stageId)) + '</b></span><small>點一下畫面或按「跳過」可以直接開始</small>';
     // 先看一眼地圖（0.6 秒）→ 飛 1.7 秒（和飛行音效 ui_flying_home 約 1.6 秒的長度一致）→ 抵達停 0.5 秒
@@ -23111,8 +23180,9 @@ function advIntroPlay(done) {
       h2MapFlySfx(false);                                                   // 抵達／跳過 → 立刻停
       setTimeout(() => finish(true), (H2.map && H2.map.skip) ? 0 : 500);
     };
-    setTimeout(() => { if (!ended) { if (H2.map && H2.map.skip) finish(true); else requestAnimationFrame(step); } }, 600);
-  }).catch(() => { clearTimeout(limit); finish(false); });
+    setTimeout(() => { if (!ended) { if (H2.map && H2.map.skip) finish(true); else requestAnimationFrame(step); } }, 700);   // 先讓玩家看清楚地圖與飛行屋 0.7 秒
+    });
+  }).catch(() => { fallback(); });
 }
 
 // ── 掛上既有流程（包住原函式；原本行為不變）──
@@ -23219,7 +23289,8 @@ function ocChooser(done) {
   console.log('[OpeningComic] 已看過 → 顯示故事選擇');
 }
 // ── 播放五幕漫畫（嵌入既有的獨立播放器）──
-function ocPlay(done, reason) {
+function ocPlay(done, reason, opts) {
+  const review = !!(opts && opts.review);   // v0.3.75：冒險手冊「主線劇情」回顧 → 不改觀看紀錄、結束後回到手冊（不進 1-1）
   ocActive = true;
   const session = 'oc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   ocSession = session;
@@ -23242,11 +23313,11 @@ function ocPlay(done, reason) {
     try { if (fr.contentWindow) fr.contentWindow.postMessage({ type: 'mc-host', session, cmd: 'stop' }, origin === 'null' ? '*' : origin); } catch (e) {}   // 保險：先叫播放器停聲音
     try { fr.src = 'about:blank'; } catch (e) {}
     host.classList.remove('is-open'); host.innerHTML = '';                       // 移除播放器 → 漫畫的所有聲音與資源一併釋放（不留下看不見的播放器）
-    if (mark) ocMarkSeen(how);
+    if (mark && !review) ocMarkSeen(how);
     ocActive = false; ocSession = null;
     ocClearInput();
     try { window.focus(); } catch (e) {}
-    console.log('[OpeningComic] 結束：' + how + (mark ? '（記為已觀看）' : '（不記錄）') + ' → 開始 1-1');
+    console.log('[OpeningComic] 結束：' + how + (review ? '（主線劇情回顧，不改紀錄）→ 回到冒險手冊' : (mark ? '（記為已觀看）' : '（不記錄）') + ' → 開始 1-1'));
     done(how);
   };
   const onMsg = e => {
@@ -23301,8 +23372,8 @@ if (typeof window !== 'undefined') {
 //  v0.3.74：王權劍覺醒 Cut-in（2-4 撿到金色油管環、氣球劍變成王權劍的那一刻）
 //  流程：原本的撿取（collectOrangeKingRing：音效、ringActive、activeSlot＝劍、小V身上金色光圈 ringAuraMs）照舊執行
 //        → 武器已經是王權劍之後才開始 Cut-in：
-//          0～350ms   世界凍結，原本的金色光圈繼續播（畫面慢慢變暗）
-//          350～1450ms Cut-in 本體 1.1 秒：金色閃光 → 斜向金色帶滑入 → royal_sword_awaken_cutin.png 滑入 →「王權劍覺醒！」→ 淡出
+//          0～450ms   世界凍結，原本的金色光圈繼續播（畫面慢慢變暗）（v0.3.75 起，原本 350ms）
+//          450～2000ms Cut-in 本體 1.55 秒（v0.3.75 起，原本 1.1 秒）：金色閃光 → 斜向金色帶滑入 → royal_sword_awaken_cutin.png 滑入 →「王權劍覺醒！」→ 淡出
 //        → 回到戰鬥（光圈此時也剛好播完）
 //  ・Cut-in 期間遊戲世界完全不更新（玩家操作、橘子王、油彈、傷害判定、計時都停）：沿用主迴圈既有的「阻擋遊戲」檢查（advIsBlockingGame）
 //  ・按暫停（Esc／暫停鈕）→ Cut-in 跟著停住，繼續冒險後接著播完
@@ -23310,7 +23381,8 @@ if (typeof window !== 'undefined') {
 //  ・全部用 canvas 畫在遊戲畫面上（和全螢幕、手機縮放一致；不新增 HTML 圖層，不影響開場漫畫）
 //  ・圖片沒載到 → 只顯示金色帶與文字（不擋遊戲）
 // ════════════════════════════════════════════════════════════════════
-const ROYAL_CUTIN = { leadMs: 350, cutMs: 1100, text: '王權劍覺醒！' };
+// v0.3.75：使用者要求整體拉長到約 2 秒 → 前段光圈 0.45 秒 + Cut-in 本體 1.55 秒（文字與主視覺停留更久、淡出放慢）
+const ROYAL_CUTIN = { leadMs: 450, cutMs: 1550, text: '王權劍覺醒！' };
 let royalCutin = null;   // { t, last, id }
 let royalCutinCount = 0;
 function royalCutinStart() {
@@ -23342,7 +23414,7 @@ function royalCutinDraw() {
   const clamp = v => Math.max(0, Math.min(1, v));
   const easeOut = p => 1 - Math.pow(1 - p, 3);
   const easeBack = p => { const s = 1.6; p = p - 1; return 1 + p * p * ((s + 1) * p + s); };
-  const out = ct > D - 220 ? clamp((D - ct) / 220) : 1;   // 最後 0.22 秒淡出
+  const out = ct > D - 320 ? clamp((D - ct) / 320) : 1;   // 最後 0.32 秒淡出
   ctx.save();
   // 壓暗（前導期間慢慢變暗，Cut-in 時更暗，結束時淡出）
   const dim = ct < 0 ? 0.28 * clamp(c.t / L) : (0.28 + 0.3 * clamp(ct / 120)) * out;
@@ -23350,9 +23422,9 @@ function royalCutinDraw() {
   ctx.fillRect(0, 0, W, H);
   if (ct < 0) { ctx.restore(); return; }
   // 金色閃光
-  if (ct < 220) {
+  if (ct < 280) {
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255,226,130,' + (0.7 * (1 - ct / 220)).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(255,226,130,' + (0.7 * (1 - ct / 280)).toFixed(3) + ')';
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -23408,7 +23480,7 @@ function royalCutinDraw() {
     ctx.shadowColor = 'rgba(255,210,80,0.9)'; ctx.shadowBlur = 18;
     ctx.fillStyle = tg; ctx.fillText(ROYAL_CUTIN.text, 0, 0);
     // 光澤掃過
-    const sw = clamp((ct - 420) / 320);
+    const sw = clamp((ct - 650) / 420);
     if (sw > 0 && sw < 1) {   // 只在文字本身上掃過（再寫一次同樣的字，填色是一條移動的白光）
       ctx.shadowBlur = 0;
       const sx = -260 + sw * 520;
@@ -23438,4 +23510,357 @@ if (typeof window !== 'undefined') {
   // 重新開始／換關：立刻清除（不把 Cut-in 帶到下一次）
   wrapFn('restart', o => function () { royalCutinEnd('restart'); return o.apply(this, arguments); });
   wrapFn('loadLevel', o => function () { royalCutinEnd('loadLevel'); return o.apply(this, arguments); });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.75：穩定性修復＋HUD 2.0＋冒險手冊整合＋小V的家功能
+// ════════════════════════════════════════════════════════════════════
+//  【P0-1 操作失靈】根因：rpg-test 對「所有玩家」都開放開發快捷鍵。F7／F9／F10 會開啟油彈／煙囪油／雙噴嘴「定位模式」，
+//    定位模式會把 ← → ↑ ↓ 拿去調整位置（不再傳給小V），空白鍵沒被攔 → 只剩「跳」能用；畫面只短暫顯示一行英文提示，
+//    玩家不知道要再按一次同一個鍵關閉 → 只能重新整理。F7、F9 就在 F8 兩旁，很多筆電的 F9／F10 也是音量鍵。
+//    修正：① F2／F3／F4／F6／F7／F8／F9／F10／` 只有開發者模式（?devtools=1 或 balloonV_devTools）才有作用
+//          ② 開發者模式下，定位模式／F8 凍結開著時畫面上一直顯示標示
+//          ③ 暫停→繼續、重新開始、換關時，F8 凍結自動解除；不是開發者時定位模式一律關閉；按住的鍵一併清空
+//          ④ 視窗失去焦點／切到背景時清空按住的鍵（避免放開鍵的事件沒收到而卡住）
+function advDevHotkeysOn() { try { return !!(ADVENTURE_TEST_TOOLS_ENABLED && H2_DEVTOOLS); } catch (e) { return false; } }
+const ADV_DEV_HOTKEYS = ['F2', 'F3', 'F4', 'F6', 'F7', 'F8', 'F9', 'F10', 'Backquote'];
+function advAnyDevModeOn() {
+  try { return !!(screenFreezeForTest || chimneyOilCalibrationMode || dualOilCalibrationMode || projectileOilShotCalibrationMode || orangeKingMachineCalibMode); } catch (e) { return false; }
+}
+function advClearHeldInput() {
+  try { Object.keys(keys).forEach(k => { keys[k] = false; }); Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; }); } catch (e) {}
+  try { document.querySelectorAll('#mobile-controls .pressed').forEach(el => el.classList.remove('pressed')); } catch (e) {}
+}
+function advExitStuckModes(reason) {
+  let changed = false;
+  try {
+    if (screenFreezeForTest) { screenFreezeForTest = false; changed = true; }
+    if (!advDevHotkeysOn()) {
+      if (chimneyOilCalibrationMode || dualOilCalibrationMode || projectileOilShotCalibrationMode || orangeKingMachineCalibMode) changed = true;
+      chimneyOilCalibrationMode = false; dualOilCalibrationMode = false; projectileOilShotCalibrationMode = false; orangeKingMachineCalibMode = false;
+    }
+  } catch (e) {}
+  if (changed) console.log('[Input] 自動解除測試狀態（' + reason + '）');
+  return changed;
+}
+if (typeof window !== 'undefined') {
+  // 開發快捷鍵：不是開發者模式 → 完全不處理（也不會開啟任何定位模式）
+  window.addEventListener('keydown', e => { if (ADV_DEV_HOTKEYS.includes(e.code) && !advDevHotkeysOn()) { e.stopImmediatePropagation(); } }, true);
+  window.addEventListener('blur', () => advClearHeldInput());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) advClearHeldInput(); });
+  window.addEventListener('pageshow', () => advClearHeldInput());
+  window.debugInput = function () {
+    const r = { gameState, keysDown: Object.keys(keys).filter(k => keys[k]), mobile: Object.keys(mobileBtn).filter(k => mobileBtn[k]), devHotkeys: advDevHotkeysOn(),
+      freeze: screenFreezeForTest, calib: { chimney: chimneyOilCalibrationMode, dual: dualOilCalibrationMode, projectile: projectileOilShotCalibrationMode, orangeKing: orangeKingMachineCalibMode },
+      inputLocked: orangeKingInputLocked, blocking: advIsBlockingGame(), comic: typeof ocActive !== 'undefined' && ocActive, cutin: typeof royalCutin !== 'undefined' && !!royalCutin, playMode: advPlayMode };
+    console.log('[Input]', r); return r;
+  };
+}
+// 開發者模式下的狀態標示（定位模式／F8 凍結開著時一直顯示，避免忘記關）
+function advDrawDevModeBanner() {
+  if (!advAnyDevModeOn()) return;
+  const parts = [];
+  if (screenFreezeForTest) parts.push('⏸ F8 畫面凍結中（再按 F8 或暫停→繼續 解除）');
+  if (projectileOilShotCalibrationMode) parts.push('🎯 F7 油彈定位模式');
+  if (chimneyOilCalibrationMode) parts.push('🎯 F9 煙囪油定位模式');
+  if (dualOilCalibrationMode) parts.push('🎯 F10 雙噴嘴定位模式');
+  if (orangeKingMachineCalibMode) parts.push('🎯 F4 橘子王定位工具');
+  const txt = parts.join('　') + (parts.length && !screenFreezeForTest || parts.length > 1 ? '｜方向鍵用來調整位置，不會移動小V' : '');
+  ctx.save(); ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = Math.min(CANVAS_W - 20, ctx.measureText(txt).width + 24), x = CANVAS_W / 2 - w / 2, y = 124;
+  ctx.fillStyle = 'rgba(160,20,20,0.85)'; ctx.beginPath(); ctx.roundRect(x, y, w, 26, 8); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText(txt, CANVAS_W / 2, y + 13, CANVAS_W - 30); ctx.restore();
+}
+
+//  【P0-2 重新整理】正式挑戰本來就有「進行中的一趟」紀錄（各關成果、戰敗、受傷、恢復點）；但關卡中撿到的金幣／材料是「當下」寫進背包存檔，
+//    而「回到本關開始前」的快照只存在記憶體 → 關卡中途重新整理：本關撿到的東西留在背包，繼續冒險又回到本關開頭可以再撿一次（可刷資源），
+//    同時關卡開始時的 HP／耐用度／帶狗狀態也跟著消失。
+//    修正：關卡進行中，把「本關開始前的快照」同步存到 balloonV_adventureStageGuard_v1__<playerKey>（關卡開始時、每 2 秒、武器耐用度變化、離開頁面時）；
+//          通關／戰敗回復／回到小V的家時立即刪除。下次開啟遊戲若還有這份快照 → 先把背包回復到該關開始前，再走原本的「繼續冒險」恢復流程。
+//    ・進行中的挑戰快照：localStorage 的 balloonV_adventureChallenge_v1test__<playerKey>.active（原有）＋ 上面的關卡快照（新增）
+//    ・已完成的正式成績：同一份存檔的 best / recent（原有）；只有 advAfterClear 在 2-4 完整七關通過時寫入，重新整理不會產生新的完成紀錄
+var advGuardArmed = false;
+function advGuardKey() { try { return 'balloonV_adventureStageGuard_v1__' + advPlayerKey(); } catch (e) { return 'balloonV_adventureStageGuard_v1__guest'; } }
+function advGuardWrite(reason) {
+  try {
+    if (!advGuardArmed || !levelStartSnapshot || levelRolledBackForRetry) return;
+    if (gameState !== 'playing' && gameState !== 'paused') return;
+    const g = { v: 1, at: Date.now(), reason: reason || '', game: GAME_VERSION, mode: advPlayMode, stageId: (LEVELS[currentLevelIndex] || {}).stageId, levelIndex: currentLevelIndex,
+      challengeId: advAttempt && !advAttempt.ended ? advAttempt.challengeId : null, snap: levelStartSnapshot };
+    localStorage.setItem(advGuardKey(), JSON.stringify(g));
+  } catch (e) {}
+}
+function advGuardClear(reason) { advGuardArmed = false; try { localStorage.removeItem(advGuardKey()); } catch (e) {} }
+function advGuardApplyAtBoot() {
+  let g = null;
+  try { g = JSON.parse(localStorage.getItem(advGuardKey()) || 'null'); } catch (e) { g = null; }
+  if (!g || !g.snap) return null;
+  try {
+    levelStartSnapshot = g.snap;
+    restoreLevelStartSnapshot();          // 背包、裝備耐用度、帶狗、HP 回到該關開始前（原本的回復函式；會存檔）
+    levelStartSnapshot = null;
+    try { initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) {}
+    console.log('[Guard] 上次在 ' + g.stageId + ' 中途關閉／重新整理（' + (g.mode || 'official') + '）→ 背包已回到該關開始前（本關撿到的不會重複，也不會遺失之前的成果）');
+  } catch (e) { console.warn('[Guard] 還原失敗', e); }
+  try { localStorage.removeItem(advGuardKey()); } catch (e) {}
+  advGuardArmed = false;
+  return g;
+}
+
+//  【計分資格】正式挑戰（official）／自選關卡練習（practice）／再打一次橘子王（bossRematch）
+//    ・只有 official 會建立／更新進行中的正式挑戰，並在完整七關通過時產生新的正式總分
+//    ・practice、bossRematch：不建立挑戰紀錄、不動進行中的挑戰、不產生正式總分（資源、耐用度照遊戲規則正常消耗與取得）
+var advPlayMode = 'official';
+const ADV_PLAY_MODE_LABEL = { practice: '🎯 自選關卡練習（不計入正式總分）', bossRematch: '👑 再打一次橘子王（不計入正式總分）' };
+function advDrawPlayModeBadge() {
+  if (advPlayMode === 'official' || (gameState !== 'playing' && gameState !== 'paused')) return;
+  const txt = ADV_PLAY_MODE_LABEL[advPlayMode] || ''; if (!txt) return;
+  ctx.save(); ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width + 18, x = 12, y = CANVAS_H - 34;
+  ctx.fillStyle = 'rgba(30,20,70,0.72)'; ctx.beginPath(); ctx.roundRect(x, y, w, 22, 8); ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,224,122,0.8)'; ctx.stroke();
+  ctx.fillStyle = '#ffe27a'; ctx.fillText(txt, x + 9, y + 11); ctx.restore();
+}
+function advBossStageIndex() { return LEVELS.findIndex(l => l.stageId === '2-4'); }
+function advCanBossRematch() {
+  try { return gameState === 'clear' && homeEntryMode !== 'failed' && (LEVELS[currentLevelIndex] || {}).stageId === '2-4' && getNextLevelIndex(currentLevelIndex) >= LEVELS.length; } catch (e) { return false; }
+}
+function advLeaveHomeForStage(idx, keepHp) {
+  try { h2MapClose(); } catch (e) {}
+  try { h2ClosePanel(); h2HideSummary(); } catch (e) {}
+  try { closeHomeScreen(); } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); } catch (e) {}
+  try { advHideFinalResults(); } catch (e) {}
+  if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+  prepCheckpoint = null;
+  const go = () => {
+    currentLevelIndex = idx;
+    if (!(player.hp > 0)) keepHp = false;
+    loadLevel(idx);
+    restart({ keepHp: !!keepHp });
+  };
+  if (typeof runWithAssetGate === 'function') runWithAssetGate(getAssetGroupsForLevel(idx), getAssetGateTitleForLevel(idx), go); else go();
+}
+// 小V的家：再打一次橘子王（目前的背包、HP、武器直接出發；不影響正式總分）
+function advStartBossRematch() {
+  const idx = advBossStageIndex(); if (idx < 0) return;
+  if (typeof isBossWeaponGateBlocked === 'function' && isBossWeaponGateBlocked(idx)) {
+    h2Toast('挑戰橘子王前，請先準備氣球劍。'); try { h2ShowFix({ card: 'recipes', focus: 'basicSword', label: '打開氣球秘笈' }); } catch (e) {} return;
+  }
+  advPlayMode = 'bossRematch';
+  nextBringDog = false; bringBalloonDog = false;
+  console.log('[Mode] 再打一次橘子王（不計入正式總分）');
+  advLeaveHomeForStage(idx, true);
+}
+// 小V的家：自選關卡練習（地圖選關；目前的背包、HP、武器直接出發；不影響正式總分）
+function advPracticeUnlocked() {
+  const st = h2MapState(); const set = new Set(st.cleared);
+  try { const d = advLoad(); if ((d.recent || []).length || Object.keys(d.best || {}).length) st.ids.forEach(id => set.add(id)); } catch (e) {}
+  if (st.next >= 0) set.add(st.ids[st.next]);
+  return set;
+}
+function advStartPractice(stageId) {
+  const idx = getLevelIndexByStageId(stageId); if (idx < 0) return;
+  if (typeof isBossWeaponGateBlocked === 'function' && isBossWeaponGateBlocked(idx)) {
+    h2Toast('2-4 只能使用氣球劍，請先到氣球秘笈製作一把。'); return;
+  }
+  advPlayMode = 'practice';
+  nextBringDog = false; bringBalloonDog = false;
+  console.log('[Mode] 自選關卡練習：' + stageId + '（不計入正式總分）');
+  advLeaveHomeForStage(idx, true);
+}
+function h2PracticeOpen() {
+  if (h2Busy(400, 'practice')) return;
+  h2MapOpen();
+  if (H2.map) { H2.map.mode = 'practice'; h2PracticeDecorate(); }
+}
+function h2PracticeDecorate() {
+  if (!H2.map || H2.map.mode !== 'practice') return;
+  const ok = advPracticeUnlocked();
+  const title = h2$('h2-map-title'); if (title) title.textContent = '自選關卡練習・選擇關卡';
+  const fog = h2$('h2-map-fog'); if (fog) fog.innerHTML = '';
+  document.querySelectorAll('#h2-map-nodes .h2-map-node').forEach(n => {
+    const can = ok.has(n.dataset.stage);
+    n.classList.toggle('is-practice', can); n.classList.toggle('is-locked', !can);
+    const dot = n.querySelector('.h2-map-dot'); if (dot) dot.textContent = can ? '▶' : '🔒';
+  });
+  const info = h2$('h2-map-info');
+  if (info) info.innerHTML = '<span>🎯 <b>自選關卡練習</b>：點一個關卡，用目前的背包、HP 和武器直接出發</span><small>資源與耐用度照常消耗；練習不會影響正式總分與排行榜</small>';
+}
+
+//  【小V的家】正式挑戰：確認後清空本次冒險背包，從 1-1 重新開始（玩家身份、V幣、設定、已讀對話紀錄、歷史正式成績都保留）
+function advConfirmOfficialChallenge() {
+  let ov = document.getElementById('adv-official-confirm');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'adv-official-confirm'; ov.className = 'oc-choose h2-skin'; document.body.appendChild(ov); }
+  ov.innerHTML = '<section class="h2-card p2-confirm-card oc-card" role="dialog" aria-modal="true" aria-labelledby="adv-official-title">'
+    + '<div class="h2-head"><span class="h2-plank h2-plank--static" id="adv-official-title">正式挑戰</span></div>'
+    + '<div class="p2-confirm-body oc-body"><p>將清空背包從 1-1 重新開始挑戰<br>確定出發嗎？</p></div>'
+    + '<div class="p2-confirm-btns oc-btns"><button type="button" class="h2-pill h2-pill--green" data-oc="yes">是</button>'
+    + '<button type="button" class="h2-pill h2-pill--red" data-oc="no">否</button></div></section>';
+  ov.classList.add('is-open');
+  const close = () => { ov.classList.remove('is-open'); ov.innerHTML = ''; ov.onclick = null; window.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
+  window.addEventListener('keydown', onKey, true);
+  ov.onclick = e => { const b = e.target.closest && e.target.closest('[data-oc]'); if (!b) { if (e.target === ov) close(); return; } e.preventDefault(); e.stopPropagation(); const v = b.dataset.oc; close(); if (v === 'yes') advStartOfficialChallenge(); };
+  setTimeout(() => { const b = ov.querySelector('[data-oc="no"]'); if (b) try { b.focus({ preventScroll: true }); } catch (e) {} }, 30);
+}
+function advStartOfficialChallenge() {
+  console.log('[Mode] 正式挑戰：清空本次冒險背包，從 1-1 出發');
+  advPlayMode = 'official';
+  try { if (advAttempt) advAttempt.ended = true; } catch (e) {}
+  try { const d = advLoad(); if (d.active) { advArchiveRun(d, d.active, d.active.status === 'test_only' ? 'test_only' : 'abandoned'); d.active = null; advSave(d); } } catch (e) {}
+  advGuardClear('official-start');
+  resetInventory();   // 只清冒險背包：金幣、材料、武器、補給、小狗、重要物品、秘笈配方、第一章流程旗標（不清 RPG 已讀紀錄／身份／V幣／歷史成績）
+  try { resetCurrentChallenge(); } catch (e) {}
+  try { prepCheckpoint = null; advLastSnapshot = null; nextBringDog = false; bringBalloonDog = false; levelStartBringDog = false; } catch (e) {}
+  try { adventureTestLoadoutActive = false; initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot(); } catch (e) {}
+  try { H2.pendingSummary = null; H2.summary = null; } catch (e) {}
+  player.hp = player.maxHp;
+  advIntroChecked = true;
+  try { h2MapClose(); h2ClosePanel(); h2HideSummary(); } catch (e) {}
+  try { closeHomeScreen(); } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); advHideFinalResults(); } catch (e) {}
+  if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+  const go = () => {
+    currentLevelIndex = 0; loadLevel(0); restart({ keepHp: false });
+    try { if (!advIntroActive && !(typeof ocActive !== 'undefined' && ocActive) && advIntroShouldPlay()) advIntroRunInLevel(); } catch (e) {}   // 世界地圖：飛行屋飛向 1-1 → 故事選擇 → 1-1
+  };
+  if (typeof runWithAssetGate === 'function') runWithAssetGate(getAssetGroupsForLevel(0), getAssetGateTitleForLevel(0), go); else go();
+}
+
+//  【暫停選單】氣球秘笈／冒險手冊 → 使用小V的家 2.0 的同一套面板（同一份資料、同一套點擊處理），關閉後回到暫停選單
+var h2Overlay = null;   // { kind, from: 'pause' }
+function h2OverlayOpen(kind, opts) {
+  const hs = document.getElementById('home-screen'), root = h2$('h2-root');
+  if (!hs || !root || H2.legacy) return false;
+  try { h2BindOnce(); h2PreloadCore(); } catch (e) {}
+  h2Overlay = { kind, from: 'pause' };
+  hs.classList.add('h2-on', 'h2-overlay-only'); hs.style.display = 'flex';
+  h2OpenPanel(kind, opts || {});
+  return true;
+}
+function h2OverlayClose() {
+  if (!h2Overlay) return;
+  h2Overlay = null;
+  const hs = document.getElementById('home-screen');
+  if (hs) { hs.classList.remove('h2-overlay-only'); if (!H2.open) { hs.classList.remove('h2-on'); hs.style.display = 'none'; } }
+  if (gameState === 'paused') { const pauseEl = document.getElementById('pause-overlay'); if (pauseEl) pauseEl.style.display = 'flex'; }
+  advClearHeldInput();
+}
+function h2OverlayFromPause(kind) {
+  if (gameState === 'playing') pauseGame();
+  if (gameState !== 'paused') return;
+  try { if (typeof closePauseBag === 'function') closePauseBag(); } catch (e) {}
+  const pauseEl = document.getElementById('pause-overlay');
+  if (pauseEl) pauseEl.style.display = 'none';
+  if (kind === 'recipes') { try { sfxOnRecipeOpen(); } catch (e) {} }
+  if (!h2OverlayOpen(kind)) { if (pauseEl) pauseEl.style.display = 'flex'; if (kind === 'recipes') { guidebookFromPause = true; if (pauseEl) pauseEl.style.display = 'none'; openGuidebook(); } else rpgOpenNotes(); }
+}
+function openHandbookFromPause() { h2OverlayFromPause('handbook'); }
+
+//  【冒險手冊】新增大類別「主線劇情」：回顧看過的動態漫畫（沿用同一個播放器與專案檔；播完／略過回到手冊，不進 1-1、不改觀看紀錄與進度）
+const ADV_STORY_LIST = [{ id: 'openingComic', name: '氣球森林・開場故事', desc: '五幕開場動態漫畫（第一章：氣球森林）' }];
+function advStorySeen(id) { if (id === 'openingComic') return typeof ocSeen === 'function' && ocSeen(); return false; }
+function advStoryPanelHtml() {
+  return '<div class="h2-list">' + ADV_STORY_LIST.map(s => {
+    const seen = advStorySeen(s.id);
+    return h2RowHtml({ iconHtml: h2Icon('mapScroll'), name: s.name, desc: h2Esc(s.desc) + '<br>' + (seen ? '已觀看，可以再看一次' : '冒險中看過之後就能在這裡回顧'),
+      side: seen ? '<button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="storyPlay" data-key="' + s.id + '">▶ 觀看</button>' : '<span class="h2-count is-zero">尚未觀看</span>' });
+  }).join('') + '</div><div class="h2-sub" style="margin-top:1em">回顧劇情和第一次一樣完整播放（可略過本幕／略過整段）；看完會回到冒險手冊，不會影響冒險進度、分數或資源。</div>';
+}
+function advStoryPlay(id) {
+  if (id !== 'openingComic' || !advStorySeen(id) || typeof ocPlay !== 'function') return;
+  if (typeof ocActive !== 'undefined' && ocActive) return;
+  console.log('[Story] 回顧：' + id + (h2Overlay ? '（暫停中的冒險手冊）' : '（小V的家）'));
+  ocPlay(how => { console.log('[Story] 回顧結束（' + how + '）→ 回到冒險手冊'); try { if (H2.panel) h2RenderPanel(); } catch (e) {} }, 'review', { review: true });
+}
+
+(function v375Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v375) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v375 = true; globalThis[name] = w; };
+  // ── 操作恢復 ──
+  wrapFn('resumeGame', o => function () {
+    if (h2Overlay) return;                                         // 暫停中開著秘笈／手冊：先關掉面板
+    const was = gameState; const r = o.apply(this, arguments);
+    if (was === 'paused' && gameState === 'playing') { advExitStuckModes('繼續冒險'); advClearHeldInput(); }
+    return r;
+  });
+  wrapFn('pauseGame', o => function () { const r = o.apply(this, arguments); if (gameState === 'paused') { advClearHeldInput(); advGuardWrite('pause'); } return r; });
+  wrapFn('restart', o => function () {
+    advExitStuckModes('重新開始／換關'); advClearHeldInput();
+    const r = o.apply(this, arguments);
+    advGuardArmed = true; advGuardWrite('stage-start');
+    return r;
+  });
+  // ── 關卡快照保護：通關／戰敗回復／回到小V的家 → 刪除；耐用度變化、定期、離開頁面 → 更新 ──
+  wrapFn('triggerClear', o => function () { advGuardClear('clear'); return o.apply(this, arguments); });
+  wrapFn('restoreLevelStartSnapshot', o => function () { const r = o.apply(this, arguments); advGuardClear('rollback'); return r; });
+  wrapFn('openHomeScreen', o => function () { advGuardClear('home'); return o.apply(this, arguments); });
+  wrapFn('weaponSnapSync', o => function () { const r = o.apply(this, arguments); advGuardWrite('weapon'); return r; });
+  wrapFn('advPersistTick', o => function () { const r = o.apply(this, arguments); advGuardWrite('tick'); return r; });
+  try { window.addEventListener('pagehide', () => advGuardWrite('pagehide')); document.addEventListener('visibilitychange', () => { if (document.hidden) advGuardWrite('hidden'); }); } catch (e) {}
+  // ── 計分資格：練習／再打一次橘子王不建立、不更新正式挑戰 ──
+  wrapFn('advOnAttemptStart', o => function () {
+    if (advPlayMode !== 'official') { advAttempt = null; advTestEntryFlag = false; console.log('[Score] ' + (ADV_PLAY_MODE_LABEL[advPlayMode] || advPlayMode) + '：這一關不寫入正式挑戰'); return; }
+    return o.apply(this, arguments);
+  });
+  wrapFn('advAfterClear', o => function () { if (advPlayMode !== 'official') return; return o.apply(this, arguments); });
+  wrapFn('advStartNewAdventure', o => function () { advPlayMode = 'official'; return o.apply(this, arguments); });
+  wrapFn('advDoAbandonAndStart', o => function () { advPlayMode = 'official'; return o.apply(this, arguments); });
+  // ── 小V的家：「出發 再玩一次」→「再打一次橘子王」 ──
+  wrapFn('h2RenderCenter', o => function () {
+    const r = o.apply(this, arguments);
+    try { const go = h2$('h2-nav-go'), sp = go && go.querySelector('span'), sub = h2$('h2-go-sub');
+      if (sp) { const rem = advCanBossRematch(); sp.textContent = rem ? '再打一次橘子王' : '出發'; if (sub && rem) sub.textContent = ''; go.classList.toggle('is-rematch', rem); } } catch (e) {}
+    return r;
+  });
+  wrapFn('h2Go', o => function () { if (advCanBossRematch()) { if (h2Busy(600, 'rematch')) return; advStartBossRematch(); return; } return o.apply(this, arguments); });
+  // ── 自選關卡練習：世界地圖的關卡選擇畫面 ──
+  wrapFn('h2MapRender', o => function () { const r = o.apply(this, arguments); try { h2PracticeDecorate(); } catch (e) {} return r; });
+  wrapFn('h2MapClick', o => function (e) {
+    if (H2.map && H2.map.mode === 'practice') {
+      const t = e.target, n = t.closest && t.closest('.h2-map-node');
+      if (n) { if (n.classList.contains('is-practice')) advStartPractice(n.dataset.stage); else h2Toast('還沒走到這一關，先在冒險中抵達吧！'); return; }
+    }
+    return o.apply(this, arguments);
+  });
+  // ── 暫停選單：氣球秘笈改用 2.0 面板 ──
+  wrapFn('openGuidebookFromPause', o => function () { h2OverlayFromPause('recipes'); });
+  wrapFn('h2ClosePanel', o => function () { const r = o.apply(this, arguments); if (h2Overlay) h2OverlayClose(); return r; });
+  // ── 冒險手冊：主線劇情 ──
+  try { H2_PANEL_TITLES.story = '主線劇情'; } catch (e) {}
+  wrapFn('h2PanelBody', o => function (kind) {
+    if (kind === 'story') return advStoryPanelHtml();
+    let html = o.apply(this, arguments);
+    if (kind === 'handbook') {
+      const row = h2RowHtml({ iconHtml: h2Icon('mapScroll'), name: '主線劇情', desc: '回顧看過的動態漫畫（氣球森林・開場故事）', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="openPanel" data-key="story">打開</button>' });
+      html = html.replace('<div class="h2-list">', '<div class="h2-list">' + row);
+    }
+    if (kind === 'challenge') {
+      html = html.replace(/<div class="h2-soon"[^>]*>「正式挑戰／自由練習」的模式選擇與世界地圖，會在下一階段開放。<br>目前請用「出發」繼續目前的冒險。<\/div>/,
+        '<div class="h2-sub" style="margin-top:0.8em">🏆 只有從小V的家按「正式挑戰」（或第一次冒險）從 1-1 依序完成七關，才會產生新的正式總分。<br>自選關卡練習、再打一次橘子王不會影響正式總分。</div>');
+    }
+    return html;
+  });
+  try {
+    const root = h2$('h2-root');
+    if (root) root.addEventListener('click', e => {
+      const t = e.target, c = sel => t.closest && t.closest(sel);
+      const sp = c('[data-h2-act="storyPlay"]'); if (sp) { e.stopPropagation(); advStoryPlay(sp.dataset.key); return; }
+      if (c('#h2-nav-practice')) { e.stopImmediatePropagation(); h2PracticeOpen(); return; }
+      if (c('#h2-nav-challenge')) { e.stopImmediatePropagation(); advConfirmOfficialChallenge(); return; }
+    }, true);
+  } catch (e) {}
+  // 暫停中開著的 2.0 面板：Esc 關面板回到暫停選單（不會直接繼續冒險）
+  window.addEventListener('keydown', e => {
+    if (!h2Overlay || e.key !== 'Escape') return;
+    if (typeof ocActive !== 'undefined' && ocActive) return;
+    if (typeof rpgNotesOpen === 'function' && rpgNotesOpen()) return;
+    e.stopImmediatePropagation(); e.preventDefault(); h2ClosePanel();
+  }, true);
+  // ── 畫面：練習模式標示、開發者模式標示 ──
+  wrapFn('draw', o => function () { const r = o.apply(this, arguments); try { advDrawPlayModeBadge(); advDrawDevModeBanner(); } catch (e) {} return r; });
+  // ── 預先載入：世界地圖兩張圖（開場飛行屋用）、王權劍 HUD 圖示（進 2-4 時）──
+  try { setTimeout(() => { try { const c = h2MapContinent(); h2Load(c.image); h2Load(c.home); } catch (e) {} }, 0); } catch (e) {}
+  wrapFn('loadLevel', o => function () { const r = o.apply(this, arguments); try { if (isBossStageLevel(currentLevelIndex)) weaponHudImg('royalSword'); } catch (e) {} return r; });
 })();

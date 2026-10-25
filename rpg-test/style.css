@@ -3948,3 +3948,23 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 .oc-choose .oc-body { text-align: center; font-size: 1.15em; padding: 0.6em 0.5em 0.3em; }
 .oc-choose .oc-btns { flex-wrap: wrap; gap: 0.8em; padding: 0.5em 0 0.6em; }
 .oc-choose .oc-btns .h2-pill { min-width: 9.5em; font-size: 1.05em; }
+
+/* ════════════════════════════════════════════════════════════════════
+   v0.3.75：暫停選單開啟的氣球秘笈／冒險手冊 → 只顯示小V之家 2.0 的面板層（同一套面板；小V之家的背景與按鈕不顯示）
+   ════════════════════════════════════════════════════════════════════ */
+#home-screen.h2-overlay-only { background: rgba(8,6,30,0.55) !important; }
+#home-screen.h2-overlay-only #h2-root > .h2-scene,
+#home-screen.h2-overlay-only #h2-root > .h2-ui { display: none !important; }
+#home-screen.h2-overlay-only #h2-root { background: transparent !important; }
+/* v0.3.75：自選關卡練習（世界地圖選關）— 可以練習的關卡顯示 ▶ */
+.h2-map-node.is-practice { cursor: pointer; }
+.h2-map-node.is-practice .h2-map-dot { background: #3aa0ff; color: #fff; font-size: 0.8em; animation: h2MapNext 1.6s ease-in-out infinite; }
+.h2-map-node.is-practice:hover .h2-map-dot, .h2-map-node.is-practice:focus-visible .h2-map-dot { filter: brightness(1.15); transform: scale(1.12); }
+/* v0.3.75：小V之家「再打一次橘子王」 */
+#h2-nav-go.is-rematch span { font-size: 0.92em; letter-spacing: 0; }
+#h2-nav-go.is-rematch small:empty { display: none; }
+/* v0.3.75：開場飛行屋 — 地圖還沒顯示前，跳過鍵停用 */
+#adv-intro .adv-intro-skip:disabled { opacity: 0.6; cursor: default; }
+/* v0.3.75：「自選關卡練習」比原本的「自由練習」長 → 窄螢幕（例如 667×375）縮小字距與左右留白（字級不變，維持手機最小字級），不被截斷 */
+#h2-nav-practice { letter-spacing: -0.03em; }
+@media (max-width: 760px) { .h2-nav .h2-pill { padding: 0 calc(var(--bh) * 0.06); } #h2-nav-practice { letter-spacing: -0.07em; } }
