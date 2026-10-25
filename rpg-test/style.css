@@ -3975,3 +3975,21 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
   background: rgba(120, 20, 90, 0.78); color: #fff; font: 700 10px/1.4 'Nunito', sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,0.35); white-space: nowrap; }
 #adv-devtest-badge.is-home { left: max(6px, env(safe-area-inset-left)); transform: none; bottom: max(6px, env(safe-area-inset-bottom)); }
 #adv-devtest-badge button { pointer-events: auto; border: 0; border-radius: 999px; padding: 0 7px; font: 700 10px/1.5 'Nunito', sans-serif; background: #fff; color: #7a1460; cursor: pointer; }
+
+/* v0.3.78：讀取動畫畫面（動畫／進度條／文案畫在 canvas；錯誤說明與按鈕用 HTML） */
+#asset-loading-overlay.adv-load { background: #140e28; }
+#asset-loading-overlay .adv-load-cv { display: block; }
+#asset-loading-overlay .adv-load-err {
+  position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(560px, 92vw); max-height: 46vh; overflow: auto; box-sizing: border-box;
+  padding: 10px 12px; border-radius: 10px; background: rgba(60, 18, 30, 0.94); border: 1px solid rgba(255, 140, 140, 0.55);
+  color: #ffeef0; font-size: 14px; line-height: 1.5; text-align: left;
+}
+#asset-loading-overlay .adv-load-err-dev { margin-top: 4px; font-size: 12px; opacity: .85; }
+#asset-loading-overlay .adv-load-err-list { font-size: 12px; opacity: .8; word-break: break-all; }
+#asset-loading-overlay .adv-load-err-btns { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+#asset-loading-overlay .adv-load-err-btns button {
+  flex: 1; min-width: 120px; padding: 8px; border-radius: 8px; border: 0; font-weight: bold; font-size: 14px; cursor: pointer;
+}
+#asset-loading-overlay .adv-load-err-btns button[data-k="retry"] { background: #ffe066; color: #3a2400; }
+#asset-loading-overlay .adv-load-err-btns button[data-k="cont"] { background: #d8d2e6; color: #2a2238; }

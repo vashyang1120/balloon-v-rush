@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.77-fresh-start-test-reset-test-1';
-const BUILD_TIME   = '2026-10-25 14:00';
+const GAME_VERSION = 'adventure-v0.3.78-loading-animation-trivia-test-1';
+const BUILD_TIME   = '2026-10-25 14:36';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -18336,6 +18336,7 @@ const ASSET_PENDING_APPLIES = [];   // gate 結束後才載好的圖片（下次
 let assetGateActive = false;        // gate（loading 畫面）進行中 → 可以直接套用到快取
 let assetGateProgress = { title: '', loaded: 0, failed: 0, total: 0, current: '', groups: [], audio: '' };
 
+// v0.3.78：讀取畫面改用 LOADING_TRIVIA（見下方讀取動畫段落）；這組舊提示保留不刪（目前沒有再顯示）
 const ASSET_LOADING_TIPS = [
   '你知道嗎？第一章的小怪是蠍子，因為牠有刺，也因為氣球小V是天蠍座！',
   '撿到圓氣球和 260 長條氣球，回小V的家可以做出氣球武器！',
@@ -18621,92 +18622,561 @@ function getAssetGateProgress() {
   return Object.assign(assetGateProgress, { total, loaded, failed, current, audio: audio.join('　') });
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.78：讀取動畫 × 氣球知識（開機 Canvas 讀取畫面 + 關卡 HTML 讀取畫面共用同一個繪製器）
+//  ・四種情境：BOOT（開機：小V之家起飛）／CHAPTER_1（氣球小狗尋寶）／CHAPTER_2（橘子怪噴油）／ORANGE_KING（橘子王）
+//    沒有專屬動畫的讀取 → GENERAL（只有進度條＋一般氣球知識輪播）
+//  ・情境依「玩家正要前往哪裡」判斷（開機中 → BOOT；要載的群組含 orangeKingBoss → 橘子王；含 chapter2 → 第二章；含 chapter1 → 第一章），
+//    不看最後載入的是哪個檔案（第二章也會載 dog／chapter1，但仍顯示橘子怪）
+//  ・進度 = 這次閘門真正要載的群組（getAssetGateProgress：已完成數／總數），角色的水平位置、房屋升空、氣球大小都依它決定；
+//    動畫圖本身「不算進度」，也不擋進關（裝飾用：載不到就只畫進度條＋文字）→ 不會形成循環依賴
+//  ・顯示用的位置只做極短的平滑（永遠不超過真實進度）；載完就立刻關閉讀取畫面，不會為了播完動畫而拖延
+//  ・圖片以「真實圖片尺寸」換算校正點；縮小時先做多段高品質縮圖、畫到畫面上時關閉插值並對齊實際像素 → 保留像素顆粒感、不會糊
+// ════════════════════════════════════════════════════════════════════
+const LOADING_TRIVIA = {
+  // 四組專屬讀取動畫的固定文案（已定案，請勿改寫）
+  scenes: {
+    BOOT:        '你知道嗎？常見的造型氣球使用天然乳膠製成！乳膠來自橡膠樹的白色乳液，經過加工，就能變成有彈性的氣球喔！',
+    CHAPTER_1:   '你知道嗎？氣球小狗不只會幫你找出隱藏寶物，還能在每回合療癒你、恢復 HP 喔！',
+    CHAPTER_2:   '你知道嗎？橘子皮含有「檸檬烯（Limonene）」，這種天然油性成分會削弱乳膠氣球，讓氣球更容易爆破！',
+    ORANGE_KING: '橘子王為什麼放任橘子油破壞氣球森林？難道他真的只是個壞人嗎？',
+  },
+  // 一般氣球知識庫（沒有專屬動畫的讀取畫面依序輪播；之後要增加直接往下加）
+  general: [
+    '你知道嗎？乳膠氣球是用模具浸入乳膠液，再經過加工、清洗、加熱定型與脫模製成的！',
+    '你知道嗎？天然乳膠來自橡膠樹，具有生物降解的可能，但做成氣球後，在自然環境中的分解速度並不固定。玩過的氣球記得妥善回收或丟棄，不要任意放飛喔！',
+    '你知道嗎？挑選氣球也能為環境盡一份心力！除了天然乳膠原料，還可以留意品牌是否使用再生能源、妥善處理製程廢水，以及取得環境管理相關認證喔！',
+    '你知道嗎？氣球小V挑選氣球時，不只看價格、手感和耐用度，也重視產品安全與環境管理認證！因為讓孩子玩得開心，也要兼顧健康與環境！',
+  ],
+};
+// 結算畫面的小知識仍是原本的 TRIVIA（不受影響）；讀取畫面只用 LOADING_TRIVIA
+const RESULT_TRIVIA = TRIVIA;
+let advLoadGeneralIdx = (() => { try { return parseInt(sessionStorage.getItem('balloonV_loadTriviaIdx') || '0', 10) || 0; } catch (e) { return 0; } })();
+function advLoadPickTrivia(scene) {
+  if (LOADING_TRIVIA.scenes[scene]) return LOADING_TRIVIA.scenes[scene];
+  const list = LOADING_TRIVIA.general;
+  const t = list[((advLoadGeneralIdx % list.length) + list.length) % list.length];
+  advLoadGeneralIdx++;                                   // 依序輪播：同一次讀取固定一則，下次讀取換下一則（不會連續重複）
+  try { sessionStorage.setItem('balloonV_loadTriviaIdx', String(advLoadGeneralIdx)); } catch (e) {}
+  return t;
+}
+function advLoadDevOn() {
+  try { return /[?&]devtools=1\b/.test(location.search) || localStorage.getItem('balloonV_devTools') === '1'; } catch (e) { return false; }
+}
+// 玩家正要前往的情境（不是看最後載入的檔名）
+function advLoadSceneFor(groups) {
+  const g = groups || [];
+  if (typeof assetBootReady !== 'undefined' && !assetBootReady) return 'BOOT';
+  if (g.includes('orangeKingBoss')) return 'ORANGE_KING';
+  if (g.includes('chapter2')) return 'CHAPTER_2';
+  if (g.includes('chapter1')) return 'CHAPTER_1';
+  return 'GENERAL';
+}
+
+// ── 讀取動畫素材（正式路徑 assets/adventure/ui/loading/，透過既有 Asset Resolver：GitHub Pages → 相對路徑 → raw）──
+const LOAD_ART_DIR = 'assets/adventure/ui/loading/';
+const LOAD_ART_FILES = {
+  BOOT:        ['loading_boot_house_01.png', 'loading_boot_house_02.png', 'loading_boot_house_03.png', 'loading_boot_house_04.png'],
+  CHAPTER_1:   ['loading_ch1_dog_01.png', 'loading_ch1_dog_02.png'],
+  CHAPTER_2:   ['loading_ch2_orange_angry.png', 'loading_ch2_orange_spray.png', 'loading_ch2_orange_tired.png', 'loading_ch2_balloon_intact.png', 'loading_ch2_balloon_pop.png'],
+  ORANGE_KING: ['loading_boss_orangeking_01.png', 'loading_boss_orangeking_02.png', 'loading_boss_orangeking_03.png', 'loading_boss_orangeking_04.png'],
+};
+// ── 可調參數（畫面座標以 960×540 為準；src* 是原圖像素座標，量自 1254×1254 原圖，會依真實圖片尺寸自動換算）──
+const LOAD_ANIM_TUNING = {
+  bar: { x: 150, y: 360, w: 660, h: 16 },        // 進度條（角色站在進度條上）
+  titleY: 50, pctY: 398,
+  trivia: { x: 100, y: 418, w: 760, h: 100, font: 22, minFont: 18, lineH: 1.42, maxLines: 3 },
+  smoothMs: 90,                                    // 顯示位置追上真實進度的時間常數（只影響呈現）
+  BOOT: {
+    bodyW: 160,                                    // 房屋本體的顯示寬度（四張圖都以房屋本體對齊，不受氣球數量影響）
+    frameAt: [0, 0.10, 0.20, 0.30],                // 0～10% 01、10～20% 02、20～30% 03、30% 以上 04
+    riseFrom: 0.30, landFrom: 0.90, liftMax: 62,   // 30%～90% 升空（柔和弧線），90%～100% 降落
+    bob: 2.5, bobHz: 0.6,                          // 飛行中的輕微漂浮
+    refW: 1254,
+    frames: [                                      // 房屋本體寬度／中心 x／底部 y（原圖像素，量自透明邊界下半部）
+      { srcBodyW: 966, srcCx: 646,   srcBottom: 1160 },
+      { srcBodyW: 914, srcCx: 642,   srcBottom: 1223 },
+      { srcBodyW: 887, srcCx: 646.5, srcBottom: 1220 },
+      { srcBodyW: 825, srcCx: 647.5, srcBottom: 1189 },
+    ],
+  },
+  CHAPTER_1: {
+    width: 190,                                    // 嗅聞姿勢的顯示寬度（坐姿用同一比例，不會忽大忽小）
+    sitAt: 0.90,                                   // 90% 起改坐姿
+    sitScale: 1.0, refW: 1255,
+    sniff: { srcW: 1121, srcCx: 642, srcBottom: 1000, noseX: 957, noseY: 840 },   // 鼻尖＝粉紅鼻子中心
+    sit:   { srcCx: 600, srcBottom: 1013, noseX: 864, noseY: 533 },
+    noseLevelSniff: 2, noseLevelSit: 3,            // 鼻子光效沿用主遊戲 DOG_NOSE_BLINK（L2 嗅聞中、L3 發現目標）
+    bob: 1, bobHz: 2,
+  },
+  CHAPTER_2: {
+    bar: { x: 250, w: 600 },                       // 第二章進度條（左端留給橘子怪）
+    orangeH: 150,                                  // angry 整張可見高度對應的顯示高度
+    orangeLeftX: 80,                               // 橘子怪本體左下角固定的位置
+    refW: 1254, srcAngryH: 906,
+    poses: {                                       // 本體尺寸校正：scale 讓三個姿勢的橘子怪本體一樣大；anchor＝本體左下角（不含噴油）
+      angry: { scale: 1.00, srcLeft: 163, srcBottom: 1078 },
+      spray: { scale: 1.37, srcLeft: 141, srcBottom: 963 },
+      tired: { scale: 1.08, srcLeft: 136, srcBottom: 1089 },
+    },
+    balloonSizes: [58, 72, 88, 104, 122],           // A～E：氣球本體（紅色部分）的顯示高度；0～20%／20～40%／40～60%／60～80%／80～100%
+    balloon: {
+      intact: { srcCx: 684, srcCy: 567, srcBodyH: 617, srcStringBottom: 1055 },
+      pop:    { srcCx: 591, srcCy: 591 },
+    },
+    balloonStartX: 25, balloonBob: 3,
+    timing: { angry: 900, spray: 650, tired: 950, popShow: 480, fadeIn: 180 },   // 一輪：intact＋angry → spray＋pop → tired → 下一輪
+  },
+  ORANGE_KING: {
+    height: 270, cx: 480, refW: 1254, srcH: 1190,
+    frames: [null,                                 // 1～4：臉（白鬍子中心）x 與腳底 y → 每張都對齊同一點，不會因留白跳動；scale＝本體尺寸校正
+      { srcFaceX: 655, srcBottom: 1209, scale: 0.92 },   // 01 原圖裡的橘子王本體大約大 8～10%（腰帶圓章／鬍子較寬）→ 縮回和其他三張一樣
+      { srcFaceX: 661, srcBottom: 1225 },
+      { srcFaceX: 591, srcBottom: 1225 },
+      { srcFaceX: 682, srcBottom: 1220 },
+    ],
+    seq: [[1, 520], [2, 520], [1, 520], [3, 520], [4, 1400]],   // 01→02→01→03→04（04 疲累多停一下）
+    bob: 1.5, bobHz: 0.8,
+  },
+};
+const ADV_LOAD_ART = {};   // 檔名 → { status: loading/ok/failed, img, url, w, h, bbox, tried }
+function advLoadArt(file, lowPriority) {
+  if (ADV_LOAD_ART[file]) return ADV_LOAD_ART[file];
+  const rec = ADV_LOAD_ART[file] = { file, status: 'loading', img: null, url: '', w: 0, h: 0, bbox: null, tried: [] };
+  let cands = [];
+  try { cands = getAssetSourceCandidates(LOAD_ART_DIR + file); } catch (e) { cands = [{ src: 'pages', url: resolveAdventureAssetSrc(LOAD_ART_DIR + file) }]; }
+  const tryAt = i => {
+    if (i >= cands.length) {
+      rec.status = 'failed';
+      console.warn('[Loading] 讀取動畫圖片載入失敗（裝飾用，不影響遊戲）：' + LOAD_ART_DIR + file + '\n' + rec.tried.map(t => '   ' + t.result + '  ' + t.url).join('\n'));
+      return;
+    }
+    const c = cands[i], im = new Image();
+    if (lowPriority) { try { im.fetchPriority = 'low'; } catch (e) {} }
+    let done = false;
+    const tm = setTimeout(() => { if (done) return; done = true; rec.tried.push({ url: c.url, result: 'timeout' }); try { im.src = ''; } catch (e) {} tryAt(i + 1); }, 15000);
+    im.onload = () => {
+      if (done) return; done = true; clearTimeout(tm);
+      if (!im.naturalWidth) { rec.tried.push({ url: c.url, result: 'error（naturalWidth 0）' }); tryAt(i + 1); return; }
+      rec.tried.push({ url: c.url, result: 'ok' });
+      rec.bbox = advLoadMeasureAlpha(im);
+      // 省記憶體：原圖約 1254×1254（解碼後每張約 6MB），只留一份最長邊 768px 的縮小版（約 2.4MB）供讀取畫面縮放；原始 PNG 檔不變
+      Object.assign(rec, { status: 'ok', img: advLoadMaster(im), url: c.url, w: im.naturalWidth, h: im.naturalHeight });
+    };
+    im.onerror = () => { if (done) return; done = true; clearTimeout(tm); rec.tried.push({ url: c.url, result: 'error' }); tryAt(i + 1); };
+    im.src = c.url;
+  };
+  tryAt(0);
+  return rec;
+}
+const LOAD_ART_MASTER_MAX = 768;
+function advLoadMaster(im) {
+  try {
+    const nw = im.naturalWidth, nh = im.naturalHeight, f = Math.min(1, LOAD_ART_MASTER_MAX / Math.max(nw, nh));
+    if (f >= 1) return im;
+    const c = document.createElement('canvas'); c.width = Math.round(nw * f); c.height = Math.round(nh * f);
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    // 先縮一半再縮到目標，避免一次縮太多產生雜點
+    const h = document.createElement('canvas'); h.width = Math.round(nw / 2); h.height = Math.round(nh / 2);
+    const hg = h.getContext('2d'); hg.imageSmoothingEnabled = true; hg.imageSmoothingQuality = 'high'; hg.drawImage(im, 0, 0, h.width, h.height);
+    g.drawImage(h.width >= c.width ? h : im, 0, 0, c.width, c.height);
+    c.naturalWidth = nw; c.naturalHeight = nh; c._advMaster = true;   // 校正座標仍以原圖像素為準
+    return c;
+  } catch (e) { return im; }
+}
+// 讀取真實透明邊界（只做檢查／開發者資訊；跨網域無法讀像素時略過，改用量好的校正值）
+function advLoadMeasureAlpha(im) {
+  try {
+    const f = 4, w = Math.ceil(im.naturalWidth / f), h = Math.ceil(im.naturalHeight / f);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    return { x: x0 * f, y: y0 * f, w: (x1 - x0 + 1) * f, h: (y1 - y0 + 1) * f, bottom: (y1 + 1) * f };
+  } catch (e) { return null; }
+}
+function advLoadEnsureSceneArt(scene, lowPriority) { (LOAD_ART_FILES[scene] || []).forEach(f => advLoadArt(f, lowPriority)); }
+function advLoadArtImg(file) { const r = ADV_LOAD_ART[file]; return r && r.status === 'ok' ? r.img : null; }
+// 開機完成後：在背景依序預載其他讀取動畫（一次一張、低優先，不和遊戲素材搶頻寬；不算進任何進度）
+let advLoadPrefetchStarted = false;
+function advLoadPrefetchRest() {
+  if (advLoadPrefetchStarted) return; advLoadPrefetchStarted = true;
+  const files = [].concat(LOAD_ART_FILES.CHAPTER_1, LOAD_ART_FILES.CHAPTER_2, LOAD_ART_FILES.ORANGE_KING);
+  const next = () => {
+    const f = files.shift(); if (!f) return;
+    const r = advLoadArt(f, true);
+    const wait = () => { if (r.status === 'loading') setTimeout(wait, 250); else setTimeout(next, 60); };
+    wait();
+  };
+  next();
+}
+
+// ── 像素圖縮放快取：先多段高品質縮小到實際要顯示的像素大小，畫上畫面時關閉插值、對齊整數像素（顆粒清楚、不糊、移動時不閃）──
+function advLoadScaled(img, kd) {
+  const key = Math.max(1, Math.round(kd * 2000));
+  const cache = img._advLoadScaled || (img._advLoadScaled = new Map());
+  let c = cache.get(key);
+  if (c) return c;
+  const tw = Math.max(1, Math.round(img.naturalWidth * kd)), th = Math.max(1, Math.round(img.naturalHeight * kd));
+  let src = img, sw = img._advMaster ? img.width : img.naturalWidth, sh = img._advMaster ? img.height : img.naturalHeight;
+  const up = tw > sw;
+  while (sw / 2 > tw * 1.05) {                    // 多段縮小（每次一半）避免鋸齒與雜點
+    const hw = Math.max(tw, Math.round(sw / 2)), hh = Math.max(th, Math.round(sh / 2));
+    const t = document.createElement('canvas'); t.width = hw; t.height = hh;
+    const tg = t.getContext('2d'); tg.imageSmoothingEnabled = true; tg.imageSmoothingQuality = 'high'; tg.drawImage(src, 0, 0, sw, sh, 0, 0, hw, hh);
+    src = t; sw = hw; sh = hh;
+  }
+  c = document.createElement('canvas'); c.width = tw; c.height = th;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = !up; g.imageSmoothingQuality = 'high';     // 需要放大（極大螢幕）時用最近鄰，保留方塊像素
+  g.drawImage(src, 0, 0, sw, sh, 0, 0, tw, th);
+  if (cache.size > 8) cache.delete(cache.keys().next().value);
+  cache.set(key, c);
+  return c;
+}
+// 把原圖上的一點 (srcAx, srcAy) 放在畫面座標 (ax, ay)，k＝每個原圖像素對應幾個畫面單位（960×540 座標）
+function advLoadDrawSprite(g, S, img, k, ax, ay, srcAx, srcAy, alpha) {
+  if (!img) return;
+  const c = advLoadScaled(img, k * S), rx = c.width / img.naturalWidth, ry = c.height / img.naturalHeight;
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.imageSmoothingEnabled = false;
+  if (alpha != null) g.globalAlpha = Math.max(0, Math.min(1, alpha));
+  g.drawImage(c, Math.round(ax * S - srcAx * rx), Math.round(ay * S - srcAy * ry));
+  g.restore();
+}
+// 鼻子光效：沿用主遊戲尋寶鼻子的顏色／節奏／光暈（DOG_NOSE_BLINK），畫在讀取畫面的座標上（不影響原本的小狗尋寶）
+function advLoadNoseGlow(g, nx, ny, level, z, tSec) {
+  const spec = (typeof DOG_NOSE_BLINK !== 'undefined' && DOG_NOSE_BLINK[level]) || { hz: 1.8, r0: 13, r1: 22, a0: 0.10, a1: 1.00, s0: 0.05, w0: 1.4, w1: 2.0 };
+  const wave = 0.5 + 0.5 * Math.sin(tSec * Math.PI * 2 * spec.hz), p = Math.pow(wave, 1.6);
+  const R = (spec.r0 + (spec.r1 - spec.r0) * p) * z, a = spec.a0 + (spec.a1 - spec.a0) * p;
+  g.save();
+  const gr = g.createRadialGradient(nx, ny, 1, nx, ny, R);
+  gr.addColorStop(0, 'rgba(255,255,225,' + a + ')'); gr.addColorStop(0.35, 'rgba(255,212,50,' + (a * 0.85) + ')'); gr.addColorStop(1, 'rgba(255,165,0,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(nx, ny, R, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(255,215,70,' + Math.min(1, spec.s0 + (1 - spec.s0) * p) + ')'; g.lineWidth = (spec.w0 + spec.w1 * p) * z;
+  g.beginPath(); g.arc(nx, ny, R * 0.62, 0, Math.PI * 2); g.stroke();
+  if (p > 0.35) { g.fillStyle = 'rgba(255,255,255,' + ((p - 0.35) / 0.65 * 0.95) + ')'; g.beginPath(); g.arc(nx, ny, (1.6 + level * 0.5) * z, 0, Math.PI * 2); g.fill(); }
+  if (level >= 2) {
+    const n = level === 3 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const ang = tSec * (level === 3 ? 2.6 : 1.6) + i * Math.PI * 2 / n, x = nx + Math.cos(ang) * R * 0.95, y = ny + Math.sin(ang) * R * 0.75, r = (level === 3 ? 5 : 4) * z;
+      g.save(); g.globalAlpha = 0.45 + 0.5 * p; g.translate(x, y); g.rotate(ang); g.fillStyle = '#fff6c0'; g.beginPath();
+      for (let j = 0; j < 8; j++) { const rr = j % 2 === 0 ? r : r * 0.32, aa = j * Math.PI / 4; g.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
+      g.closePath(); g.fill(); g.restore();
+    }
+  }
+  g.restore();
+}
+// 中文換行：英文單字（例如 Limonene）不拆開；句首不放標點
+function advLoadWrap(g, text, maxW) {
+  const toks = String(text).match(/[A-Za-z0-9]+|\s+|./gu) || [];
+  const noStart = /^[，。！？、）」』：；…,.!?)]$/;
+  const lines = []; let cur = '';
+  toks.forEach(t => {
+    const test = cur + t;
+    if (cur && g.measureText(test).width > maxW && !noStart.test(t)) { lines.push(cur.trimEnd()); cur = t.trimStart(); }
+    else cur = test;
+  });
+  if (cur) lines.push(cur);
+  return lines;
+}
+function advLoadTier(p) { return Math.max(0, Math.min(4, Math.floor(p * 5 + 1e-9))); }
+function advLoadSmooth(u) { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); }
+function advLoadBootLift(p) {
+  const T = LOAD_ANIM_TUNING.BOOT;
+  if (p <= T.riseFrom) return 0;
+  if (p < T.landFrom) return T.liftMax * Math.sin((p - T.riseFrom) / (T.landFrom - T.riseFrom) * Math.PI / 2);
+  return T.liftMax * (1 - advLoadSmooth((p - T.landFrom) / (1 - T.landFrom)));
+}
+function advLoadBootFrame(p) { const at = LOAD_ANIM_TUNING.BOOT.frameAt; let f = 0; for (let i = 0; i < at.length; i++) if (p >= at[i]) f = i; return f; }
+function advLoadKingFrame(ms) {
+  const seq = LOAD_ANIM_TUNING.ORANGE_KING.seq, total = seq.reduce((a, s) => a + s[1], 0);
+  let t = ((ms % total) + total) % total;
+  for (let i = 0; i < seq.length; i++) { if (t < seq[i][1]) return seq[i][0]; t -= seq[i][1]; }
+  return seq[0][0];
+}
+function advLoadCh2Phase(st, now, realP) {
+  const T = LOAD_ANIM_TUNING.CHAPTER_2.timing, cycle = T.angry + T.spray + T.tired;
+  const el = Math.max(0, now - st.t0), idx = Math.floor(el / cycle), ct = el - idx * cycle;
+  if (st.ch2Cycle !== idx) { st.ch2Cycle = idx; st.ch2Tier = advLoadTier(realP); }   // 每一輪新出現的氣球用當下的真實進度級距
+  const pose = ct < T.angry ? 'angry' : ct < T.angry + T.spray ? 'spray' : 'tired';
+  let balloon = null, alpha = 1;
+  if (ct < T.angry) { balloon = 'intact'; alpha = Math.min(1, ct / T.fadeIn); }
+  else if (ct < T.angry + T.popShow) { balloon = 'pop'; const left = T.angry + T.popShow - ct; alpha = Math.min(1, left / 150); }
+  return { pose, balloon, alpha, tier: st.ch2Tier, cycle: idx };
+}
+
+// ── 主繪製器（g：2D context；S：每個 960×540 單位對應幾個實際像素；st：讀取狀態）──
+function advLoadRender(g, S, st, now) {
+  const L = LOAD_ANIM_TUNING, W = 960, H = 540;
+  const tSec = now / 1000, realP = Math.max(0, Math.min(1, st.realP || 0)), p = Math.max(0, Math.min(realP, st.dispP || 0));
+  g.save();
+  g.setTransform(S, 0, 0, S, 0, 0);
+  // 背景（沿用原本讀取畫面的深紫色）＋淡淡的星點
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2a1c4e'); bg.addColorStop(1, '#140e28');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 26; i++) {
+    const x = (i * 157.3) % W, y = 20 + (i * 83.7) % 300, tw = 0.25 + 0.25 * Math.sin(tSec * 1.3 + i);
+    g.fillStyle = 'rgba(255,240,200,' + tw + ')'; g.fillRect(Math.round(x), Math.round(y), 2, 2);
+  }
+  // 標題
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.fillStyle = '#f4ecff'; g.font = 'bold 26px sans-serif';
+  g.fillText(st.title || '派對島準備中...', W / 2, L.titleY);
+  // 進度條
+  const scene = st.scene, bar = Object.assign({}, L.bar, (scene === 'CHAPTER_2' && L.CHAPTER_2.bar) || {});
+  const r = bar.h / 2;
+  const rr = (x, y, w, h, rad) => { g.beginPath(); g.moveTo(x + rad, y); g.arcTo(x + w, y, x + w, y + h, rad); g.arcTo(x + w, y + h, x, y + h, rad); g.arcTo(x, y + h, x, y, rad); g.arcTo(x, y, x + w, y, rad); g.closePath(); };
+  g.fillStyle = 'rgba(255,255,255,0.15)'; rr(bar.x, bar.y, bar.w, bar.h, r); g.fill();
+  if (p > 0) {
+    const fw = Math.max(bar.h, bar.w * p);
+    const fg = g.createLinearGradient(bar.x, 0, bar.x + bar.w, 0); fg.addColorStop(0, '#ffb347'); fg.addColorStop(1, '#ffe066');
+    g.save(); rr(bar.x, bar.y, bar.w, bar.h, r); g.clip(); g.fillStyle = fg; g.fillRect(bar.x, bar.y, fw, bar.h); g.restore();
+  }
+  g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5; rr(bar.x, bar.y, bar.w, bar.h, r); g.stroke();
+  // 動畫（圖片沒載到 → 不畫角色，只留進度條與文字）
+  const groundY = bar.y - 1;
+  st.dbg = null;
+  try {
+    if (scene === 'BOOT') {
+      const T = L.BOOT, fi = advLoadBootFrame(realP), img = advLoadArtImg(LOAD_ART_FILES.BOOT[fi]);
+      if (img) {
+        const fr = T.frames[fi], s = img.naturalWidth / T.refW, k = T.bodyW / (fr.srcBodyW * s);
+        const lift = advLoadBootLift(p), air = T.liftMax ? lift / T.liftMax : 0;
+        const bob = air > 0.02 ? Math.sin(tSec * Math.PI * 2 * T.bobHz) * T.bob * air : 0;
+        advLoadDrawSprite(g, S, img, k, bar.x + bar.w * p, groundY - lift + bob, fr.srcCx * s, fr.srcBottom * s);
+        st.dbg = { frame: fi + 1, x: Math.round(bar.x + bar.w * p), lift: Math.round(lift) };
+      }
+    } else if (scene === 'CHAPTER_1') {
+      const T = L.CHAPTER_1, sit = realP >= T.sitAt, img = advLoadArtImg(LOAD_ART_FILES.CHAPTER_1[sit ? 1 : 0]);
+      const ref = advLoadArtImg(LOAD_ART_FILES.CHAPTER_1[0]) || img;
+      if (img) {
+        const s = img.naturalWidth / T.refW, k = T.width / (T.sniff.srcW * (ref.naturalWidth / T.refW)) * (sit ? T.sitScale : 1);
+        const P = sit ? T.sit : T.sniff, cx = bar.x + bar.w * p, bob = Math.round(Math.abs(Math.sin(tSec * Math.PI * T.bobHz)) * T.bob);
+        advLoadDrawSprite(g, S, img, k, cx, groundY - bob, P.srcCx * s, P.srcBottom * s);
+        const nx = cx + (P.noseX - P.srcCx) * s * k, ny = groundY - bob + (P.noseY - P.srcBottom) * s * k;
+        advLoadNoseGlow(g, nx, ny, sit ? T.noseLevelSit : T.noseLevelSniff, Math.max(0.85, k / 0.12), tSec);
+        st.dbg = { pose: sit ? 'sit' : 'sniff', x: Math.round(cx), noseX: Math.round(nx), noseY: Math.round(ny) };
+      }
+    } else if (scene === 'CHAPTER_2') {
+      const T = L.CHAPTER_2, ph = advLoadCh2Phase(st, now, realP), F = LOAD_ART_FILES.CHAPTER_2;
+      // 氣球（在橘子怪後面畫：噴油會蓋在氣球上）
+      const bImg = ph.balloon ? advLoadArtImg(ph.balloon === 'intact' ? F[3] : F[4]) : null;
+      if (bImg) {
+        const s = bImg.naturalWidth / T.refW, B = T.balloon.intact, k = T.balloonSizes[ph.tier] / (B.srcBodyH * s);
+        const cx = bar.x + T.balloonStartX + (bar.w - T.balloonStartX) * p;
+        const cy = groundY - 4 - (B.srcStringBottom - B.srcCy) * s * k + Math.sin(tSec * 2.2) * T.balloonBob;
+        const A = ph.balloon === 'intact' ? B : T.balloon.pop;
+        advLoadDrawSprite(g, S, bImg, k, cx, cy, A.srcCx * s, A.srcCy * s, ph.alpha);
+      }
+      const oImg = advLoadArtImg(F[['angry', 'spray', 'tired'].indexOf(ph.pose)]);
+      if (oImg) {
+        const s = oImg.naturalWidth / T.refW, P = T.poses[ph.pose], k = T.orangeH / (T.srcAngryH * s) * P.scale;
+        advLoadDrawSprite(g, S, oImg, k, T.orangeLeftX, groundY, P.srcLeft * s, P.srcBottom * s);
+      }
+      st.dbg = { pose: ph.pose, balloon: ph.balloon || '-', size: 'ABCDE'[ph.tier], x: Math.round(bar.x + T.balloonStartX + (bar.w - T.balloonStartX) * p) };
+    } else if (scene === 'ORANGE_KING') {
+      const T = L.ORANGE_KING, fn = advLoadKingFrame(now - st.t0), img = advLoadArtImg(LOAD_ART_FILES.ORANGE_KING[fn - 1]);
+      if (img) {
+        const s = img.naturalWidth / T.refW, fr = T.frames[fn], k = T.height / (T.srcH * s) * (fr.scale || 1);
+        const bob = Math.sin(tSec * Math.PI * 2 * T.bobHz) * T.bob;
+        advLoadDrawSprite(g, S, img, k, T.cx, groundY + 2 - Math.max(0, bob), fr.srcFaceX * s, fr.srcBottom * s);
+        st.dbg = { frame: fn };
+      }
+    }
+  } catch (e) { if (!st.warned) { st.warned = true; console.warn('[Loading] 讀取動畫繪製失敗（改用純進度條）', e); } }
+  if (st.dbg) { st.dbg.p = +p.toFixed(4); st.dbg.real = +realP.toFixed(4); }
+  // 百分比（真實載入進度）
+  g.textAlign = 'center'; g.fillStyle = '#fff3c4'; g.font = 'bold 22px sans-serif';
+  g.fillText(st.error ? '載入遇到問題' : Math.floor(realP * 100) + '%', W / 2, L.pctY);
+  // 氣球知識／劇情文案（錯誤訊息出現時讓位給錯誤說明）
+  if (!st.error && st.trivia) {
+    const T = L.trivia;
+    g.fillStyle = 'rgba(255,255,255,0.07)'; rr(T.x, T.y, T.w, T.h, 12); g.fill();
+    let fs = T.font, lines;
+    for (;;) { g.font = fs + 'px sans-serif'; lines = advLoadWrap(g, '💡 ' + st.trivia, T.w - 40); if (lines.length <= T.maxLines || fs <= T.minFont) break; fs--; }
+    const lh = fs * T.lineH, y0 = T.y + T.h / 2 - (lines.length - 1) * lh / 2;
+    g.fillStyle = '#ffe9a8'; g.textBaseline = 'middle';
+    lines.forEach((ln, i) => g.fillText(ln, W / 2, y0 + i * lh));
+    g.textBaseline = 'alphabetic';
+  }
+  // 開發者模式：載入細節（一般玩家不顯示檔名／路徑／群組）
+  if (st.dev && st.devLine) {
+    g.textAlign = 'left'; g.font = '12px monospace'; g.fillStyle = 'rgba(200,230,255,0.75)';
+    let line = st.devLine; while (line.length > 8 && g.measureText(line).width > W - 16) line = line.slice(0, -2);   // 太長就截斷（完整資訊在 console）
+    g.fillText(line === st.devLine ? line : line + '…', 8, 534);
+  }
+  if (st.preview) { g.textAlign = 'right'; g.font = 'bold 13px sans-serif'; g.fillStyle = '#ff9db0'; g.fillText('開發者預覽（不是真實載入）・點一下關閉', W - 8, 18); }
+  g.restore();
+}
+
 // ── Loading 畫面（HTML overlay，蓋在結算頁 / 小V的家 / 暫停畫面之上）──
 let assetLoadingEl = null, assetLoadingTimer = 0, assetLoadingTipIdx = 0;
+const ADV_LOAD = { cv: null, raf: 0, st: null, lastTs: 0, visible: false };
 function ensureAssetLoadingOverlay() {
   if (assetLoadingEl || typeof document === 'undefined' || !document.createElement || !document.body) return assetLoadingEl;
   const d = document.createElement('div');
-  d.id = 'asset-loading-overlay';
-  d.setAttribute('style', 'position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;'
-    + 'background:rgba(20,14,40,0.94);font-family:sans-serif;color:#f4ecff;padding:16px;box-sizing:border-box');
-  d.innerHTML = '<div style="width:min(520px,100%);text-align:center">'
-    + '<div data-k="title" style="font-size:22px;font-weight:bold;margin-bottom:14px">派對島準備中...</div>'
-    + '<div style="height:14px;border-radius:7px;background:rgba(255,255,255,0.15);overflow:hidden"><div data-k="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#ffb347,#ffe066);transition:width .15s"></div></div>'
-    + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px;opacity:.9"><span data-k="count">0 / 0</span><span data-k="pct">0%</span></div>'
-    + '<div data-k="file" style="font-size:12px;opacity:.65;margin-top:6px;word-break:break-all;min-height:16px"></div>'
-    + '<div data-k="audio" style="font-size:12px;opacity:.65;margin-top:4px;min-height:16px"></div>'
-    + '<div data-k="err" style="display:none;margin-top:14px;padding:10px;border-radius:8px;background:rgba(255,80,80,0.18);font-size:13px;text-align:left"></div>'
-    + '<div data-k="tip" style="font-size:13px;margin-top:18px;color:#ffe9a8;line-height:1.5"></div>'
-    + '</div>';
+  d.id = 'asset-loading-overlay'; d.className = 'adv-load';
+  d.setAttribute('style', 'position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;background:#140e28;font-family:sans-serif;color:#f4ecff;overflow:hidden');
+  d.innerHTML = '<canvas class="adv-load-cv" style="display:block"></canvas>'
+    + '<div data-k="err" class="adv-load-err" style="display:none"></div>'
+    // 相容用（舊程式／測試會讀這些欄位）：不顯示在畫面上
+    + '<div class="adv-load-compat" style="display:none" aria-hidden="true"><span data-k="title"></span><div data-k="bar" style="width:0%"></div><span data-k="count"></span><span data-k="pct"></span><span data-k="file"></span><span data-k="audio"></span><span data-k="tip"></span></div>';
   document.body.appendChild(d);
   assetLoadingEl = d;
+  ADV_LOAD.cv = d.querySelector('canvas');
   return d;
 }
-function updateAssetLoadingOverlay() {
-  const el = assetLoadingEl;
-  if (!el) return;
+// 讀取百分比：已載好的＋「可略過的素材」失敗（不影響遊玩）才算完成；必要素材失敗不算（不會把失敗偽裝成 100%）
+function advLoadComputeReal() {
   const p = getAssetGateProgress();
+  let ok = 0, total = 0;
+  (p.groups || []).forEach(g => (getAssetManifest()[g] || []).forEach(e => {
+    total++;
+    const r = ASSET_REGISTRY[e.path], st = r ? r.status : 'idle';
+    if (st === 'loaded' || (st === 'failed' && !e.critical && !(r && r.critical))) ok++;
+  }));
   const done = p.loaded + p.failed;
-  const pct = p.total ? Math.floor(done / p.total * 100) : 0;
+  return { p, done, real: total ? ok / total : 0 };
+}
+function updateAssetLoadingOverlay() {
+  const el = assetLoadingEl, st = ADV_LOAD.st;
+  if (!el) return;
+  const { p, done, real } = advLoadComputeReal();
+  const pct = Math.floor(real * 100);
+  if (st && !st.preview) {
+    st.realP = Math.max(st.attemptMax || 0, real); st.attemptMax = st.realP;   // 同一次載入內不倒退
+    st.title = p.title;
+    if (st.dev) {
+      const anim = (LOAD_ART_FILES[st.scene] || []).map(f => (ADV_LOAD_ART[f] || {}).status === 'ok' ? 1 : 0).reduce((a, b) => a + b, 0);
+      st.devLine = '[DEV] ' + st.scene + '｜' + (p.groups || []).join('+') + '｜成功 ' + p.loaded + '／失敗 ' + p.failed + '／共 ' + p.total
+        + (p.current ? '｜載入中：' + p.current : '') + '｜動畫圖 ' + anim + '/' + (LOAD_ART_FILES[st.scene] || []).length
+        + (st.dbg ? '｜' + Object.entries(st.dbg).map(([k, v]) => k + '=' + v).join(' ') : '');
+    }
+  }
   const q = k => el.querySelector('[data-k="' + k + '"]');
   q('title').textContent = p.title;
   q('bar').style.width = pct + '%';
   q('count').textContent = '已載入 ' + done + ' / ' + p.total + (p.failed ? '（失敗 ' + p.failed + '）' : '');
   q('pct').textContent = pct + '%';
-  q('file').textContent = p.current ? '正在載入：' + p.current : '';
-  q('audio').textContent = p.audio ? '音樂：' + p.audio : '';
+  const dev = st ? st.dev : advLoadDevOn();
+  q('file').textContent = dev && p.current ? '正在載入：' + p.current : '';
+  q('audio').textContent = dev && p.audio ? '音樂：' + p.audio : '';
+}
+function advLoadFitCanvas() {
+  const el = assetLoadingEl, cv = ADV_LOAD.cv; if (!el || !cv) return 1;
+  const vw = el.clientWidth || window.innerWidth || 960, vh = el.clientHeight || window.innerHeight || 540;
+  let cw = Math.min(vw, vh * 16 / 9), ch = cw * 9 / 16;
+  cw = Math.floor(cw); ch = Math.floor(ch);
+  const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+  const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
+  if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+  return bw / 960;
+}
+function advLoadFrame(ts) {
+  ADV_LOAD.raf = 0;
+  if (!ADV_LOAD.visible || !ADV_LOAD.st || !ADV_LOAD.cv) return;
+  const st = ADV_LOAD.st, now = performance.now();
+  const dt = ADV_LOAD.lastTs ? Math.min(100, now - ADV_LOAD.lastTs) : 16; ADV_LOAD.lastTs = now;
+  if (st.preview) st.realP = st.previewP(now);
+  // 顯示位置：極短平滑追上真實進度（只是呈現，不改真實數據；永遠不超過真實進度）
+  const target = st.realP || 0;
+  if (target < (st.dispP || 0)) st.dispP = target;
+  else { st.dispP = (st.dispP || 0) + (target - (st.dispP || 0)) * Math.min(1, dt / LOAD_ANIM_TUNING.smoothMs); if (target - st.dispP < 0.002) st.dispP = target; }
+  try { const S = advLoadFitCanvas(); advLoadRender(ADV_LOAD.cv.getContext('2d'), S, st, now); } catch (e) { if (!st.warned) { st.warned = true; console.warn('[Loading] 讀取畫面繪製失敗', e); } }
+  ADV_LOAD.raf = requestAnimationFrame(advLoadFrame);
+}
+function advLoadStartLoop() {
+  ADV_LOAD.visible = true; ADV_LOAD.lastTs = 0;
+  if (!ADV_LOAD.raf && typeof requestAnimationFrame === 'function') ADV_LOAD.raf = requestAnimationFrame(advLoadFrame);
+}
+function advLoadStopLoop() {
+  ADV_LOAD.visible = false;
+  if (ADV_LOAD.raf) { try { cancelAnimationFrame(ADV_LOAD.raf); } catch (e) {} ADV_LOAD.raf = 0; }
 }
 function showAssetLoadingOverlay(title, groups) {
   // 進度只算這次真的要載的群組（已載好的群組不重複計入）
   const fresh = groups.filter(g => !isAssetGroupSettled(g));
   assetGateProgress.title = title; assetGateProgress.groups = fresh.length ? fresh : groups;
+  const scene = advLoadSceneFor(groups);   // 依玩家要前往的地方（完整群組）判斷，不看剩下哪些群組
+  advLoadEnsureSceneArt(scene, false);      // 讀取動畫圖：裝飾用，不算進度、不擋進關
+  const dev = advLoadDevOn();
+  ADV_LOAD.st = { scene, title, groups: groups.slice(), trivia: advLoadPickTrivia(scene), realP: 0, dispP: 0, attemptMax: 0, t0: performance.now(), dev, devLine: '', error: false, preview: false };
+  if (dev) console.info('[Loading] 讀取畫面：' + scene + '（' + title + '）　要載入的群組：' + assetGateProgress.groups.join(' + '));
   const el = ensureAssetLoadingOverlay();
   if (!el) return;
   el.querySelector('[data-k="err"]').style.display = 'none';
-  el.querySelector('[data-k="tip"]').textContent = '💡 ' + ASSET_LOADING_TIPS[assetLoadingTipIdx++ % ASSET_LOADING_TIPS.length];
+  el.querySelector('[data-k="tip"]').textContent = '💡 ' + ADV_LOAD.st.trivia;
+  assetLoadingTipIdx++;
+  el.onclick = null;
   el.style.display = 'flex';
   updateAssetLoadingOverlay();
   clearInterval(assetLoadingTimer);
   assetLoadingTimer = setInterval(updateAssetLoadingOverlay, 120);
+  advLoadStartLoop();
 }
 function hideAssetLoadingOverlay() {
   clearInterval(assetLoadingTimer);
-  if (assetLoadingEl) assetLoadingEl.style.display = 'none';
+  advLoadStopLoop();
+  if (ADV_LOAD.st && ADV_LOAD.st.scene === 'BOOT') { try { setTimeout(advLoadPrefetchRest, 3000); } catch (e) {} }
+  ADV_LOAD.st = null;
+  if (assetLoadingEl) { assetLoadingEl.style.display = 'none'; assetLoadingEl.onclick = null; }
 }
 function showAssetLoadingError(result, onRetry, onContinue) {
   const el = assetLoadingEl;
   if (!el) { onContinue(); return; }
   clearInterval(assetLoadingTimer); updateAssetLoadingOverlay();
+  const st = ADV_LOAD.st, dev = st ? st.dev : advLoadDevOn();
+  if (st) st.error = true;
   const box = el.querySelector('[data-k="err"]');
-  const list = result.criticalFailedPaths.slice(0, 8).map(p => '・' + p.split('/').pop()).join('<br>') + (result.criticalFailedPaths.length > 8 ? '<br>…共 ' + result.criticalFailedPaths.length + ' 個' : '');
-  box.innerHTML = '<b>⚠️ 有 ' + result.criticalFailedPaths.length + ' 個必要素材載入失敗</b>（完整網址已列在 console）<br>' + list
-    + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
-    + '<button data-k="retry" style="flex:1;padding:8px;border-radius:6px;border:0;background:#ffe066;font-weight:bold">重新載入</button>'
-    + '<button data-k="cont" style="flex:1;padding:8px;border-radius:6px;border:0;background:#ccc">' + (ADVENTURE_TEST_TOOLS_ENABLED ? '測試版：用 fallback 繼續' : '仍要繼續（部分畫面會簡化）') + '</button></div>';
+  const n = result.criticalFailedPaths.length;
+  const list = dev ? '<div class="adv-load-err-list">' + result.criticalFailedPaths.slice(0, 8).map(p => '・' + p.split('/').pop()).join('<br>') + (n > 8 ? '<br>…共 ' + n + ' 個' : '') + '</div>' : '';
+  box.innerHTML = '<b>⚠️ 有些遊戲需要的素材沒有載入成功</b><div>請確認網路連線後，按「重新載入」再試一次。</div>'
+    + (dev ? '<div class="adv-load-err-dev">［開發者］必要素材失敗 ' + n + ' 個（完整網址與原因已列在 console）</div>' + list : '')
+    + '<div class="adv-load-err-btns">'
+    + '<button type="button" data-k="retry">🔄 重新載入</button>'
+    + '<button type="button" data-k="cont">' + (ADVENTURE_TEST_TOOLS_ENABLED && dev ? '測試版：用 fallback 繼續' : '仍要繼續（部分畫面會簡化）') + '</button></div>';
   box.style.display = 'block';
-  box.querySelector('[data-k="retry"]').onclick = () => { box.style.display = 'none'; onRetry(); };
-  box.querySelector('[data-k="cont"]').onclick = () => { console.warn('[AssetPreload] 使用者選擇以 fallback 繼續，缺少：', result.criticalFailedPaths); onContinue(); };
+  box.querySelector('[data-k="retry"]').onclick = e => {
+    if (e) e.stopPropagation();
+    box.style.display = 'none';
+    if (ADV_LOAD.st) { ADV_LOAD.st.error = false; ADV_LOAD.st.attemptMax = 0; }   // 重試＝新的一次載入：進度從實際剩下的開始算
+    onRetry();
+  };
+  box.querySelector('[data-k="cont"]').onclick = e => { if (e) e.stopPropagation(); console.warn('[AssetPreload] 使用者選擇以 fallback 繼續，缺少：', result.criticalFailedPaths); onContinue(); };
 }
-// 5. drawLoadingScreen(progress)：canvas 版（開機 gate 時畫在遊戲畫面上）
+// 5. drawLoadingScreen(progress)：canvas 版（開機 gate 時畫在遊戲畫面上）— v0.3.78 與 HTML 讀取畫面共用同一個繪製器
+//    HTML 讀取畫面顯示中（它蓋在遊戲畫面上）→ 這裡只鋪底色，避免同一個動畫畫兩次
+const ADV_LOAD_CANVAS_ST = { t0: 0 };
 function drawLoadingScreen(progress) {
   const p = progress || getAssetGateProgress();
-  const done = p.loaded + p.failed, pct = p.total ? done / p.total : 0;
-  ctx.save();
-  ctx.fillStyle = '#1a1230'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f4ecff'; ctx.font = 'bold 24px sans-serif';
-  ctx.fillText(p.title || '派對島準備中...', CANVAS_W / 2, CANVAS_H / 2 - 50);
-  const bw = 440, bx = (CANVAS_W - bw) / 2, by = CANVAS_H / 2 - 20;
-  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(bx, by, bw, 14);
-  ctx.fillStyle = '#ffd36b'; ctx.fillRect(bx, by, bw * pct, 14);
-  ctx.font = '14px sans-serif'; ctx.fillStyle = 'rgba(244,236,255,0.9)';
-  ctx.fillText('已載入 ' + done + ' / ' + p.total + '　' + Math.floor(pct * 100) + '%', CANVAS_W / 2, by + 36);
-  ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(244,236,255,0.6)';
-  if (p.current) ctx.fillText('正在載入：' + p.current, CANVAS_W / 2, by + 56);
-  ctx.fillStyle = '#ffe9a8'; ctx.font = '13px sans-serif';
-  ctx.fillText('💡 ' + ASSET_LOADING_TIPS[0], CANVAS_W / 2, by + 96);
-  ctx.restore();
+  if (ADV_LOAD.visible) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#140e28'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H); ctx.restore(); return; }
+  const st = ADV_LOAD_CANVAS_ST, now = performance.now();
+  if (!st.t0) { st.t0 = now; st.scene = advLoadSceneFor(p.groups); st.trivia = advLoadPickTrivia(st.scene); advLoadEnsureSceneArt(st.scene, false); st.dev = advLoadDevOn(); }
+  st.realP = advLoadComputeReal().real; st.dispP = st.realP; st.title = p.title;
+  st.devLine = st.dev ? '[DEV] ' + st.scene + '｜成功 ' + p.loaded + '／失敗 ' + p.failed + '／共 ' + p.total + (p.current ? '｜載入中：' + p.current : '') : '';
+  advLoadRender(ctx, CANVAS_W / 960, st, now);
 }
+// 開發者限定：讀取動畫預覽（不是真實載入、不碰任何素材群組／進度／存檔）— console：debugLoadingPreview('CHAPTER_2', { ms: 8000 }) 或 { p: 0.5 }
+function debugLoadingPreview(scene, opts) {
+  if (!advLoadDevOn()) { console.warn('[Loading] 只有開發者模式（?devtools=1）可以預覽'); return false; }
+  if (typeof assetGateBusy !== 'undefined' && assetGateBusy) { console.warn('[Loading] 正在真實載入中，不能預覽'); return false; }
+  const o = opts || {}, sc = LOAD_ART_FILES[scene] || scene === 'GENERAL' ? scene : 'BOOT', ms = o.ms || 8000, t0 = performance.now();
+  advLoadEnsureSceneArt(sc, false);
+  const el = ensureAssetLoadingOverlay(); if (!el) return false;
+  clearInterval(assetLoadingTimer);
+  ADV_LOAD.st = { scene: sc, title: o.title || '［預覽］' + sc, trivia: advLoadPickTrivia(sc), realP: 0, dispP: 0, t0, dev: true, devLine: '[DEV] 預覽 ' + sc + '（不是真實載入）', error: false, preview: true,
+    previewP: now => (o.p != null ? Math.max(0, Math.min(1, o.p)) : Math.min(1, ((now - t0) % (ms + 1500)) / ms)) };
+  el.querySelector('[data-k="err"]').style.display = 'none';
+  el.style.display = 'flex';
+  el.onclick = () => { if (ADV_LOAD.st && ADV_LOAD.st.preview) hideAssetLoadingOverlay(); };
+  advLoadStartLoop();
+  return true;
+}
+if (typeof window !== 'undefined') Object.assign(window, { LOADING_TRIVIA, LOAD_ANIM_TUNING, debugLoadingPreview, advLoadSceneFor });
 
 // 進關閘門：該關 critical 素材 ready 才執行 fn；沒 ready → loading 畫面 → 載完才開始（不會先 fallback 再跳圖）
 let assetGateBusy = false;
