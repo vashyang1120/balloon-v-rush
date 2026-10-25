@@ -3968,3 +3968,10 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 /* v0.3.75：「自選關卡練習」比原本的「自由練習」長 → 窄螢幕（例如 667×375）縮小字距與左右留白（字級不變，維持手機最小字級），不被截斷 */
 #h2-nav-practice { letter-spacing: -0.03em; }
 @media (max-width: 760px) { .h2-nav .h2-pill { padding: 0 calc(var(--bh) * 0.06); } #h2-nav-practice { letter-spacing: -0.07em; } }
+
+/* v0.3.77：開發者測試（全新冒險測試存檔）標示 — 小字；遊戲中放在下方中央（左右鍵與跳／砍之間的空白），小V的家放在左下角（書桌，沒有按鈕）；不擋操作 */
+#adv-devtest-badge { position: fixed; bottom: max(4px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 15900;
+  display: flex; align-items: center; gap: 5px; padding: 1px 3px 1px 8px; border-radius: 999px; pointer-events: none;
+  background: rgba(120, 20, 90, 0.78); color: #fff; font: 700 10px/1.4 'Nunito', sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,0.35); white-space: nowrap; }
+#adv-devtest-badge.is-home { left: max(6px, env(safe-area-inset-left)); transform: none; bottom: max(6px, env(safe-area-inset-bottom)); }
+#adv-devtest-badge button { pointer-events: auto; border: 0; border-radius: 999px; padding: 0 7px; font: 700 10px/1.5 'Nunito', sans-serif; background: #fff; color: #7a1460; cursor: pointer; }

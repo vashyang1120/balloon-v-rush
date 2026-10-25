@@ -43,9 +43,40 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.76-map-unlock-reload-fix-test-1';
-const BUILD_TIME   = '2026-10-25 12:30';
+const GAME_VERSION = 'adventure-v0.3.77-fresh-start-test-reset-test-1';
+const BUILD_TIME   = '2026-10-25 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.77：開發者「重新開始測試」＝獨立的全新冒險測試存檔（正式玩家資料完全不動）
+//  ・只在開發者模式（?devtools=1 或 balloonV_devTools）且開啟測試旗標（balloonV_devFreshTest_v1）時生效
+//  ・生效時，下面這些「冒險進度／獎勵」存檔的讀寫全部改到同名＋「__devtest」的獨立位置（在 localStorage 這一層統一轉向，每個讀寫點都一致）：
+//      背包 balloonV_inventory、冒險挑戰（進行中／歷史成績／永久解鎖／重新整理狀態）、關卡快照、RPG 已讀與開場漫畫觀看紀錄、小V之家、
+//      V幣、V幣紀錄、每日獎勵、成就
+//  ・不轉向（共用、只讀或與進度無關）：玩家身份與頭像、音效設定、開發工具的定位設定
+//  ・測試期間不寫 Firebase 的 gameLogs/adventure（測試成績不進任何排行榜／紀錄）
+//  ・沒有開發者模式時（例如網址拿掉 ?devtools=1）一律讀寫正式資料；測試資料不會被當成正式進度
+// ════════════════════════════════════════════════════════════════════
+var ADV_DEVTEST_FLAG_KEY = 'balloonV_devFreshTest_v1';
+var ADV_DEVTEST_SUFFIX = '__devtest';
+var ADV_DEVTEST_PATTERNS = [/^balloonV_inventory$/, /^balloonV_adventureChallenge_v1test__/, /^balloonV_adventureStageGuard_v1__/, /^balloonV_adventureRpg_v1__/,
+  /^balloonVAdventureHome__/, /^balloonVAdventureWallet__/, /^balloonVAdventureVCoinLogs__/, /^balloonVAdventureDailyRewards__/, /^balloonVAdventureAchievements__/];
+var ADV_DEVTEST = (function () {
+  const st = { on: false, suspend: false, rawGet: null, rawSet: null, rawRemove: null };
+  try {
+    if (typeof Storage === 'undefined' || typeof localStorage === 'undefined') return st;
+    const P = Storage.prototype; st.rawGet = P.getItem; st.rawSet = P.setItem; st.rawRemove = P.removeItem;
+    const dev = /[?&]devtools=1\b/.test(location.search) || st.rawGet.call(localStorage, 'balloonV_devTools') === '1';
+    st.on = dev && st.rawGet.call(localStorage, ADV_DEVTEST_FLAG_KEY) === '1';
+    const isAdv = k => typeof k === 'string' && !k.endsWith(ADV_DEVTEST_SUFFIX) && ADV_DEVTEST_PATTERNS.some(re => re.test(k));
+    P.getItem = function (k) { if (this === localStorage && st.on && isAdv(k)) k = k + ADV_DEVTEST_SUFFIX; return st.rawGet.call(this, k); };
+    P.setItem = function (k, v) { if (this === localStorage && isAdv(k)) { if (st.suspend) return; if (st.on) k = k + ADV_DEVTEST_SUFFIX; } return st.rawSet.call(this, k, v); };
+    P.removeItem = function (k) { if (this === localStorage && isAdv(k)) { if (st.suspend) return; if (st.on) k = k + ADV_DEVTEST_SUFFIX; } return st.rawRemove.call(this, k); };
+    if (st.on) console.log('[DevTest] 開發者測試：全新冒險（使用獨立測試存檔，正式玩家資料不會被讀寫）');
+  } catch (e) {}
+  return st;
+})();
+function advDevTestActive() { return !!(ADV_DEVTEST && ADV_DEVTEST.on); }
 
 // ── Canvas setup ──────────────────────────────
 const canvas = document.getElementById('gameCanvas');
@@ -22555,9 +22586,10 @@ function p2ToggleDev() { const c = h2$('p2-dev'); if (c) c.classList.toggle('is-
 //         玩家的家（balloonVAdventureHome，尚未使用）、音效設定、各種校正／開發設定、Firebase（本功能完全不寫入、不刪除 Firebase）
 //   不使用 localStorage.clear()、不用模糊前綴刪除
 // ════════════════════════════════════════════════════════════════════
+// v0.3.77：重新開始測試 → 改用獨立的「全新冒險測試存檔」（正式玩家的資料完全不動）
 const P2_RESET_LIST = {
-  reset: ['關卡通關進度（正式挑戰進行中的那一趟，封存後從 1-1 重新開始）', '背包、冒險金幣、260 氣球、圓氣球', '武器與道具（氣球劍、氣球槌、繃帶、急救包、棒棒糖）', '已取得配方、秘笈解鎖', '弱點筆記等重要物品', '氣球小狗與第一章教學／保底紀錄', '看過的 RPG 對話、提示筆記、劇情紀錄', '首次教學提示（記憶體中）'],
-  keep:  ['玩家身份、playerKey、頭像', '跨遊戲稱號', 'V 幣、V 幣紀錄、每日獎勵、成就', '歷史成績與排行榜資料', 'Firebase 上的所有資料', '音效與 RPG 顯示模式設定'],
+  reset: ['建立一份全新的測試存檔：從世界地圖・飛行屋 → 開場漫畫 → 1-1 重新體驗第一次玩冒險', '測試存檔：沒有通關紀錄、沒有永久解鎖、背包／武器／金幣都是新手狀態', '測試存檔：沒看過開場漫畫、沒讀過任何 RPG 對話與首次教學', '畫面上的所有遊玩狀態（再打一次橘子王、自選練習、暫停、進行中的演出）全部清除（重新載入頁面）'],
+  keep:  ['正式玩家的冒險進度、永久解鎖、背包、歷史成績', '正式玩家的 RPG 已讀紀錄與開場漫畫觀看紀錄', '玩家身份、playerKey、頭像、稱號', 'V 幣、V 幣紀錄、每日獎勵、成就', 'Firebase 上的所有資料（測試期間不寫入成績紀錄）'],
 };
 function p2ConfirmTestReset(step) {
   let ov = h2$('p2-confirm');
@@ -22565,14 +22597,14 @@ function p2ConfirmTestReset(step) {
   const s = step || 1;
   if (s === 1) {
     ov.innerHTML = '<section class="h2-card p2-confirm-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">重新開始測試（1 / 2）</span></div>'
-      + '<div class="p2-confirm-body"><p>要讓這位玩家<b>重新體驗第一次玩冒險</b>嗎？</p>'
+      + '<div class="p2-confirm-body"><p>要用<b>全新的測試存檔</b>，從頭體驗第一次玩冒險嗎？</p>'
       + '<div class="p2-confirm-cols"><div><b>會重置</b><ul>' + P2_RESET_LIST.reset.map(t => '<li>' + h2Esc(t) + '</li>').join('') + '</ul></div>'
       + '<div><b>不會動到</b><ul>' + P2_RESET_LIST.keep.map(t => '<li>' + h2Esc(t) + '</li>').join('') + '</ul></div></div></div>'
       + '<div class="p2-confirm-btns"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-p2c="cancel">取消</button><button type="button" class="h2-pill h2-pill--red h2-pill--sm" data-p2c="next">下一步</button></div></section>';
   } else {
     ov.innerHTML = '<section class="h2-card p2-confirm-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">再確認一次（2 / 2）</span></div>'
-      + '<div class="p2-confirm-body"><p><b>重置後無法復原。</b>確定要清除這位玩家的冒險進度、背包與對話紀錄嗎？</p><p class="p2-confirm-who">玩家：' + h2Esc((h2Profile() || {}).id || 'Player') + '</p></div>'
-      + '<div class="p2-confirm-btns"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-p2c="cancel">取消</button><button type="button" class="h2-pill h2-pill--red h2-pill--sm" data-p2c="do">確定重置</button></div></section>';
+      + '<div class="p2-confirm-body"><p>會清空<b>上一次的測試存檔</b>並重新載入頁面；正式玩家的資料不會被刪除或改寫。<br>測試期間畫面上方會顯示「開發者測試：全新冒險」，可以隨時結束測試回到正式資料。</p><p class="p2-confirm-who">玩家：' + h2Esc((h2Profile() || {}).id || 'Player') + '</p></div>'
+      + '<div class="p2-confirm-btns"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-p2c="cancel">取消</button><button type="button" class="h2-pill h2-pill--red h2-pill--sm" data-p2c="do">開始全新測試</button></div></section>';
   }
   ov.classList.add('is-open');
   ov.onclick = e => {
@@ -24048,4 +24080,76 @@ function advRestoreHomeCtx() {
     try { advBootOpenHome(p); } catch (e) { console.warn('[Boot] 回小V的家失敗', e); }
   })();
   if (typeof window !== 'undefined') window.debugProgress = function () { const d = advLoad(); const r = { cleared: advProgressEnsure(d).cleared, session: d.session, mode: advPlayMode, homeCtx: advHomeCtx, active: d.active && d.active.status }; console.log('[Progress]', r); return r; };
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.77：開發者「重新開始測試」修復
+//  【v0.3.76 重置失敗的根因】舊的 p2DoTestReset → resetAdventureTestState 是 v0.3.68 寫的，只清背包／RPG 紀錄、loadLevel(0)、restart()；
+//    v0.3.75／v0.3.76 新增的執行狀態 advPlayMode（再打一次橘子王／自選練習）與 advHomeCtx（出發前的小V之家位置）完全沒有清除：
+//      ① 模式仍是 bossRematch → 進 1-1 時 advOnAttemptStart 不建立正式挑戰，左下角仍顯示「再打一次橘子王」
+//      ② 1-1 通關回到小V的家 → openHomeScreen 把它當成「重打結束」，把位置還原成 2-4 → 出發按鈕變成「再打一次橘子王」
+//    另外舊的重置會直接清掉「正式玩家本人」的 RPG 已讀、開場漫畫紀錄、背包與永久解鎖（不是測試專用資料）。
+//  【修正】重新開始測試 → 停止所有冒險存檔寫入 → 清空上一次的測試存檔 → 開啟測試旗標 → 重新載入頁面
+//    ・重新載入＝記憶體中的所有遊玩狀態（模式、小V之家位置、暫停、進行中的飛行屋／漫畫／素材載入／延遲跳轉）一律清除，舊的非同步回呼不可能再生效
+//    ・載入後讀寫的是全新的測試存檔（見檔案開頭 ADV_DEVTEST）→ 照真正的新手流程：世界地圖・飛行屋 → 開場漫畫 → 1-1 → 小V的家 → 1-2 …
+// ════════════════════════════════════════════════════════════════════
+function advDevTestWipeTestData() {
+  const ks = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.endsWith(ADV_DEVTEST_SUFFIX) && ADV_DEVTEST_PATTERNS.some(re => re.test(k.slice(0, -ADV_DEVTEST_SUFFIX.length)))) ks.push(k);
+    }
+    ks.forEach(k => ADV_DEVTEST.rawRemove.call(localStorage, k));
+  } catch (e) {}
+  return ks;
+}
+function advDevTestStart() {
+  if (!ADVENTURE_TEST_TOOLS_ENABLED || !H2_DEVTOOLS) { console.warn('[DevTest] 只有開發者模式（?devtools=1）可以使用'); return; }
+  ADV_DEVTEST.suspend = true;                                  // 從這一刻起不再寫入任何冒險存檔（離開頁面時的自動保存也不寫）
+  const wiped = advDevTestWipeTestData();
+  try { ADV_DEVTEST.rawSet.call(localStorage, ADV_DEVTEST_FLAG_KEY, '1'); } catch (e) {}
+  console.log('[DevTest] 重新開始測試：清空上一次的測試存檔（' + wiped.length + ' 筆）→ 重新載入，從新手流程開始');
+  try { location.reload(); } catch (e) {}
+}
+function advDevTestExit() {
+  ADV_DEVTEST.suspend = true;
+  try { ADV_DEVTEST.rawRemove.call(localStorage, ADV_DEVTEST_FLAG_KEY); } catch (e) {}
+  console.log('[DevTest] 結束開發者測試 → 重新載入，回到正式玩家資料');
+  try { location.reload(); } catch (e) {}
+}
+function advDevTestConfirmExit() {
+  let ov = document.getElementById('adv-devtest-exit');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'adv-devtest-exit'; ov.className = 'oc-choose h2-skin'; document.body.appendChild(ov); }
+  ov.innerHTML = '<section class="h2-card p2-confirm-card oc-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">結束開發者測試</span></div>'
+    + '<div class="p2-confirm-body oc-body"><p>回到正式玩家的資料嗎？<br><small>（會重新載入頁面；測試存檔留到下次「重新開始測試」時才清空）</small></p></div>'
+    + '<div class="p2-confirm-btns oc-btns"><button type="button" class="h2-pill h2-pill--red" data-oc="exit">結束測試</button><button type="button" class="h2-pill h2-pill--blue" data-oc="stay">繼續測試</button></div></section>';
+  ov.classList.add('is-open');
+  ov.onclick = e => { const b = e.target.closest && e.target.closest('[data-oc]'); if (!b) return; e.preventDefault(); e.stopPropagation(); ov.classList.remove('is-open'); ov.innerHTML = ''; if (b.dataset.oc === 'exit') advDevTestExit(); };
+}
+(function v377Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v377) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v377 = true; globalThis[name] = w; };
+  // 重新開始測試：不再直接清掉正式玩家的資料（舊流程），改成全新的測試存檔
+  wrapFn('p2DoTestReset', () => function () { advDevTestStart(); });
+  // 測試期間：成績紀錄不寫 Firebase
+  wrapFn('submitAdventureGameLog', o => function () { if (advDevTestActive()) { console.log('[DevTest] 測試存檔：不寫入 Firebase gameLogs/adventure'); return Promise.resolve(false); } return o.apply(this, arguments); });
+  if (!advDevTestActive() || typeof document === 'undefined') return;
+  // 測試標示（畫面上方中央，小字；不擋操作）＋ 結束測試
+  const mk = () => {
+    if (document.getElementById('adv-devtest-badge')) return;
+    const el = document.createElement('div'); el.id = 'adv-devtest-badge';
+    el.innerHTML = '<span>🧪 開發者測試：全新冒險</span><button type="button" id="adv-devtest-exit-btn">結束測試</button>';
+    document.body.appendChild(el);
+    el.querySelector('button').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); advDevTestConfirmExit(); });
+    const box = document.getElementById('p2-dev-body');
+    if (box && !document.getElementById('btn-pause-devtest-exit')) {
+      const b = document.createElement('button'); b.id = 'btn-pause-devtest-exit'; b.className = 'h2-pill h2-pill--blue h2-pill--sm'; b.textContent = '🔙 結束測試（回到正式資料）';
+      b.addEventListener('click', e => { e.preventDefault(); advDevTestConfirmExit(); });
+      box.appendChild(b);
+    }
+  };
+  if (document.body) mk(); else document.addEventListener('DOMContentLoaded', mk);
+  // 在小V的家時移到左下角（下方中央是出發按鈕）；遊戲中在下方中央
+  setInterval(() => { const el = document.getElementById('adv-devtest-badge'), hs = document.getElementById('home-screen'); if (el && hs) el.classList.toggle('is-home', hs.style.display !== 'none' && !hs.classList.contains('h2-overlay-only')); }, 300);
 })();
