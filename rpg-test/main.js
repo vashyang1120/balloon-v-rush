@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.78-loading-animation-trivia-test-1';
-const BUILD_TIME   = '2026-10-25 14:36';
+const GAME_VERSION = 'adventure-v0.3.79-start-gate-unified-test-1';
+const BUILD_TIME   = '2026-10-27 06:48';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -2806,9 +2806,17 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') confirmOrangeKingVictory();
     e.preventDefault(); return;
   }
+  // v0.3.79：用 Enter／空白鍵開始冒險後，同一個按鍵（含按住不放的自動重複）放開之前都不送進遊戲 → 不會同時跳躍／攻擊
+  if (startGateKeySwallow && e.code === startGateKeySwallow) { e.preventDefault(); return; }
   // v0.3.57：開始冒險前，鍵盤不操作遊戲（Enter / 空白鍵 = 開始冒險，需已在橫向）
   if (isGameStartGateActive()) {
-    if ((e.code === 'Enter' || e.code === 'Space') && getStartGateStep() === 'start') { startAdventureFromGate(); e.preventDefault(); }
+    // v0.3.79：焦點在準備畫面的按鈕上（例如「全螢幕」）→ 交給按鈕自己處理，不會因為按 Enter 就順便開始冒險
+    if (e.target && e.target.closest && e.target.closest('#start-gate-overlay button')) return;
+    if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat && getStartGateStep() === 'start') {
+      e.preventDefault(); e.stopImmediatePropagation();
+      startGateKeySwallow = e.code;
+      startAdventureFromGate();
+    }
     return;
   }
   if (e.code === 'Escape') {
@@ -3019,7 +3027,7 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
   }
 });
-window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('keyup', e => { keys[e.code] = false; if (startGateKeySwallow && e.code === startGateKeySwallow) startGateKeySwallow = null; });
 // v0.3.59：RPG 對話期間不接受遊戲按鍵（keys 在開關對話時都會清空）
 
 function bindBtn(id, prop) {
@@ -10722,7 +10730,12 @@ function startOrangeKingBossTestLevel__impl() {
 
 // ══ v0.3.57：手機開始流程（載入 → 橫向 + 全螢幕 → 按「開始冒險」才真的開始）══
 // 手機 / 觸控裝置：開機載入完成後先停在「準備畫面」，遊戲邏輯完全不推進（loop 不呼叫 update）
-// 桌機：維持原本習慣（載入完成直接開始）
+// ══ v0.3.79：桌機與手機統一 ══
+//   ・所有裝置開機載入完成後都停在準備畫面；玩家明確按「▶ 開始冒險」（或 Enter／空白鍵）才正式開始
+//   ・「進入全螢幕」是另一個獨立按鈕：只切換全螢幕，永遠不會開始冒險（成功、失敗、不支援都停在準備畫面）
+//   ・手機直向只顯示「請轉成橫向」；桌機不檢查直橫向、不強制全螢幕
+//   ・開始前：遊戲迴圈不呼叫 update（不計時、角色／敵人不動）、不播 BGM、不播世界地圖入場與開場漫畫；
+//     「繼續冒險」提示與「回到小V的家」都等按下開始之後才出現（判斷規則照舊，只是延後顯示）
 function isTouchPlayDevice() {
   try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) && (navigator.maxTouchPoints || 0) > 0; } catch (e) { return false; }
 }
@@ -10731,12 +10744,12 @@ function isFullscreenNow() { try { return !!(document.fullscreenElement || docum
 function isFullscreenSupported() {
   try { const el = document.documentElement; return !!(el.requestFullscreen || el.webkitRequestFullscreen) && (document.fullscreenEnabled !== false || document.webkitFullscreenEnabled); } catch (e) { return false; }
 }
-let gameStartGateActive = (typeof window !== 'undefined') ? isTouchPlayDevice() : false;
+let gameStartGateActive = (typeof window !== 'undefined');   // v0.3.79：桌機也要按「開始冒險」（原本只有觸控裝置）
+var startGateKeySwallow = null;   // v0.3.79：用 Enter／空白鍵開始後，放開該鍵之前不送進遊戲
 let gameStartFsAttempted = false; // 按過「進入全螢幕」但瀏覽器不給（例如 iPhone Safari）→ 允許直接開始
 function isGameStartGateActive() { return !!gameStartGateActive; }
 function getStartGateStep() {
-  if (isPortraitNow()) return 'rotate';
-  if (!isFullscreenNow() && isFullscreenSupported() && !gameStartFsAttempted) return 'fullscreen';
+  if (isTouchPlayDevice() && isPortraitNow()) return 'rotate';   // v0.3.79：只有手機／平板要轉橫向；全螢幕不再是開始前的必經步驟
   return 'start';
 }
 function requestGameFullscreen() {
@@ -10762,38 +10775,50 @@ function renderStartGate() {
     document.body.appendChild(el);
   }
   const step = getStartGateStep();
-  const lv = LEVELS[currentLevelIndex] || {};
-  let inner = '<div class="hv-ui-card start-gate-card"><div class="start-gate-title">🎈 氣球小V：派對島大作戰</div>'
-    + '<div class="start-gate-stage">' + (typeof getChapterDisplayTitle === 'function' ? getChapterDisplayTitle(currentLevelIndex) : (lv.name || '')) + '</div>';
+  const touch = isTouchPlayDevice(), fsNow = isFullscreenNow();
+  const fsOffer = !fsNow && isFullscreenSupported() && !gameStartFsAttempted;   // 還可以試著進入全螢幕
+  const key = 'v379|' + step + '|' + (fsNow ? 1 : 0) + '|' + (fsOffer ? 1 : 0) + '|' + (touch ? 1 : 0);
+  if (el.dataset.key === key && el.style.display === 'flex') return;   // 內容沒變就不重畫（避免按鈕在玩家按下時被換掉）
+  el.dataset.key = key;
+  let inner = '<div class="hv-ui-card start-gate-card"><div class="start-gate-title">🎈 氣球小V：派對島大作戰</div>';
   if (step === 'rotate') {
     inner += '<div class="start-gate-icon">📱↔️</div><div class="start-gate-msg">請把手機轉成<b>橫向</b></div>'
       + '<div class="start-gate-sub">轉好之前，冒險不會開始、也不會計時</div>';
-  } else if (step === 'fullscreen') {
-    inner += '<div class="start-gate-msg">先進入全螢幕，畫面會更大更好玩！</div>'
-      + '<button class="hv-ui-btn hv-ui-btn--primary" id="btn-start-gate-fs">⛶ 進入全螢幕</button>'
-      + '<div class="start-gate-sub">準備好之前，冒險不會開始、也不會計時</div>';
   } else {
-    inner += '<div class="start-gate-msg">準備好了嗎？</div>'
-      + '<button class="hv-ui-btn hv-ui-btn--primary hv-ui-btn--big" id="btn-start-gate-go">▶ 開始冒險</button>'
-      + (isFullscreenNow() ? '' : '<div class="start-gate-sub">（這個瀏覽器不支援全螢幕，也可以直接開始）</div>');
+    inner += '<div class="start-gate-msg">準備好開始冒險了嗎？</div>'
+      + '<button type="button" class="hv-ui-btn hv-ui-btn--primary hv-ui-btn--big" id="btn-start-gate-go">▶ 開始冒險</button>';
+    if (fsOffer) inner += '<div class="start-gate-fs-row"><button type="button" class="hv-ui-btn start-gate-fs-btn" id="btn-start-gate-fs">⛶ 進入全螢幕</button></div>'
+      + '<div class="start-gate-sub">' + (touch ? '建議先進入全螢幕，畫面會更大更好玩' : '全螢幕可以不用，準備好再按「開始冒險」') + '</div>';
+    else if (!fsNow && gameStartFsAttempted) inner += '<div class="start-gate-sub">這個瀏覽器沒有進入全螢幕，也可以直接開始</div>';
+    else if (fsNow) inner += '<div class="start-gate-sub">已進入全螢幕</div>';
+    inner += '<div class="start-gate-sub">按下開始之前，冒險不會開始、也不會計時</div>';
   }
   inner += '</div>';
   el.innerHTML = inner;
   el.style.display = 'flex';
   const fsb = document.getElementById('btn-start-gate-fs');
-  if (fsb) fsb.onclick = (e) => { e.preventDefault(); requestGameFullscreen(); };
+  if (fsb) fsb.onclick = (e) => { e.preventDefault(); e.stopPropagation(); requestGameFullscreen(); };   // 只切全螢幕，不會開始冒險
   const go = document.getElementById('btn-start-gate-go');
-  if (go) go.onclick = (e) => { e.preventDefault(); startAdventureFromGate(); };
+  if (go) go.onclick = (e) => { e.preventDefault(); e.stopPropagation(); startAdventureFromGate(); };
 }
 function startAdventureFromGate() {
   if (!gameStartGateActive) return;
+  if (typeof assetBootReady !== 'undefined' && !assetBootReady) return;   // v0.3.79：開機素材還沒載好不能開始
   if (isTouchPlayDevice() && isPortraitNow()) { renderStartGate(); return; }
   gameStartGateActive = false;
-  lastTime = 0; fixedStepAccumulator = 0;
+  lastTime = 0; fixedStepAccumulator = 0;   // 遊戲迴圈時間基準從現在算起（等待多久都不會一次補進遊戲）
   if (gameState === 'paused') resumeGame();
   const el = document.getElementById('start-gate-overlay');
-  if (el) el.style.display = 'none';
+  if (el) { el.style.display = 'none'; el.dataset.key = ''; el.innerHTML = ''; }   // 按鈕一起移除（不會留下看不見但還能按的按鈕）
+  try { Object.keys(keys).forEach(k => { keys[k] = false; }); Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; }); } catch (e) {}
   console.log('[StartGate] 開始冒險（從這一刻起才開始計時）');
+  // v0.3.79：開機時已經判斷好的去向，等玩家按下開始才顯示（下一個事件迴圈再做 → 同一次按鍵／點擊不會順便按到新出現的按鈕）
+  setTimeout(() => {
+    try {
+      if (typeof advBootHomePending !== 'undefined' && advBootHomePending) { const p = advBootHomePending; advBootHomePending = null; advBootOpenHome(p); return; }
+      if (advResumePromptDeferred) { const r = advResumePromptDeferred; advResumePromptDeferred = null; advShowResumePrompt(r); }
+    } catch (e) { console.warn('[StartGate] 開始後的流程失敗', e); }
+  }, 0);
 }
 if (typeof window !== 'undefined') window.startAdventureFromGate = startAdventureFromGate;
 // ── 自動暫停：切到背景 / 鎖螢幕 / 來電 / 離開全螢幕 / 轉回直向 → 停在暫停選單，回來時由玩家按「繼續冒險」──
@@ -20762,8 +20787,10 @@ function advBoot() {
   }
   advOnAttemptStart(); // 開機直接在 1-1：建立 / 延續這一趟
 }
+var advResumePromptDeferred = null;   // v0.3.79：開機時就判斷出「上一趟還沒完成」→ 等玩家按「開始冒險」才顯示
 function advShowResumePrompt(run) {
   advResumePromptOpen = true;
+  if (typeof isGameStartGateActive === 'function' && isGameStartGateActive()) { advResumePromptDeferred = run; return; }
   let el = document.getElementById('adv-resume-overlay');
   if (!el) { el = document.createElement('div'); el.id = 'adv-resume-overlay'; document.body.appendChild(el); }
   const cleared = OFFICIAL_ADVENTURE_STAGE_IDS.filter(s => run.stageResults[s]).length;
@@ -24448,7 +24475,7 @@ function advBootV376() {
   try { if (run && run.status === 'test_only') { advArchiveRun(d, run, 'test_only'); d.active = null; advSave(d); } } catch (e) {}
   try { if (runInProgress && run.live) { const L = run.live; advCommitFailure(run, { stageId: L.stageId, type: 'interrupted', hpLost: L.hpLost || 0, sec: L.sec || 0 }); run.live = null; advSave(d); } } catch (e) {}
   gameState = 'clear';                 // 不跑 1-1（開素材載好之前也不會觸發入場演出）
-  try { gameStartGateActive = false; } catch (e) {}
+  // v0.3.79：不再跳過準備畫面 → 玩家按「開始冒險」後才打開小V的家
   let ctx = s && s.homeCtx;
   if (!ctx || typeof ctx.levelIndex !== 'number' || !LEVELS[ctx.levelIndex]) {
     let idx = -1;
@@ -24545,7 +24572,7 @@ function advRestoreHomeCtx() {
   // 開機決定回小V的家 → 等開機素材載好再打開
   (function waitBootHome() {
     if (!advBootHomePending) return;
-    if (typeof assetBootReady === 'undefined' || !assetBootReady) { setTimeout(waitBootHome, 100); return; }
+    if (typeof assetBootReady === 'undefined' || !assetBootReady || (typeof isGameStartGateActive === 'function' && isGameStartGateActive())) { setTimeout(waitBootHome, 100); return; }
     const p = advBootHomePending; advBootHomePending = null;
     try { advBootOpenHome(p); } catch (e) { console.warn('[Boot] 回小V的家失敗', e); }
   })();
