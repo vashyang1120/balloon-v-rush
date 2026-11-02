@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.80-continent2-prototype-test-1';
-const BUILD_TIME   = '2026-11-02 12:21';
+const GAME_VERSION = 'adventure-v0.3.81-continent2-stage31-test-1';
+const BUILD_TIME   = '2026-11-02 20:32';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -4667,13 +4667,8 @@ const LEVELS = [
 ];  // end LEVELS
 
 // ════════════════════════════════════════════════════════════════════
-//  v0.3.80：第二大陸 → 第三章「風之峽谷」3-1 玩法原型（只在第二大陸開發工作區加入；開發者工具進入）
-//  ・加在 LEVELS 最後面：不改變既有關卡的索引；第一章／第二章正式流程、世界地圖、練習、正式總分都不會包含它
-//  ・區域 A：平地＋第一個垂直風口（自己發現：走進去會飄、在裡面跳更高；高台上的金幣是額外獎勵）
-//    區域 B：一長段連續尖刺（一般跳躍跳不過）＋可以用氣球槌敲倒的大樹 → 倒下的樹幹是可以站的通道
-//    區域 C：風口 → 高台（一般跳躍跳不上去）→ 越過下方的長尖刺
-//  ・3-1 的長尖刺：被刺到會受傷並退回尖刺前（不能靠受傷無敵時間硬走過去，謎題才有意義）
-//  ・美術：測試用 canvas 畫法（天空／地面／平台沿用舊版畫法；風口、樹另外畫），正式峽谷美術之後再做
+//  v0.3.80：第二大陸 → 第三章「風之峽谷」：風口物理（WIND_TUNING／makeWindVent）＋解謎攝影機（cameraZones）
+//  v0.3.81：3-1 升級成完整入門關卡（說明見下方 C2_STAGE_31）
 // ════════════════════════════════════════════════════════════════════
 // 風口物理：以現有角色物理為基準（重力 GRAVITY=0.55、跳躍初速 JUMP_FORCE=13、跑速 3.8）— 下一輪實機手感只要改這裡
 const WIND_TUNING = {
@@ -4691,60 +4686,113 @@ function makeWindVent(o) {
   return Object.assign({ x: 0, y: GROUND_Y, w: 80, h: 150, dir: 'up', strength: 1, maxUp: JUMP_FORCE + WIND_TUNING.maxUpExtra, enabled: true,
     visual: { lines: 5, particles: 6, color: '190,240,255' } }, o);
 }
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.81：3-1 風之峽谷 — 完整入門關卡（第二大陸開發工作區；仍由開發者工具進入，不屬於正式冒險流程）
+//  流程：小狗同行 → 小蠍子示範風口（第一次）→ 自己試風口／打蠍子 → 凹陷尖刺坑（小V對話）→ 氣球槌敲倒大樹當橋
+//       → 小狗發現「氣球雨傘製作秘笈」（沒拿到不能往右）→ 另一個風口跳上高台（下方是第二個尖刺坑）→ 終點
+//  ・尖刺坑（spikePits）：地面挖洞，坑底用既有正式尖刺圖 chapter1_spike.png 平鋪；掉進坑＝受傷並退回 resetX（無敵時間也一樣退回）
+//  ・noTimeLimit：第三章解謎關只記錄通關時間，不會因 60 秒時間到而失敗（第一大陸 1-1～2-4 不受影響）
+//  ・美術：天空／地面／平台仍是 canvas 測試畫法（正式峽谷美術之後再做）；尖刺用既有正式圖
+// ════════════════════════════════════════════════════════════════════
 const C2_STAGE_31 = {
   chapterId:   3,
   stageId:     '3-1',
-  devPrototype: true,                        // 開發原型：不屬於正式冒險流程
-  displayName: '3-1 風之峽谷（原型）',
-  name:        '3-1 風之峽谷（原型）',
-  shortName:   '風之峽谷（原型）',
-  length:      3600,                          // FINISH_X = 3400
+  devPrototype: true,                        // 開發測試版：不屬於正式冒險流程（不寫成績、不解鎖、不發 V幣）
+  noTimeLimit: true,                         // v0.3.81：只記錄通關時間，不會因時間到而失敗
+  forceDog:    true,                         // v0.3.81：3-1 一定有小狗同行（開發測試時自動帶測試用小狗，不寫入存檔）
+  displayName: '3-1 風之峽谷',
+  name:        '3-1 風之峽谷',
+  shortName:   '風之峽谷',
+  length:      4600,                          // FINISH_X = 4400
   emoji:       '🌬️',
   hints: [
-    { triggerX:   30, msg: '🌬️ 3-1 風之峽谷（原型）：觀察地形，試試看各種方法！', shown: false, duration: 240 },
-    { triggerX:  560, msg: '🌬️ 前面有向上吹的風口，走進去、在裡面跳跳看！',       shown: false, duration: 220 },
-    { triggerX: 1250, msg: '🌲 尖刺太長跳不過去…換成氣球槌（電腦按 2），把大樹敲倒看看！',     shown: false, duration: 260 },
-    { triggerX: 2230, msg: '🌬️ 高台太高了，借風口的風跳上去！',                     shown: false, duration: 220 },
+    { triggerX:   30, msg: '🌬️ 3-1 風之峽谷：氣球小狗陪你一起出發！', shown: false, duration: 220 },
+    { triggerX: 3240, msg: '🌬️ 高台太高了，借風口的風跳上去！',       shown: false, duration: 220 },
   ],
   buildPlatforms: () => [
-    { x:  440, y: GROUND_Y -  90, w: 150, h: 22 },   // A：一般跳躍就上得去的平台
-    { x:  860, y: GROUND_Y - 195, w: 200, h: 22 },   // A：只有借風才上得去的高台（額外金幣）
-    { x: 2470, y: GROUND_Y - 200, w: 430, h: 22 },   // C：必經的高台（一般跳躍約 150px 上不去）
+    { x:  440, y: GROUND_Y -  90, w: 150, h: 22 },   // A：一般跳躍就上得去的平台（上面有 260）
+    { x:  880, y: GROUND_Y - 195, w: 200, h: 22 },   // A：只有借風才上得去的高台（金幣＋260 獎勵）
+    { x: 1520, y: GROUND_Y - 100, w: 160, h: 22 },   // 中段平台（260）
+    { x: 3020, y: GROUND_Y - 100, w: 150, h: 22 },   // 秘笈之後的平台（260）
+    { x: 3480, y: GROUND_Y - 200, w: 420, h: 22 },   // C：必經的高台（下方是尖刺坑；一般跳躍約 150px 上不去）
   ],
   buildWindVents: () => [
     makeWindVent({ id: 'A', x:  720, w: 80, h: 150 }),
-    makeWindVent({ id: 'C', x: 2400, w: 80, h: 150 }),
+    makeWindVent({ id: 'C', x: 3410, w: 80, h: 150 }),
   ],
-  // 解謎攝影機：x0～x1＝角色在這個範圍內時使用；camMin～camMax＝鏡頭左緣可以停的範圍；lead＝角色在畫面中的位置；ease＝跟隨速度
+  // 尖刺坑：x～x+w 地面挖空，坑底是尖刺；掉進去 → 受傷並退回 resetX（尖刺坑前方的安全地面）
+  spikePits: [
+    { id: 'B', x: 2090, w: 280, resetX: 1880 },     // 倒樹解謎（樹幹 2000～2400 橫跨整個坑）
+    { id: 'C', x: 3540, w: 340, resetX: 3300 },     // 高台下方（要借風口 C 跳上高台）
+  ],
+  // 解謎攝影機（v0.3.80 機制）：x0～x1＝角色在這個範圍內時使用；camMin～camMax＝鏡頭左緣可以停的範圍
   cameraZones: [
-    { id: 'A', x0:  420, x1: 1150, camMin:  300, camMax:  420, lead: 0.40, ease: 0.10 },
-    { id: 'B', x0: 1180, x1: 1990, camMin: 1240, camMax: 1240, lead: 0.40, ease: 0.08 },   // 固定：大樹＋整段尖刺＋對岸一次看完
-    { id: 'C', x0: 2150, x1: 3150, camMin: 2150, camMax: 2350, lead: 0.35, ease: 0.10 },
+    { id: 'A', x0:  380, x1: 1150, camMin:  240, camMax:  420, lead: 0.40, ease: 0.10 },   // camMin 240：手機橫向時小V不會被左下角的方向鍵蓋住
+    { id: 'B', x0: 1680, x1: 2480, camMin: 1740, camMax: 1740, lead: 0.40, ease: 0.08 },   // 固定：大樹＋整個尖刺坑＋對岸一次看完
+    { id: 'D', x0: 2480, x1: 3300, camMin: 2240, camMax: 2760, lead: 0.40, ease: 0.10 },   // 秘笈區（還沒拿到秘笈時，鏡頭最多到 treasureGate.camMax）
+    { id: 'C', x0: 3300, x1: 4200, camMin: 3280, camMax: 3500, lead: 0.35, ease: 0.10 },
   ],
+  // 小蠍子示範風口（第一次）：角色走到 triggerX → 鎖操作、鏡頭停在 camX → 蠍子走過風口 A
+  scorpionDemo: { triggerX: 470, camX: 240, ventId: 'A', timeoutSteps: 720 },   // camX 240：畫面 240～1200（小V、風口 A、小蠍子都在畫面內，也避開手機按鈕）
+  // 倒樹教學：第一次接近尖刺坑時播放小V對話；之後顯示箭頭＋切換氣球槌提示（樹倒下後消失）
+  treeTutorial: { triggerX: 1760, pitId: 'B', showX0: 1650, showX1: 2470 },
+  // 秘笈前進限制：還沒拿到雨傘秘笈時，角色最多走到 playerMaxX、鏡頭最多到 camMax
+  treasureGate: { playerMaxX: 2920, camMax: 2340 },
   buildCoins: () => [
-    [300,55],[360,55],[480,150],[540,150],
-    [900,250],[960,250],[1020,250],          // A 高台獎勵
-    [1300,55],[2000,55],[2060,55],
-    [2580,270],[2700,270],[2820,270],        // C 高台
-    [3250,55],[3310,55],
+    [200,55],[250,55],[470,140],[560,140],
+    [900,250],[960,250],[1040,250],            // A 高台獎勵
+    [1250,55],[1300,55],[1560,150],[1650,150],
+    [1800,55],[1850,55],
+    [2150,90],[2220,90],[2290,90],             // 樹幹橋上方
+    [2600,55],[2750,55],
+    [3060,150],[3130,150],
+    [3600,270],[3800,270],                     // C 高台
+    [4000,55],[4060,55],[4250,55],
   ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
-  buildBalloons: () => [],
-  buildSpikes: () => [
-    // resetX：被刺到 → 退回這個位置（尖刺前）
-    { x: 1640, y: GROUND_Y - 20, w: 240, h: 20, resetX: 1400 },   // B：跳不過（一般跳躍最多約 120px）
-    { x: 2520, y: GROUND_Y - 20, w: 360, h: 20, resetX: 2300 },   // C：高台下方（手機橫向時整段在左右控制鍵之間，看得到）
-  ],
+  // 260 長條氣球 9 條（未來氣球雨傘＝260×5 的材料；沒有放在需要冒險才拿得到的位置）
+  buildBalloons: () => [
+    [ 300,  60],   // 起點地面
+    [ 515, 150],   // A 低平台上
+    [ 980, 255],   // A 高台（借風口才拿得到的獎勵）
+    [1180,  60],
+    [1600, 160],   // 中段平台上
+    [2650,  60],   // 過橋後
+    [3095, 160],   // 秘笈之後的平台上
+    [3700, 260],   // C 高台上
+    [4150,  60],   // 終點前
+  ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+  buildSpikes: () => [],                       // 3-1 的尖刺都在尖刺坑裡（spikePits）
   buildTackHazards: () => [],
   buildTrees: () => [
-    // 樹幹 x 1500（槌子判定 1500～1560）；尖刺從 1640 開始 → 敲樹時槌子碰不到尖刺（槌子攻擊距離 70）
-    // h＝樹高＝倒下後的長度：1500～1890 蓋住整段尖刺（1640～1880）；walkable：倒下的樹幹是可以站的通道（高 24，尖刺高 20）
-    { x: 1500, y: 0, h: 390, trunkW: 24, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 390, walkable: true },
+    // 樹幹 x 2000（槌子判定 2000～2060）；坑從 2090 開始 → 敲樹時碰不到尖刺
+    // h＝樹高＝倒下後的長度：2000～2400 橫跨整個坑（2090～2370），兩端都搭在地面上；walkable：倒下的樹幹是可以站的橋（高 24）
+    { x: 2000, y: 0, h: 400, trunkW: 24, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 400, walkable: true },
   ],
-  buildEnemies: () => [],
+  // 小蠍子（一般蠍子 normal）：S1 示範風口＋正常戰鬥；c2Wind＝會受風口影響
+  buildEnemies: () => [
+    Object.assign(makeChapter2Scorpion(900, 40, 'normal'), { c2Id: 'S1', c2Wind: true, c2Demo: true, c2StartX: 900, c2DemoPatrol: 800, c2DemoRange: 200 }),   // 示範前：風口右邊 860～940 巡邏；示範後：600～1000（經過風口）
+    Object.assign(makeChapter2Scorpion(1350, 90, 'normal'), { c2Id: 'S2', c2Wind: true }),
+    Object.assign(makeChapter2Scorpion(3180, 90, 'normal'), { c2Id: 'S3', c2Wind: true }),   // 秘笈之後（巡邏 3090～3270，和秘笈對話結束的位置留一點距離）
+  ],
   buildOranges: () => [],
   buildRoundBalloons: () => [],
+  // 氣球雨傘製作秘笈：放在必經路線（地面高度），小狗在附近鼻子會發亮；沿用既有隱藏寶物（recipe）流程
+  hiddenTreasure: {
+    type:       'recipe',
+    recipeKey:  'balloonUmbrella',
+    recipeName: '氣球雨傘秘笈',
+    foundMsg:   '找到氣球雨傘秘笈！',
+    x:          2900,
+    y:          GROUND_Y - 70,
+    found:      false,
+    emoji:      '☂️',
+  },
 };
-if (ADV_WORKSPACE) LEVELS.push(C2_STAGE_31);
+if (ADV_WORKSPACE) {
+  LEVELS.push(C2_STAGE_31);
+  // v0.3.81：氣球雨傘秘笈（3-1 取得；製作與用途在 3-2 才開放 → 秘笈裡顯示「即將開放」，沒有材料欄、不能製作）
+  RECIPES.push({ id: 'balloonUmbrella', name: '氣球雨傘', effect: '在風之峽谷找到的秘笈。製作方法與用途會在 3-2 開放。', durability: 0, cost: {}, emoji: '☂️', unlockKey: 'balloonUmbrella', comingSoon: true });
+}
 
 
 // ════════════════════════════════════════════════════════════
@@ -5626,8 +5674,8 @@ function update(dt, dtMs = 16.667) {
   elapsedSec += dtMs / 1000; // real seconds
 
   const bossStage = isOrangeKingStageActive(); // v0.3.35
-  // Time up → game over（Boss 房不計時）
-  if (!bossStage && elapsedSec >= LEVEL_DURATION) {
+  // Time up → game over（Boss 房不計時；v0.3.81：noTimeLimit 的關卡〔第三章解謎關 3-1〕只記錄通關時間，不會時間到失敗）
+  if (!bossStage && !(LEVELS[currentLevelIndex] && LEVELS[currentLevelIndex].noTimeLimit) && elapsedSec >= LEVEL_DURATION) {
     triggerGameOver();
     return;
   }
@@ -13166,6 +13214,7 @@ function drawWorldInner() {
     }
     if (orangeKingBoss) drawOrangeKingPlatformHint(p, cx, 'front'); // v0.3.40（色塊 fallback 也有提示）
   });
+  try { if (c2Pits.length) drawC2SpikePits(cx); } catch (e) {} // v0.3.81：3-1 尖刺坑（坑底正式尖刺圖；在平台之後、樹與角色之前）
   try { if (windVents.length) drawWindVents(cx); } catch (e) {} // v0.3.80：風口（在平台之後、角色與道具之前）
 
   // Coins
@@ -14915,10 +14964,11 @@ function drawHUD() {
   if (isOrangeKingStageActive()) {
     drawOrangeKingHpBar();
   } else {
-  const timerColor = timeLeft <= 10 ? '#FF6B9D' : 'rgba(255,255,255,0.9)';
+  const noLimit = !!lv.noTimeLimit; // v0.3.81：第三章解謎關 → 顯示實際經過時間（分:秒），不倒數、不變紅
+  const timerColor = (!noLimit && timeLeft <= 10) ? '#FF6B9D' : 'rgba(255,255,255,0.9)';
   ctx.font = 'bold 18px monospace';
   ctx.fillStyle = timerColor;
-  ctx.fillText('⏱ ' + String(timeLeft).padStart(2, '0'), CANVAS_W / 2, 31);
+  ctx.fillText(noLimit ? ('⏱ ' + Math.floor(elapsedSec / 60) + ':' + String(Math.floor(elapsedSec % 60)).padStart(2, '0')) : ('⏱ ' + String(timeLeft).padStart(2, '0')), CANVAS_W / 2, 31);
 
   // 進度條
   const barW = 180;
@@ -18721,7 +18771,7 @@ function getAssetGroupsForLevelBase(levelIndex) {
   if (!lv) return ['common', 'chapter1', 'rpgBoot', 'rpg'];
   if (lv.isBossStage) return ['common', 'chapter2', 'orangeKingBoss', 'rpgBoot', 'rpg'];
   if (lv.chapterId === 2) return ['common', 'chapter1', 'chapter2', 'rpgBoot', 'rpg'];
-  if (lv.chapterId === 3) return ['common', 'rpgBoot', 'rpg'];   // v0.3.80：3-1 原型只用共用素材（背景／地面／平台為 canvas 測試畫法）
+  if (lv.chapterId === 3) return ['common', 'chapter1', 'rpgBoot', 'rpg'];   // v0.3.80：背景／地面／平台為 canvas 測試畫法；v0.3.81：尖刺坑沿用第一章正式尖刺圖（chapter1_spike.png 在 chapter1 群組）
   return ['common', 'chapter1', 'rpgBoot', 'rpg'];
 }
 function getAssetGateTitleForLevel(levelIndex) {
@@ -24866,13 +24916,316 @@ function camZoneAt(lv) {
   const px = player.x + player.w / 2;
   return zs.find(z => px >= z.x0 && px <= z.x1) || null;
 }
-// ── ⑤ 3-1 原型狀態 ──
+// ── ⑤ 3-1 狀態 ──
 var c2Proto = { prevIdx: null, done: false, startedAt: 0 };
 function c2Is31() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.devPrototype && lv.stageId === '3-1'); }
-function c2SpikeUnderPlayer() {
-  const px = player.x + 6, py = player.y + 6, pw = player.w - 12, ph = player.h - 6;
-  return spikes.find(s => s.resetX != null && rectsOverlap(px, py + ph - 12, pw, 12, s.x, s.y, s.w, s.h)) || null;
+function c2LevelSpec() { return LEVELS[currentLevelIndex] || {}; }
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.81：3-1 完整入門關卡的執行邏輯（只在第二大陸開發工作區；第一大陸關卡完全不走這裡）
+//  ⑦ 工作區事件紀錄（一次性事件：小蠍子示範風口）— 只存在這個工作區（balloonV_c2Events31 → 實際鍵加 __c2）
+//  ⑧ 尖刺坑：地面挖洞＋坑底正式尖刺圖平鋪；掉進去 → 受傷並退回坑前（無敵時間也一樣退回，不能硬闖）
+//  ⑨ 小蠍子受風口影響（和小V同一套風力公式）
+//  ⑩ 小蠍子示範風口：鎖操作（移動／跳躍／攻擊／換武器）＋小V立刻 Idle ＋鏡頭另外鎖定；看完自動解除
+//  ⑪ 風口浮空：小V／小狗小幅上下飄（只在畫面上，碰撞不變）；穩定浮空時都用 Fall 圖
+//  ⑫ 倒樹教學：小V三句對話 → 箭頭指向大樹＋切換氣球槌提示（手機圈出既有的換武器鍵）；樹倒下就消失
+//  ⑬ 氣球雨傘秘笈：沿用既有小狗尋寶／取得秘笈流程；還沒拿到時鏡頭和角色都不能往右
+//  ⑭ 3-1 一定有小狗同行（開發測試時自動帶測試用小狗；不改背包裡的小狗、不扣陪伴次數）
+// ════════════════════════════════════════════════════════════════════
+// ── ⑦ 工作區事件紀錄 ──
+const C2_EVENTS_KEY = 'balloonV_c2Events31';
+function c2EventsLoad() { try { return JSON.parse(localStorage.getItem(C2_EVENTS_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function c2EventSeen(id) { return !!c2EventsLoad()[id]; }
+function c2EventMark(id) {
+  const d = c2EventsLoad(), now = Date.now();
+  d[id] = d[id] || { firstAt: now, count: 0 }; d[id].count = (d[id].count || 0) + 1; d[id].lastAt = now;
+  try { localStorage.setItem(C2_EVENTS_KEY, JSON.stringify(d)); } catch (e) {}
 }
+// 本次嘗試的狀態（loadLevel／restart 重設；不存檔）
+var c2Lock = { input: false, camX: null };
+var c2Run = null;
+function c2ResetRun() {
+  c2Run = { demo: { phase: 'idle', t: 0, sawLift: false, maxLift: 0, liftAt: 0, landedAt: 0, how: '' },
+    tree: { asked: false, fallenAt: 0 }, gateHinted: false, gateHits: 0, pitHits: 0, umbrellaFound: false, hoverK: 0 };
+  c2Lock.input = false; c2Lock.camX = null;
+}
+function c2UmbrellaOwned() { return !!((playerInventory && playerInventory.unlockedRecipes) || {}).balloonUmbrella; }
+
+// ── ⑧ 尖刺坑 ──
+var c2Pits = [];
+const C2_PIT = { hitDepth: 6, tipY: 4, baseY: 64, overlap: 0.38, resetInvincible: 24 };
+// tipY／baseY：尖刺圖尖端／底座在地面下幾 px；hitDepth：腳低於地面幾 px（碰到尖端）就算刺到；overlap：相鄰兩叢尖刺重疊比例
+function c2BuildPits(lv) {
+  for (let i = groundGaps.length - 1; i >= 0; i--) if (groundGaps[i].c2Pit) groundGaps.splice(i, 1);
+  for (let i = platforms.length - 1; i >= 0; i--) if (platforms[i].c2PitFloor) platforms.splice(i, 1);
+  c2Pits = (lv && Array.isArray(lv.spikePits)) ? lv.spikePits.map(p => Object.assign({}, p)) : [];
+  c2Pits.forEach(p => {
+    groundGaps.push({ x: p.x, w: p.w, c2Pit: true });   // 沿用既有地面缺口：坑裡左右是牆
+    platforms.push({ x: p.x, y: GROUND_GAP_FLOOR_Y, w: p.w, h: CANVAS_H - GROUND_GAP_FLOOR_Y, c2PitFloor: true });   // 坑底（保險：不會掉出畫面）
+  });
+}
+function c2PitUnderPlayer() {
+  if (!c2Pits.length) return null;
+  const cxp = player.x + player.w / 2, feet = player.y + player.h;
+  return c2Pits.find(p => cxp >= p.x && cxp <= p.x + p.w && feet > GROUND_Y + C2_PIT.hitDepth) || null;
+}
+function c2PitHazardStep() {
+  const p = c2PitUnderPlayer(); if (!p) return;
+  const wasInv = player.invincible > 0;
+  if (!wasInv) damagePlayer();                                   // 一般受傷（沿用原本規則）
+  if (!(player.hp > 0) || gameState !== 'playing') return;       // 這一下沒血了 → 交給原本的失敗流程
+  player.x = p.resetX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
+  player.windT = 0; player.windInfo = null;
+  if (!wasInv) player.invincible = Math.min(player.invincible, C2_PIT.resetInvincible);
+  c2Run.pitHits++;
+  showHint(wasInv ? '💥 尖刺坑！退回坑前（受傷後的無敵時間也不能硬闖）' : '💥 被尖刺刺到了！退回坑前，想想別的方法', 150);
+  console.log('[3-1] 尖刺坑 ' + p.id + '：' + (wasInv ? '無敵中 → 不扣血，退回' : '受傷 → 退回') + ' x ' + p.resetX);
+}
+// 坑底尖刺：既有正式圖 chapter1_spike.png 等比例縮小、依坑寬平鋪（相鄰兩叢重疊、奇數叢左右翻轉；不拉長）→ 預先畫好快取
+var c2PitArtCache = {};
+function c2PitArt(w) {
+  const img = (typeof getChapter1BgImg === 'function') ? getChapter1BgImg('spike') : null;
+  if (!img) return null;
+  const key = Math.round(w);
+  if (c2PitArtCache[key]) return c2PitArtCache[key];
+  const S = CHAPTER1_TILE_SRC.spike, D = CHAPTER1_SPIKE_DRAW;
+  const sc = (C2_PIT.baseY - C2_PIT.tipY) / (S.y1 - S.y0);       // 只依高度等比例縮放
+  const artW = (S.x1 - S.x0) * sc, dw = img.naturalWidth * sc, dh = img.naturalHeight * sc;
+  const step0 = artW * (1 - C2_PIT.overlap);
+  const n = Math.max(1, Math.ceil(Math.max(0, w - artW) / step0) + 1);
+  const step = n > 1 ? (w - artW) / (n - 1) : 0;
+  const H = CANVAS_H - GROUND_Y;
+  const c = document.createElement('canvas'); c.width = key; c.height = H;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  const sil = (typeof getChapter1SpikeSilhouette === 'function' && D.outlineEnabled) ? getChapter1SpikeSilhouette(img, dw, dh, D.outlineColor) : null;
+  const clumps = [];
+  for (let i = 0; i < n; i++) clumps.push({ x: (n > 1 ? i * step : (w - artW) / 2) - S.x0 * sc, y: C2_PIT.tipY - S.y0 * sc, flip: i % 2 === 1 });
+  const put = (src, cl, dx, dy) => {
+    g.save();
+    if (cl.flip) { g.translate(cl.x + dx + S.x0 * sc + artW / 2, 0); g.scale(-1, 1); g.drawImage(src, -(S.x0 * sc + artW / 2), cl.y + dy, dw, dh); }
+    else g.drawImage(src, cl.x + dx, cl.y + dy, dw, dh);
+    g.restore();
+  };
+  // 和第一章尖刺相同的可讀性處理：白色細描邊＋紅橘 glow（只在描邊層），本體保持原色
+  if (sil) {
+    g.save(); if (D.glowEnabled) { g.shadowColor = D.glowColor; g.shadowBlur = Math.round(D.glowBlur * 0.6); }
+    const o = 1.2;
+    clumps.forEach(cl => [[-o, 0], [o, 0], [0, -o], [0, o]].forEach(([dx, dy]) => put(sil, cl, dx, dy)));
+    g.restore();
+  }
+  clumps.forEach(cl => put(img, cl, 0, 0));
+  c2PitArtCache[key] = { canvas: c, n, step: Math.round(step * 10) / 10, artW: Math.round(artW * 10) / 10, sc };
+  return c2PitArtCache[key];
+}
+function drawC2SpikePits(cx) {
+  c2Pits.forEach(p => {
+    const sx = Math.round(p.x - cx);
+    if (sx > CANVAS_W + 20 || sx + p.w < -20) return;
+    ctx.save();
+    // 坑內：深色土壁（蓋住坑底保險平台的色塊）
+    const g = ctx.createLinearGradient(0, GROUND_Y, 0, CANVAS_H);
+    g.addColorStop(0, '#24150b'); g.addColorStop(1, '#4a3220');
+    ctx.fillStyle = g; ctx.fillRect(sx, GROUND_Y, p.w, CANVAS_H - GROUND_Y);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(sx, GROUND_Y, 7, CANVAS_H - GROUND_Y); ctx.fillRect(sx + p.w - 7, GROUND_Y, 7, CANVAS_H - GROUND_Y);
+    ctx.fillStyle = 'rgba(255,230,180,0.35)'; ctx.fillRect(sx - 2, GROUND_Y - 1, 4, 10); ctx.fillRect(sx + p.w - 2, GROUND_Y - 1, 4, 10);   // 坑緣
+    // 尖刺（只畫在坑的範圍內：畫面＝判定）
+    ctx.beginPath(); ctx.rect(sx, GROUND_Y - 30, p.w, CANVAS_H - GROUND_Y + 30); ctx.clip();
+    const art = c2PitArt(p.w);
+    if (art) ctx.drawImage(art.canvas, sx, GROUND_Y);
+    else drawSpike(sx, GROUND_Y + C2_PIT.tipY, p.w, C2_PIT.baseY - C2_PIT.tipY);   // 圖還沒載好：暫時用舊的三角形畫法
+    ctx.restore();
+  });
+}
+
+// ── ⑨ 小蠍子受風口影響（和 applyWindToPlayer 同一套：重力＋風力＋過渡＋阻尼；只有 c2Wind 的敵人）──
+function c2EnemyWindStep(e) {
+  let a = 0;
+  windVents.forEach(v => { const x = windLiftAt(v, e); if (x > a) a = x; });
+  e.windT = (e.windT || 0) + ((a > 0 ? 1 : 0) - (e.windT || 0)) * WIND_TUNING.rampPerStep;
+  a *= e.windT;
+  e.vy = (e.vy || 0) + GRAVITY;
+  if (a > 0) {
+    const maxUp = JUMP_FORCE + WIND_TUNING.maxUpExtra;
+    if (e.vy > -maxUp) e.vy = Math.max(e.vy - a, -maxUp);
+    if (Math.abs(e.vy) < WIND_TUNING.dampBelow) e.vy *= WIND_TUNING.damp;
+  }
+  e.y += e.vy;
+  if (e.y + e.h >= GROUND_Y) { e.y = GROUND_Y - e.h; e.vy = 0; e.c2OnGround = true; } else e.c2OnGround = false;
+  e.c2Lift = a; e.c2Height = Math.max(0, Math.round(GROUND_Y - (e.y + e.h)));
+}
+function c2SetupScorpions() {
+  const seen = c2EventSeen('scorpionDemo31');
+  enemies.forEach(e => {
+    if (!e.c2Wind) return;
+    e.vy = 0; e.windT = 0; e.y = GROUND_Y - e.h; e.c2OnGround = true; e.c2Height = 0; e.c2DemoInvuln = false;
+    if (e.c2Demo) {
+      if (e.c2PrePatrol == null) { e.c2PrePatrol = e.patrol; e.c2PreRange = e.patrolRange; }
+      // 還沒看過示範：先在風口右邊小範圍巡邏（不會自己走進風口）；看過了：一開始就是跨過風口的巡邏範圍
+      if (seen) { e.patrol = e.c2DemoPatrol; e.patrolRange = e.c2DemoRange; } else { e.patrol = e.c2PrePatrol; e.patrolRange = e.c2PreRange; }
+      e.x = e.c2StartX; e.vx = -Math.abs(e.vx || CONFIG.ENEMY_SPEED);
+    }
+  });
+}
+
+// ── ⑩ 小蠍子示範風口 ──
+function c2LockInput(on) {
+  c2Lock.input = !!on;
+  Object.keys(keys).forEach(k => { keys[k] = false; });                 // 按住的鍵全部放開 → 解除後不會原地跑步或暴衝
+  Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; });
+  try { document.querySelectorAll('#mobile-controls .pressed').forEach(el => el.classList.remove('pressed')); } catch (e) {}
+  if (on) {
+    player.vx = 0;                                                     // 水平速度歸零（在空中就直直落下，正常落地）
+    player.attackActive = 0; player.meleeActive = 0; player.meleeHammerActive = 0; player.swordAnimTimer = 0; player.hammerAnimTimer = 0;
+    _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false; _heroFrameTimer = 0;   // 跑步動畫狀態也歸零（不播停下來的過渡格）
+    dogWasRunning = false;
+  }
+}
+function c2DemoBegin(s, cfg) {
+  const d = c2Run.demo; d.phase = 'run'; d.t = 0;
+  c2LockInput(true);
+  c2Lock.camX = cfg.camX;                                              // 鏡頭鎖定和操作鎖定分開
+  s.patrol = s.c2DemoPatrol; s.patrolRange = s.c2DemoRange; s.vx = -Math.abs(s.vx || CONFIG.ENEMY_SPEED);
+  s.c2DemoInvuln = true;
+  console.log('[3-1] 小蠍子示範風口開始（操作鎖定；鏡頭 ' + cfg.camX + '）', { playerX: Math.round(player.x), onGround: player.onGround, scorpionX: Math.round(s.x) });
+}
+function c2DemoEnd(how) {
+  const d = c2Run.demo; d.phase = 'done'; d.how = how;
+  c2LockInput(false); c2Lock.camX = null;
+  enemies.forEach(e => { if (e.c2Demo) e.c2DemoInvuln = false; });
+  if (how === 'done' || how === 'timeout') c2EventMark('scorpionDemo31');
+  console.log('[3-1] 小蠍子示範風口結束：' + how + '（' + d.t + ' 步，最高浮起 ' + d.maxLift + 'px）→ 操作恢復');
+}
+function c2DemoStep() {
+  const cfg = c2LevelSpec().scorpionDemo; if (!cfg) return;
+  const d = c2Run.demo;
+  const s = enemies.find(e => e.c2Demo);
+  if (d.phase === 'idle') {
+    if (c2EventSeen('scorpionDemo31')) { d.phase = 'skipped'; return; }   // 看過了 → 重玩不再強制觀看（蠍子照樣會被風吹起）
+    if (!s || !s.active || rpgIsActive() || player.x < cfg.triggerX) return;
+    c2DemoBegin(s, cfg);
+    return;
+  }
+  if (d.phase !== 'run') return;
+  d.t++;
+  player.vx = 0;
+  if (!s || !s.active) { c2DemoEnd('scorpionGone'); return; }
+  if ((s.windT || 0) > 0.6 && (s.c2Height || 0) >= 4) { d.sawLift = true; d.maxLift = Math.max(d.maxLift, s.c2Height); if (!d.liftAt) d.liftAt = d.t; }
+  const inWind = windVents.some(v => windLiftAt(v, s) > 0);
+  if (d.sawLift && !inWind && s.c2OnGround) { d.landedAt = d.t; c2DemoEnd('done'); return; }   // 進入風口 → 浮起 → 離開 → 落地
+  if (d.t >= (cfg.timeoutSteps || 720)) c2DemoEnd('timeout');                                // 保險：不會一直鎖住
+}
+
+// ── ⑪ 風口浮空的小幅上下飄（只影響畫面；碰撞、地面判定、平台、鏡頭都用真正的位置）──
+const C2_HOVER = { ampPx: 3, periodSteps: 96, blend: 0.08 };   // 上下約 ±3px（共 6px 以內）、一次約 1.6 秒
+function c2HoverStep() {
+  const w = player.windInfo;
+  const hovering = !!w && !player.onGround && Math.abs(player.vy) < 2.5 && w.h <= WIND_TUNING.hoverJumpBand;
+  player.c2Hover = hovering;
+  c2Run.hoverK += ((hovering ? 1 : 0) - c2Run.hoverK) * C2_HOVER.blend;     // 進出風口時漸入漸出，不會突然跳一下
+  if (c2Run.hoverK < 0.002) c2Run.hoverK = 0;
+}
+function c2HoverBobY() {
+  if (!c2Run || !c2Is31() || c2Run.hoverK <= 0) return 0;
+  return Math.sin((frameCount || 0) * Math.PI * 2 / C2_HOVER.periodSteps) * C2_HOVER.ampPx * c2Run.hoverK;
+}
+
+// ── ⑫ 倒樹教學 ──
+function c2TreeStep() {
+  const cfg = c2LevelSpec().treeTutorial; if (!cfg) return;
+  const t = breakableTrees[0]; if (!t) return;
+  if (!c2Run.tree.asked && t.state === 'standing' && player.x >= cfg.triggerX && !rpgIsActive()) {
+    const zb = (c2LevelSpec().cameraZones || []).find(z => z.id === 'B');
+    if (zb && Math.abs(cameraX - zb.camMin) > 24 && player.x < cfg.triggerX + 120) return;   // 等鏡頭停好（大樹＋整個坑都在畫面上）再說話
+    c2Run.tree.asked = true;
+    const pit = c2Pits.find(p => p.id === cfg.pitId);
+    rpgRequest('c2_31_tree', () => c2Is31() && t.state === 'standing',
+      { target: () => pit ? { x: pit.x, y: GROUND_Y - 34, w: pit.w, h: 70 } : null });   // 對話時光暈指向尖刺坑
+  }
+  if (t.state !== 'standing' && !c2Run.tree.fallenAt) { c2Run.tree.fallenAt = +elapsedSec.toFixed(2); console.log('[3-1] 大樹被敲倒（' + c2Run.tree.fallenAt + ' 秒）→ 倒樹提示消失'); }
+}
+function c2TreeHintActive() {
+  if (!c2Run || !c2Is31() || gameState !== 'playing' || rpgIsActive()) return false;
+  const cfg = c2LevelSpec().treeTutorial, t = breakableTrees[0];
+  if (!cfg || !t || t.state !== 'standing') return false;
+  if (!rpgIsSeen('c2_31_tree')) return false;                                  // 對話結束後才出現
+  return player.x >= cfg.showX0 && player.x <= cfg.showX1;
+}
+var c2FocusEl = null, c2FocusFor = null;
+function c2SetButtonFocus(btnId) {
+  if (!btnId) { if (c2FocusEl) c2FocusEl.style.display = 'none'; c2FocusFor = null; return; }
+  const btn = document.getElementById(btnId); if (!btn) return;
+  if (!c2FocusEl) {
+    c2FocusEl = document.createElement('div'); c2FocusEl.id = 'c2-btn-focus';
+    c2FocusEl.innerHTML = '<div class="c2f-ring"></div><div class="c2f-arrow">▼</div>';
+    const st = document.createElement('style');
+    st.textContent = '#c2-btn-focus{position:fixed;z-index:9000;pointer-events:none;display:none}'
+      + '#c2-btn-focus .c2f-ring{position:absolute;inset:-7px;border-radius:50%;border:4px solid #ffe14d;box-shadow:0 0 14px 6px rgba(255,214,40,.85),inset 0 0 10px rgba(255,214,40,.6);animation:c2fPulse 1s ease-in-out infinite}'
+      + '#c2-btn-focus .c2f-arrow{position:absolute;left:50%;top:-34px;transform:translateX(-50%);color:#ffe14d;font:900 26px/1 sans-serif;text-shadow:0 0 4px #000,0 2px 0 #7a4a00;animation:c2fBob .8s ease-in-out infinite}'
+      + '@keyframes c2fPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.12);opacity:.75}}'
+      + '@keyframes c2fBob{0%,100%{margin-top:0}50%{margin-top:-6px}}';
+    document.head.appendChild(st); document.body.appendChild(c2FocusEl);
+  }
+  const r = btn.getBoundingClientRect();
+  if (!(r.width > 0)) { c2FocusEl.style.display = 'none'; return; }
+  Object.assign(c2FocusEl.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', display: 'block' });
+  c2FocusFor = btnId;
+}
+function drawC2TreeHint() {
+  const on = c2TreeHintActive();
+  const touch = on && (typeof rpgIsTouchControlsShown === 'function') && rpgIsTouchControlsShown();
+  const needSwitch = activeSlot !== 'hammer';
+  if (!on) { c2SetButtonFocus(null); return; }
+  const t = breakableTrees[0], cx = cameraX, now = frameCount || 0;
+  // ① 箭頭：從左邊指向大樹的樹幹（左右輕輕擺動）
+  const tx = t.x - cx, ay = GROUND_Y - 175, sway = Math.sin(now * 0.12) * 6;
+  ctx.save();
+  ctx.translate(tx - 14 + sway, ay);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-26, -20); ctx.lineTo(-26, -9); ctx.lineTo(-58, -9); ctx.lineTo(-58, 9); ctx.lineTo(-26, 9); ctx.lineTo(-26, 20); ctx.closePath();
+  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#7a4a00'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(255,200,0,0.9)'; ctx.shadowBlur = 12; ctx.fill(); ctx.shadowBlur = 0; ctx.stroke();
+  ctx.restore();
+  // 樹幹發光框（可以敲的地方）
+  ctx.save(); ctx.globalAlpha = 0.55 + 0.35 * Math.sin(now * 0.15);
+  ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 3; ctx.setLineDash([8, 5]);
+  ctx.strokeRect(tx - 6, GROUND_Y - 250, (t.trunkW || 24) + 12, 250); ctx.restore();
+  // ② 提示文字（畫面上方中間；不擋操作按鈕與尖刺坑）
+  const l1 = '擊倒樹木來穿過尖刺吧～！';
+  const l2 = touch ? (needSwitch ? '👉 按發光的按鈕，換成氣球槌' : '👉 靠近大樹，按攻擊鍵揮下氣球槌！')
+                   : (needSwitch ? '電腦：按 2 切換成氣球槌' : '靠近大樹，按 Z 揮下氣球槌！');
+  ctx.save();
+  ctx.font = 'bold 20px sans-serif'; const w1 = ctx.measureText(l1).width;
+  ctx.font = 'bold 16px sans-serif'; const w2 = ctx.measureText(l2).width;
+  const bw = Math.max(w1, w2) + 40, bh = 62, by = 66;
+  const rightLimit = (typeof hudWeaponRect !== 'undefined' && hudWeaponRect && hudWeaponRect.x) ? hudWeaponRect.x - 12 : CANVAS_W - 300;   // 不蓋到右上角的武器／小狗 HUD
+  const bx = Math.round(Math.max(150, Math.min(CANVAS_W / 2 - bw / 2, rightLimit - bw)));
+  c2Run.hintBox = { x: bx, y: by, w: Math.round(bw), h: bh };   // 測試／除錯用：提示框位置（960×540 畫布座標）
+  ctx.fillStyle = 'rgba(30,18,4,0.82)'; ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 12); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 20px sans-serif'; ctx.fillStyle = '#fff6c8'; ctx.fillText(l1, bx + bw / 2, by + 21);
+  ctx.font = 'bold 16px sans-serif'; ctx.fillStyle = needSwitch ? '#ffd23a' : '#9ff2a8'; ctx.fillText(l2, bx + bw / 2, by + 45);
+  ctx.restore();
+  // ③ 手機：圈出既有的換武器鍵（還沒換成槌子）／攻擊鍵（已經是槌子）
+  if (touch) { if (now % 10 === 0 || c2FocusFor !== (needSwitch ? 'btn-switch-weapon' : 'btn-attack')) c2SetButtonFocus(needSwitch ? 'btn-switch-weapon' : 'btn-attack'); }
+  else c2SetButtonFocus(null);
+}
+
+// ── ⑬ 秘笈前進限制 ──
+function c2GateActive() {
+  const g = c2LevelSpec().treasureGate;
+  return !!(g && c2Is31() && currentHiddenTreasure && !currentHiddenTreasure.found);
+}
+function c2GateStep() {
+  if (!c2GateActive()) return;
+  const g = c2LevelSpec().treasureGate;
+  if (player.x > g.playerMaxX) {
+    player.x = g.playerMaxX; if (player.vx > 0) player.vx = 0;
+    c2Run.gateHits++;
+    if (!c2Run.gateHinted) { c2Run.gateHinted = true; showHint('🐶 小狗的鼻子在發亮…附近一定有東西！先找找看！', 200); }
+  }
+}
+
+// ── ⑤ 3-1 開始／完成 ──
 function c2Start31() {
   if (!ADV_WORKSPACE || !ADVENTURE_TEST_TOOLS_ENABLED || !H2_DEVTOOLS) { console.warn('[3-1] 只有第二大陸開發工作區的開發者模式（?devtools=1）可以使用'); return; }
   if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) { console.warn('[3-1] 開場演出／漫畫／準備畫面進行中，請結束後再進入 3-1'); return; }
@@ -24882,9 +25235,12 @@ function c2Start31() {
   try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
   try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  // ⑭ v0.3.81：3-1 一定有小狗同行 — 測試用小狗（只在記憶體：不改背包裡的小狗、不扣陪伴次數、不寫存檔）
+  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
     advMarkTestEntry('c2-prototype-3-1');          // 測試紀錄（test_only）：不進正式挑戰、成績、解鎖
     currentLevelIndex = idx;
+    bringBalloonDog = true; levelStartBringDog = true;
     loadLevel(idx);
     initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();
     applyAdventureTestLoadout();                    // 測試用氣球劍＋氣球槌（只在記憶體，不寫背包）
@@ -24893,26 +25249,47 @@ function c2Start31() {
     c2Proto.done = false; c2Proto.startedAt = Date.now();
     gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
     if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
-    console.log('[3-1] 進入 3-1 風之峽谷（原型，測試紀錄）');
+    console.log('[3-1] 進入 3-1 風之峽谷（開發測試紀錄；測試用小狗同行：' + bringBalloonDog + '）');
   });
 }
 function c2HideDone() { const ov = document.getElementById('c2-proto-done'); if (ov) { ov.classList.remove('is-open'); ov.innerHTML = ''; } }
+function c2FmtSec(s) { s = Math.max(0, +s || 0); const m = Math.floor(s / 60); return (m ? m + ' 分 ' : '') + (s - m * 60).toFixed(1) + ' 秒'; }
 function c2Complete31() {
   if (c2Proto.done) return; c2Proto.done = true;
   gameState = 'clear';
+  try { c2LockInput(false); c2Lock.camX = null; c2SetButtonFocus(null); } catch (e) {}
   try { advEndLiveAttempt('discard'); } catch (e) {}
   try { sfxOnLevelClear(); } catch (e) {}
   try { if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn(); } catch (e) {}
-  const sec = Math.round(elapsedSec || 0);
+  const sec = +(elapsedSec || 0).toFixed(1);       // 實際遊玩時間（暫停、對話、載入都不算）
+  const got = { coins: currentRunStats.coins || 0, b260: currentRunStats.balloon260 || 0, enemies: player.enemiesDefeated || 0, pitHits: c2Run ? c2Run.pitHits : 0 };
+  // 雨傘秘笈：沿用既有規則（本次找到 → 通過終點才正式收進秘笈；死亡／重試／重新整理 → 沒有收進去）
+  const pendingUmbrella = !!(currentRunStats.pendingRecipeUnlocks && currentRunStats.pendingRecipeUnlocks.balloonUmbrella);
+  const ownedBefore = c2UmbrellaOwned();
+  // 測試關：本次撿到的金幣／260 不帶回背包（不會因為重玩測試而一直增加材料）→ 回到 3-1 開始前的數量
+  try {
+    const snap = levelStartSnapshot;
+    if (snap) { playerInventory.coins = snap.coins; playerInventory.balloon260 = snap.balloon260; playerInventory.roundBalloon = snap.roundBalloon; }
+  } catch (e) {}
+  if (pendingUmbrella && !ownedBefore) {
+    if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
+    playerInventory.unlockedRecipes.balloonUmbrella = true;        // 只寫進這個工作區的背包（__c2）
+    c2EventMark('umbrellaRecipe31');
+  }
+  try { saveInventory(); } catch (e) {}
   // 開發版專屬完成紀錄（只存在這個工作區：balloonV_c2Proto31 → 實際鍵加 __c2）
   let rec = {}; try { rec = JSON.parse(localStorage.getItem('balloonV_c2Proto31') || '{}') || {}; } catch (e) {}
   rec.clears = (rec.clears || 0) + 1; rec.lastSec = sec; rec.bestSec = rec.bestSec ? Math.min(rec.bestSec, sec) : sec; rec.at = Date.now();
+  rec.lastRun = Object.assign({ umbrella: pendingUmbrella ? (ownedBefore ? 'already' : 'new') : 'none', demo: c2Run ? c2Run.demo.how || c2Run.demo.phase : '' }, got);
   try { localStorage.setItem('balloonV_c2Proto31', JSON.stringify(rec)); } catch (e) {}
-  console.log('[3-1] 原型測試完成（不寫入正式成績／不解鎖後續關卡／不發 V幣）', rec);
+  console.log('[3-1] 開發測試完成（不寫入正式成績／不解鎖後續關卡／不發 V幣；本次材料不帶回）', rec);
+  const umbrellaLine = pendingUmbrella ? (ownedBefore ? '☂️ 氣球雨傘秘笈：之前已經收藏（不會重複加入）' : '☂️ 氣球雨傘秘笈：已收進這個工作區的氣球秘笈！') : '☂️ 氣球雨傘秘笈：這次沒有取得';
   let ov = document.getElementById('c2-proto-done');
   if (!ov) { ov = document.createElement('div'); ov.id = 'c2-proto-done'; ov.className = 'oc-choose h2-skin'; document.body.appendChild(ov); }
   ov.innerHTML = '<section class="h2-card p2-confirm-card oc-card" role="dialog" aria-modal="true"><div class="h2-head"><span class="h2-plank h2-plank--static">🌬️ 3-1 原型測試完成</span></div>'
-    + '<div class="p2-confirm-body oc-body"><p>通過風之峽谷（原型）！<br><small>用時 ' + sec + ' 秒・這個工作區第 ' + rec.clears + ' 次完成<br>開發測試紀錄：不計入正式成績、不解鎖後續關卡、不發 V幣</small></p></div>'
+    + '<div class="p2-confirm-body oc-body"><p>通過風之峽谷！<br><b>' + umbrellaLine + '</b><br><small>通關時間 ' + c2FmtSec(sec) + '（最佳 ' + c2FmtSec(rec.bestSec) + '）・這個工作區第 ' + rec.clears + ' 次完成<br>'
+    + '本次撿到：金幣 ' + got.coins + '・260 長條氣球 ' + got.b260 + ' 條・打倒蠍子 ' + got.enemies + ' 隻<br>'
+    + '開發測試紀錄：不計入正式成績、不解鎖 3-2、不發 V幣；金幣與 260 不帶回背包</small></p></div>'
     + '<div class="p2-confirm-btns oc-btns"><button type="button" class="h2-pill h2-pill--yellow" data-oc="again">🔁 再玩一次 3-1</button><button type="button" class="h2-pill h2-pill--blue" data-oc="back">↩️ 回到原本的冒險</button></div></section>';
   ov.classList.add('is-open');
   ov.onclick = e => {
@@ -24922,29 +25299,53 @@ function c2Complete31() {
     else { c2HideDone(); console.log('[3-1] 回到原本的冒險（重新載入）'); try { location.reload(); } catch (er) {} }
   };
 }
+// 開發者工具：重設 3-1 的一次性事件（只清第二大陸工作區的測試紀錄；第一大陸／正式資料完全不碰）
+function c2ResetEvents31() {
+  if (!ADV_WORKSPACE || !ADVENTURE_TEST_TOOLS_ENABLED || !H2_DEVTOOLS) return false;
+  try { localStorage.removeItem(C2_EVENTS_KEY); } catch (e) {}
+  try { const d = rpgLoad(); ['c2_31_tree', 'c2_31_umbrella'].forEach(k => { delete d.seen[k]; }); rpgSave(); } catch (e) {}
+  try { if (playerInventory.unlockedRecipes && playerInventory.unlockedRecipes.balloonUmbrella) { delete playerInventory.unlockedRecipes.balloonUmbrella; saveInventory(); } } catch (e) {}
+  try { if (levelStartSnapshot && levelStartSnapshot.unlockedRecipes) delete levelStartSnapshot.unlockedRecipes.balloonUmbrella; } catch (e) {}
+  console.log('[3-1] 已重設 3-1 一次性事件（小蠍子示範、倒樹對話、雨傘秘笈收藏）— 只清第二大陸工作區的資料');
+  try { showHint('🔄 已重設 3-1 測試事件：下次進入 3-1 會重新播放', 200); } catch (e) {}
+  return true;
+}
+
 (function v380Install() {
   if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v380) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v380 = true; globalThis[name] = w; };
-  // 關卡載入：建立風口；清掉上一關的樹幹平台與鏡頭狀態
+  // 關卡載入：建立風口、尖刺坑；清掉上一關的樹幹平台與鏡頭狀態
   wrapFn('loadLevel', o => function (index) {
     const r = o.apply(this, arguments);
     const lv = LEVELS[index];
     windVents = (lv && typeof lv.buildWindVents === 'function') ? lv.buildWindVents() : [];
+    c2BuildPits(lv);
     camZoneState.active = null; camZoneState.blend = false;
-    player.windT = 0; player.windInfo = null;
+    player.windT = 0; player.windInfo = null; player.c2Hover = false;
+    if (lv && lv.devPrototype) c2ResetRun(); else { c2Run = null; c2Lock.input = false; c2Lock.camX = null; }
+    try { c2SetButtonFocus(null); } catch (e) {}
     return r;
   });
-  // 重新開始／死亡重試：樹回到站立（原本程式已處理），移除倒下時加的樹幹平台；風力狀態歸零
+  // 重新開始／死亡重試：樹回到站立（原本程式已處理），移除倒下時加的樹幹平台；風力、示範、限制狀態歸零
   wrapFn('restart', o => function () {
     const r = o.apply(this, arguments);
     for (let i = platforms.length - 1; i >= 0; i--) if (platforms[i].treeLog) platforms.splice(i, 1);
     breakableTrees.forEach(t => { t._logPlat = null; });
-    player.windT = 0; player.windInfo = null;
+    player.windT = 0; player.windInfo = null; player.c2Hover = false;
     camZoneState.active = null; camZoneState.blend = false;
     c2Proto.done = false; c2HideDone();
+    if (c2Is31()) {
+      c2ResetRun(); c2SetupScorpions();
+      // ⑭ 3-1 一定有小狗同行（死亡重試也一樣；測試用，不寫存檔）
+      if (c2LevelSpec().forceDog && ADVENTURE_TEST_TOOLS_ENABLED) {
+        bringBalloonDog = true; levelStartBringDog = true;
+        if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = true;
+      }
+    } else { c2Lock.input = false; c2Lock.camX = null; }
+    try { c2SetButtonFocus(null); } catch (e) {}
     return r;
   });
-  // ③ 倒樹：walkable 的樹完全倒下 → 加一段和畫面上樹幹一樣大的平台（樹幹頂面高 trunkW，比尖刺高）
+  // ③ 倒樹：walkable 的樹完全倒下 → 加一段和畫面上樹幹一樣大的平台（樹幹頂面高 trunkW）
   wrapFn('updateBreakableTrees', o => function () {
     const r = o.apply(this, arguments);
     breakableTrees.forEach(t => {
@@ -24952,46 +25353,140 @@ function c2Complete31() {
         const tw = t.trunkW || 22;
         t._logPlat = { x: t.x, y: GROUND_Y - tw, w: t.h, h: tw, treeLog: true };
         platforms.push(t._logPlat);
-        console.log('[3-1] 大樹倒下：樹幹通道 x ' + t.x + '～' + (t.x + t.h) + '（可以站）');
+        console.log('[3-1] 大樹倒下：樹幹橋 x ' + t.x + '～' + (t.x + t.h) + '（可以站）');
       }
     });
     return r;
   });
-  // ④ 3-1 長尖刺：受傷後退回尖刺前（無敵時間縮短，不能靠無敵硬闖）
-  wrapFn('damagePlayer', o => function () {
-    const s = c2SpikeUnderPlayer();
+  // ⑨ 小蠍子受風口影響：原本的巡邏（水平）照舊；原本「強制貼地」之後，c2Wind 的蠍子改用風力＋重力的垂直運動
+  wrapFn('updateEnemies', o => function () {
+    if (!c2Is31() || !windVents.length) return o.apply(this, arguments);
+    const ys = enemies.map(e => e.y);
     const r = o.apply(this, arguments);
-    try {
-      if (s && player.hp > 0 && gameState === 'playing') {
-        player.x = s.resetX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
-        player.invincible = Math.min(player.invincible, 24);
-        player.windT = 0;
-        showHint('💥 被尖刺刺到了！退回尖刺前，想想別的方法', 150);
-      }
-    } catch (e) {}
+    enemies.forEach((e, i) => { if (!e.active || !e.c2Wind) return; e.y = ys[i]; c2EnemyWindStep(e); });
     return r;
   });
-  // ⑤ 3-1 終點：開發版完成畫面（不呼叫 triggerClear → 不寫成績／背包／解鎖／V幣）
+  // ⑩ 示範中的小蠍子不會被打倒
+  wrapFn('damageScorpionEnemy', o => function (e) {
+    if (e && e.c2DemoInvuln) return false;
+    return o.apply(this, arguments);
+  });
+  // ⑩ 操作鎖定：移動／跳躍／攻擊（inp）＋換武器（數字鍵、手機換武器鍵 → cycleWeapon）
+  wrapFn('inp', o => function () {
+    if (c2Lock.input && c2Is31()) return false;
+    return o.apply(this, arguments);
+  });
+  wrapFn('cycleWeapon', o => function () {
+    if (c2Lock.input && c2Is31()) return;
+    return o.apply(this, arguments);
+  });
+  try {
+    window.addEventListener('keydown', e => {
+      if (c2Lock.input && c2Is31() && gameState === 'playing' && /^Digit[0-9]$/.test(e.code)) { e.stopImmediatePropagation(); e.preventDefault(); }
+    }, true);
+  } catch (e) {}
+  // ⑩ 鎖定時小V一定是 Idle（在地上）；⑪ 風口裡穩定浮空 → Fall 圖
+  wrapFn('computeHeroArtKey', o => function () {
+    if (c2Is31()) {
+      if (c2Lock.input && player.onGround) { _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false; _heroFrameTimer = 0; return 'idle'; }
+      const k = o.apply(this, arguments);
+      if (player.c2Hover && (k === 'jump' || k === 'fall')) return 'fall';
+      return k;
+    }
+    return o.apply(this, arguments);
+  });
+  wrapFn('getDogPoseKey', o => function () {
+    const p = o.apply(this, arguments);
+    if (c2Is31() && player.c2Hover && p && (p.state === 'jump' || p.state === 'fall')) return { key: getDogFrameKey(DOG_ART.fallFrame), state: 'fall' };   // 不再 Jump／Fall 交替
+    return p;
+  });
+  // ⑪ 浮空小幅上下飄：只在畫面上平移（碰撞、地面、平台、鏡頭不變）
+  ['drawPlayer', 'drawCompanionDog'].forEach(nm => wrapFn(nm, o => function () {
+    const by = c2HoverBobY();
+    if (!by) return o.apply(this, arguments);
+    ctx.save(); ctx.translate(0, by);
+    try { return o.apply(this, arguments); } finally { ctx.restore(); }
+  }));
+  // ⑫ 倒樹提示畫在 HUD 之前（世界畫面最上層）
+  wrapFn('drawHUD', o => function () {
+    try { if (c2Is31()) drawC2TreeHint(); else if (c2FocusFor) c2SetButtonFocus(null); } catch (e) {}
+    return o.apply(this, arguments);
+  });
+  // 每一步更新的最後：尖刺坑 → 浮空 → 示範 → 倒樹 → 秘笈前進限制
+  wrapFn('update', o => function () {
+    const r = o.apply(this, arguments);
+    if (c2Run && gameState === 'playing' && c2Is31()) {
+      try { c2PitHazardStep(); } catch (e) { console.warn('[3-1] pit', e); }
+      if (gameState === 'playing') {
+        try { c2HoverStep(); } catch (e) {}
+        try { c2DemoStep(); } catch (e) { console.warn('[3-1] demo', e); }
+        try { c2TreeStep(); } catch (e) { console.warn('[3-1] tree', e); }
+        try { c2GateStep(); } catch (e) {}
+      }
+    }
+    return r;
+  });
+  // RPG：3-1 的對話（小V三句、雨傘秘笈兩句）；3-1 不播第一章的「第一次看到尖刺／蠍子」教學（蠍子由示範風口介紹，不用對話）
+  wrapFn('rpgBuildScene', o => function (id) {
+    if (id === 'c2_31_tree') return { id, title: '3-1 長長的尖刺坑', policy: 'oncePerPlayer', saveHistory: false, left: 'balloonv_surprised', right: null, pages: [
+      { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！好長一排{r:尖刺}！！' },
+      { sp: 'balloonv', face: 'balloonv_shocked',   text: '這絕對跳不過去的吧！！！' },
+      { sp: 'balloonv', face: 'balloonv_thinking',  text: '我該怎麼過去呢……' } ] };
+    if (id === 'c2_31_umbrella') return { id, title: '發現氣球雨傘秘笈', modeControlled: false, saveHistory: false, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
+      { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:氣球雨傘}的製作秘笈！' },
+      { sp: 'balloonv', face: 'balloonv_thinking',  text: '氣球雨傘……可以用在哪裡呢……？' } ] };
+    return o.apply(this, arguments);
+  });
+  wrapFn('rpgUpdate', o => function () {
+    if (c2Is31()) { try { rpgAttempt.shown.add('rpg002_first_spike'); rpgAttempt.shown.add('rpg004_first_scorpion'); } catch (e) {} }
+    return o.apply(this, arguments);
+  });
+  // ⑬ 取得雨傘秘笈：沿用既有取得通知框；RPG 改成規格的兩句（已經收藏過 → 不重播、不重複加入）
+  wrapFn('rpgOnTreasureFound', o => function (t) {
+    if (t && t.recipeKey === 'balloonUmbrella' && c2Is31()) {
+      if (c2Run) c2Run.umbrellaFound = true;
+      console.log('[3-1] 小狗找到氣球雨傘秘笈（' + (c2UmbrellaOwned() ? '之前已收藏' : '新取得，通過終點後收進秘笈') + '）');
+      if (c2UmbrellaOwned()) {
+        try { if (treasurePickupEffects[0]) treasurePickupEffects[0].subtitle = '已經收藏過了（不會重複加入）'; } catch (e) {}
+        showHint('☂️ 氣球雨傘秘笈已經收藏過了', 200);
+        return true;
+      }
+      return rpgRequest('c2_31_umbrella', () => true);
+    }
+    return o.apply(this, arguments);
+  });
+  // ⑤ 3-1 終點：開發版完成畫面（不呼叫 triggerClear → 不寫成績／不解鎖／不發 V幣）
   wrapFn('checkFinish', o => function () {
     if (c2Is31()) { if (gameState === 'playing' && player.x + player.w >= FINISH_X) c2Complete31(); return; }
     return o.apply(this, arguments);
   });
   // ② 解謎攝影機：在 cameraZones 內不自動捲動，鏡頭平順跟隨並限制在範圍內；離開後平順接回原本的鏡頭
+  //   v0.3.81：示範鏡頭（c2Lock.camX）、秘笈前進限制（還沒拿到秘笈 → 鏡頭最多到 treasureGate.camMax）
   wrapFn('updateCamera', o => function () {
     const lv = LEVELS[currentLevelIndex];
     if (!lv || !lv.cameraZones) return o.apply(this, arguments);
     const z = camZoneAt(lv);
-    if (!z && !camZoneState.blend) return o.apply(this, arguments);
+    const gate = c2GateActive() ? lv.treasureGate : null;
     const prev = cameraX;
-    const step = (d, lim) => Math.max(-lim, Math.min(lim, d));      // 每一步最多移動 CAM_ZONE_MAX_STEP（比跑速 3.8 快，鏡頭追得上；但不會一次跳很遠）
-    if (z) {
+    const step = (d, lim) => Math.max(-lim, Math.min(lim, d));      // 每一步最多移動 CAM_ZONE_MAX_STEP
+    if (!z && !camZoneState.blend && c2Lock.camX == null) {
+      o.apply(this, arguments);
+      if (gate && cameraX > gate.camMax) cameraX = Math.max(gate.camMax, Math.min(prev, cameraX));
+      return;
+    }
+    if (c2Lock.camX != null) {
+      cameraX = prev + step((c2Lock.camX - prev) * 0.12, CAM_ZONE_MAX_STEP);
+      camZoneState.blend = true;
+    } else if (z) {
       let target = player.x + player.w / 2 - CANVAS_W * z.lead;
       target = Math.max(z.camMin, Math.min(z.camMax, target));
+      if (gate) target = Math.min(target, gate.camMax);
       cameraX = prev + step((target - prev) * z.ease, CAM_ZONE_MAX_STEP);
       camZoneState.active = z.id; camZoneState.blend = true;
     } else {
       // 離開解謎區：往原本「自動捲動＋角色在畫面左側 30%」的位置平順靠過去，接上後交回原本的鏡頭
-      const normal = Math.max(prev + CONFIG.AUTO_SCROLL_SPEED_NORMAL, player.x - CANVAS_W * 0.3);
+      let normal = Math.max(prev + CONFIG.AUTO_SCROLL_SPEED_NORMAL, player.x - CANVAS_W * 0.3);
+      if (gate) normal = Math.min(normal, gate.camMax);
       cameraX = prev + step((normal - prev) * 0.12, CAM_ZONE_MAX_STEP);
       if (Math.abs(normal - cameraX) < 2) { cameraX = normal; camZoneState.blend = false; }
       camZoneState.active = null;
@@ -25007,15 +25502,25 @@ function c2Complete31() {
     try { const card = document.querySelector('#start-gate-overlay .start-gate-card'); if (card && !card.querySelector('.c2-ws-tag')) { const d = document.createElement('div'); d.className = 'start-gate-sub c2-ws-tag'; d.textContent = '🧪 第二大陸開發工作區（獨立存檔，不影響正式冒險）'; card.appendChild(d); } } catch (e) {}
     return r;
   });
-  // ⑥ 開發者工具：🌬️ 測試 3-1 風之峽谷（暫停選單 → 開發測試工具；?devtools=1 才看得到）
+  // 氣球雨傘秘笈的圖示（目前沒有正式道具圖 → 用 ☂️）
+  try { if (typeof H2_ICON !== 'undefined' && !H2_ICON.balloonUmbrella) H2_ICON.balloonUmbrella = { path: null, emoji: '☂️' }; } catch (e) {}
+  // ⑥ 開發者工具：🌬️ 測試 3-1 風之峽谷／🔄 重設 3-1 測試事件（暫停選單 → 開發測試工具；?devtools=1 才看得到）
   try {
     const box = document.getElementById('p2-dev-body');
     if (box && ADVENTURE_TEST_TOOLS_ENABLED && H2_DEVTOOLS && !document.getElementById('btn-pause-test-c2-31')) {
       const b = document.createElement('button'); b.id = 'btn-pause-test-c2-31'; b.type = 'button'; b.className = 'h2-pill h2-pill--yellow h2-pill--sm';
       b.textContent = '🌬️ 測試 3-1 風之峽谷';
       b.addEventListener('click', e => { e.preventDefault(); c2Start31(); });
+      const b2 = document.createElement('button'); b2.id = 'btn-pause-reset-c2-31'; b2.type = 'button'; b2.className = 'h2-pill h2-pill--blue h2-pill--sm';
+      b2.textContent = '🔄 重設 3-1 測試事件（只清第二大陸）';
+      b2.addEventListener('click', e => { e.preventDefault(); c2ResetEvents31(); b2.textContent = '✅ 已重設 3-1 測試事件'; setTimeout(() => { b2.textContent = '🔄 重設 3-1 測試事件（只清第二大陸）'; }, 2500); });
+      box.insertBefore(b2, box.firstChild);
       box.insertBefore(b, box.firstChild);
     }
   } catch (e) {}
-  if (typeof window !== 'undefined') Object.assign(window, { c2Start31, WIND_TUNING, windLiftAt, debugWind: () => { const o = { vents: windVents, player: { x: player.x, y: player.y, vy: player.vy, windT: player.windT, windInfo: player.windInfo }, zone: camZoneState }; console.log('[Wind]', o); return o; } });
+  if (typeof window !== 'undefined') Object.assign(window, { c2Start31, c2ResetEvents31, WIND_TUNING, windLiftAt,
+    debugWind: () => { const o = { vents: windVents, player: { x: player.x, y: player.y, vy: player.vy, windT: player.windT, windInfo: player.windInfo, hover: player.c2Hover }, zone: camZoneState }; console.log('[Wind]', o); return o; },
+    debug31: () => { const o = { run: c2Run, lock: Object.assign({}, c2Lock), events: c2EventsLoad(), pits: c2Pits, gate: c2GateActive(), umbrellaOwned: c2UmbrellaOwned(), dog: bringBalloonDog,
+      scorpions: enemies.filter(e => e.c2Wind).map(e => ({ id: e.c2Id, x: Math.round(e.x), y: Math.round(e.y), h: e.c2Height, windT: +(e.windT || 0).toFixed(2), active: e.active, patrol: e.patrol, range: e.patrolRange })) };
+      console.log('[3-1]', o); return o; } });
 })();
