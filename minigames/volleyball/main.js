@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.0-test-2',
+  VERSION: 'v0.2.0-test-3',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -24,7 +24,9 @@ const CONFIG = {
   CEILING_Y: 0,               // 天花板（球碰到會反彈，不會飛出畫面）
 
   // ---- 角色（玩家與電腦共用）----
-  CHAR_RADIUS: 52,            // 角色碰撞半徑（圓形）
+  CHAR_RADIUS: 52,            // 角色碰撞半徑基準（圓形）；實際半徑 = 基準 × CHARACTER_SIZE
+  // 角色大小倍率：同時放大「碰撞範圍」與「圖片」（v0.2.0-test-3：依使用者指定）
+  CHARACTER_SIZE: { v: 1.15, scorpion: 1.15, orange: 1.15, orange_king: 1.30 },
   CHAR_MOVE_SPEED: 430,       // 水平移動速度（放開即停，無滑行）
   CHAR_JUMP_SPEED: 1060,      // 跳躍初速度
   CHAR_GRAVITY: 2700,         // 角色重力
@@ -33,7 +35,7 @@ const CONFIG = {
   CPU_START_X: 1060,          // 電腦每球開始位置
 
   // ---- 排球 ----
-  BALL_RADIUS: 30,
+  BALL_RADIUS: 39,            // 排球碰撞半徑（原本 30，×1.3 = 39；圖片同步放大）
   BALL_GRAVITY: 900,          // 球重力（街機風格，比真實氣球快）
   BALL_MAX_SPEED: 1300,       // 球速上限
   BALL_WALL_RESTITUTION: 0.9, // 撞左右牆／天花板反彈係數
@@ -192,7 +194,7 @@ const CHARACTER_VISUAL_CONFIG = {
   CHARACTERS: {
     v: {
       folder: 'v', prefix: 'v',
-      scale: 0.14, offsetX: 0, offsetY: 0,      // 待機身高約 165
+      scale: 0.14, offsetX: 0, offsetY: 0,      // 基準身高約 165（實際再乘 CONFIG.CHARACTER_SIZE）
       geometry: ['#9b6be0', '#5d3a9a'],
       poses: {
         idle: { anchor: 'feet',   anchorX: 601, anchorY: 1207, bottomY: 1207, facing:  1, offsetX: 0, offsetY: 0 },
@@ -290,9 +292,8 @@ const STEP = 1 / CONFIG.PHYSICS_HZ;
 const NET_LEFT = CONFIG.NET_X - CONFIG.NET_W / 2;
 const NET_RIGHT = CONFIG.NET_X + CONFIG.NET_W / 2;
 const NET_TOP = CONFIG.GROUND_Y - CONFIG.NET_H;
-const R = CONFIG.CHAR_RADIUS;
 const BR = CONFIG.BALL_RADIUS;
-const CHAR_GROUND_Y = CONFIG.GROUND_Y - R;
+// 角色碰撞半徑因角色而異：每個角色身上有 c.r（半徑）與 c.groundY（站在地上時的中心高度）
 
 // =========================================================
 // 狀態
@@ -372,7 +373,9 @@ function makeCharacter(side, ctrl) {
     facing: side === 'left' ? 1 : -1,  // 對方場地的方向
     ctrl,
     x: side === 'left' ? CONFIG.PLAYER_START_X : CONFIG.CPU_START_X,
-    y: CHAR_GROUND_Y,
+    y: 0,
+    r: CONFIG.CHAR_RADIUS,
+    groundY: CONFIG.GROUND_Y - CONFIG.CHAR_RADIUS,
     vx: 0,
     vy: 0,
     onGround: true,
@@ -388,14 +391,28 @@ function makeCharacter(side, ctrl) {
     poseDir: 1,          // 純視覺：撲球方向（1 = 右，-1 = 左）
     lookDir: side === 'left' ? 1 : -1, // 純視覺：目前面向的方向
     lookHold: 0,         // 純視覺：停下後多久轉回面向球網
-    minX: side === 'left' ? R : NET_RIGHT + R,
-    maxX: side === 'left' ? NET_LEFT - R : CONFIG.WORLD_W - R,
+    minX: 0,
+    maxX: 0,
   };
+}
+
+// 設定角色大小（碰撞半徑、站立高度、可移動範圍）
+function applyCharacterSize(c, id) {
+  const k = CONFIG.CHARACTER_SIZE[id] || 1;
+  c.r = CONFIG.CHAR_RADIUS * k;
+  c.groundY = CONFIG.GROUND_Y - c.r;
+  c.minX = c.side === 'left' ? c.r : NET_RIGHT + c.r;
+  c.maxX = c.side === 'left' ? NET_LEFT - c.r : CONFIG.WORLD_W - c.r;
+  c.y = Math.min(c.y || c.groundY, c.groundY);
+  if (c.onGround) c.y = c.groundY;
+  c.x = Math.max(c.minX, Math.min(c.maxX, c.x));
 }
 
 const player = makeCharacter('left', playerCtrl);
 const cpu = makeCharacter('right', cpuCtrl);
 const chars = [player, cpu];
+applyCharacterSize(player, 'v');
+applyCharacterSize(cpu, 'orange');
 
 const ball = { x: 0, y: 0, vx: 0, vy: 0, held: true, spin: 0 };
 
@@ -404,7 +421,7 @@ const ball = { x: 0, y: 0, vx: 0, vy: 0, held: true, spin: 0 };
 // =========================================================
 function resetCharacter(c) {
   c.x = c.side === 'left' ? CONFIG.PLAYER_START_X : CONFIG.CPU_START_X;
-  c.y = CHAR_GROUND_Y;
+  c.y = c.groundY;
   c.vx = 0;
   c.vy = 0;
   c.onGround = true;
@@ -426,7 +443,7 @@ function resetCharacter(c) {
 function placeBallForServe() {
   const s = game.server === 'left' ? player : cpu;
   ball.x = s.x;
-  ball.y = CHAR_GROUND_Y - R - BR - CONFIG.SERVE_HEIGHT;
+  ball.y = s.groundY - s.r - BR - CONFIG.SERVE_HEIGHT;
   ball.vx = 0;
   ball.vy = 0;
   ball.held = true;
@@ -449,6 +466,7 @@ function setOpponent(id) {
   if (!AI_PROFILES[id]) id = 'orange';
   game.opponent = id;
   Object.assign(CONFIG.AI, AI_PROFILES[id].ai);
+  applyCharacterSize(cpu, id);
 }
 
 function startMatch(opponentId) {
@@ -539,8 +557,8 @@ function updateCharacter(c, dt, canMove, allowActiveHit) {
   c.x += c.vx * dt;
   c.y += c.vy * dt;
 
-  if (c.y >= CHAR_GROUND_Y) {
-    c.y = CHAR_GROUND_Y;
+  if (c.y >= c.groundY) {
+    c.y = c.groundY;
     c.vy = 0;
     c.onGround = true;
   }
@@ -636,7 +654,7 @@ function aimOf(c) {
 function doActiveHit(c, nx, ny) {
   const f = c.facing;
   const aim = aimOf(c);
-  const relY = (ball.y - c.y) / (R + BR);
+  const relY = (ball.y - c.y) / (c.r + BR);
   let vx, vy;
 
   if (!c.onGround && relY < -0.15) {
@@ -669,8 +687,8 @@ function doActiveHit(c, nx, ny) {
   ball.vy = vy;
   clampBallSpeed();
   // 確保球不在角色體內
-  ball.x = c.x + nx * (R + BR + 0.5);
-  ball.y = c.y + ny * (R + BR + 0.5);
+  ball.x = c.x + nx * (c.r + BR + 0.5);
+  ball.y = c.y + ny * (c.r + BR + 0.5);
   c.hitUsed = true;          // 一次判定最多擊中一次
   c.hitFlash = 0.18;
   // 純視覺：撲球方向 = 實際出球方向（球速水平分量）；幾乎垂直時沿用最後面向
@@ -702,8 +720,8 @@ function doNormalBounce(c, nx, ny) {
   }
   ball.vx += c.facing * CONFIG.BOUNCE_FORWARD_BIAS;
   clampBallSpeed();
-  ball.x = c.x + nx * (R + BR + 0.5);
-  ball.y = c.y + ny * (R + BR + 0.5);
+  ball.x = c.x + nx * (c.r + BR + 0.5);
+  ball.y = c.y + ny * (c.r + BR + 0.5);
   c.touchCooldown = CONFIG.TOUCH_COOLDOWN;
   game.ballEventId++;
   sfx('ball_bounce');
@@ -712,8 +730,8 @@ function doNormalBounce(c, nx, ny) {
 function inHitRange(c) {
   const dx = ball.x - c.x;
   const dy = ball.y - c.y;
-  if (Math.hypot(dx, dy) > R + BR + CONFIG.HIT_REACH) return false;
-  if (dy > R * 0.6) return false;                       // 球在腳下太低
+  if (Math.hypot(dx, dy) > c.r + BR + CONFIG.HIT_REACH) return false;
+  if (dy > c.r * 0.6) return false;                       // 球在腳下太低
   if ((ball.x - CONFIG.NET_X) * c.facing > BR) return false; // 球已在對方場地
   return true;
 }
@@ -731,15 +749,15 @@ function resolveCharacter(c) {
     return;
   }
 
-  if (d >= R + BR) return;
+  if (d >= c.r + BR) return;
 
   const rvn = (ball.vx - c.vx) * nx + (ball.vy - c.vy) * ny;
   if (c.touchCooldown <= 0 && rvn < 0) {
     doNormalBounce(c, nx, ny);
   } else {
     // 冷卻中：只推出、移除「往角色裡面」的速度分量，不額外加速 → 不會震動或暴衝
-    ball.x = c.x + nx * (R + BR + 0.5);
-    ball.y = c.y + ny * (R + BR + 0.5);
+    ball.x = c.x + nx * (c.r + BR + 0.5);
+    ball.y = c.y + ny * (c.r + BR + 0.5);
     const vn = ball.vx * nx + ball.vy * ny;
     if (vn < 0) {
       ball.vx -= vn * nx;
@@ -841,7 +859,7 @@ function resetAI() {
 function predictBall() {
   let x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy;
   const h = 1 / 120;
-  const contactY = CHAR_GROUND_Y - R - BR; // 球剛好碰到站立角色頭頂的高度
+  const contactY = cpu.groundY - cpu.r - BR; // 球剛好碰到站立電腦頭頂的高度
   let contactX = null;
   for (let t = 0; t < CONFIG.AI.PREDICT_MAX_TIME; t += h) {
     const px = x;
@@ -913,9 +931,11 @@ function updateAI(dt) {
   const onMySide = ball.x > CONFIG.NET_X;
 
   // 起跳判斷：每一球最多擲一次骰
+  // 起跳高度區間原本是依「半徑 52 的角色＋半徑 30 的球」調的；角色或球變大時，整個區間跟著上移
+  const jumpShift = (c.groundY - c.r - BR) - (CONFIG.GROUND_Y - 2 * 52 - 30);
   if (c.onGround && ai.jumpRolled !== game.ballEventId && onMySide &&
       Math.abs(ball.x - c.x) < A.JUMP_TRIGGER_DX &&
-      ball.y > A.JUMP_TRIGGER_MIN_Y && ball.y < A.JUMP_TRIGGER_MAX_Y && ball.vy > -200) {
+      ball.y > A.JUMP_TRIGGER_MIN_Y + jumpShift && ball.y < A.JUMP_TRIGGER_MAX_Y + jumpShift && ball.vy > -200) {
     ai.jumpRolled = game.ballEventId;
     if (Math.random() < A.JUMP_CHANCE) cpuCtrl.jump = true;
   }
@@ -923,7 +943,7 @@ function updateAI(dt) {
   // 主動擊球判斷：每一球最多擲一次骰
   if (ai.hitRolled !== game.ballEventId && c.hitTimer <= 0 && onMySide) {
     const d = Math.hypot(ball.x - c.x, ball.y - c.y);
-    if (d < R + BR + CONFIG.HIT_REACH * 0.8 && ball.y < c.y + R * 0.5) {
+    if (d < c.r + BR + CONFIG.HIT_REACH * 0.8 && ball.y < c.y + c.r * 0.5) {
       ai.hitRolled = game.ballEventId;
       if (Math.random() < A.HIT_CHANCE) {
         cpuCtrl.hit = true;
@@ -1261,7 +1281,7 @@ function loadCharacter(id) {
   const cfg = CHARACTER_VISUAL_CONFIG.CHARACTERS[id];
   const entry = { status: 'loading', images: {}, loaded: 0, failed: [], promise: null };
   sprites.chars[id] = entry;
-  const k = cfg.scale * CHARACTER_VISUAL_CONFIG.PRESCALE;
+  const k = cfg.scale * (CONFIG.CHARACTER_SIZE[id] || 1) * CHARACTER_VISUAL_CONFIG.PRESCALE;
   entry.promise = Promise.all(Object.keys(cfg.poses).map(pose =>
     loadImage(charImagePath(id, pose)).then(img => {
       const p = cfg.poses[pose];
@@ -1436,11 +1456,12 @@ function drawShadow(x, w) {
 
 // 幾何角色（保留給除錯比較與圖片失敗時使用）
 function drawCharacter(c, body, dark) {
+  const R = c.r, k = c.r / CONFIG.CHAR_RADIUS;
   drawShadow(c.x, R * 0.9);
   ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.ellipse(c.x - 20, c.y + R - 4, 16, 9, 0, 0, Math.PI * 2);
-  ctx.ellipse(c.x + 20, c.y + R - 4, 16, 9, 0, 0, Math.PI * 2);
+  ctx.ellipse(c.x - 20 * k, c.y + R - 4 * k, 16 * k, 9 * k, 0, 0, Math.PI * 2);
+  ctx.ellipse(c.x + 20 * k, c.y + R - 4 * k, 16 * k, 9 * k, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = body;
   ctx.beginPath();
@@ -1452,15 +1473,15 @@ function drawCharacter(c, body, dark) {
   const ang = Math.atan2(ball.y - c.y, ball.x - c.x);
   const ex = Math.cos(ang) * 4, ey = Math.sin(ang) * 4;
   for (const off of [-16, 16]) {
-    const bx = c.x + off + c.facing * 6;
-    const by = c.y - 14;
+    const bx = c.x + (off + c.facing * 6) * k;
+    const by = c.y - 14 * k;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(bx, by, 11, 0, Math.PI * 2);
+    ctx.arc(bx, by, 11 * k, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#222';
     ctx.beginPath();
-    ctx.arc(bx + ex, by + ey, 5, 0, Math.PI * 2);
+    ctx.arc(bx + ex * k, by + ey * k, 5 * k, 0, Math.PI * 2);
     ctx.fill();
   }
   drawSwing(c);
@@ -1474,7 +1495,7 @@ function drawSwing(c) {
     ctx.lineWidth = 8;
     ctx.beginPath();
     const a0 = c.facing > 0 ? -Math.PI * 0.75 : -Math.PI * 0.25;
-    ctx.arc(c.x, c.y, R + 14, a0 - 0.6, a0 + 0.6);
+    ctx.arc(c.x, c.y, c.r + 14, a0 - 0.6, a0 + 0.6);
     ctx.stroke();
   }
 }
@@ -1491,16 +1512,16 @@ function drawCharSprite(c) {
   const img = set.images[pose];
   if (!img || !pc.srcW) return false;
 
-  const s = cfg.scale;
+  const s = cfg.scale * (CONFIG.CHARACTER_SIZE[id] || 1);   // 圖片與碰撞同比例放大
   const flip = pc.facing === 0 ? 1 : wantDir(c, pose) * pc.facing; // 正面圖不鏡像
   const tx = c.x + (cfg.offsetX + pc.offsetX) * (pc.facing === 0 ? 1 : wantDir(c, pose));
-  let top = (pc.anchor === 'feet' ? c.y + R : c.y) + cfg.offsetY + pc.offsetY - pc.anchorY * s;
+  let top = (pc.anchor === 'feet' ? c.y + c.r : c.y) + cfg.offsetY + pc.offsetY - pc.anchorY * s;
   if (CHARACTER_VISUAL_CONFIG.KEEP_ABOVE_GROUND && pose === 'dive') {
     const bottom = top + pc.bottomY * s;
     if (bottom > CONFIG.GROUND_Y) top -= bottom - CONFIG.GROUND_Y;
   }
 
-  drawShadow(c.x, R * 0.8);
+  drawShadow(c.x, c.r * 0.8);
   ctx.save();
   ctx.translate(tx, 0);
   ctx.scale(flip, 1);   // 以對齊點為中心鏡像 → 鏡像後位置不偏移
@@ -1610,12 +1631,12 @@ function drawDebug() {
   for (const c of chars) {
     ctx.strokeStyle = '#00e676';
     ctx.beginPath();
-    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.strokeStyle = c.hitTimer > 0 ? '#ff1744' : 'rgba(255,23,68,.35)';
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
-    ctx.arc(c.x, c.y, R + BR + CONFIG.HIT_REACH, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y, c.r + BR + CONFIG.HIT_REACH, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -1634,8 +1655,8 @@ function drawDebug() {
   if (ai.predContactX !== null) {
     ctx.strokeStyle = '#ff9100';
     ctx.beginPath();
-    ctx.moveTo(ai.predContactX, CHAR_GROUND_Y - R - BR - 15);
-    ctx.lineTo(ai.predContactX, CHAR_GROUND_Y - R - BR + 15);
+    ctx.moveTo(ai.predContactX, cpu.groundY - cpu.r - BR - 15);
+    ctx.lineTo(ai.predContactX, cpu.groundY - cpu.r - BR + 15);
     ctx.stroke();
   }
   ctx.strokeStyle = '#d500f9';
@@ -2138,8 +2159,9 @@ window.BalloonVolleyball = {
       ticks: game.ticks,
       ballEventId: game.ballEventId,
       ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, held: ball.held, spin: ball.spin },
-      player: { x: player.x, y: player.y, onGround: player.onGround, hitTimer: player.hitTimer, hitUsed: player.hitUsed },
-      cpu: { x: cpu.x, y: cpu.y, onGround: cpu.onGround, hitTimer: cpu.hitTimer },
+      player: { x: player.x, y: player.y, r: player.r, onGround: player.onGround, hitTimer: player.hitTimer, hitUsed: player.hitUsed },
+      cpu: { x: cpu.x, y: cpu.y, r: cpu.r, onGround: cpu.onGround, hitTimer: cpu.hitTimer },
+      ballR: BR,
       visual: {
         mode: visualMode,
         player: { pose: poseOf(player), dir: player.lookDir, poseDir: player.poseDir, poseTimer: player.poseTimer },
