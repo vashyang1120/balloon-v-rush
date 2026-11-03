@@ -5,71 +5,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>氣球排球｜v0.1.1 小V角色測試</title>
+  <title>氣球排球｜v0.2.0 測試版</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="stage">
+    <!-- 畫布填滿整個畫面；遊戲世界維持 16:9 顯示在中央 -->
+    <canvas id="court"></canvas>
+
+    <!-- 遊戲世界範圍（用來放比賽中的按鈕） -->
     <div id="game">
-      <canvas id="court" width="1280" height="720"></canvas>
+      <button id="btnPause" class="hud-btn hidden" type="button" aria-label="暫停">❚❚</button>
+    </div>
+    <button id="btnMute" class="mute-btn" type="button" aria-label="靜音">🔊</button>
 
-      <button id="btnPause" class="hud-btn" type="button" aria-label="暫停">❚❚</button>
-
-      <!-- 標題畫面 -->
-      <div id="overlayTitle" class="overlay">
-        <div class="panel">
-          <h1>氣球排球</h1>
-          <p class="sub">v0.1.1 小V角色圖片測試</p>
-          <button id="btnStart" class="big-btn" type="button">開始遊戲</button>
-          <div class="help">
-            <div class="help-col">
-              <h3>電腦鍵盤</h3>
-              <p>← → 移動　↑ 跳躍</p>
-              <p>Space 擊球／發球</p>
-              <p>P 或 Esc 暫停</p>
-            </div>
-            <div class="help-col">
-              <h3>手機（橫向）</h3>
-              <p>左下：左移／右移</p>
-              <p>右下：跳躍／擊球</p>
-              <p>可同時按住多個鍵</p>
-            </div>
-          </div>
-          <p class="rule">先得 7 分者獲勝・第一球由玩家發球</p>
-        </div>
+    <!-- 選角畫面 -->
+    <div id="overlayTitle" class="overlay">
+      <div class="panel panel-select">
+        <h1>氣球排球</h1>
+        <p class="sub">選擇你的對手・三位全部開放</p>
+        <div id="cards" class="cards"></div>
+        <p class="help-line">
+          <span>電腦：← → 移動・↑ 跳躍・Space 擊球／發球・P 暫停・M 靜音</span>
+          <span>手機：左下 ◀ ▶ ▲・右下 跳／擊</span>
+        </p>
+        <p class="rule">先得 7 分獲勝・第一球由小V發球・<span id="versionTag"></span></p>
       </div>
+    </div>
 
-      <!-- 暫停畫面 -->
-      <div id="overlayPause" class="overlay hidden">
-        <div class="panel">
-          <h2>暫停中</h2>
-          <button id="btnResume" class="big-btn" type="button">繼續遊戲</button>
-          <button id="btnPauseTitle" class="mid-btn" type="button">返回標題</button>
-        </div>
+    <!-- 暫停畫面 -->
+    <div id="overlayPause" class="overlay hidden">
+      <div class="panel">
+        <h2>暫停中</h2>
+        <button id="btnResume" class="big-btn" type="button">繼續遊戲</button>
+        <button id="btnPauseTitle" class="mid-btn" type="button">更換對手</button>
       </div>
+    </div>
 
-      <!-- 結算畫面 -->
-      <div id="overlayOver" class="overlay hidden">
-        <div class="panel">
-          <h2 id="overTitle">玩家獲勝！</h2>
-          <p id="overScore" class="final-score">7 : 0</p>
-          <button id="btnAgain" class="big-btn" type="button">再玩一次</button>
-          <button id="btnOverTitle" class="mid-btn" type="button">返回標題</button>
+    <!-- 結算畫面 -->
+    <div id="overlayOver" class="overlay overlay-over hidden">
+      <div class="panel panel-over">
+        <h2 id="overTitle">小V 獲勝！</h2>
+        <p id="overVs" class="vs"></p>
+        <p id="overScore" class="final-score">7 : 0</p>
+        <div id="rewardBox" class="reward"></div>
+        <div class="btn-row">
+          <button id="btnAgain" class="big-btn" type="button">再戰一次</button>
+          <button id="btnChange" class="mid-btn" type="button">更換對手</button>
         </div>
       </div>
     </div>
 
-    <!-- 手機虛擬按鍵（位於遊戲畫面外層，依螢幕左右下角定位） -->
+    <!-- 手機虛擬按鍵：直接疊在畫面上 -->
     <div id="controls" class="hidden" aria-hidden="true">
-      <div class="ctrl-zone ctrl-left">
-        <div class="ctrl-btn" data-cmd="left">◀</div>
-        <div class="ctrl-btn" data-cmd="right">▶</div>
-      </div>
-      <div class="ctrl-zone ctrl-right">
-        <div class="ctrl-btn" data-cmd="jump">跳</div>
-        <div class="ctrl-btn ctrl-hit" data-cmd="hit">擊</div>
-      </div>
+      <div class="ctrl-pad" data-side="left"></div>
+      <div class="ctrl-pad" data-side="right"></div>
+      <div class="ctrl-btn" data-side="left" data-cmd="jump">▲</div>
+      <div class="ctrl-btn" data-side="left" data-cmd="left">◀</div>
+      <div class="ctrl-btn" data-side="left" data-cmd="right">▶</div>
+      <div class="ctrl-btn" data-side="right" data-cmd="jump">跳</div>
+      <div class="ctrl-btn ctrl-hit" data-side="right" data-cmd="hit">擊</div>
     </div>
 
     <!-- 直向提示 -->
@@ -77,6 +73,9 @@
       <div class="rotate-icon">📱↻</div>
       <p>請將手機轉為橫向遊玩</p>
     </div>
+
+    <!-- 讀取手機安全區域用（不顯示） -->
+    <div id="safeProbe"></div>
   </div>
 
   <script src="main.js"></script>
