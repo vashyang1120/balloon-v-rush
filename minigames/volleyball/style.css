@@ -218,6 +218,8 @@ html, body {
   pointer-events: none;
 }
 .card-scorpion .card-img img { transform: scale(1.25); }
+.card-img img.flip { transform: scaleX(-1); }
+.card-scorpion .card-img img.flip { transform: scale(-1.25, 1.25); }
 .card-fallback { font-size: calc(120px * var(--s)); color: #ff9a3c; }
 .card-name {
   font-size: calc(34px * var(--s));

@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.0-test-1',
+  VERSION: 'v0.2.0-test-2',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -186,6 +186,7 @@ const OPPONENT_ORDER = ['scorpion', 'orange', 'orange_king'];
 // =========================================================
 const CHARACTER_VISUAL_CONFIG = {
   DIVE_POSE_TIME: 0.35,      // 成功主動擊球後，撲球姿勢停留秒數（純視覺）
+  TURN_BACK_DELAY: 0.15,     // 停止移動後，幾秒轉回面向球網（純視覺；避免來回小步時一直翻面）
   KEEP_ABOVE_GROUND: true,   // 撲球圖片不會畫到地板下方（純視覺）
   PRESCALE: 2.5,             // 圖片預先縮小到「顯示大小 × 這個倍率」，兼顧清晰與手機記憶體
   CHARACTERS: {
@@ -207,9 +208,9 @@ const CHARACTER_VISUAL_CONFIG = {
       geometry: ['#e86fb5', '#9b2f73'],
       poses: {
         idle: { anchor: 'feet',   anchorX: 240, anchorY: 430, bottomY: 430, facing:  1, offsetX: 0, offsetY: 0 },
-        jump: { anchor: 'feet',   anchorX: 247, anchorY: 428, bottomY: 428, facing:  0, offsetX: 0, offsetY: 0 },
+        jump: { anchor: 'feet',   anchorX: 247, anchorY: 428, bottomY: 428, facing:  1, offsetX: 0, offsetY: 0 },
         dive: { anchor: 'center', anchorX: 227, anchorY: 279, bottomY: 406, facing:  1, offsetX: 0, offsetY: 0 },
-        win:  { anchor: 'feet',   anchorX: 242, anchorY: 441, bottomY: 441, facing:  0, offsetX: 0, offsetY: 0 },
+        win:  { anchor: 'feet',   anchorX: 242, anchorY: 441, bottomY: 441, facing:  1, offsetX: 0, offsetY: 0 },
         lose: { anchor: 'feet',   anchorX: 265, anchorY: 415, bottomY: 415, facing: -1, offsetX: 0, offsetY: 0 },
       },
     },
@@ -230,11 +231,11 @@ const CHARACTER_VISUAL_CONFIG = {
       scale: 0.15, offsetX: 0, offsetY: 0,      // 待機約 171×176（魔王體型較大）
       geometry: ['#ff7a1a', '#8a3d00'],
       poses: {
-        idle: { anchor: 'feet',   anchorX: 662, anchorY: 1206, bottomY: 1206, facing:  0, offsetX: 0, offsetY: 0 },
-        jump: { anchor: 'feet',   anchorX: 631, anchorY: 1165, bottomY: 1165, facing:  0, offsetX: 0, offsetY: 0 },
+        idle: { anchor: 'feet',   anchorX: 662, anchorY: 1206, bottomY: 1206, facing:  1, offsetX: 0, offsetY: 0 },
+        jump: { anchor: 'feet',   anchorX: 631, anchorY: 1165, bottomY: 1165, facing:  1, offsetX: 0, offsetY: 0 },
         dive: { anchor: 'center', anchorX: 636, anchorY: 661,  bottomY: 1128, facing:  1, offsetX: 0, offsetY: 0 },
-        win:  { anchor: 'feet',   anchorX: 648, anchorY: 1202, bottomY: 1202, facing:  0, offsetX: 0, offsetY: 0 },
-        lose: { anchor: 'feet',   anchorX: 671, anchorY: 1162, bottomY: 1162, facing:  0, offsetX: 0, offsetY: 0 },
+        win:  { anchor: 'feet',   anchorX: 648, anchorY: 1202, bottomY: 1202, facing:  1, offsetX: 0, offsetY: 0 },
+        lose: { anchor: 'feet',   anchorX: 671, anchorY: 1162, bottomY: 1162, facing:  1, offsetX: 0, offsetY: 0 },
       },
     },
   },
@@ -385,7 +386,8 @@ function makeCharacter(side, ctrl) {
     aimOverride: null,   // AI 用：'fwd' / 'back' / null
     poseTimer: 0,        // 純視覺：撲球姿勢剩餘顯示時間
     poseDir: 1,          // 純視覺：撲球方向（1 = 右，-1 = 左）
-    lookDir: side === 'left' ? 1 : -1, // 純視覺：最後面向的方向
+    lookDir: side === 'left' ? 1 : -1, // 純視覺：目前面向的方向
+    lookHold: 0,         // 純視覺：停下後多久轉回面向球網
     minX: side === 'left' ? R : NET_RIGHT + R,
     maxX: side === 'left' ? NET_LEFT - R : CONFIG.WORLD_W - R,
   };
@@ -415,6 +417,7 @@ function resetCharacter(c) {
   c.poseTimer = 0;
   c.poseDir = c.facing;
   c.lookDir = c.facing;   // 每球開始時面向球網
+  c.lookHold = 0;
   // 讓「目前仍按住」的鍵不會在新回合被當成剛按下（防止按住連續發球）
   c.prevJump = c.ctrl.jump;
   c.prevHit = c.ctrl.hit;
@@ -518,7 +521,9 @@ function updateCharacter(c, dt, canMove, allowActiveHit) {
   // 水平：直接設定速度 → 反應快、放開立即停
   const dir = canMove ? (ctrl.right ? 1 : 0) - (ctrl.left ? 1 : 0) : 0;
   c.vx = dir * CONFIG.CHAR_MOVE_SPEED;
-  if (dir !== 0) c.lookDir = dir;   // 純視覺：記住最後面向
+  // 純視覺：移動時面向移動方向；停下一小段時間後轉回面向球網（看著對手）
+  if (dir !== 0) { c.lookDir = dir; c.lookHold = CHARACTER_VISUAL_CONFIG.TURN_BACK_DELAY; }
+  else if ((c.lookHold -= dt) <= 0) c.lookDir = c.facing;
 
   // 跳躍：只在按下瞬間觸發（含落地前短暫緩衝），長按不會連跳
   if (canMove && jumpEdge) c.jumpBuffer = CONFIG.JUMP_BUFFER;
@@ -1769,6 +1774,7 @@ function buildCards() {
       <span class="card-loading">載入中…</span>`;
     const img = card.querySelector('img');
     img.onerror = () => { img.replaceWith(Object.assign(document.createElement('span'), { className: 'card-fallback', textContent: '●' })); };
+    if (CHARACTER_VISUAL_CONFIG.CHARACTERS[id].poses.idle.facing === 1) img.classList.add('flip'); // 面向左邊的小V
     img.src = charImagePath(id, 'idle');
     card.addEventListener('click', (e) => { e.preventDefault(); chooseOpponent(id); });
     card.addEventListener('pointerenter', () => { selectedIndex = i; highlightCard(); });
