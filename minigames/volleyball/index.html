@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>氣球排球｜幾何原型 MVP v0.1</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stage">
+    <div id="game">
+      <canvas id="court" width="1280" height="720"></canvas>
+
+      <button id="btnPause" class="hud-btn" type="button" aria-label="暫停">❚❚</button>
+
+      <!-- 標題畫面 -->
+      <div id="overlayTitle" class="overlay">
+        <div class="panel">
+          <h1>氣球排球</h1>
+          <p class="sub">幾何原型 MVP v0.1</p>
+          <button id="btnStart" class="big-btn" type="button">開始遊戲</button>
+          <div class="help">
+            <div class="help-col">
+              <h3>電腦鍵盤</h3>
+              <p>← → 移動　↑ 跳躍</p>
+              <p>Space 擊球／發球</p>
+              <p>P 或 Esc 暫停</p>
+            </div>
+            <div class="help-col">
+              <h3>手機（橫向）</h3>
+              <p>左下：左移／右移</p>
+              <p>右下：跳躍／擊球</p>
+              <p>可同時按住多個鍵</p>
+            </div>
+          </div>
+          <p class="rule">先得 7 分者獲勝・第一球由玩家發球</p>
+        </div>
+      </div>
+
+      <!-- 暫停畫面 -->
+      <div id="overlayPause" class="overlay hidden">
+        <div class="panel">
+          <h2>暫停中</h2>
+          <button id="btnResume" class="big-btn" type="button">繼續遊戲</button>
+          <button id="btnPauseTitle" class="mid-btn" type="button">返回標題</button>
+        </div>
+      </div>
+
+      <!-- 結算畫面 -->
+      <div id="overlayOver" class="overlay hidden">
+        <div class="panel">
+          <h2 id="overTitle">玩家獲勝！</h2>
+          <p id="overScore" class="final-score">7 : 0</p>
+          <button id="btnAgain" class="big-btn" type="button">再玩一次</button>
+          <button id="btnOverTitle" class="mid-btn" type="button">返回標題</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手機虛擬按鍵（位於遊戲畫面外層，依螢幕左右下角定位） -->
+    <div id="controls" class="hidden" aria-hidden="true">
+      <div class="ctrl-zone ctrl-left">
+        <div class="ctrl-btn" data-cmd="left">◀</div>
+        <div class="ctrl-btn" data-cmd="right">▶</div>
+      </div>
+      <div class="ctrl-zone ctrl-right">
+        <div class="ctrl-btn" data-cmd="jump">跳</div>
+        <div class="ctrl-btn ctrl-hit" data-cmd="hit">擊</div>
+      </div>
+    </div>
+
+    <!-- 直向提示 -->
+    <div id="rotateHint" class="hidden">
+      <div class="rotate-icon">📱↻</div>
+      <p>請將手機轉為橫向遊玩</p>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
