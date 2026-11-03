@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'MVP v0.1',
+  VERSION: 'v0.1.1',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -91,6 +91,34 @@ const CONFIG = {
   MAX_STEPS_PER_FRAME: 5,     // 單一畫面最多補算幾步（避免背景回來暴衝）
   MAX_FRAME_DT: 0.1,          // 單一畫面最大時間差
   MAX_DPR: 2,                 // 最高繪圖解析度倍率
+};
+
+// =========================================================
+// 【小V角色圖片顯示設定】v0.1.1 新增
+// 只影響畫面，不影響任何物理、碰撞、擊球或 AI
+//
+// 四張原圖都是 1254×1254 透明畫布。
+// anchorX / anchorY：原圖中的「對齊點」（原圖像素座標，已實際量測）
+//   - 待機／勝利／失敗：對齊點 = 身體重心的水平位置 + 腳底最低點
+//                        → 對到遊戲中角色的「站立點」（碰撞圓正下方的地面）
+//   - 撲球：對齊點 = 人物身體重心 → 對到遊戲中角色的碰撞圓中心
+// offsetX / offsetY：在遊戲畫面上的額外微調（遊戲像素，向右／向下為正）
+//   向左撲球時 offsetX 會自動左右反轉
+// =========================================================
+const V_SPRITE = {
+  BASE_PATH: 'assets/characters/v/',
+  SCALE: 0.14,              // 原圖縮放倍率（四張圖共用 → 切換時大小不變）
+                            // 0.14 ≈ 待機時人物身高 165 遊戲像素（碰撞圓直徑為 104）
+  OFFSET_X: 0,              // 全部姿勢共同微調
+  OFFSET_Y: 0,
+  DIVE_POSE_TIME: 0.35,     // 成功主動擊球後，撲球姿勢停留秒數（純視覺）
+  KEEP_ABOVE_GROUND: true,  // 撲球圖片不會畫到地板下方（純視覺）
+  POSES: {
+    idle: { file: 'v_volleyball_idle.png',       anchor: 'feet',   anchorX: 601, anchorY: 1207, offsetX: 0, offsetY: 0 },
+    dive: { file: 'v_volleyball_dive_right.png', anchor: 'center', anchorX: 647, anchorY: 580,  offsetX: 0, offsetY: 0 },
+    win:  { file: 'v_volleyball_win.png',        anchor: 'feet',   anchorX: 595, anchorY: 1180, offsetX: 0, offsetY: 0 },
+    lose: { file: 'v_volleyball_lose.png',       anchor: 'feet',   anchorX: 602, anchorY: 1204, offsetX: 0, offsetY: 0 },
+  },
 };
 
 // 衍生常數
@@ -191,6 +219,8 @@ function makeCharacter(side, ctrl) {
     hitFlash: 0,
     touchCooldown: 0,
     aimOverride: null,   // AI 用：'fwd' / 'back' / null
+    poseTimer: 0,        // 純視覺：撲球姿勢剩餘顯示時間
+    poseDir: 1,          // 純視覺：撲球方向（1 = 右，-1 = 左）
     minX: side === 'left' ? R : NET_RIGHT + R,
     maxX: side === 'left' ? NET_LEFT - R : CONFIG.WORLD_W - R,
   };
@@ -217,6 +247,8 @@ function resetCharacter(c) {
   c.hitFlash = 0;
   c.touchCooldown = 0;
   c.aimOverride = null;
+  c.poseTimer = 0;
+  c.poseDir = 1;
   // 讓「目前仍按住」的鍵不會在新回合被當成剛按下（防止按住連續發球）
   c.prevJump = c.ctrl.jump;
   c.prevHit = c.ctrl.hit;
@@ -342,6 +374,7 @@ function updateCharacter(c, dt, canMove, allowActiveHit) {
   }
   c.touchCooldown = Math.max(0, c.touchCooldown - dt);
   c.hitFlash = Math.max(0, c.hitFlash - dt);
+  c.poseTimer = Math.max(0, c.poseTimer - dt); // 純視覺計時，不影響擊球判定
 
   return hitEdge;
 }
@@ -455,6 +488,11 @@ function doActiveHit(c, nx, ny) {
   ball.y = c.y + ny * (R + BR + 0.5);
   c.hitUsed = true;          // 一次判定最多擊中一次
   c.hitFlash = 0.18;
+  // 純視覺：撲向「擊球當下球所在的那一側」；球幾乎在正上方時依方向鍵，否則朝向對方
+  const relX = (ball.x - c.x);
+  c.poseDir = Math.abs(relX) > 12 ? Math.sign(relX)
+    : (c.ctrl.left && !c.ctrl.right ? -1 : (c.ctrl.right && !c.ctrl.left ? 1 : c.facing));
+  c.poseTimer = V_SPRITE.DIVE_POSE_TIME;
   c.touchCooldown = CONFIG.TOUCH_COOLDOWN;
   game.ballEventId++;
 }
@@ -890,6 +928,118 @@ function drawCharacter(c, body, dark) {
   }
 }
 
+// =========================================================
+// 小V圖片（v0.1.1）：載入、姿勢選擇、繪製
+// =========================================================
+// 開發者切換：?playerVisual=geometry 或 ?playerVisual=sprite（預設 sprite）
+const playerVisualMode = (params.get('playerVisual') || 'sprite').toLowerCase() === 'geometry' ? 'GEOMETRY' : 'SPRITE';
+
+const vSprites = {
+  status: 'idle',        // idle → loading → ready / failed
+  loaded: 0,
+  failed: [],
+  images: {},            // pose -> 預先縮小好的畫布（顯示更清晰、手機效能更好）
+};
+
+function prescale(img, targetW, targetH) {
+  // 逐步縮小（每次最多一半），避免大圖一次縮太多產生鋸齒
+  let src = img, w = img.naturalWidth, h = img.naturalHeight;
+  while (w / 2 >= targetW) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(w / 2); c.height = Math.round(h / 2);
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, c.width, c.height);
+    src = c; w = c.width; h = c.height;
+  }
+  const out = document.createElement('canvas');
+  out.width = targetW; out.height = targetH;
+  const g = out.getContext('2d');
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, targetW, targetH);
+  return out;
+}
+
+function loadVSprites() {
+  if (playerVisualMode !== 'SPRITE') return;
+  vSprites.status = 'loading';
+  const poses = Object.keys(V_SPRITE.POSES);
+  for (const pose of poses) {
+    const cfg = V_SPRITE.POSES[pose];
+    const img = new Image();
+    img.onload = () => {
+      cfg.srcW = img.naturalWidth;
+      cfg.srcH = img.naturalHeight;
+      // 依最高 2 倍解析度預先縮小（原圖 1254px 每格重繪太浪費）
+      const k = V_SPRITE.SCALE * CONFIG.MAX_DPR;
+      try {
+        vSprites.images[pose] = prescale(img, Math.max(1, Math.round(img.naturalWidth * k)), Math.max(1, Math.round(img.naturalHeight * k)));
+      } catch (e) {
+        vSprites.images[pose] = img; // 預縮失敗就直接用原圖
+      }
+      vSprites.loaded++;
+      if (vSprites.loaded === poses.length && vSprites.failed.length === 0) vSprites.status = 'ready';
+    };
+    img.onerror = () => {
+      vSprites.failed.push(cfg.file);
+      vSprites.status = 'failed';
+      console.error(`[氣球排球] 小V圖片載入失敗：${V_SPRITE.BASE_PATH}${cfg.file}　→ 已改用幾何角色顯示`);
+    };
+    img.src = V_SPRITE.BASE_PATH + cfg.file;
+  }
+}
+
+// 依目前遊戲狀態決定要顯示的姿勢（只讀取狀態，不修改）
+function playerPose(c) {
+  if (game.state === STATE.GAME_OVER) return game.winner === 'left' ? 'win' : 'lose';
+  if (c.poseTimer > 0) return 'dive';
+  return 'idle'; // 待機、移動、跳躍、普通碰球都用待機圖
+}
+
+// 回傳 false 代表無法用圖片畫（呼叫端改畫幾何角色）
+function drawPlayerSprite(c) {
+  if (playerVisualMode !== 'SPRITE' || vSprites.status !== 'ready') return false;
+  const pose = playerPose(c);
+  const cfg = V_SPRITE.POSES[pose];
+  const img = vSprites.images[pose];
+  if (!img || !cfg.srcW) return false;
+
+  const s = V_SPRITE.SCALE;
+  const dir = pose === 'dive' ? c.poseDir : 1;   // 只有撲球會鏡像
+  const w = cfg.srcW * s;
+  const h = cfg.srcH * s;
+
+  // 對齊點在遊戲中的位置
+  let tx = c.x + (V_SPRITE.OFFSET_X + cfg.offsetX) * dir;
+  let ty = (cfg.anchor === 'feet' ? c.y + R : c.y) + V_SPRITE.OFFSET_Y + cfg.offsetY;
+
+  // 圖片左上角（未鏡像時）
+  let top = ty - cfg.anchorY * s;
+  if (V_SPRITE.KEEP_ABOVE_GROUND && pose === 'dive') {
+    // 以實際人物最低點估算（POSES.dive 的不透明範圍底部約在原圖 y=1072）
+    const bottom = top + 1072 * s;
+    if (bottom > CONFIG.GROUND_Y) top -= bottom - CONFIG.GROUND_Y;
+  }
+
+  drawShadow(c.x, R * 0.75);
+  ctx.save();
+  ctx.translate(tx, 0);
+  ctx.scale(dir, 1);   // 以對齊點為中心水平鏡像 → 鏡像後位置仍正確
+  ctx.drawImage(img, -cfg.anchorX * s, top, w, h);
+  ctx.restore();
+
+  // 主動擊球判定中的揮擊提示（沿用原本效果）
+  if (c.hitTimer > 0 && c.poseTimer <= 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,.8)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    const a0 = c.facing > 0 ? -Math.PI * 0.75 : -Math.PI * 0.25;
+    ctx.arc(c.x, c.y, R + 14, a0 - 0.6, a0 + 0.6);
+    ctx.stroke();
+  }
+  return true;
+}
+
 function drawBall() {
   drawShadow(ball.x, BR * (0.5 + 0.5 * (ball.y / CONFIG.GROUND_Y)));
   ctx.save();
@@ -1023,10 +1173,11 @@ function drawDebug() {
     `player hit: ${player.hitTimer.toFixed(2)}${player.hitUsed ? ' used' : ''}  cpu hit: ${cpu.hitTimer.toFixed(2)}`,
     `input: ${['left', 'right', 'jump', 'hit'].filter(k => playerCtrl[k]).join(',') || '-'}`,
     `FPS: ${fpsMeter.fps}  physics: ${fpsMeter.tps}/s  scale: ${viewScale.toFixed(2)}`,
+    `playerVisual: ${playerVisualMode}  sprites: ${vSprites.status} ${vSprites.loaded}/4  pose: ${playerVisualMode === 'SPRITE' && vSprites.status === 'ready' ? playerPose(player) : '-'}${player.poseTimer > 0 ? (player.poseDir > 0 ? ' →' : ' ←') : ''}`,
     `(Shift+D 切換除錯)`,
   ];
   ctx.fillStyle = 'rgba(0,0,0,.6)';
-  ctx.fillRect(10, 120, 470, lines.length * 20 + 12);
+  ctx.fillRect(10, 120, 600, lines.length * 20 + 12);
   ctx.fillStyle = '#b9f6ca';
   ctx.font = '15px monospace';
   ctx.textAlign = 'left';
@@ -1039,7 +1190,7 @@ function render() {
   ctx.setTransform(viewScale * dpr, 0, 0, viewScale * dpr, 0, 0);
   drawBackground();
   drawNet();
-  drawCharacter(player, '#9b6be0', '#5d3a9a');
+  if (!drawPlayerSprite(player)) drawCharacter(player, '#9b6be0', '#5d3a9a'); // 圖片不可用時回退幾何
   drawCharacter(cpu, '#ff9a3c', '#b85d10');
   drawBall();
   if (game.state !== STATE.TITLE) drawHUD();
@@ -1315,6 +1466,7 @@ window.BalloonVolleyball = {
       ballEventId: game.ballEventId,
       ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, held: ball.held },
       player: { x: player.x, y: player.y, onGround: player.onGround, hitTimer: player.hitTimer, hitUsed: player.hitUsed },
+      visual: { mode: playerVisualMode, sprites: vSprites.status, loaded: vSprites.loaded, pose: playerPose(player), poseDir: player.poseDir, poseTimer: player.poseTimer },
       cpu: { x: cpu.x, y: cpu.y, onGround: cpu.onGround, hitTimer: cpu.hitTimer },
       input: { ...playerCtrl },
       touch: { ...touchInput },
@@ -1326,6 +1478,7 @@ window.BalloonVolleyball = {
 // =========================================================
 // 啟動
 // =========================================================
+loadVSprites();
 goToTitle();
 layout();
 requestAnimationFrame(frame);
