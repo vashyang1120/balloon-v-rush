@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.82-continent2-umbrella-preparation-test-1';
-const BUILD_TIME   = '2026-11-03 11:30';
+const GAME_VERSION = 'adventure-v0.3.83-continent2-stage32-test-1';
+const BUILD_TIME   = '2026-11-03 18:50';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -13164,6 +13164,7 @@ function drawWorldInner() {
 
   // v0.3.27-terrain：地面缺口（低處坑道）— 挖掉地面，坑底由平台繪製（v0.3.49：第二章正式地面帶已畫好凹洞時跳過）
   if (!chapter2TilesDrawn) groundGaps.forEach(g => {
+    if (g.c2Pit && chapter3BgDrawn && typeof c3PitArtReady === 'function' && c3PitArtReady()) return;   // v0.3.83：第三章尖刺坑改畫正式坑洞圖（不再填深色長方形）
     const gx = g.x - cx;
     if (gx > CANVAS_W + 10 || gx + g.w < -10) return;
     ctx.fillStyle = '#4a3220';                       // 坑內陰影
@@ -21695,7 +21696,7 @@ const H2_UI_COMP  = 'assets/adventure/ui/components/';
 const H2_UI_ITEMS = 'assets/adventure/ui/items/';
 const H2_UI = {
   // 小V之家場景
-  window:   H2_UI_HOME + 'window_continent_01.png',   // 底層：第一大陸窗景（未來換大陸只換這張）
+  window:   H2_UI_HOME + ((typeof ADV_WORKSPACE !== 'undefined' && ADV_WORKSPACE === 'continent2') ? 'window_continent_02.png' : 'window_continent_01.png'),   // 底層：大陸窗景（v0.3.83：第二大陸工作區 rpg-continent2 用 window_continent_02.png；第一大陸 rpg-test 仍是 01）
   interior: H2_UI_HOME + 'home_interior.png',         // 中景：小V之家室內（窗戶透明）
   hero:    [H2_UI_HOME + 'hero_front.png', H2_UI_HOME + 'hero_right.png', H2_UI_HOME + 'hero_back.png', H2_UI_HOME + 'hero_left.png'], // 向右轉的順序
   dogBed:   H2_UI_HOME + 'dog_bed.png',
@@ -24623,7 +24624,7 @@ function advSessionSave(where) {
     const d = advLoad(); delete d._progressNew;
     const mode = advPlayMode || 'official';
     d.session = { v: 1, where, mode, stageId: (LEVELS[currentLevelIndex] || {}).stageId, at: Date.now(), game: GAME_VERSION,
-      homeCtx: mode === 'official' ? (where === 'home' ? { levelIndex: currentLevelIndex, gameState, entry: homeEntryMode, mode: 'official' } : null) : (advHomeCtx || null) };
+      homeCtx: mode === 'official' ? (where === 'home' ? { levelIndex: currentLevelIndex, stageId: (LEVELS[currentLevelIndex] || {}).stageId, gameState, entry: homeEntryMode, mode: 'official' } : null) : (advHomeCtx || null) };
     advSave(d);
   } catch (e) {}
 }
@@ -24646,20 +24647,24 @@ function advBootV376() {
   gameState = 'clear';                 // 不跑 1-1（開素材載好之前也不會觸發入場演出）
   // v0.3.79：不再跳過準備畫面 → 玩家按「開始冒險」後才打開小V的家
   let ctx = s && s.homeCtx;
-  if (!ctx || typeof ctx.levelIndex !== 'number' || !LEVELS[ctx.levelIndex]) {
+  // v0.3.83：另外記住關卡代號 — 開機判斷的時候，main.js 後面才加進來的關卡（第二大陸 3-2）還不在 LEVELS 裡；真正打開小V的家時再用代號找
+  // v0.3.83：舊存檔的 homeCtx 沒有關卡代號 → 只有「正式模式、人在小V的家」時，session 的關卡＝小V的家的關卡，才拿來補（練習／重打中的關卡不能拿來用）
+  if (ctx && typeof ctx.levelIndex === 'number' && !ctx.stageId && s && s.stageId && s.where === 'home' && (s.mode || 'official') === 'official') ctx = Object.assign({}, ctx, { stageId: s.stageId });
+  if (!ctx || typeof ctx.levelIndex !== 'number' || (!LEVELS[ctx.levelIndex] && !ctx.stageId)) {
     let idx = -1;
     if (runInProgress && run.resume && typeof run.resume.levelIndex === 'number') idx = run.resume.levelIndex;
     else if (complete) idx = LEVELS.findIndex(l => l.stageId === '2-4');
     ctx = { levelIndex: idx >= 0 ? idx : 0, gameState: 'clear', entry: 'normal', mode: 'official' };
   }
   advBootHomePending = { ctx, why };
-  console.log('[Boot] ' + why + ' → 回到小V的家（' + (LEVELS[ctx.levelIndex] || {}).stageId + '）');
+  console.log('[Boot] ' + why + ' → 回到小V的家（' + (ctx.stageId || (LEVELS[ctx.levelIndex] || {}).stageId) + '）');
 }
 function advBootOpenHome(p) {
   advIntroChecked = true;
   advPlayMode = 'official'; advHomeCtx = null;
   try { gameStartGateActive = false; renderStartGate(); } catch (e) {}
   const ctx = p.ctx;
+  if (ctx.stageId) { const i = getLevelIndexByStageId(ctx.stageId); if (i >= 0) ctx.levelIndex = i; else if (!LEVELS[ctx.levelIndex]) ctx.levelIndex = 0; }   // v0.3.83：用關卡代號找回（所有關卡都載入之後）
   currentLevelIndex = ctx.levelIndex; loadLevel(ctx.levelIndex);
   const failed = ctx.gameState === 'failed' || ctx.gameState === 'gameover';
   gameState = failed ? ctx.gameState : 'clear';
@@ -24719,7 +24724,7 @@ function advRestoreHomeCtx() {
   // 練習選關：和地圖用同一份資料（已解鎖＋下一站）
   wrapFn('advPracticeUnlocked', o => function () { const st = h2MapState(); const set = new Set(st.cleared); if (st.next >= 0) set.add(st.ids[st.next]); return set; });
   // ── B：練習／重打橘子王出發前，記住小V之家的狀態；回家時還原 ──
-  const keepCtx = () => { if (advPlayMode !== 'practice' && advPlayMode !== 'bossRematch') advHomeCtx = { levelIndex: currentLevelIndex, gameState, entry: homeEntryMode, mode: advPlayMode || 'official' }; };
+  const keepCtx = () => { if (advPlayMode !== 'practice' && advPlayMode !== 'bossRematch') advHomeCtx = { levelIndex: currentLevelIndex, stageId: (LEVELS[currentLevelIndex] || {}).stageId, gameState, entry: homeEntryMode, mode: advPlayMode || 'official' }; };
   wrapFn('advStartPractice', o => function () { keepCtx(); return o.apply(this, arguments); });
   wrapFn('advStartBossRematch', o => function () { keepCtx(); return o.apply(this, arguments); });
   wrapFn('openHomeScreen', o => function (from) {
@@ -24928,6 +24933,9 @@ function camZoneAt(lv) {
 // ── ⑤ 3-1 狀態 ──
 var c2Proto = { prevIdx: null, done: false, startedAt: 0 };
 function c2Is31() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.devPrototype && lv.stageId === '3-1'); }
+// v0.3.83：第三章「風之峽谷」一般關卡（3-1、3-2）共用的機關：尖刺坑、風口浮空、蠍子被風吹起、浮空姿勢與上下飄、小狗同行
+//   （3-1 專屬的劇情：蠍子示範、倒樹對話、雨傘秘笈、秘笈前進限制 → 仍只在 3-1，依關卡資料有沒有設定決定）
+function c2IsWindStage() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.devPrototype && lv.chapterId === 3 && (lv.stageId === '3-1' || lv.stageId === '3-2')); }
 function c2LevelSpec() { return LEVELS[currentLevelIndex] || {}; }
 
 // ════════════════════════════════════════════════════════════════════
@@ -25136,7 +25144,7 @@ function c2HoverStep() {
   if (c2Run.hoverK < 0.002) c2Run.hoverK = 0;
 }
 function c2HoverBobY() {
-  if (!c2Run || !c2Is31() || c2Run.hoverK <= 0) return 0;
+  if (!c2Run || !c2IsWindStage() || c2Run.hoverK <= 0) return 0;
   return Math.sin((frameCount || 0) * Math.PI * 2 / C2_HOVER.periodSteps) * C2_HOVER.ampPx * c2Run.hoverK;
 }
 
@@ -25345,7 +25353,7 @@ function c2ResetEvents31() {
     player.windT = 0; player.windInfo = null; player.c2Hover = false;
     camZoneState.active = null; camZoneState.blend = false;
     c2Proto.done = false; c2HideDone();
-    if (c2Is31()) {
+    if (c2IsWindStage()) {
       c2ResetRun(); c2SetupScorpions();
       // ⑭ 3-1 一定有小狗同行（死亡重試也一樣；測試用，不寫存檔）
       if (c2LevelSpec().forceDog && ADVENTURE_TEST_TOOLS_ENABLED) {
@@ -25372,7 +25380,7 @@ function c2ResetEvents31() {
   });
   // ⑨ 小蠍子受風口影響：原本的巡邏（水平）照舊；原本「強制貼地」之後，c2Wind 的蠍子改用風力＋重力的垂直運動
   wrapFn('updateEnemies', o => function () {
-    if (!c2Is31() || !windVents.length) return o.apply(this, arguments);
+    if (!c2IsWindStage() || !windVents.length) return o.apply(this, arguments);
     const ys = enemies.map(e => e.y);
     const r = o.apply(this, arguments);
     enemies.forEach((e, i) => { if (!e.active || !e.c2Wind) return; e.y = ys[i]; c2EnemyWindStep(e); });
@@ -25399,7 +25407,7 @@ function c2ResetEvents31() {
   } catch (e) {}
   // ⑩ 鎖定時小V一定是 Idle（在地上）；⑪ 風口裡穩定浮空 → Fall 圖
   wrapFn('computeHeroArtKey', o => function () {
-    if (c2Is31()) {
+    if (c2IsWindStage()) {
       if (c2Lock.input && player.onGround) { _heroRunPhase = 'idle'; _heroRunFrame = 0; _heroWasMoving = false; _heroFrameTimer = 0; return 'idle'; }
       const k = o.apply(this, arguments);
       if (player.c2Hover && (k === 'jump' || k === 'fall')) return 'fall';
@@ -25409,7 +25417,7 @@ function c2ResetEvents31() {
   });
   wrapFn('getDogPoseKey', o => function () {
     const p = o.apply(this, arguments);
-    if (c2Is31() && player.c2Hover && p && (p.state === 'jump' || p.state === 'fall')) return { key: getDogFrameKey(DOG_ART.fallFrame), state: 'fall' };   // 不再 Jump／Fall 交替
+    if (c2IsWindStage() && player.c2Hover && p && (p.state === 'jump' || p.state === 'fall')) return { key: getDogFrameKey(DOG_ART.fallFrame), state: 'fall' };   // 不再 Jump／Fall 交替
     return p;
   });
   // ⑪ 浮空小幅上下飄：只在畫面上平移（碰撞、地面、平台、鏡頭不變）
@@ -25427,7 +25435,7 @@ function c2ResetEvents31() {
   // 每一步更新的最後：尖刺坑 → 浮空 → 示範 → 倒樹 → 秘笈前進限制
   wrapFn('update', o => function () {
     const r = o.apply(this, arguments);
-    if (c2Run && gameState === 'playing' && c2Is31()) {
+    if (c2Run && gameState === 'playing' && c2IsWindStage()) {
       try { c2PitHazardStep(); } catch (e) { console.warn('[3-1] pit', e); }
       if (gameState === 'playing') {
         try { c2HoverStep(); } catch (e) {}
@@ -25450,7 +25458,7 @@ function c2ResetEvents31() {
     return o.apply(this, arguments);
   });
   wrapFn('rpgUpdate', o => function () {
-    if (c2Is31() || (typeof c2IsField === 'function' && c2IsField())) { try { rpgAttempt.shown.add('rpg002_first_spike'); rpgAttempt.shown.add('rpg004_first_scorpion'); } catch (e) {} }   // v0.3.82：開發用雨傘測試場也不播第一大陸的教學對話
+    if (c2IsWindStage() || (typeof c2IsField === 'function' && c2IsField())) { try { rpgAttempt.shown.add('rpg002_first_spike'); rpgAttempt.shown.add('rpg004_first_scorpion'); } catch (e) {} }   // v0.3.82：開發用雨傘測試場也不播第一大陸的教學對話
     return o.apply(this, arguments);
   });
   // ⑬ 取得雨傘秘笈：沿用既有取得通知框；RPG 改成規格的兩句（已經收藏過 → 不重播、不重複加入）
@@ -25597,8 +25605,13 @@ function syncChapter3Bgm() {
 }
 // ── ④ 風口氣流聲：只有一個循環聲源；音量跟著「小V在風口裡的程度」平順變化（約 0.25 秒），離開風口後淡出再停止 ──
 var c2WindSnd = { level: 0, lastOn: 0 };
+const C2_WIND_SND = { heroMul: 1.2, scorpionMul: 1.0, maxGain: 0.95 };   // v0.3.83：小V ×1.2（相對 v0.3.82）；蠍子＝v0.3.82 原本音量；最大增益 0.95
 function c2WindSoundFrame(playing) {
-  const want = (playing && c2Run && windVents.length && player.windInfo) ? Math.max(0, Math.min(1, player.windT || 0)) : 0;
+  // v0.3.83：同一個循環音（不疊加）：小V在風裡 → 原本音量 ×1.2；只有蠍子在風裡（畫面內）→ 原本音量；兩者同時 → 取大的（小V）
+  const heroW = (playing && c2Run && windVents.length && player.windInfo) ? Math.max(0, Math.min(1, player.windT || 0)) * C2_WIND_SND.heroMul : 0;
+  let scW = 0;
+  if (playing && c2Run && windVents.length) enemies.forEach(e => { if (!e.active || !e.c2Wind || !(e.c2Lift > 0)) return; const sx = e.x - cameraX; if (sx + e.w < -20 || sx > CANVAS_W + 20) return; scW = Math.max(scW, Math.min(1, e.windT || 0) * C2_WIND_SND.scorpionMul); });
+  const want = Math.max(heroW, scW); c2WindSnd.src = heroW >= scW ? (heroW > 0 ? 'hero' : '') : 'scorpion';
   const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
   const dt = Math.min(0.1, Math.max(0.001, (now - (c2WindSnd.t || now)) / 1000)); c2WindSnd.t = now;
   const dl = (want - c2WindSnd.level) * Math.min(1, dt / (want > c2WindSnd.level ? 0.25 : 0.12));   // 淡入 0.25 秒；離開風口淡出較快（0.12 秒），聲音不會拖在畫面後面
@@ -25608,7 +25621,7 @@ function c2WindSoundFrame(playing) {
   if (c2WindSnd.level > 0.02) {
     if (!loop) { SFX.loopGainMul = SFX.loopGainMul || {}; SFX.loopGainMul.c2WindVentLoop = 0.001; sfxLoop('c2WindVentLoop', true); }
     const L = SFX.loops.c2WindVentLoop;
-    if (L) { try { const t = SFX.ctx.currentTime; L.g.gain.setTargetAtTime(sfxVol('c2WindVentLoop') * c2WindSnd.level, t, 0.05); } catch (e) {} }
+    if (L) { try { const t = SFX.ctx.currentTime; L.g.gain.setTargetAtTime(Math.min(C2_WIND_SND.maxGain, sfxVol('c2WindVentLoop') * c2WindSnd.level), t, 0.05); } catch (e) {} }   // 音量上限 maxGain（不失真）
     c2WindSnd.lastOn = now;
   } else if (loop && now - c2WindSnd.lastOn > 100) {
     try { const t = SFX.ctx.currentTime; loop.g.gain.setTargetAtTime(0.0001, t, 0.04); setTimeout(() => { if (c2WindSnd.level <= 0.02) sfxLoop('c2WindVentLoop', false); }, 200); } catch (e) { sfxLoop('c2WindVentLoop', false); }
@@ -26371,7 +26384,7 @@ function debugChapter3Bg() {
 const CHAPTER3_VENT_ASSETS = { vent: 'assets/adventure/hazards/chapter3/chapter3_wind_vent.png', flow: 'assets/effects/chapter3_wind_flow.png' };
 const CHAPTER3_VENT_ART = {
   // 風口圖 1536×1024：岩石底座最下緣 y 903、風池中心 (760, 745)、岩石內圈寬約 400px（原圖像素）
-  vent: { cropY0: 560, cropY1: 910, fadePx: 70, baseBottomY: 903, poolX: 760, poolY: 745, innerW: 400, innerMul: 1.25, sinkPx: 4 },
+  vent: { cropY0: 560, cropY1: 910, fadePx: 70, baseBottomY: 903, poolX: 760, poolY: 745, innerW: 400, innerMul: 1.25, sinkPx: 22, embedPx: 60 },   // v0.3.83：sinkPx 4 → 22（底座往下沉）＋ embedPx：地面重畫蓋住底座下半部（嵌進地面）
   // 氣流圖 1024×1536：內容 x 154～867（寬 713）、y 82～1437；底部風圈中心 x 約 510
   flow: { x0: 154, x1: 867, y0: 82, y1: 1437, cx: 510, widthMul: 1.3, poolOverlap: 8,
           baseAlpha: 0.85, moveAlpha: 0.4, tintAlpha: 0.16, risePx: 18, periodSteps: 180,
@@ -26387,12 +26400,13 @@ function c3VentImg(k) { if (k === 'flowTint') k = 'flow'; const im = chapter3Ven
 function c3VentGeom(v) {
   const V = CHAPTER3_VENT_ART.vent, F = CHAPTER3_VENT_ART.flow;
   const s = v.w * V.innerMul / V.innerW;                                // 岩石內圈 ≈ 作用寬 ×1.25
-  const poolCx = v.x + v.w / 2, baseBottom = v.y + V.sinkPx;
+  const cal = (typeof c3VentCalibFor === 'function') ? c3VentCalibFor(v) : { base: 0, flow: 0 };   // v0.3.83：開發者校準（畫面位置；不影響風口作用範圍）
+  const poolCx = v.x + v.w / 2, baseBottom = v.y + V.sinkPx + cal.base;
   const poolY = baseBottom - (V.baseBottomY - V.poolY) * s;
   const fs = v.w * F.widthMul / (F.x1 - F.x0);                         // 氣流螺旋寬 ≈ 作用寬 ×1.3
   return { s, fs, poolCx, poolY, baseBottom,
     base: { x: poolCx - V.poolX * s, y: baseBottom - (V.baseBottomY - V.cropY0) * s, w: 1536 * s, h: (V.cropY1 - V.cropY0) * s },
-    flow: { x: poolCx - F.cx * fs, y: poolY + F.poolOverlap - F.y1 * fs, w: 1024 * fs, h: 1536 * fs } };
+    flow: { x: poolCx - F.cx * fs, y: poolY + F.poolOverlap - F.y1 * fs + cal.flow, w: 1024 * fs, h: 1536 * fs } };
 }
 function c3VentTile(kind, scale) {
   const ck = kind + '|' + scale.toFixed(4); if (chapter3VentCache[ck]) return chapter3VentCache[ck];
@@ -26442,6 +26456,8 @@ function drawC3VentArt(v, cx, t) {
   ctx.restore();
   // ② 岩石底座＋風池（擋住氣流根部）
   ctx.drawImage(base, Math.round(G.base.x + ox), Math.round(G.base.y));
+  // v0.3.83：底座嵌進地面 — 在底座下半部再蓋一次地面的草地＋岩層（草叢在岩石前面），看起來像從地面長出來的岩石風口
+  try { if (v.y >= GROUND_Y - 1 && typeof c3GroundStrip === 'function' && CHAPTER3_VENT_ART.vent.embedPx > 0) c3GroundStrip(G.base.x, G.base.x + G.base.w, GROUND_Y, GROUND_Y + CHAPTER3_VENT_ART.vent.embedPx, cx); } catch (e) {}
   return true;
 }
 (function chapter3VentInstall() {
@@ -26499,6 +26515,7 @@ const C3_TREE_ART = {
   treePath: 'assets/adventure/props/tree_standing.png', rootPath: 'assets/adventure/props/tree_root_foreground.png',
   scale: 0.29, pivotSrcX: 498, pivotSrcY: 1370, groundSrcY: 1395, trunkHalfSrc: 58, forkSrcY: 560, bridgeBackPx: 18,
   landShakeFrames: 14, landShakePx: 2,
+  rootMask: { flareSrcY: 1240, trunkPadSrc: 6, belowPivotPx: 2 },   // v0.3.83：倒下時樹根張開的部分不畫（站著時不受影響）
 };
 const c3TreeImgs = {}, c3TreeStatus = {};
 function c3TreeEntries() {
@@ -26540,6 +26557,12 @@ function drawC3TreeArt(sx, t) {
   c3TreeClip(cx);
   ctx.translate(G.px - cx, G.py + shake);                       // 支點固定在世界座標
   ctx.rotate(c3TreeAngle(t));
+  if (t.state !== 'standing' && C3_TREE_ART.rootMask) {
+    // v0.3.83：樹倒下時，原本在地面附近往左右張開的樹根不跟著翻上來（只留樹幹本身）→ 不會翻到前景石頭上方
+    //   局部座標（支點＝原點、往上是負）：樹幹帶 |x| ≤ 樹幹半寬 一路到支點；樹幹帶以外只畫到樹根開始張開的高度（原圖 y 1240）以上
+    const M = C3_TREE_ART.rootMask, s0 = G.s, hw = (C3_TREE_ART.trunkHalfSrc + M.trunkPadSrc) * s0, cut = (C3_TREE_ART.pivotSrcY - M.flareSrcY) * s0;
+    ctx.beginPath(); ctx.rect(-G.w * 2, -G.h * 2, G.w * 4, G.h * 2 - cut); ctx.rect(-hw, -cut - 1, hw * 2, cut + 1 + M.belowPivotPx); ctx.clip();
+  }
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, G.imgX, G.imgY, G.w, G.h);                   // 整張樹（含樹根）一起轉
   ctx.restore();
@@ -26638,6 +26661,7 @@ function drawChapter3Ground(cx) {
   segs.forEach(([a, b]) => c3GroundStrip(a, b, GROUND_Y, CANVAS_H + 2, cx));
   // 尖刺坑兩側的崖壁陰影（在地面圖上、靠坑的那一側）
   const sh = C3_GROUND.pitShadowPx;
+  if (typeof c3PitArtReady === 'function' && c3PitArtReady()) return true;   // v0.3.83：正式坑洞圖自己有崖壁
   gaps.forEach(g => {
     const l = Math.round(g.x - cx), r = Math.round(g.x + g.w - cx);
     ctx.save();
@@ -26674,4 +26698,389 @@ function debugChapter3Ground() {
   if (!ADV_WORKSPACE) return;
   try { const M = getAssetManifest(); M.chapter3bg = (M.chapter3bg || []).concat(c3GroundEntries()); } catch (e) { console.warn('[Chapter3Ground] 資產清單', e); }
   if (typeof window !== 'undefined') window.debugChapter3Ground = debugChapter3Ground;
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.83：第三章正式三段式懸空平台＋三段式尖刺坑（只換畫法；平台／坑的位置、碰撞、傷害、退回點都不變）
+// ════════════════════════════════════════════════════════════════════
+//  ① 懸空平台 assets/adventure/platforms/chapter3/chapter3_platform_left／middle／right.png（各 257×161／314×161／257×161）
+//     量測（原圖像素）：三張的草地可站立面都在 y≈36（草叢最高 y 21）、岩石下緣 y≈130；
+//       left 的內容 x 51～256（右邊接中段）；middle 可用 x 1～313（x 0 那一欄是透明 → 不用）；right 的內容 x 0～241
+//     縮放 ×0.30（不變形）：左端 62px、中段 94px、右端 72px，岩層厚約 28px
+//     拼法：左端貼在平台左緣外 4px、右端貼在平台右緣外 4px；中間用中段重複補滿（最後一段裁切）；
+//           平台太短（左右端加起來比平台寬）→ 左右端各畫到平台中線（不拉伸）
+//     草地可站立面（原圖 y 36）＝平台碰撞頂面 p.y
+const C3_PLATFORM = {
+  dir: 'assets/adventure/platforms/chapter3/', scale: 0.30, grassSrcY: 36, overhang: 4,
+  left:   { file: 'chapter3_platform_left.png',   x0: 51, x1: 257 },
+  middle: { file: 'chapter3_platform_middle.png', x0: 1,  x1: 314 },
+  right:  { file: 'chapter3_platform_right.png',  x0: 0,  x1: 242 },
+};
+//  ② 尖刺坑 assets/adventure/tiles/chapter3/chapter3_spike_pit_left／middle／right.png（1448×1086／1672×941／1448×1086）
+//     量測（原圖像素）：left：草地地表約 y 180、崖邊（草地結束、往下凹）約 x 640、坑內岩壁頂 y 409；
+//                     middle：岩壁頂 y 198（整張可水平重複）；right：岩壁頂 y 368、崖邊（草地開始）約 x 770、草地約 y 170
+//     遊戲裡地面以下只看得到 80px（地面 y 460、畫面底 540）→ 縮放 ×0.12：坑壁頂在地面下約 25px，坑底在畫面外
+//     拼法：左段的崖邊對齊坑的左緣、右段的崖邊對齊坑的右緣；中間用中段重複補滿；坑太窄時左右段各畫到坑中線
+//     圖層：坑的岩壁／內部 → 既有尖刺 chapter1_spike.png（不變）→ 之後才畫樹、角色；地面草地在坑外照常
+const C3_PIT = {
+  dir: 'assets/adventure/tiles/chapter3/', scale: 0.12,
+  left:   { file: 'chapter3_spike_pit_left.png',   grassY: 180, cliffX: 640, wallTop: 409, x1: 1448 },
+  middle: { file: 'chapter3_spike_pit_middle.png', wallTop: 198 },
+  right:  { file: 'chapter3_spike_pit_right.png',  grassY: 170, cliffX: 770, wallTop: 368, x0: 0 },
+};
+const c3PieceImgs = {}, c3PieceStatus = {}, c3PieceCache = {};
+function c3PieceEntries() {
+  const list = [];
+  ['left', 'middle', 'right'].forEach(k => { list.push(['plat_' + k, C3_PLATFORM.dir + C3_PLATFORM[k].file]); list.push(['pit_' + k, C3_PIT.dir + C3_PIT[k].file]); });
+  return list.map(([k, p]) => ({ path: p, type: 'image', critical: false, label: 'chapter3Piece:' + k,
+    apply: im => { c3PieceImgs[k] = im; c3PieceStatus[k] = 'ok'; },
+    fail: () => { c3PieceStatus[k] = 'error'; console.warn('[Chapter3Art] 圖片載入失敗（改用上一版畫法）：' + p); } }));
+}
+function c3PieceImg(k) { const im = c3PieceImgs[k]; return (im && im.complete && im.naturalWidth > 0) ? im : null; }
+function c3PlatformArtReady() { return !!(c3PieceImg('plat_left') && c3PieceImg('plat_middle') && c3PieceImg('plat_right')); }
+function c3PitArtReady() { return !!(c3PieceImg('pit_left') && c3PieceImg('pit_middle') && c3PieceImg('pit_right')); }
+// 縮放好的單張（只取 x0～x1 那一段；離屏 canvas 快取）
+function c3Piece(k, x0, x1, scale) {
+  const ck = k + '|' + x0 + '|' + x1 + '|' + scale; if (c3PieceCache[ck]) return c3PieceCache[ck];
+  const im = c3PieceImg(k); if (!im) return null;
+  const sx1 = (x1 == null ? im.naturalWidth : x1), w = Math.max(1, Math.round((sx1 - x0) * scale)), h = Math.max(1, Math.round(im.naturalHeight * scale));
+  let out = null;
+  try { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(im, x0, 0, sx1 - x0, im.naturalHeight, 0, 0, w, h); out = { c, w, h }; } catch (e) { out = null; }
+  c3PieceCache[ck] = out; return out;
+}
+function drawC3PlatformPieces(p, cx) {
+  const P = C3_PLATFORM, s = P.scale;
+  const L = c3Piece('plat_left', P.left.x0, P.left.x1, s), M = c3Piece('plat_middle', P.middle.x0, P.middle.x1, s), Rt = c3Piece('plat_right', P.right.x0, P.right.x1, s);
+  if (!L || !M || !Rt) return false;
+  const y = Math.round(p.y - P.grassSrcY * s);
+  const x0 = Math.round(p.x - P.overhang - cx), x1 = Math.round(p.x + p.w + P.overhang - cx);
+  if (x1 < -10 || x0 > CANVAS_W + 10) return true;
+  const mid = Math.round((x0 + x1) / 2);
+  const lEnd = x0 + L.w, rStart = x1 - Rt.w;
+  ctx.save();
+  if (lEnd >= rStart) {                                             // 短平台：左端＋右端（各畫到中線，不拉伸）
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, y - 20, mid - x0 + 2, Rt.h + 40); ctx.clip(); ctx.drawImage(L.c, x0, y); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(mid, y - 20, x1 - mid + 2, Rt.h + 40); ctx.clip(); ctx.drawImage(Rt.c, rStart, y); ctx.restore();
+  } else {
+    ctx.save(); ctx.beginPath(); ctx.rect(lEnd - 1, y - 20, rStart - lEnd + 2, M.h + 40); ctx.clip();
+    for (let x = lEnd - 1; x < rStart + 1; x += M.w - 1) ctx.drawImage(M.c, x, y);   // 中段重複（每段重疊 1px，不會有透明縫）；最後一段被裁切
+    ctx.restore();
+    ctx.drawImage(L.c, x0, y);
+    ctx.drawImage(Rt.c, rStart, y);
+  }
+  ctx.restore();
+  return true;
+}
+function drawC3PitPieces(p, cx) {
+  const T = C3_PIT, s = T.scale;
+  const Lp = c3Piece('pit_left', 0, null, s), Mp = c3Piece('pit_middle', 0, null, s), Rp = c3Piece('pit_right', 0, null, s);
+  if (!Lp || !Mp || !Rp) return false;
+  const G = GROUND_Y, px = p.x - cx, pr = p.x + p.w - cx;
+  if (pr + 200 < 0 || px - 200 > CANVAS_W) return true;
+  const lx = Math.round(px - T.left.cliffX * s), ly = Math.round(G - T.left.grassY * s);
+  const rx = Math.round(pr - T.right.cliffX * s), ry = Math.round(G - T.right.grassY * s);
+  const wallL = G + (T.left.wallTop - T.left.grassY) * s, wallR = G + (T.right.wallTop - T.right.grassY) * s;
+  const my = Math.round((wallL + wallR) / 2 - T.middle.wallTop * s);   // 中段的岩壁頂放在左右兩段之間（差 3px 以內）
+  const lEnd = lx + Lp.w, rStart = rx, mid = Math.round((px + pr) / 2);
+  ctx.save();
+  if (lEnd < rStart) {
+    ctx.save(); ctx.beginPath(); ctx.rect(lEnd - 2, my - 10, rStart - lEnd + 4, CANVAS_H); ctx.clip();
+    for (let x = lEnd - 2; x < rStart + 2; x += Mp.w - 1) ctx.drawImage(Mp.c, x, my);
+    ctx.restore();
+    ctx.drawImage(Lp.c, lx, ly); ctx.drawImage(Rp.c, rx, ry);
+  } else {                                                          // 坑很窄：左右段各畫到坑中線
+    ctx.save(); ctx.beginPath(); ctx.rect(lx - 2, 0, mid - lx + 2, CANVAS_H); ctx.clip(); ctx.drawImage(Lp.c, lx, ly); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(mid, 0, rx + Rp.w - mid + 2, CANVAS_H); ctx.clip(); ctx.drawImage(Rp.c, rx, ry); ctx.restore();
+  }
+  ctx.restore();
+  return true;
+}
+// 坑：岩壁／內部 → 既有尖刺（和原本同一張 chapter1_spike.png、同一個位置）
+function drawC3SpikePitsArt(cx) {
+  c2Pits.forEach(p => {
+    const sx = Math.round(p.x - cx);
+    if (sx > CANVAS_W + 220 || sx + p.w < -220) return;
+    drawC3PitPieces(p, cx);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(sx, GROUND_Y - 30, p.w, CANVAS_H - GROUND_Y + 30); ctx.clip();
+    const art = c2PitArt(p.w);
+    if (art) ctx.drawImage(art.canvas, sx, GROUND_Y);
+    else drawSpike(sx, GROUND_Y + C2_PIT.tipY, p.w, C2_PIT.baseY - C2_PIT.tipY);
+    ctx.restore();
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.83：風口視覺校準（開發者模式 F4；第三章關卡）— 只改畫面位置，不改風口作用範圍
+//   F4 開關 → [ ／ ] 選風口（全部／A／C…）→ ↑↓ 底座 Y、Shift＋↑↓ 一次 5px；W／S 氣流 Y；R 重設；C 複製數值（同時印在主控台）
+//   數值存在這台裝置（開發者測試用；正式玩家看不到面板與數值）
+// ════════════════════════════════════════════════════════════════════
+const C3_VENT_CALIB_KEY = 'balloonV_c3VentCalib';
+var c3VentCalib = { all: { base: 0, flow: 0 } }, c3VentCalibSel = 'all';
+try { const raw = localStorage.getItem(C3_VENT_CALIB_KEY); if (raw) { const o = JSON.parse(raw); if (o && typeof o === 'object' && o.all) c3VentCalib = o; } } catch (e) {}
+function c3VentCalibFor(v) { const a = c3VentCalib.all || { base: 0, flow: 0 }, o = (v && c3VentCalib[v.id]) || { base: 0, flow: 0 }; return { base: (a.base || 0) + (o.base || 0), flow: (a.flow || 0) + (o.flow || 0) }; }
+function c3VentCalibSave() { try { localStorage.setItem(C3_VENT_CALIB_KEY, JSON.stringify(c3VentCalib)); } catch (e) {} }
+function c3VentCalibText() { const parts = Object.keys(c3VentCalib).map(k => k + '：底座 ' + (c3VentCalib[k].base || 0) + '、氣流 ' + (c3VentCalib[k].flow || 0)); return 'C3_VENT_CALIB = ' + JSON.stringify(c3VentCalib) + '  （' + parts.join('｜') + '）'; }
+function c3VentCalibActive() { try { return !!(orangeKingMachineCalibMode && typeof isChapter3ParallaxStage === 'function' && isChapter3ParallaxStage() && windVents.length); } catch (e) { return false; } }
+function handleC3VentCalibKey(e) {
+  if (!c3VentCalibActive()) return false;
+  const ids = ['all'].concat(windVents.map(v => v.id));
+  const cur = c3VentCalib[c3VentCalibSel] || (c3VentCalib[c3VentCalibSel] = { base: 0, flow: 0 });
+  const st = e.shiftKey ? 5 : 1;
+  let done = true;
+  if (e.code === 'BracketRight' || e.code === 'BracketLeft') { const i = ids.indexOf(c3VentCalibSel); c3VentCalibSel = ids[(i + (e.code === 'BracketRight' ? 1 : ids.length - 1)) % ids.length]; if (!c3VentCalib[c3VentCalibSel]) c3VentCalib[c3VentCalibSel] = { base: 0, flow: 0 }; }
+  else if (e.code === 'ArrowUp') cur.base -= st; else if (e.code === 'ArrowDown') cur.base += st;
+  else if (e.code === 'KeyW') cur.flow -= st; else if (e.code === 'KeyS') cur.flow += st;
+  else if (e.code === 'KeyR') { cur.base = 0; cur.flow = 0; }
+  else if (e.code === 'KeyC') { const t = c3VentCalibText(); console.log('[Chapter3Vent] 校準數值', t); try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (er) {} showHint('📋 已複製風口校準數值（也印在主控台）', 160); }
+  else done = false;
+  if (done) { c3VentCalibSave(); e.preventDefault(); }
+  return done || /^(Arrow|Space|KeyZ|KeyX|Digit)/.test(e.code);   // 校準中不讓角色移動／攻擊
+}
+function drawC3VentCalibOverlay() {
+  const ids = ['all'].concat(windVents.map(v => v.id));
+  ctx.save();
+  windVents.forEach(v => { const G = c3VentGeom(v), sx = v.x - cameraX; const sel = c3VentCalibSel === 'all' || c3VentCalibSel === v.id;
+    ctx.strokeStyle = sel ? '#ffe14d' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+    ctx.strokeRect(Math.round(G.base.x - cameraX), Math.round(G.base.y), Math.round(G.base.w), Math.round(G.base.h));
+    ctx.beginPath(); ctx.moveTo(sx - 30, GROUND_Y + 0.5); ctx.lineTo(sx + v.w + 30, GROUND_Y + 0.5); ctx.strokeStyle = '#ff5050'; ctx.stroke(); ctx.setLineDash([]); });
+  const c = c3VentCalib[c3VentCalibSel] || { base: 0, flow: 0 };
+  const lines = ['🎯 風口視覺校準（F4 關閉）　目前：' + (c3VentCalibSel === 'all' ? '全部風口' : '風口 ' + c3VentCalibSel) + '　[ ／ ] 換',
+    '底座 Y ' + (c.base || 0) + '（↑↓，Shift×5）　氣流 Y ' + (c.flow || 0) + '（W／S）　R 重設　C 複製',
+    '選項：' + ids.join(' ') + '　紅線＝地面 y ' + GROUND_Y + '（風口作用範圍不變）'];
+  ctx.font = 'bold 13px sans-serif'; const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 20;
+  ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(10, CANVAS_H - 78, w, 68);
+  ctx.fillStyle = '#ffe14d'; ctx.textAlign = 'left'; lines.forEach((l, i) => ctx.fillText(l, 20, CANVAS_H - 58 + i * 20));
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.83：氣球雨傘 × 風口 — 一次連續有效互動只扣 1 點耐久（在互動結束時結算；不是每秒、也不是每一格）
+//   ・有效互動＝撐著氣球雨傘（目前裝備雨傘）＋正在被風口托起（player.windInfo）
+//   ・互動中短暫離開風口（graceSteps 內又回來）＝同一次互動；離開超過 graceSteps，或改拿別的裝備 → 結束並結算
+//   ・太短的接觸（少於 minSteps）不算一次互動、不扣
+//   ・結算時耐久剩 1 → 雨傘用完：沿用既有破掉流程（balloonPop、自動換備用、沒有就卸下）
+//   ・格擋蠍子是另外一件事（各自扣，不會因為同一件事扣兩次）
+//   ・暫停：遊戲不前進 → 不計；重新開始／換關／回家／通關：互動直接作廢（不扣）
+// ════════════════════════════════════════════════════════════════════
+const C2_UMB_VENT = { minSteps: 12, graceSteps: 20 };
+var c2UmbVent = { active: false, steps: 0, since: 0, missing: 0, charged: 0 };
+function c2UmbVentReset(why) { if (c2UmbVent.active) console.log('[Umbrella] 風口互動作廢（' + why + '，不扣耐久）'); c2UmbVent.active = false; c2UmbVent.steps = 0; c2UmbVent.missing = 0; }
+function c2UmbVentStep() {
+  if (gameState !== 'playing') return;
+  const using = umbEquipped() && !!player.windInfo && (player.windT || 0) > 0.2;
+  if (using) {
+    if (!c2UmbVent.active) { c2UmbVent.active = true; c2UmbVent.steps = 0; c2UmbVent.since = frameCount; console.log('[Umbrella] 風口互動開始（風口 ' + player.windInfo.id + '）'); }
+    c2UmbVent.steps++; c2UmbVent.missing = 0; return;
+  }
+  if (!c2UmbVent.active) return;
+  const switched = !umbEquipped();
+  c2UmbVent.missing++;
+  if (switched || c2UmbVent.missing > C2_UMB_VENT.graceSteps) {
+    const n = c2UmbVent.steps; c2UmbVent.active = false; c2UmbVent.steps = 0; c2UmbVent.missing = 0;
+    if (n >= C2_UMB_VENT.minSteps && equippedUmbrella.id) {
+      c2UmbVent.charged++;
+      console.log('[Umbrella] 風口互動結束（' + (switched ? '換了裝備' : '離開風口') + '，持續 ' + n + ' 步）→ 雨傘耐久 −1');
+      c2UmbConsume('vent');
+    } else console.log('[Umbrella] 風口接觸太短（' + n + ' 步），不算一次互動');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.83：3-2「雨傘試煉」— 可遊玩測試版（全部用既有元素重新組合；沒有新機關）
+//   從小V的家「出發」進入（3-1 通關、已經有過第一把氣球雨傘之後）；終點 → 正常通關 → 回到小V的家
+//   區域：A 起點（安全、練跳）→ B 風口與高台（風口 B1 上獎勵高台；風口 B2 上高台越過尖刺坑 S1）
+//        → C 蠍子（會被風口 C1 吹起的小蠍子＋地面小蠍子；可以格擋或用劍／槌子打）→ D 倒樹搭橋（換氣球槌敲樹，越過尖刺坑 S2）
+//        → E 風口 E1 上高台、再上更高的平台，撐傘慢慢飄下（空中金幣）→ 終點
+//   不用雨傘也一定過得去：風口不用雨傘也會托起；高台、樹橋都不需要雨傘；掉下來不扣血
+//   物理（既有參數）：一般跳躍最高約 147px、助跑跳最遠約 182px；風口完整進入約浮起 50px、從風口跳可以上 200px 高台
+//   （高台／坑的距離都照 3-1 已驗證過的配置：風口在高台左邊 70px、高台高 200px；坑寬 ≥ 200px → 一般跳不過去）
+// ════════════════════════════════════════════════════════════════════
+const C2_STAGE_32 = {
+  chapterId: 3, stageId: '3-2', devPrototype: true, noTimeLimit: true, forceDog: true,
+  displayName: '3-2 風之峽谷・雨傘試煉', name: '3-2 風之峽谷・雨傘試煉', shortName: '雨傘試煉',
+  length: 4900,                                   // FINISH_X = 4700
+  emoji: '☂️',
+  hints: [
+    { triggerX:   30, msg: '☂️ 3-2 雨傘試煉：按 3（手機：工具鍵）拿起氣球雨傘，跳起來會慢慢落下！', shown: false, duration: 260 },
+    { triggerX:  760, msg: '🌬️ 走進風口浮起來，再按跳躍就能跳上高台！', shown: false, duration: 220 },
+    { triggerX: 1960, msg: '🦂 小蠍子！拿雨傘按住攻擊鍵可以格擋，也可以用劍或槌子打倒', shown: false, duration: 240 },
+    { triggerX: 2700, msg: '🔨 換成氣球槌（電腦按 2／手機按工具鍵），敲倒大樹搭橋！', shown: false, duration: 260 },
+    { triggerX: 3330, msg: '🌬️ 借風口跳上高台，再撐著雨傘從最高的平台慢慢飄下去！', shown: false, duration: 240 },
+  ],
+  buildPlatforms: () => [
+    { x:  420, y: GROUND_Y -  90, w: 150, h: 22 },   // A：練習跳躍的低平台
+    { x:  960, y: GROUND_Y - 200, w: 300, h: 22 },   // B：只有借風口 B1 才上得去的獎勵高台
+    { x: 1480, y: GROUND_Y - 200, w: 340, h: 22 },   // B：必經高台（下方是尖刺坑 S1；借風口 B2 上去）
+    { x: 2380, y: GROUND_Y - 100, w: 160, h: 22 },   // C：小平台（可以跳上去避開蠍子）
+    { x: 3480, y: GROUND_Y - 200, w: 300, h: 22 },   // E：借風口 E1 上去的高台
+    { x: 3860, y: GROUND_Y - 290, w: 200, h: 22 },   // E：從高台再一般跳上去的最高平台（之後撐傘慢慢飄下）
+  ],
+  buildWindVents: () => [
+    makeWindVent({ id: 'B1', x:  890, w: 80, h: 150 }),
+    makeWindVent({ id: 'B2', x: 1410, w: 80, h: 150 }),
+    makeWindVent({ id: 'C1', x: 2150, w: 80, h: 150 }),   // 小蠍子巡邏會經過（被吹起來；只有蠍子在風裡也聽得到風聲）
+    makeWindVent({ id: 'E1', x: 3410, w: 80, h: 150 }),
+  ],
+  spikePits: [
+    { id: 'S1', x: 1540, w: 240, resetX: 1330 },     // 高台下方（一般跳不過：要借風口 B2 上高台）
+    { id: 'S2', x: 2990, w: 200, resetX: 2780 },     // 倒樹搭橋（和 3-1 的坑 B 同一套距離：樹幹橋 2958～3211）
+  ],
+  cameraZones: [ { id: 'ALL', x0: 0, x1: 4900, camMin: 0, camMax: 3940, lead: 0.40, ease: 0.12 } ],   // 只跟著角色，不自動捲動
+  buildCoins: () => [
+    [200,55],[260,55],[470,140],[540,140],
+    [1010,250],[1100,250],[1190,250],            // B1 獎勵高台
+    [1560,250],[1680,250],                       // B2 高台（坑上方）
+    [1900,55],[2000,55],[2420,150],[2500,150],
+    [2780,55],[3060,90],[3140,90],               // 樹幹橋上方
+    [3560,250],[3700,250],[3920,340],[4000,340],
+    [4160,240],[4240,200],[4320,160],[4400,120], // 從最高平台撐傘飄下來時拿得到的空中金幣
+    [4600,55],
+  ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+  buildBalloons: () => [
+    [ 300,  60], [ 495, 150], [1130, 260], [1760, 260], [2460, 160], [3630, 260], [3960, 350],
+  ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+  buildSpikes: () => [], buildTackHazards: () => [],
+  buildTrees: () => [
+    // 和 3-1 同一棵正式樹木（tree_standing.png ×0.29）：支點 x 2976；樹幹橋 2958～3211 跨過坑 S2 2990～3190（左搭地 32px、右 21px）
+    { x: 2959, y: 0, h: 358, trunkW: 34, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 253, walkable: true, pivotRight: true, c3Art: true },
+  ],
+  buildEnemies: () => [
+    Object.assign(makeChapter2Scorpion(2190, 200, 'normal'), { c2Id: 'C1', c2Wind: true }),   // 巡邏 1990～2390，經過風口 C1
+    Object.assign(makeChapter2Scorpion(2600, 80, 'normal'), { c2Id: 'C2', c2Wind: true }),    // 巡邏 2520～2680（離坑 S2 的退回點 2780 有一段距離）
+    Object.assign(makeChapter2Scorpion(4300, 120, 'normal'), { c2Id: 'E2', c2Wind: true }),   // 飄下來之後的格擋練習
+  ],
+  buildOranges: () => [], buildRoundBalloons: () => [],
+  hiddenTreasure: null,
+};
+if (ADV_WORKSPACE) {
+  const iT = LEVELS.findIndex(l => l && l.stageId === '3-T');
+  if (iT >= 0) LEVELS.splice(iT, 0, C2_STAGE_32); else LEVELS.push(C2_STAGE_32);
+}
+function c2Is32() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.stageId === '3-2'); }
+function c2Is32Clear() { return c2Is32() && gameState === 'clear' && homeEntryMode !== 'failed'; }
+function c2UmbrellaEverOwned() { const f = c2Flow(); return !!(f.umbrellaFirstCraft || f.umbrellaRescue) || c2UmbrellaCount() > 0; }
+// 從小V的家進入 3-2（一般流程：不需要 ?devtools=1）
+function c2Start32() {
+  if (!ADV_WORKSPACE) return;
+  if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
+  const idx = getLevelIndexByStageId('3-2'); if (idx < 0) return;
+  c2HideDone();
+  try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
+  try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;   // 和 3-1 一樣：測試用小狗同行（只在記憶體，不改背包裡的小狗）
+  runWithAssetGate(getAssetGroupsForLevel(idx), '雨傘試煉準備中...', () => {
+    advMarkTestEntry('c2-stage-3-2');            // 測試紀錄（test_only）：不進正式挑戰、成績、排行
+    currentLevelIndex = idx;
+    bringBalloonDog = true; levelStartBringDog = true;
+    loadLevel(idx);
+    initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();
+    applyAdventureTestLoadout();                  // 和 3-1 一樣：測試用氣球劍＋氣球槌（只在記憶體，不寫背包）→ 一定有槌子可以敲樹
+    restart({ keepHp: false, preserveBringDog: false });
+    applyAdventureTestLoadout();
+    try { initEquippedUmbrella(); } catch (e) {}  // 雨傘＝背包裡真正的雨傘（耐久會真的扣）
+    if (equippedUmbrella.id) { activeSlot = 'umbrella'; c2Tool.last = 'umbrella'; }   // 一開始就拿著雨傘（隨時可以按 1／2 換武器）
+    c2Proto.done = false; c2Proto.startedAt = Date.now();
+    gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    console.log('[3-2] 進入 3-2 雨傘試煉（雨傘 ' + c2UmbrellaCount() + ' 把，耐久 ' + (equippedUmbrella.currentDur || 0) + '）');
+  });
+}
+// 3-2 正常通關：和 3-1 同一套（第一次領金幣／260；開發／重玩不重複發；不發 V幣、不寫正式成績）
+function c2Complete32() {
+  if (c2Proto.done) return; c2Proto.done = true;
+  try { c2UmbVentReset('通關'); } catch (e) {}
+  const sec = +(elapsedSec || 0).toFixed(1);
+  const flow = c2Flow();
+  const first = !(flow.stage32 && flow.stage32.claimed);
+  const got = { coins: currentRunStats.coins || 0, b260: currentRunStats.balloon260 || 0, round: currentRunStats.roundBalloon || 0 };
+  if (!first) {
+    const snap = levelStartSnapshot;
+    if (snap) { playerInventory.coins = snap.coins; playerInventory.balloon260 = snap.balloon260; playerInventory.roundBalloon = snap.roundBalloon; }
+    currentRunStats.coins = 0; currentRunStats.balloon260 = 0; currentRunStats.roundBalloon = 0;
+  } else flow.stage32 = { claimed: true, claimedAt: Date.now(), coins: got.coins, b260: got.b260, sec };
+  flow.stage32Clears = (flow.stage32Clears || 0) + 1; flow.stage32LastSec = sec;
+  flow.stage32BestSec = flow.stage32BestSec ? Math.min(flow.stage32BestSec, sec) : sec;
+  const dogSave = JSON.stringify(playerInventory.balloonDog || {});
+  c2ClearGuard = true;
+  try { playerInventory.balloonDog = { present: false, turnsLeft: 0 }; triggerClear(); }
+  finally { c2ClearGuard = false; try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} try { saveInventory(); } catch (e) {} }
+  try {
+    if (H2.pendingSummary) {
+      const rows = H2.pendingSummary.rows;
+      if (!first) rows.push({ icon: null, emoji: '🧪', text: '3-2 的金幣與 260 已經領過（重玩不會重複發放）', val: '' });
+      rows.push({ icon: null, emoji: '⏱️', text: '通關時間 ' + c2FmtSec(sec) + '（只記錄，不計 V幣與正式成績）', val: '' });
+      H2.pendingSummary.title = '3-2 雨傘試煉 通關！';
+    }
+  } catch (e) {}
+  console.log('[3-2] 正常通關 → 回到小V的家', { first, got: first ? got : '（重玩：不發）', sec, coins: playerInventory.coins, b260: playerInventory.balloon260, umbrellas: c2UmbrellaCount() });
+}
+
+(function v383Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v383) { if (typeof o !== 'function') console.warn('[v0.3.83] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v383 = true; globalThis[name] = w; };
+  // 素材：三段式平台＋三段式尖刺坑 → 第三章的讀取群組（chapter3bg）
+  try { const M = getAssetManifest(); M.chapter3bg = (M.chapter3bg || []).concat(c3PieceEntries()); } catch (e) { console.warn('[Chapter3Art] 資產清單', e); }
+  // 懸空平台：三段式正式圖（載入失敗 → 上一版畫法）
+  wrapFn('drawChapter3PlatformArt', o => function (p, cx) {
+    if (p && !p.c2PitFloor && !p.treeLog && p.y < GROUND_Y - 1 && c3PlatformArtReady()) { try { if (drawC3PlatformPieces(p, cx)) return true; } catch (e) { console.warn('[Chapter3Art] 平台', e); } }
+    return o.apply(this, arguments);
+  });
+  // 尖刺坑：三段式正式圖＋既有尖刺（載入失敗 → 上一版畫法）
+  wrapFn('drawC2SpikePits', o => function (cx) {
+    if (isChapter3ParallaxStage() && c3PitArtReady()) { try { drawC3SpikePitsArt(cx); return; } catch (e) { console.warn('[Chapter3Art] 坑', e); } }
+    return o.apply(this, arguments);
+  });
+  // 風口視覺校準（F4；只有開發者模式才收得到 F4）
+  wrapFn('handleOrangeKingMachineCalibKey', o => function (e) {
+    if (e && e.code !== 'F4' && c3VentCalibActive()) return handleC3VentCalibKey(e);
+    const r = o.apply(this, arguments);
+    try { if (e && e.code === 'F4' && r && typeof isChapter3ParallaxStage === 'function' && isChapter3ParallaxStage()) showHint(orangeKingMachineCalibMode ? '🎯 第三章風口視覺校準 ON（F4 關閉）' : '🎯 第三章風口視覺校準 OFF', 200); } catch (er) {}
+    return r;
+  });
+  wrapFn('drawOrangeKingMachineCalibOverlay', o => function () {
+    if (ADVENTURE_TEST_TOOLS_ENABLED && c3VentCalibActive()) { try { drawC3VentCalibOverlay(); } catch (e) {} return; }
+    return o.apply(this, arguments);
+  });
+  // 每一步：雨傘 × 風口 一次性耐久
+  wrapFn('update', o => function () { const r = o.apply(this, arguments); try { c2UmbVentStep(); } catch (e) {} return r; });
+  wrapFn('loadLevel', o => function () { c2UmbVentReset('換關'); return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { c2UmbVentReset('重新開始'); return o.apply(this, arguments); });
+  // 3-2 終點 → 正常通關
+  wrapFn('checkFinish', o => function () {
+    if (c2Is32()) { if (gameState === 'playing' && player.x + player.w >= FINISH_X) c2Complete32(); return; }
+    return o.apply(this, arguments);
+  });
+  // 小V的家：3-1 通關後（已經有過第一把雨傘）→ 出發＝進入 3-2；3-2 通關後 → 出發＝再玩一次 3-2（3-3 尚未開放）
+  wrapFn('c2DepartState', o => function () {
+    const g = o.apply(this, arguments);
+    if (g.kind !== 'go' && c2UmbrellaEverOwned()) return { kind: 'go', c2ready32: true, sub: '☂️ 前往 3-2（目前沒有氣球雨傘也可以通過）' };   // 雨傘用完也不會卡住
+    if (g.c2ready32) g.sub = '☂️ 前往 3-2 雨傘試煉';
+    return g;
+  });
+  wrapFn('h2DepartCheck', o => function () {
+    if (c2Is32Clear()) return { kind: 'go', c2replay32: true, sub: '🔁 再玩一次 3-2（3-3 尚未開放）' };
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2Go', o => function () {
+    if (c2Is31Clear() || c2Is32Clear()) {
+      const g = h2DepartCheck();
+      if (g.c2ready32 || g.c2replay32) { if (!h2Busy(900, 'c2go32')) { console.log('[3-2] 從小V的家出發 → 3-2'); c2Start32(); } return; }
+    }
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2RenderCenter', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      const nl = h2$('h2-nextline');
+      if (nl && c2Is31Clear()) { nl.textContent = 'ⓘ 下一關：3-2 風之峽谷・雨傘試煉'; nl.parentElement.style.display = ''; }
+      if (nl && c2Is32Clear()) { nl.textContent = 'ⓘ 3-2 雨傘試煉 已完成（通關 ' + (c2Flow().stage32Clears || 1) + ' 次）・3-3 尚未開放'; nl.parentElement.style.display = ''; }
+    } catch (e) {}
+    return r;
+  });
+  if (typeof window !== 'undefined') Object.assign(window, { c2Start32,
+    debug32: () => { const f = c2Flow(); const o = { stage: (LEVELS[currentLevelIndex] || {}).stageId, gs: gameState, stage32: f.stage32 || null, clears: f.stage32Clears || 0, umbrellas: c2UmbrellaCount(), dur: equippedUmbrella.currentDur, ventInteraction: Object.assign({}, c2UmbVent), depart: (typeof h2DepartCheck === 'function') ? h2DepartCheck() : null }; console.log('[3-2]', o); return o; },
+    debugChapter3Art: () => { const o = { pieces: Object.assign({}, c3PieceStatus), platformReady: c3PlatformArtReady(), pitReady: c3PitArtReady(), ventCalib: JSON.parse(JSON.stringify(c3VentCalib)) }; console.log('[Chapter3Art]', o); return o; } });
+  console.log('[v0.3.83] 第二大陸：3-2 雨傘試煉、三段式平台／尖刺坑、第二大陸窗景、風口校準已載入');
 })();
