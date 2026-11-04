@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.1-test-1',
+  VERSION: 'v0.2.2-test-1',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -173,6 +173,7 @@ const AI_PROFILES = {
   },
 };
 const OPPONENT_ORDER = ['scorpion', 'orange', 'orange_king'];
+const DIFFICULTY_ID = { scorpion: 'beginner', orange: 'intermediate', orange_king: 'advanced' };
 
 // =========================================================
 // 【角色圖片顯示設定】CHARACTER_VISUAL_CONFIG
@@ -359,6 +360,22 @@ let debugOn = params.get('debug') === '1';
 const forceTouch = params.get('touch') === '1';
 
 // =========================================================
+// v0.2.2：冒險主線整合（只有 ?embed=adventure 時才啟用；直接開啟獨立測試網址時完全不變）
+//   ・冒險主線用 iframe 開啟本頁：?embed=adventure&session=<sessionId>&opponent=<scorpion|orange|orange_king>
+//   ・本頁只負責：顯示對手、進行比賽、記錄比分、判斷勝負、用 postMessage 回傳結果
+//   ・本頁不讀寫冒險背包、金幣、V幣、解鎖或任何玩家資料（獎勵與場次全部由冒險主線計算）
+//   ・物理、操作、AI 完全沒有修改
+// =========================================================
+const EMBED = params.get('embed') === 'adventure';
+const EMBED_SESSION = EMBED ? String(params.get('session') || '') : '';
+const EMBED_OPPONENT = EMBED ? String(params.get('opponent') || '') : '';
+const embedState = { matchId: null, resultSent: false };
+function embedPost(type, extra) {
+  if (!EMBED) return;
+  try { window.parent.postMessage(Object.assign({ source: 'balloonVolleyball', type, sessionId: EMBED_SESSION, version: CONFIG.VERSION }, extra || {}), location.origin); } catch (e) { /* 忽略 */ }
+}
+
+// =========================================================
 // 輸入：鍵盤與觸控共用同一套指令
 // =========================================================
 const keyInput = { left: false, right: false, jump: false, hit: false };
@@ -504,7 +521,12 @@ function setOpponent(id) {
 }
 
 function startMatch(opponentId) {
+  if (EMBED && embedState.resultSent) return;           // 冒險比賽：一張排球只比一場（不能在這裡直接再戰）
   if (opponentId) setOpponent(opponentId);
+  if (EMBED) {
+    embedState.matchId = 'm-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e9).toString(36);
+    embedPost('started', { matchId: embedState.matchId, opponentId: game.opponent });
+  }
   game.score.left = 0;
   game.score.right = 0;
   game.server = 'left';     // 每場第一球固定由玩家發球
@@ -850,6 +872,15 @@ function afterPoint() {
     clearAllInputs();
     showGameOver();
     audio.onGameOver(w === 'left');
+    // 冒險主線整合：回傳比賽結果（冒險主線負責驗證與發獎）
+    if (EMBED && !embedState.resultSent) {
+      embedState.resultSent = true;
+      embedPost('result', {
+        matchId: embedState.matchId, opponentId: game.opponent, difficulty: DIFFICULTY_ID[game.opponent] || '',
+        playerScore: game.score.left, cpuScore: game.score.right, targetScore: CONFIG.TARGET_SCORE,
+        winner: w === 'left' ? 'player' : 'cpu', completed: true,
+      });
+    }
     // 預留未來整合：冒險主遊戲可監聽此事件取得結果（目前不連接任何系統）
     try {
       window.dispatchEvent(new CustomEvent('balloonVolleyball:result', {
@@ -1906,9 +1937,10 @@ function showOverlay(which) {
 let selectedIndex = 1;
 let starting = false;
 
+function titleOrder() { return (EMBED && OPPONENT_ORDER.includes(EMBED_OPPONENT)) ? [EMBED_OPPONENT] : OPPONENT_ORDER; }
 function buildCards() {
   el.cards.innerHTML = '';
-  OPPONENT_ORDER.forEach((id, i) => {
+  titleOrder().forEach((id, i) => {
     const p = AI_PROFILES[id];
     const card = document.createElement('button');
     card.type = 'button';
@@ -1960,6 +1992,14 @@ function showGameOver() {
   el.overTitle.classList.toggle('lose', !playerWon);
   el.overVs.textContent = `小V vs ${p.name}（${p.level}）`;
   el.overScore.textContent = `${game.score.left} : ${game.score.right}`;
+  if (EMBED) {   // 冒險比賽：獎勵由冒險主線結算（回到小V的家後顯示）
+    el.reward.innerHTML = `
+    <div class="rw-title">比賽完成！</div>
+    <div class="rw-row"><span>本場結果已送回冒險</span><b class="ok">✔</b></div>
+    <div class="rw-row"><span>獎勵會在回到小V的家後發放</span><b>${p.level}</b></div>`;
+    showOverlay('over');
+    return;
+  }
   // 只顯示獎勵規則與級距，不顯示數字、不發放任何東西
   el.reward.innerHTML = `
     <div class="rw-title">獎勵預覽（測試版不發放）</div>
@@ -1982,9 +2022,9 @@ function bindButton(id, fn, click = true) {
 }
 
 bindButton('btnResume', resumeGame);
-bindButton('btnPauseTitle', goToTitle);
-bindButton('btnAgain', () => startMatch(game.opponent));
-bindButton('btnChange', goToTitle);
+bindButton('btnPauseTitle', () => { if (EMBED) { embedPost('exit', { matchId: embedState.matchId, completed: false }); goToTitle(); return; } goToTitle(); });
+bindButton('btnAgain', () => { if (EMBED) return; startMatch(game.opponent); });
+bindButton('btnChange', () => { if (EMBED) { embedPost('close', { matchId: embedState.matchId, completed: embedState.resultSent }); return; } goToTitle(); });
 bindButton('btnPause', () => {
   if (game.state === STATE.PAUSED) resumeGame();
   else pauseGame();
@@ -2013,14 +2053,15 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
       if (!e.repeat) {
-        selectedIndex = (selectedIndex + (e.code === 'ArrowRight' ? 1 : OPPONENT_ORDER.length - 1)) % OPPONENT_ORDER.length;
+        const ord = titleOrder();
+        selectedIndex = (selectedIndex + (e.code === 'ArrowRight' ? 1 : ord.length - 1)) % ord.length;
         highlightCard();
       }
       return;
     }
     if (e.code === 'Enter' || e.code === 'Space') {
       e.preventDefault();
-      if (!e.repeat) chooseOpponent(OPPONENT_ORDER[selectedIndex]);
+      if (!e.repeat) chooseOpponent(titleOrder()[selectedIndex] || titleOrder()[0]);
       return;
     }
   }
@@ -2049,7 +2090,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'Enter') {
-    if (game.state === STATE.GAME_OVER) { e.preventDefault(); sfx('ui_click'); startMatch(game.opponent); }
+    if (game.state === STATE.GAME_OVER) { e.preventDefault(); if (EMBED) return; sfx('ui_click'); startMatch(game.opponent); }
     else if (game.state === STATE.PAUSED) { e.preventDefault(); resumeGame(); }
   }
 }, { passive: false });
@@ -2312,6 +2353,18 @@ window.BalloonVolleyball = {
 // 啟動
 // =========================================================
 el.version.textContent = CONFIG.VERSION;
+if (EMBED) {
+  // 冒險比賽：只顯示這一場的對手；暫停選單「放棄這場比賽」；結算只有「返回小V的家」
+  selectedIndex = 0;
+  document.body.classList.add('embed-adventure');
+  const sub = el.title.querySelector('.sub'); if (sub) sub.textContent = '冒險比賽・點對手卡片開始';
+  const back = document.createElement('button'); back.type = 'button'; back.id = 'btnEmbedBack'; back.className = 'mid-btn'; back.textContent = '← 返回小V的家';
+  back.addEventListener('click', (e) => { e.preventDefault(); embedPost('close', { matchId: embedState.matchId, completed: embedState.resultSent }); });
+  const panel = el.title.querySelector('.panel'); if (panel) panel.appendChild(back);
+  const pt = document.getElementById('btnPauseTitle'); if (pt) pt.textContent = '放棄這場比賽（回小V的家）';
+  const ag = document.getElementById('btnAgain'); if (ag) ag.style.display = 'none';
+  const ch = document.getElementById('btnChange'); if (ch) ch.textContent = '返回小V的家';
+}
 buildCards();
 updateMuteButton();
 loadBall();
@@ -2323,5 +2376,6 @@ setOpponent('orange');
 goToTitle();
 layout();
 requestAnimationFrame(frame);
+embedPost('ready', { opponentId: EMBED_OPPONENT });
 
 })();
