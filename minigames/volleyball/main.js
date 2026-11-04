@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.0-test-3',
+  VERSION: 'v0.2.1-test-1',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -241,6 +241,40 @@ const CHARACTER_VISUAL_CONFIG = {
       },
     },
   },
+};
+
+// =========================================================
+// 【球場美術設定】COURT_VISUAL_CONFIG（v0.2.1）
+// 只影響畫面，不影響任何物理。所有位置都以遊戲世界座標（1280×720）為準。
+// visible*：原圖中「實際看得到的範圍」（依透明通道量測，原圖像素）
+// 縮放倍率由物理尺寸自動算出，不用手填：
+//   地面：可見寬度 → 球場寬 1280；可見上緣 → 物理地板 GROUND_Y
+//   球網：可見頂端（粉紅氣球頭）→ 物理網頂 NET_TOP；可見底部 → 地板；網柱中心 → NET_X
+// offsetX / offsetY：遊戲世界像素微調（向右／向下為正）
+// =========================================================
+const COURT_VISUAL_CONFIG = {
+  background: {
+    file: 'assets/court/volleyball_arena_bg.png',      // 實際 1672×941（16:9，無透明）
+    offsetX: 0, offsetY: 0,
+    extendMirror: true,     // 螢幕比 16:9 寬或高時，用鏡像延伸背景填滿（不留黑邊）
+  },
+  ground: {
+    file: 'assets/court/volleyball_court_ground.png',  // 實際 2172×724，透明
+    visibleLeft: 36, visibleRight: 2135,               // 可見寬 2100 → 縮放 0.6095
+    visibleTop: 311,                                   // 平台上緣（平坦部分）→ 對齊物理地板
+    visibleBottom: 487,                                // 平台底部（16:9 畫面下緣會裁掉約 27 像素）
+    offsetX: 0, offsetY: 0,
+  },
+  net: {
+    file: 'assets/court/volleyball_net.png',           // 實際 1254×1254，透明，側視網柱
+    visibleLeft: 573, visibleRight: 679,               // 最寬處（網頂氣球）
+    visibleTop: 120,                                   // 網頂氣球最高點 → 對齊物理網頂
+    visibleBottom: 1143,                               // 底座最低點 → 對齊地板
+    centerX: 625.5,                                    // 網柱中心 → 對齊 NET_X
+    postWidth: 76,                                     // 網柱寬（縮放後約 15.6，物理網寬 16）
+    offsetX: 0, offsetY: 0,
+  },
+  PRESCALE: 2.5,            // 球網圖先縮小到「顯示大小 × 這個倍率」，清晰又省記憶體
 };
 
 // 【正式排球圖片】只影響畫面；碰撞仍是半徑 BALL_RADIUS 的圓
@@ -1234,6 +1268,8 @@ let dpr = 1;
 
 // 開發者切換：?playerVisual=geometry（所有角色與排球改用幾何圖形）／?playerVisual=sprite（預設）
 const visualMode = (params.get('playerVisual') || 'sprite').toLowerCase() === 'geometry' ? 'GEOMETRY' : 'SPRITE';
+// 開發者切換：?courtVisual=geometry（原本幾何球場）／?courtVisual=art（預設，正式球場美術）
+const courtMode = (params.get('courtVisual') || 'art').toLowerCase() === 'geometry' ? 'GEOMETRY' : 'ART';
 
 // ---------- 圖片載入 ----------
 const sprites = { chars: {}, ball: { status: 'idle', img: null } };
@@ -1297,6 +1333,40 @@ function loadCharacter(id) {
   return entry.promise;
 }
 
+// 球場美術：每張圖獨立載入，任何一張失敗只會讓那一部分回到幾何外觀（只記錄一次錯誤）
+const courtArt = { background: { status: 'idle' }, ground: { status: 'idle' }, net: { status: 'idle' } };
+function loadCourt() {
+  if (courtMode !== 'ART') return;
+  for (const part of Object.keys(courtArt)) {
+    const C = COURT_VISUAL_CONFIG[part];
+    courtArt[part].status = 'loading';
+    loadImage(C.file).then(img => {
+      C.srcW = img.naturalWidth; C.srcH = img.naturalHeight;
+      let draw = img;
+      if (part === 'net') {
+        // 只保留可見範圍並預先縮小（原圖 1254px，實際顯示約 22×210）
+        const s = netScale() * COURT_VISUAL_CONFIG.PRESCALE;
+        const sw = C.visibleRight - C.visibleLeft + 1, sh = C.visibleBottom - C.visibleTop + 1;
+        try {
+          const crop = document.createElement('canvas');
+          crop.width = sw; crop.height = sh;
+          crop.getContext('2d').drawImage(img, C.visibleLeft, C.visibleTop, sw, sh, 0, 0, sw, sh);
+          draw = prescale(crop, Math.round(sw * s), Math.round(sh * s));
+          C.cropped = true;
+        } catch (e) { draw = img; C.cropped = false; }
+      }
+      courtArt[part].img = draw;
+      courtArt[part].status = 'ready';
+    }).catch(() => {
+      courtArt[part].status = 'failed';
+      console.error(`[氣球排球] 球場圖片載入失敗：${C.file}　→ 改用幾何外觀`);
+    });
+  }
+}
+
+function groundScale() { const G = COURT_VISUAL_CONFIG.ground; return CONFIG.WORLD_W / (G.visibleRight - G.visibleLeft); }
+function netScale() { const N = COURT_VISUAL_CONFIG.net; return CONFIG.NET_H / (N.visibleBottom - N.visibleTop); }
+
 function loadBall() {
   if (visualMode !== 'SPRITE') return;
   sprites.ball.status = 'loading';
@@ -1346,6 +1416,44 @@ const BG_BALLOONS = [
 ];
 
 function drawBackground() {
+  if (courtArt.background.status === 'ready') drawArtBackground();
+  else drawGeomSky();
+  if (courtArt.ground.status === 'ready') drawArtGround();
+  else drawGeomFloor();
+}
+
+// 正式背景：等比例鋪滿 16:9 球場；螢幕更寬／更高時用鏡像延伸，不留黑邊
+function drawArtBackground() {
+  const C = COURT_VISUAL_CONFIG.background, img = courtArt.background.img;
+  const s = Math.max(CONFIG.WORLD_W / C.srcW, CONFIG.WORLD_H / C.srcH);   // 不變形
+  const w = C.srcW * s, h = C.srcH * s;
+  const x0 = (CONFIG.WORLD_W - w) / 2 + C.offsetX, y0 = (CONFIG.WORLD_H - h) / 2 + C.offsetY;
+  const B = worldBounds();
+  const span = C.extendMirror ? 1 : 0;
+  for (let j = -span; j <= span; j++) {
+    for (let i = -span; i <= span; i++) {
+      const x = x0 + i * w, y = y0 + j * h;
+      if (x > B.r || x + w < B.l || y > B.b || y + h < B.t) continue;  // 看不到的就不畫
+      const fx = i % 2 !== 0, fy = j % 2 !== 0;
+      ctx.save();
+      ctx.translate(x + (fx ? w : 0), y + (fy ? h : 0));
+      ctx.scale(fx ? -1 : 1, fy ? -1 : 1);
+      ctx.drawImage(img, 0, 0, w + (i === 0 ? 0 : 0.5), h + (j === 0 ? 0 : 0.5));
+      ctx.restore();
+    }
+  }
+}
+
+// 正式地面：可見上緣對齊物理地板，可見寬度剛好橫跨球場
+function drawArtGround() {
+  const C = COURT_VISUAL_CONFIG.ground, img = courtArt.ground.img;
+  const s = groundScale();
+  const sw = C.visibleRight - C.visibleLeft, sh = C.visibleBottom - C.visibleTop;
+  ctx.drawImage(img, C.visibleLeft, C.visibleTop, sw, sh,
+    0 + C.offsetX, CONFIG.GROUND_Y + C.offsetY, sw * s, sh * s);
+}
+
+function drawGeomSky() {
   const W = CONFIG.WORLD_W, G = CONFIG.GROUND_Y;
   const B = worldBounds();
   const sky = ctx.createLinearGradient(0, B.t, 0, G);
@@ -1378,7 +1486,11 @@ function drawBackground() {
     ctx.arc(cx + 80 * s, cy, 32 * s, 0, Math.PI * 2);
     ctx.fill();
   }
+}
 
+function drawGeomFloor() {
+  const W = CONFIG.WORLD_W, G = CONFIG.GROUND_Y;
+  const B = worldBounds();
   // 地板（延伸到整個螢幕）
   const floor = ctx.createLinearGradient(0, G, 0, B.b);
   floor.addColorStop(0, '#f6cf7e');
@@ -1421,6 +1533,22 @@ function drawBalloonColumn(x, cols) {
 }
 
 function drawNet() {
+  if (courtArt.net.status === 'ready') drawArtNet();
+  else drawGeomNet();
+}
+
+// 正式球網：網頂氣球最高點＝物理網頂，底座＝地板，網柱中心＝NET_X（等比例，不拉伸）
+function drawArtNet() {
+  const C = COURT_VISUAL_CONFIG.net, img = courtArt.net.img;
+  const s = netScale();
+  const sw = C.visibleRight - C.visibleLeft + 1, sh = C.visibleBottom - C.visibleTop + 1;
+  const x = CONFIG.NET_X - (C.centerX - C.visibleLeft) * s + C.offsetX;
+  const y = NET_TOP + C.offsetY;
+  if (C.cropped) ctx.drawImage(img, x, y, sw * s, sh * s);
+  else ctx.drawImage(img, C.visibleLeft, C.visibleTop, sw, sh, x, y, sw * s, sh * s);
+}
+
+function drawGeomNet() {
   // 網柱（外觀；碰撞仍是原本的矩形）
   ctx.fillStyle = '#ffffff';
   roundRect(NET_LEFT, NET_TOP, CONFIG.NET_W, CONFIG.NET_H, 4);
@@ -1676,7 +1804,7 @@ function drawDebug() {
     `opponent: ${game.opponent} (${AI_PROFILES[game.opponent].level})  react=${A.REACTION_TIME} err=${A.PREDICT_ERROR} miss=${A.BIG_MISTAKE_CHANCE} hit=${A.HIT_CHANCE} jump=${A.JUMP_CHANCE}`,
     `player hit: ${player.hitTimer.toFixed(2)}${player.hitUsed ? ' used' : ''}  cpu hit: ${cpu.hitTimer.toFixed(2)}  input: ${['left', 'right', 'jump', 'hit'].filter(k => playerCtrl[k]).join(',') || '-'}`,
     `visual: ${visualMode}  V: ${sp('v')} ${poseOf(player)}${player.lookDir > 0 ? '→' : '←'}  CPU: ${sp(game.opponent)} ${poseOf(cpu)}${cpu.lookDir > 0 ? '→' : '←'}  ball: ${sprites.ball.status}`,
-    `audio: ${au.unlocked ? (au.ctx || 'none') : 'locked'}  bgm=${au.current || '-'}${au.muted ? ' (muted)' : ''}`,
+    `audio: ${au.unlocked ? (au.ctx || 'none') : 'locked'}  bgm=${au.current || '-'}${au.muted ? ' (muted)' : ''}   court: ${courtMode} bg=${courtArt.background.status} ground=${courtArt.ground.status} net=${courtArt.net.status}`,
     `FPS: ${fpsMeter.fps}  physics: ${fpsMeter.tps}/s  scale: ${viewScale.toFixed(2)}   (Shift+D 切換除錯)`,
   ];
   ctx.fillStyle = 'rgba(0,0,0,.6)';
@@ -2168,6 +2296,7 @@ window.BalloonVolleyball = {
         cpu: { pose: poseOf(cpu), dir: cpu.lookDir, poseDir: cpu.poseDir, poseTimer: cpu.poseTimer },
         sprites: Object.fromEntries(Object.entries(sprites.chars).map(([k, v]) => [k, { status: v.status, loaded: v.loaded, failed: v.failed.slice() }])),
         ball: sprites.ball.status,
+        court: { mode: courtMode, background: courtArt.background.status, ground: courtArt.ground.status, net: courtArt.net.status },
       },
       ai: { targetX: ai.targetX, predLandX: ai.predLandX, profile: { ...CONFIG.AI } },
       input: { ...playerCtrl },
@@ -2186,6 +2315,7 @@ el.version.textContent = CONFIG.VERSION;
 buildCards();
 updateMuteButton();
 loadBall();
+loadCourt();
 loadCharacter('v');
 // 背景預先載入三位對手（不阻擋畫面）
 OPPONENT_ORDER.forEach(id => loadCharacter(id));
