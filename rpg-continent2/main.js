@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.84-continent2-stability-fix-test-1';
-const BUILD_TIME   = '2026-11-04 02:30';
+const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-1';
+const BUILD_TIME   = '2026-11-04 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -4530,6 +4530,14 @@ const LEVELS = [
       emoji:       '🪙',
       foundMsg:    '氣球小狗找到隱藏金幣寶箱！金幣 +40！',
     },
+    // v0.3.85：同一關的第二個隱藏寶物「氣球排球秘笈」（和金幣寶箱各自獨立：各自的發現狀態、各自的小狗鼻子提示）
+    //   位置：入口後的「上路」平台（x 520～700、高 110，普通橘子 750 之前）左側上方 → 不在必經道路上（底下的地面可以直接走過去）
+    //   拾取判定以 (x, y) 為中心 ±50px：站在平台上才碰得到（從地面碰不到）
+    //   和金幣寶箱（x 3790）相距 3210px；小狗鼻子的感應範圍是 400px → 兩個寶物的提示範圍完全不重疊
+    extraHiddenTreasures: [
+      { id: 'volleyballRecipe', type: 'recipe', recipeKey: 'balloonVolleyball', recipeName: '氣球排球秘笈', name: '氣球排球秘笈',
+        x: 580, y: GROUND_Y - 150, emoji: '📖', foundMsg: '氣球小狗找到「氣球排球秘笈」！通關後就會收進氣球秘笈！' },
+    ],
   },
 
   // Stage 2-3：飛行油彈訓練場（橘子家族總複習）
@@ -20526,13 +20534,13 @@ function advStageLabel(sid) { const s = OFFICIAL_ADVENTURE_STAGES.find(x => x.st
 //   normal / big：buildEnemies() 的一般蠍子 / 重甲（大型）蠍子
 //   explore：需要帶氣球小狗才會出現的隱藏物
 const ADV_RESOURCE_CATALOG = {
-  version: 'catalog-v1-2026-10-18',
+  version: 'catalog-v2-2026-11-04',   // v0.3.85：2-2 新增探索項目「2-2#recipe:balloonVolleyball」（氣球排球秘笈；金幣寶箱照舊）
   stages: {
     '1-1':  { coins: 33, b260: 8,  roundMax: 0, normal: 4, big: 0, explore: [] },
     '1-2b': { coins: 35, b260: 10, roundMax: 2, normal: 2, big: 0, explore: [{ id: '1-2b#recipe:basicHammer',       cat: 'recipe' }] },
     '1-3':  { coins: 46, b260: 10, roundMax: 2, normal: 3, big: 2, explore: [{ id: '1-3#recipe:balloonLollipop',    cat: 'recipe' }] },
     '2-1':  { coins: 38, b260: 4,  roundMax: 1, normal: 1, big: 0, explore: [] },
-    '2-2':  { coins: 46, b260: 5,  roundMax: 2, normal: 0, big: 1, explore: [{ id: '2-2#treasure:goldChest',        cat: 'treasure' }] },
+    '2-2':  { coins: 46, b260: 5,  roundMax: 2, normal: 0, big: 1, explore: [{ id: '2-2#treasure:goldChest',        cat: 'treasure' }, { id: '2-2#recipe:balloonVolleyball', cat: 'recipe' }] },
     '2-3':  { coins: 56, b260: 6,  roundMax: 2, normal: 1, big: 1, explore: [{ id: '2-3#note:orangeKingWeaknessNote01', cat: 'note' }] },
     '2-4':  { coins: 0,  b260: 0,  roundMax: 0, normal: 0, big: 0, explore: [], boss: 'orangeKing' },
   },
@@ -21054,7 +21062,8 @@ function advVerifyCatalog(quiet) {
       normal: en.filter(v => v !== 'heavyBody').length, big: en.filter(v => v === 'heavyBody').length };
     Object.keys(got).forEach(k => { if (got[k] !== c[k]) issues.push(sid + ' ' + k + '：目錄 ' + c[k] + ' / 關卡 ' + got[k]); });
     const t = lv.hiddenTreasure; const want = c.explore.map(x => x.id);
-    const have = t ? [sid + (t.type === 'recipe' ? '#recipe:' + t.recipeKey : t.type === 'goldChest' ? '#treasure:goldChest' : t.type === 'bossNote' ? '#note:' + t.id : '#hidden:' + t.type)] : [];
+    const have = (t ? [sid + (t.type === 'recipe' ? '#recipe:' + t.recipeKey : t.type === 'goldChest' ? '#treasure:goldChest' : t.type === 'bossNote' ? '#note:' + t.id : '#hidden:' + t.type)] : [])
+      .concat((lv.extraHiddenTreasures || []).map(x => sid + '#recipe:' + x.recipeKey));   // v0.3.85：同一關的第二個隱藏寶物
     if (JSON.stringify(want) !== JSON.stringify(have)) issues.push(sid + ' 探索物：目錄 ' + want.join(',') + ' / 關卡 ' + have.join(','));
   });
   if (issues.length && !quiet) console.warn('[Score] 資源目錄與關卡不一致', issues);
@@ -21745,6 +21754,7 @@ const H2_ICON = {
   coinBag:         { path: H2_UI_ITEMS + 'item_coin_bag.png',    emoji: '🛒' },
   mapScroll:       { path: H2_UI_ITEMS + 'item_map_scroll.png',  emoji: '📔' },
   star:            { path: H2_UI_ITEMS + 'item_star.png',        emoji: '⭐' },
+  balloonVolleyball: { path: H2_UI_ITEMS + 'item_balloon_volleyball.png', emoji: '🏐' },   // v0.3.85：使用者上傳的正式氣球排球圖示
 };
 const H2_HERO_SHIFT_X = [0, -2.8, 0, 1.5];           // 四方向軀幹中心補正（v0.3.66 量測）
 const H2_HERO_DIR_NAMES = ['正面', '右側', '背面', '左側'];
@@ -27136,6 +27146,12 @@ const C2_STAGE_32 = {
   ],
   buildOranges: () => [], buildRoundBalloons: () => [],
   hiddenTreasure: null,
+  // v0.3.85：第二大陸的「氣球排球秘笈」藏匿處 — 區域 B 的獎勵高台（x 960～1260、高 200；只有借風口 B1 才上得去，不是必經道路）右端
+  //   不需要氣球排球、不需要雨傘（沒有雨傘時風口一樣托得起來）；高台上沒有尖刺與敵人；拾取判定 ±50px（從地面碰不到）
+  extraHiddenTreasures: [
+    { id: 'volleyballRecipe', type: 'recipe', recipeKey: 'balloonVolleyball', recipeName: '氣球排球秘笈', name: '氣球排球秘笈',
+      x: 1225, y: GROUND_Y - 235, emoji: '📖', foundMsg: '氣球小狗找到「氣球排球秘笈」！' },
+  ],
 };
 if (ADV_WORKSPACE) {
   const iT = LEVELS.findIndex(l => l && l.stageId === '3-T');
@@ -27483,4 +27499,366 @@ function drawC2UmbCalPanel() {
     debugC3Pits: () => { const o = (typeof c2Pits !== 'undefined' ? c2Pits : []).map(p => Object.assign({ id: p.id, x: p.x, w: p.w, resetX: p.resetX }, c3PitGeom(p))); console.log('[Chapter3Pit]', o); return o; },
   });
   console.log('[v0.3.84] 第二大陸：第三章實測問題修正已載入（雨傘 FALL／格擋／風口加成、F5、尖刺坑新圖、樹木、重玩結算、製作音效）');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.85：氣球排球小遊戲 × 冒險主線整合（第二大陸測試工作區；第一大陸正式版 rpg-test/ 不受影響）
+//  ・秘笈：「氣球排球秘笈」— 永久解鎖 ID：unlockedRecipes.balloonVolleyball（同一份，只解鎖一次）
+//      藏匿處 2 個：第一大陸 2-2（和原本的金幣寶箱是兩個獨立的隱藏寶物）、第二大陸 3-2
+//      探索紀錄 ID：'2-2#recipe:balloonVolleyball'（沿用正式挑戰的探索計分，記在該趟挑戰的 2-2 關卡結果）
+//                  '3-2#recipe:balloonVolleyball'（第二大陸：c2Flow.explore，3-2 正常通關時寫入）
+//  ・同一關多個隱藏寶物：關卡資料 extraHiddenTreasures（原本的 hiddenTreasure 不動）
+//      每一步把「離小V最近、還沒找到的那一個」當成目前的寶物（currentHiddenTreasure）→ 原本的小狗鼻子、鏡頭減速、寶物淡入全部照舊
+//      找到其中一個之後，另一個照樣會讓鼻子發亮；額外寶物的拾取由這裡處理（不影響原本寶物的「本輪已取得」）
+//  ・製作：260 長條氣球 ×3（沿用氣球秘笈與 craftItem；製作音效照舊）→ craftedItems.balloonVolleyball＝一張尚未使用的參賽資格（最多 1 顆）
+//  ・場次：每輪最多 3 場（三位對手共用）；首次完成「新的主線關卡」→ 回到小V的家時補回 3（不累加超過 3）
+//  ・比賽：小V的家開啟 iframe（../minigames/volleyball/?embed=adventure&session=…&opponent=…）；結果用 postMessage 回傳
+//      冒險主線驗證（同源、同一個 session、對手相符、7 分制比分合理、沒有結算過）→ 發獎 → 扣場次與排球 → 存檔
+//  ・資料：playerInventory.volleyball（跟著背包存在 __c2）；不碰 V幣、Firebase、正式玩家資料
+//  ・注意：GitHub Pages 是純前端網頁，sessionId／比分／完成旗標都在玩家的瀏覽器裡，不能視為完整的防作弊憑證
+//          （這裡做到：不重複扣材料、同一場不重複發獎、重新整理不會多出場次或獎勵、一般操作不會讓存檔錯亂）
+// ════════════════════════════════════════════════════════════════════
+const VB_CONFIG = {
+  recipeKey: 'balloonVolleyball',
+  exploreIds: { '2-2': '2-2#recipe:balloonVolleyball', '3-2': '3-2#recipe:balloonVolleyball' },
+  cost: { balloon260: 3 },
+  maxMatches: 3,
+  // 獎勵參數（第一版測試值；使用者尚未逐項確認 → 全部集中在這裡調整）
+  reward: {
+    base: { balloon260: 4, coins: 10 },                                // 正常完成一場（不論輸贏）
+    perPoint: { scorpion: 1, orange: 2, orange_king: 3 },              // 玩家每得 1 分的金幣
+    winBonus: { scorpion: 5, orange: 10, orange_king: 15 },            // 勝利額外金幣
+  },
+  targetScore: 7,
+  frameUrl: '../minigames/volleyball/index.html',
+  loadTimeoutMs: 20000,
+  // 主線關卡（首次完成才會補場次）：第一大陸正式七關＋第二大陸 3-1、3-2（開發用雨傘測試場不算）
+  mainlineStages: null,
+  opponents: [
+    { id: 'scorpion',    name: '蠍子怪', level: '初級', fatigue: '呼～今天打得好累喔！等你完成下一場冒險，我們再一起玩吧！' },
+    { id: 'orange',      name: '橘子怪', level: '中級', fatigue: '橘子汁都流光光了……讓我休息一下嘛！等你冒險回來，我們再比一場！' },
+    { id: 'orange_king', name: '橘子王', level: '高級', fatigue: '哼哼，本王今天也有點累了。等你完成下一段冒險，再來挑戰本王吧！' },
+  ],
+};
+function vbMainline() { return VB_CONFIG.mainlineStages || (VB_CONFIG.mainlineStages = OFFICIAL_ADVENTURE_STAGE_IDS.concat(['3-1', '3-2'])); }
+function vbOpp(id) { return VB_CONFIG.opponents.find(o => o.id === id) || null; }
+function vbImg(id, pose) { return VB_CONFIG.frameUrl.replace('index.html', '') + 'assets/characters/' + id + '/' + id + '_volleyball_' + (pose || 'idle') + '.png'; }
+function vbUnlocked() { return !!((playerInventory && playerInventory.unlockedRecipes) || {})[VB_CONFIG.recipeKey]; }
+function vbData() {
+  const inv = playerInventory; if (!inv.volleyball || typeof inv.volleyball !== 'object') inv.volleyball = {};
+  const v = inv.volleyball;
+  if (!v.v) v.v = 1;
+  if (typeof v.matchesLeft !== 'number') v.matchesLeft = 0;
+  if (!v.clearLog || typeof v.clearLog !== 'object') v.clearLog = {};
+  if (!v.settled || typeof v.settled !== 'object') v.settled = {};
+  if (!Array.isArray(v.history)) v.history = [];
+  return v;
+}
+function vbTickets() { return Math.max(0, Math.floor(Number(((playerInventory.craftedItems || {})[VB_CONFIG.recipeKey]) || 0))); }
+function vbSave() { try { saveInventory(); } catch (e) {} }
+
+// ── 獎勵計算（集中）──
+function vbCalcReward(r) {
+  const R = VB_CONFIG.reward, pp = R.perPoint[r.opponentId] || 0, wb = r.winner === 'player' ? (R.winBonus[r.opponentId] || 0) : 0;
+  const coins = R.base.coins + r.playerScore * pp + wb;
+  return { balloon260: R.base.balloon260, coins, parts: { baseCoins: R.base.coins, pointCoins: r.playerScore * pp, perPoint: pp, winBonus: wb } };
+}
+
+// ── 已經完成過的主線關卡（解鎖當下記下來 → 之前完成的不會變成新的額度）──
+function vbKnownClearedStages() {
+  const set = new Set();
+  try { const d = advLoad(); const runs = [d.active].concat(d.recent || [], Object.values(d.best || {}), d.archived || []);
+    runs.forEach(run => { if (run && run.stageResults) Object.keys(run.stageResults).forEach(s => set.add(s)); }); } catch (e) {}
+  try { const f = c2Flow(); if ((f.stage31Clears || 0) > 0 || f.stage31) set.add('3-1'); if ((f.stage32Clears || 0) > 0 || f.stage32) set.add('3-2'); } catch (e) {}
+  return set;
+}
+function vbOnFirstUnlock(sid) {
+  const v = vbData(), now = Date.now();
+  vbKnownClearedStages().forEach(s => { if (!v.clearLog[s]) v.clearLog[s] = { at: now, before: true }; });
+  if (sid) v.clearLog[sid] = { at: now, unlock: true };
+  v.matchesLeft = VB_CONFIG.maxMatches;                                 // 首次取得秘笈：開放第一輪 3 場
+  v.unlockedAt = now; v.unlockedFrom = sid || null; v.refillPending = null;
+  v.history.push({ t: 'unlock', at: now, sid });
+  console.log('[Volleyball] 首次解鎖氣球排球秘笈（' + sid + '）→ 開放 3 場；已完成過的關卡：', Object.keys(v.clearLog).join('、'));
+}
+function vbOnStageClear(sid, newlyUnlocked) {
+  if (!vbUnlocked() || !sid || !vbMainline().includes(sid)) return;
+  const v = vbData();
+  if (v.clearLog[sid]) return;                                           // 重玩已經完成的關卡 → 不補
+  v.clearLog[sid] = { at: Date.now() };
+  if (!newlyUnlocked) { v.refillPending = { sid, at: Date.now() }; console.log('[Volleyball] 首次完成新的主線關卡 ' + sid + ' → 回到小V的家時補回場次'); }
+}
+function vbApplyRefill() {
+  const v = vbData(); if (!v.refillPending) return false;
+  const before = v.matchesLeft;
+  v.matchesLeft = VB_CONFIG.maxMatches;                                  // 補回到 3（不是累加）
+  v.history.push({ t: 'refill', at: Date.now(), sid: v.refillPending.sid, before });
+  console.log('[Volleyball] 補回場次：' + before + ' → ' + v.matchesLeft + '（' + v.refillPending.sid + '）');
+  v.refillPending = null; vbSave();
+  return true;
+}
+
+// ── 同一關多個隱藏寶物 ──
+var vbTreasureList = [];
+function vbExtraAvailable(lv, t) {
+  if (!lv || !t) return false;
+  if (lv.stageId === '3-2') { const id = VB_CONFIG.exploreIds['3-2']; return !(c2Flow().explore || {})[id]; }   // 第二大陸：這個地點已經探索過 → 不再出現
+  return true;                                                          // 第一大陸：沿用既有規則（每一趟挑戰都可以探索）
+}
+function vbBuildTreasureList() {
+  const lv = LEVELS[currentLevelIndex]; vbTreasureList = [];
+  if (currentHiddenTreasure) { currentHiddenTreasure._primary = true; vbTreasureList.push(currentHiddenTreasure); }
+  ((lv && lv.extraHiddenTreasures) || []).forEach(t => { if (vbExtraAvailable(lv, t)) vbTreasureList.push(Object.assign({}, t, { found: false, extra: true })); });
+}
+function vbFocus() {
+  if (vbTreasureList.length < 2 && !(vbTreasureList[0] && vbTreasureList[0].extra)) return;   // 只有原本一個寶物 → 完全照舊
+  let best = null, bd = Infinity;
+  vbTreasureList.forEach(t => { if (t.found || typeof t.x !== 'number') return; const d = Math.abs(player.x - t.x); if (d < bd) { bd = d; best = t; } });
+  currentHiddenTreasure = best || vbTreasureList.find(t => t._primary) || vbTreasureList[0] || null;
+}
+function vbPickupExtra(t) {
+  if (!bringBalloonDog || !t || t.found || typeof t.x !== 'number') return;
+  const R = 50;
+  if (!rectsOverlap(player.x, player.y, player.w, player.h, t.x - R, t.y - R, R * 2, R * 2)) return;
+  t.found = true;
+  const sid = advCurrentStageId();
+  currentRunStats.vbFound = currentRunStats.vbFound || {}; currentRunStats.vbFound[sid] = true;
+  if (!currentRunStats.pendingRecipeUnlocks) currentRunStats.pendingRecipeUnlocks = {};
+  currentRunStats.pendingRecipeUnlocks[t.recipeKey] = true;               // 通關才正式寫入（和其他秘笈相同）
+  try { advNoteExplore(t); } catch (e) {}                                 // 第一大陸：本趟探索（id ＝ 2-2#recipe:balloonVolleyball）
+  try { sfxPlay('secretDiscovered'); } catch (e) {}
+  const known = vbUnlocked();
+  if (known) { spawnTreasurePickupEffect('📖 發現氣球排球的另一個秘密藏匿處！', '已經學會氣球排球秘笈（列入探索紀錄）'); showHint('🏐 發現氣球排球的另一個秘密藏匿處！', 300); }
+  else { spawnTreasurePickupEffect('📖 獲得氣球排球秘笈！', '通關後收進氣球秘笈'); showHint(t.foundMsg || '找到氣球排球秘笈！', 320); }
+  console.log('[Volleyball] 找到氣球排球秘笈（' + sid + '）', { alreadyUnlocked: known });
+  vbFocus();
+}
+
+// ── 比賽 session ──
+var vbFrame = { el: null, iframe: null, session: null, timer: 0, ready: false };
+function vbCurrent() { return vbData().current || null; }
+function vbCanCraft() {
+  if (!vbUnlocked()) return '尚未取得秘笈';
+  if (typeof gameState !== 'undefined' && (gameState === 'playing' || gameState === 'paused')) return '回到小V的家再製作';
+  const v = vbData();
+  if (v.matchesLeft <= 0) return '對手都累了';
+  if (vbTickets() >= 1) return '已有一顆排球';
+  return '';
+}
+function vbStartMatch(opponentId) {
+  const op = vbOpp(opponentId); if (!op) return;
+  const v = vbData();
+  if (v.matchesLeft <= 0) { vbShowFatigue(op); return; }                   // 場次用完：對手說累了（不扣材料、不建立資格）
+  if (vbTickets() < 1) { h2Toast('先用 260 ×3 製作一顆氣球排球吧！'); return; }
+  if (vbFrame.el && vbFrame.el.classList.contains('is-open')) return;
+  const sid = 's-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e9).toString(36);
+  v.current = { id: sid, opponent: op.id, state: 'pending', createdAt: Date.now(), matchId: null };
+  vbSave();
+  vbOpenFrame(v.current);
+}
+function vbOpenFrame(sess) {
+  if (!vbFrame.el) {
+    const w = document.createElement('div'); w.id = 'vb-frame-wrap';
+    w.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#0b1020;display:none;';
+    w.innerHTML = '<iframe id="vb-frame" title="氣球排球" allow="autoplay; fullscreen" style="width:100%;height:100%;border:0;display:block;background:#0b1020"></iframe>'
+      + '<div id="vb-frame-msg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#fff;font:bold 18px sans-serif;text-align:center;padding:20px"></div>';
+    document.body.appendChild(w);
+    vbFrame.el = w; vbFrame.iframe = w.querySelector('iframe');
+  }
+  vbFrame.session = sess.id; vbFrame.ready = false;
+  const msg = vbFrame.el.querySelector('#vb-frame-msg'); msg.style.display = 'none';
+  vbFrame.iframe.style.display = 'block';
+  vbFrame.iframe.src = VB_CONFIG.frameUrl + '?embed=adventure&session=' + encodeURIComponent(sess.id) + '&opponent=' + encodeURIComponent(sess.opponent);
+  vbFrame.el.style.display = 'block'; vbFrame.el.classList.add('is-open');
+  clearTimeout(vbFrame.timer);
+  vbFrame.timer = setTimeout(() => { if (!vbFrame.ready && vbFrame.el.classList.contains('is-open')) vbFrameFail(); }, VB_CONFIG.loadTimeoutMs);
+  console.log('[Volleyball] 開啟比賽 session ' + sess.id + '（對手 ' + sess.opponent + '）');
+}
+function vbFrameFail() {
+  const msg = vbFrame.el.querySelector('#vb-frame-msg');
+  vbFrame.iframe.style.display = 'none';
+  msg.innerHTML = '<div>😢 氣球排球沒有順利載入</div><div style="font-size:14px;font-weight:normal">排球還留著，沒有扣任何材料或場次，可以稍後再試。</div><button type="button" id="vb-frame-close" style="font:bold 16px sans-serif;padding:10px 22px;border-radius:12px;border:0;background:#ffd23a">返回小V的家</button>';
+  msg.style.display = 'flex';
+  msg.querySelector('#vb-frame-close').addEventListener('click', () => vbCloseFrame('loadFail'));
+  console.warn('[Volleyball] 小遊戲載入失敗（逾時）→ session 保留為待使用');
+}
+function vbCloseFrame(why) {
+  clearTimeout(vbFrame.timer);
+  const v = vbData(), c = v.current;
+  if (c && c.state !== 'done') { c.state = 'pending'; c.lastStop = why || 'close'; vbSave(); }   // 沒完成 → 排球照樣保留
+  if (vbFrame.el) { vbFrame.el.classList.remove('is-open'); vbFrame.el.style.display = 'none'; try { vbFrame.iframe.src = 'about:blank'; } catch (e) {} }
+  vbFrame.session = null;
+  try { h2ScheduleRefresh(); if (H2.panel && H2.panel.kind === 'volleyball') h2RenderPanel(); } catch (e) {}
+  if (c && c.state === 'done' && c.reward && !c.shown) { c.shown = true; vbSave(); vbShowResult(c); }
+  else if (why === 'exit' || why === 'close') { try { h2Toast('這場比賽沒有完成，排球還留著，可以再挑戰一次。'); } catch (e) {} }
+}
+function vbValidResult(d, c) {
+  const n = x => Number.isInteger(x) && x >= 0 && x <= VB_CONFIG.targetScore;
+  if (!d || d.completed !== true || !c) return '未完成';
+  if (d.opponentId !== c.opponent) return '對手不符';
+  if (!n(d.playerScore) || !n(d.cpuScore)) return '比分不合理';
+  const T = VB_CONFIG.targetScore, pw = d.playerScore === T && d.cpuScore < T, cw = d.cpuScore === T && d.playerScore < T;
+  if (!pw && !cw) return '不是 7 分制的完成比分';
+  if ((pw && d.winner !== 'player') || (cw && d.winner !== 'cpu')) return '勝負不符';
+  if (!d.matchId || typeof d.matchId !== 'string') return '沒有 matchId';
+  return '';
+}
+function vbOnMessage(e) {
+  if (e.origin !== location.origin) return;
+  if (!vbFrame.iframe || e.source !== vbFrame.iframe.contentWindow) return;
+  const d = e.data; if (!d || d.source !== 'balloonVolleyball') return;
+  const v = vbData(), c = v.current;
+  if (!c || d.sessionId !== c.id) { console.warn('[Volleyball] 收到不屬於目前 session 的訊息 → 忽略', d.type, d.sessionId); return; }
+  if (d.type === 'ready') { vbFrame.ready = true; clearTimeout(vbFrame.timer); return; }
+  if (d.type === 'started') { if (c.state !== 'done') { c.state = 'active'; c.matchId = d.matchId || null; c.startedAt = Date.now(); vbSave(); } return; }
+  if (d.type === 'exit') { vbCloseFrame('exit'); return; }
+  if (d.type === 'close') { vbCloseFrame('close'); return; }
+  if (d.type === 'result') vbSettle(d, c);
+}
+function vbSettle(d, c) {
+  const v = vbData();
+  if (c.state === 'done' || (d.matchId && v.settled[d.matchId])) { console.warn('[Volleyball] 同一場結果重複送來 → 不重複發獎', d.matchId); return false; }
+  const bad = vbValidResult(d, c);
+  if (bad) { console.warn('[Volleyball] 結果不正確（' + bad + '）→ 不發獎', d); return false; }
+  if (vbTickets() < 1 || v.matchesLeft <= 0) { console.warn('[Volleyball] 沒有可用的排球或場次 → 不發獎'); return false; }
+  const rw = vbCalcReward(d);
+  playerInventory.craftedItems[VB_CONFIG.recipeKey] = vbTickets() - 1;   // 用掉這顆排球
+  v.matchesLeft = Math.max(0, v.matchesLeft - 1);
+  playerInventory.balloon260 = (playerInventory.balloon260 || 0) + rw.balloon260;
+  playerInventory.coins = (playerInventory.coins || 0) + rw.coins;
+  v.settled[d.matchId] = c.id;
+  Object.assign(c, { state: 'done', matchId: d.matchId, settledAt: Date.now(), result: { playerScore: d.playerScore, cpuScore: d.cpuScore, winner: d.winner, difficulty: d.difficulty }, reward: rw, shown: false });
+  v.history.push({ t: 'match', at: Date.now(), session: c.id, matchId: d.matchId, opponent: c.opponent, score: d.playerScore + ':' + d.cpuScore, winner: d.winner, coins: rw.coins, b260: rw.balloon260 });
+  if (v.history.length > 60) v.history.splice(0, v.history.length - 60);
+  vbSave();
+  console.log('[Volleyball] 比賽結算：' + c.opponent + ' ' + d.playerScore + '：' + d.cpuScore + ' → 260 +' + rw.balloon260 + '、金幣 +' + rw.coins + '（剩 ' + v.matchesLeft + ' 場）');
+  try { h2ScheduleRefresh(); } catch (e) {}
+  return true;
+}
+function vbShowModal(html) {
+  let m = document.getElementById('vb-modal');
+  if (!m) { m = document.createElement('div'); m.id = 'vb-modal'; m.style.cssText = 'position:fixed;inset:0;z-index:2147482000;display:none;align-items:center;justify-content:center;background:rgba(20,10,40,0.55)'; document.body.appendChild(m);
+    m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-vb-close]')) { m.style.display = 'none'; } }); }
+  vbEnsureStyle();
+  m.innerHTML = '<div class="vb-mcard" style="max-width:520px;width:88%;max-height:90vh;overflow:auto;padding:18px 20px;border-radius:18px;background:#fff8e8;color:#4a2a10;font:16px/1.5 sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35)">' + html + '<div style="text-align:center;margin-top:12px"><button type="button" class="vb-ok" data-vb-close="1">好的</button></div></div>';
+  m.style.display = 'flex';
+}
+function vbShowFatigue(op) {
+  vbShowModal('<div style="display:flex;gap:14px;align-items:center"><img src="' + h2Esc(vbImg(op.id, 'lose')) + '" alt="" style="width:110px;height:110px;object-fit:contain;flex:none" onerror="this.style.display=\'none\'">'
+    + '<div><div style="font-weight:bold;font-size:18px;margin-bottom:4px">' + h2Esc(op.name) + '</div><div>「' + h2Esc(op.fatigue) + '」</div></div></div>');
+  console.log('[Volleyball] 場次用完 → ' + op.name + ' 的疲勞對話（沒有扣材料）');
+}
+function vbShowResult(c) {
+  const op = vbOpp(c.opponent) || { name: c.opponent, level: '' }, r = c.result, w = c.reward, win = r.winner === 'player';
+  vbShowModal('<div style="text-align:center;font-weight:bold;font-size:20px">' + (win ? '🏆 小V 獲勝！' : '🏐 比賽完成！') + '</div>'
+    + '<div style="text-align:center;margin:4px 0 10px">小V ' + r.playerScore + ' ： ' + r.cpuScore + ' ' + h2Esc(op.name) + '（' + h2Esc(op.level) + '）</div>'
+    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('balloon260') + '</span><span>260 長條氣球 <b>+' + w.balloon260 + '</b>（完成比賽保底）</span></div>'
+    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('coins') + '</span><span>金幣 <b>+' + w.coins + '</b>（保底 ' + w.parts.baseCoins + '＋得分 ' + r.playerScore + ' × ' + w.parts.perPoint + (w.parts.winBonus ? '＋勝利 ' + w.parts.winBonus : '') + '）</span></div>'
+    + '<div style="margin-top:8px;font-size:14px;color:#7a5a30">本輪剩餘場次：' + vbData().matchesLeft + '／' + VB_CONFIG.maxMatches + '</div>');
+}
+
+// ── 小V的家：氣球排球面板 ──
+function vbEnsureStyle() {
+  if (document.getElementById('vb-style')) return;
+  const st = document.createElement('style'); st.id = 'vb-style';
+  st.textContent = '.vb-panel{display:flex;flex-direction:column;gap:10px;font-size:15px;color:#4a2a10}'
+    + '.vb-box{background:rgba(255,255,255,.72);border:2px solid #e8c27a;border-radius:14px;padding:10px 12px}'
+    + '.vb-recipe{display:flex;align-items:center;gap:12px}.vb-recipe .vb-ico{width:64px;height:64px;flex:none;display:flex;align-items:center;justify-content:center}'
+    + '.vb-recipe .vb-ico img{max-width:64px;max-height:64px;width:auto;height:auto;object-fit:contain}.vb-recipe .vb-txt{flex:1;min-width:0}'
+    + '.vb-recipe .vb-txt small{display:block;color:#7a5a30}.vb-recipe button{flex:none;white-space:nowrap}'
+    + '.vb-stat{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}.vb-tired{color:#9a5a10;font-weight:bold}'
+    + '.vb-ops{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}'
+    + '.vb-op{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}.vb-op img{width:92px;height:92px;object-fit:contain}'
+    + '.vb-op small{color:#7a5a30;line-height:1.3}.vb-note{font-size:13px;color:#7a5a30;line-height:1.45}'
+    + '@media (max-height:460px){.vb-op img{width:64px;height:64px}.vb-panel{font-size:13px}}'
+    + '.vb-rrow{display:flex;align-items:center;gap:8px;margin:4px 0}.vb-rico{width:36px;height:36px;flex:none;display:inline-flex;align-items:center;justify-content:center;overflow:hidden}'
+    + '.vb-rico img{max-width:36px;max-height:36px;width:auto;height:auto;object-fit:contain}'
+    + '#vb-modal .vb-ok{min-width:120px;padding:8px 22px;font-size:17px;font-weight:bold;border-radius:999px;border:2px solid #2f7a2a;background:linear-gradient(#7ad66a,#3aa23a);color:#fff;cursor:pointer}';
+  document.head.appendChild(st);
+}
+function vbPanelHtml() {
+  vbEnsureStyle();
+  const v = vbData(), left = v.matchesLeft, t = vbTickets(), have = playerInventory.balloon260 || 0;
+  const reason = vbCanCraft() || (have < VB_CONFIG.cost.balloon260 ? '材料不足' : '');
+  const dots = Array.from({ length: VB_CONFIG.maxMatches }, (_, i) => i < left ? '🏐' : '⚪').join(' ');
+  const R = VB_CONFIG.reward;
+  let h = '<div class="vb-panel">';
+  h += '<div class="vb-box vb-recipe" data-recipe-row="balloonVolleyball"><span class="vb-ico">' + h2Icon('balloonVolleyball', 'vb-ico-img') + '</span>'
+    + '<div class="vb-txt"><b>氣球排球秘笈</b>（已學會）<small>製作：260 長條氣球 ×3（目前 ' + have + ' 條）・一顆排球可以比一場</small></div>'
+    + '<button type="button" class="h2-pill h2-pill--green" data-h2-act="craft" data-key="balloonVolleyball"' + (reason ? ' disabled' : '') + '>' + h2Esc(reason || '製作') + '</button></div>';
+  h += '<div class="vb-box vb-stat"><span>本輪剩餘場次：' + dots + '　<b>' + left + '／' + VB_CONFIG.maxMatches + '</b></span><span>氣球排球：<b>' + t + '</b> 顆' + (t ? '（可以比賽）' : '') + '</span></div>';
+  if (left <= 0) h += '<div class="vb-box vb-tired">對手們都累了，完成下一場新的冒險再回來比賽吧！</div>';
+  h += '<div class="vb-ops">';
+  VB_CONFIG.opponents.forEach(o => {
+    h += '<div class="vb-box vb-op"><img src="' + h2Esc(vbImg(o.id, left > 0 ? 'idle' : 'lose')) + '" alt="" draggable="false" onerror="this.style.visibility=\'hidden\'">'
+      + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>每得 1 分金幣 +' + R.perPoint[o.id] + '<br>勝利再 +' + R.winBonus[o.id] + '</small>'
+      + '<button type="button" class="h2-pill ' + (left > 0 && t > 0 ? 'h2-pill--green' : 'h2-pill--yellow') + ' h2-pill--sm" data-vb-act="play" data-op="' + o.id + '">' + (left <= 0 ? '休息中' : t > 0 ? '開始比賽' : '先製作排球') + '</button></div>';
+  });
+  h += '</div><div class="vb-note">每場正常完成（不論輸贏）：260 ×' + R.base.balloon260 + '＋金幣 ' + R.base.coins + '；先得 7 分獲勝。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），首次完成新的冒險關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
+  return h;
+}
+function vbEnsureNav() {
+  let b = document.getElementById('h2-nav-volleyball');
+  if (!b) {
+    const nav = document.querySelector('#home-screen .h2-nav') || document.querySelector('.h2-nav'), go = document.getElementById('h2-nav-go');
+    if (!nav) return null;
+    b = document.createElement('button'); b.type = 'button'; b.id = 'h2-nav-volleyball'; b.className = 'h2-pill h2-pill--yellow'; b.innerHTML = '🏐 氣球排球';
+    b.style.display = 'none';
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (!h2Busy(400, 'vbNav')) h2OpenPanel('volleyball'); });
+    if (go) nav.insertBefore(b, go); else nav.appendChild(b);
+  }
+  b.style.display = vbUnlocked() ? '' : 'none';
+  return b;
+}
+
+(function v385Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v385) { if (typeof o !== 'function') console.warn('[v0.3.85] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v385 = true; globalThis[name] = w; };
+  // 秘笈與製作（沿用既有氣球秘笈）
+  RECIPES.push({ id: 'balloonVolleyball', name: '氣球排球', minigame: true, durability: 0, cost: Object.assign({}, VB_CONFIG.cost), emoji: '🏐', unlockKey: 'balloonVolleyball',
+    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。不論輸贏，正常完成都能拿到 260 ×4 與金幣。' });
+  H2_PANEL_TITLES.volleyball = '氣球排球';
+  wrapFn('h2RecipeState', o => function (r) { const st = o.apply(this, arguments); if (r && r.id === VB_CONFIG.recipeKey && !st.reason) { const why = vbCanCraft(); if (why) st.reason = why; } return st; });
+  wrapFn('craftItem', o => function (id) {
+    if (id === VB_CONFIG.recipeKey) { const why = vbCanCraft(); if (why) { console.warn('[Volleyball] 不能製作：' + why + '（沒有扣材料）'); return false; } }
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2PanelBody', o => function (kind) { if (kind === 'volleyball') { try { return vbPanelHtml(); } catch (e) { console.warn('[Volleyball] 面板', e); return ''; } } return o.apply(this, arguments); });
+  wrapFn('h2RenderAll', o => function () { const r = o.apply(this, arguments); try { if (vbUnlocked() && typeof gameState !== 'undefined' && gameState !== 'playing' && gameState !== 'paused' && h2IsOpen()) { if (vbApplyRefill() && H2.panel && H2.panel.kind === 'volleyball') h2RenderPanel(); } vbEnsureNav(); } catch (e) {} return r; });
+  // 同一關多個隱藏寶物
+  wrapFn('loadLevel', o => function () { const r = o.apply(this, arguments); try { vbBuildTreasureList(); } catch (e) { console.warn('[Volleyball] 寶物清單', e); } return r; });
+  wrapFn('restart', o => function () {
+    const r = o.apply(this, arguments);
+    try { vbTreasureList.forEach(t => { t.found = false; }); const p = vbTreasureList.find(t => t._primary); if (p) currentHiddenTreasure = p; if (currentRunStats) currentRunStats.vbFound = {}; } catch (e) {}
+    return r;
+  });
+  wrapFn('update', o => function () { try { if (gameState === 'playing') vbFocus(); } catch (e) {} return o.apply(this, arguments); });
+  // 小狗鼻子：排球秘笈只靠鼻子發亮（既有的「小狗嗅到寶物」對話 rpg006a／rpg006b 不為排球秘笈播放 → 不新增文字提醒）
+  wrapFn('rpgRequest', o => function (id) { try { if (/^rpg006[ab]_/.test(String(id)) && currentHiddenTreasure && currentHiddenTreasure.extra) return false; } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('checkHiddenTreasure', o => function () { const t = currentHiddenTreasure; if (t && t.extra) { try { vbPickupExtra(t); } catch (e) { console.warn('[Volleyball] 拾取', e); } return; } return o.apply(this, arguments); });
+  // 通關：正式解鎖（只解鎖一次）→ 第二大陸探索紀錄 → 新關卡完成紀錄（補場次）
+  wrapFn('triggerClear', o => function () {
+    const before = vbUnlocked(), sid = advCurrentStageId(), pend = !!(currentRunStats && currentRunStats.pendingRecipeUnlocks && currentRunStats.pendingRecipeUnlocks[VB_CONFIG.recipeKey]);
+    const found = !!(currentRunStats && currentRunStats.vbFound && currentRunStats.vbFound[sid]);
+    const r = o.apply(this, arguments);
+    try {
+      if (gameState === 'clear') {
+        let newly = false;
+        if (pend) { playerInventory.unlockedRecipes = playerInventory.unlockedRecipes || {}; if (!playerInventory.unlockedRecipes[VB_CONFIG.recipeKey]) { playerInventory.unlockedRecipes[VB_CONFIG.recipeKey] = true; } if (!before) { newly = true; vbOnFirstUnlock(sid); } }
+        if (found && sid === '3-2') { const f = c2Flow(); f.explore = f.explore || {}; const id = VB_CONFIG.exploreIds['3-2']; if (!f.explore[id]) f.explore[id] = { at: Date.now(), stageId: '3-2', alreadyUnlocked: before }; }
+        vbOnStageClear(sid, newly);
+        vbSave();
+        if (found && H2.pendingSummary && H2.pendingSummary.rows) H2.pendingSummary.rows.push({ icon: 'balloonVolleyball', text: before ? '發現氣球排球的另一個秘密藏匿處！（' + sid + ' 探索紀錄）' : '氣球排球秘笈（已收進氣球秘笈；小V的家開放 3 場比賽）', val: '' });
+      }
+    } catch (e) { console.warn('[Volleyball] 通關結算', e); }
+    return r;
+  });
+  // 開機：上次比賽中途關閉／重新整理 → 那一顆排球保留（回到待使用），不發獎、不扣場次
+  try { const c = (playerInventory.volleyball || {}).current; if (c && c.state === 'active') { c.state = 'pending'; c.lastStop = 'reload'; vbSave(); console.log('[Volleyball] 上次比賽沒有完成（重新整理／關閉）→ 排球保留'); } } catch (e) {}
+  try { window.addEventListener('message', vbOnMessage); } catch (e) {}
+  // 面板裡的按鈕
+  try { document.addEventListener('click', e => { const a = e.target && e.target.closest && e.target.closest('[data-vb-act]'); if (!a) return; e.preventDefault(); e.stopPropagation(); if (a.dataset.vbAct === 'play' && !h2Busy(500, 'vbPlay')) vbStartMatch(a.dataset.op); }, true); } catch (e) {}
+  if (typeof window !== 'undefined') Object.assign(window, { VB_CONFIG, vbCalcReward,
+    debugVolleyball: () => { const o = { unlocked: vbUnlocked(), tickets: vbTickets(), data: JSON.parse(JSON.stringify(vbData())), canCraft: vbCanCraft() || 'ok', treasures: vbTreasureList.map(t => ({ id: t.id || t.type, x: t.x, y: t.y, found: t.found, extra: !!t.extra })), focus: currentHiddenTreasure && (currentHiddenTreasure.id || currentHiddenTreasure.type) }; console.log('[Volleyball]', o); return o; } });
+  console.log('[v0.3.85] 第二大陸：氣球排球小遊戲整合（2-2／3-2 秘笈、製作、場次、比賽結算）已載入');
 })();
