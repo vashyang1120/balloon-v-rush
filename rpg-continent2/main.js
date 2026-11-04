@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-1';
-const BUILD_TIME   = '2026-11-04 15:00';
+const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-2';
+const BUILD_TIME   = '2026-11-04 18:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27826,7 +27826,7 @@ function vbEnsureNav() {
   wrapFn('h2PanelBody', o => function (kind) { if (kind === 'volleyball') { try { return vbPanelHtml(); } catch (e) { console.warn('[Volleyball] 面板', e); return ''; } } return o.apply(this, arguments); });
   wrapFn('h2RenderAll', o => function () { const r = o.apply(this, arguments); try { if (vbUnlocked() && typeof gameState !== 'undefined' && gameState !== 'playing' && gameState !== 'paused' && h2IsOpen()) { if (vbApplyRefill() && H2.panel && H2.panel.kind === 'volleyball') h2RenderPanel(); } vbEnsureNav(); } catch (e) {} return r; });
   // 同一關多個隱藏寶物
-  wrapFn('loadLevel', o => function () { const r = o.apply(this, arguments); try { vbBuildTreasureList(); } catch (e) { console.warn('[Volleyball] 寶物清單', e); } return r; });
+  wrapFn('loadLevel', o => function (index) { try { const lv = LEVELS[index]; if (!(lv && lv.stageId === '2-2')) vbDevRun = false; } catch (e) {} const r = o.apply(this, arguments); try { vbBuildTreasureList(); } catch (e) { console.warn('[Volleyball] 寶物清單', e); } return r; });
   wrapFn('restart', o => function () {
     const r = o.apply(this, arguments);
     try { vbTreasureList.forEach(t => { t.found = false; }); const p = vbTreasureList.find(t => t._primary); if (p) currentHiddenTreasure = p; if (currentRunStats) currentRunStats.vbFound = {}; } catch (e) {}
@@ -27840,7 +27840,11 @@ function vbEnsureNav() {
   wrapFn('triggerClear', o => function () {
     const before = vbUnlocked(), sid = advCurrentStageId(), pend = !!(currentRunStats && currentRunStats.pendingRecipeUnlocks && currentRunStats.pendingRecipeUnlocks[VB_CONFIG.recipeKey]);
     const found = !!(currentRunStats && currentRunStats.vbFound && currentRunStats.vbFound[sid]);
-    const r = o.apply(this, arguments);
+    // 開發者入口的 2-2：和 3-1／3-2 一樣，測試用小狗不扣陪伴次數、不發 V幣
+    const dev = vbDevRun && sid === '2-2', dogSave = dev ? JSON.stringify(playerInventory.balloonDog || {}) : null;
+    let r;
+    if (dev) { c2ClearGuard = true; try { r = o.apply(this, arguments); } finally { c2ClearGuard = false; vbDevRun = false; try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} } }
+    else r = o.apply(this, arguments);
     try {
       if (gameState === 'clear') {
         let newly = false;
@@ -27860,5 +27864,57 @@ function vbEnsureNav() {
   try { document.addEventListener('click', e => { const a = e.target && e.target.closest && e.target.closest('[data-vb-act]'); if (!a) return; e.preventDefault(); e.stopPropagation(); if (a.dataset.vbAct === 'play' && !h2Busy(500, 'vbPlay')) vbStartMatch(a.dataset.op); }, true); } catch (e) {}
   if (typeof window !== 'undefined') Object.assign(window, { VB_CONFIG, vbCalcReward,
     debugVolleyball: () => { const o = { unlocked: vbUnlocked(), tickets: vbTickets(), data: JSON.parse(JSON.stringify(vbData())), canCraft: vbCanCraft() || 'ok', treasures: vbTreasureList.map(t => ({ id: t.id || t.type, x: t.x, y: t.y, found: t.found, extra: !!t.extra })), focus: currentHiddenTreasure && (currentHiddenTreasure.id || currentHiddenTreasure.type) }; console.log('[Volleyball]', o); return o; } });
+  // 開發者工具（暫停選單 → 開發測試工具；?devtools=1 才看得到，玩家看不到）：直接進 2-2／3-2（帶小狗）找排球秘笈
+  try {
+    const box = document.getElementById('p2-dev-body');
+    if (box && ADVENTURE_TEST_TOOLS_ENABLED && H2_DEVTOOLS && !document.getElementById('btn-pause-test-vb-22')) {
+      const mk = (id, txt, fn, cls) => { const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'h2-pill ' + (cls || 'h2-pill--yellow') + ' h2-pill--sm'; b.textContent = txt; b.addEventListener('click', e => { e.preventDefault(); fn(b); }); return b; };
+      const b1 = mk('btn-pause-test-vb-22', '🏐 測試 2-2（帶小狗・排球秘笈）', () => vbDevStart22());
+      const b2 = mk('btn-pause-test-vb-32', '🏐 測試 3-2（帶小狗・排球秘笈）', () => c2Start32());
+      const b3 = mk('btn-pause-reset-vb', '🔄 重設排球秘笈測試（只清排球資料）', b => { vbDevReset(); b.textContent = '✅ 已重設排球秘笈測試'; setTimeout(() => { b.textContent = '🔄 重設排球秘笈測試（只清排球資料）'; }, 2500); }, 'h2-pill--blue');
+      box.insertBefore(b3, box.firstChild); box.insertBefore(b2, box.firstChild); box.insertBefore(b1, box.firstChild);
+    }
+  } catch (e) { console.warn('[Volleyball] 開發者入口', e); }
   console.log('[v0.3.85] 第二大陸：氣球排球小遊戲整合（2-2／3-2 秘笈、製作、場次、比賽結算）已載入');
 })();
+// 開發者入口：直接進 2-2，測試用小狗同行（只在記憶體：不改背包裡的小狗、不扣陪伴次數）；測試紀錄，不進正式挑戰
+var vbDevRun = false;
+function vbDevStart22() {
+  if (!ADV_WORKSPACE || !ADVENTURE_TEST_TOOLS_ENABLED || !H2_DEVTOOLS) return;
+  if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
+  const idx = getLevelIndexByStageId('2-2'); if (idx < 0) return;
+  try { c2HideDone(); } catch (e) {}
+  try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
+  try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;
+  runWithAssetGate(getAssetGroupsForLevel(idx), '2-2 準備中...', () => {
+    advMarkTestEntry('vb-dev-2-2');
+    currentLevelIndex = idx; vbDevRun = true;
+    bringBalloonDog = true; levelStartBringDog = true;
+    loadLevel(idx);
+    initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();
+    applyAdventureTestLoadout();
+    restart({ keepHp: false, preserveBringDog: true });
+    bringBalloonDog = true; levelStartBringDog = true;
+    applyAdventureTestLoadout();
+    gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    console.log('[Volleyball] 開發者入口：進入 2-2（測試用小狗同行）');
+  });
+}
+// 開發者：重設排球秘笈測試 → 只清「排球秘笈解鎖、排球資料、2-2／3-2 排球探索紀錄」（第二大陸測試存檔；不動其他資料）
+function vbDevReset() {
+  if (!ADV_WORKSPACE || !ADVENTURE_TEST_TOOLS_ENABLED || !H2_DEVTOOLS) return;
+  try {
+    const inv = playerInventory;
+    if (inv.unlockedRecipes) delete inv.unlockedRecipes[VB_CONFIG.recipeKey];
+    if (inv.craftedItems) delete inv.craftedItems[VB_CONFIG.recipeKey];
+    delete inv.volleyball;
+    const f = c2Flow(); if (f.explore) delete f.explore[VB_CONFIG.exploreIds['3-2']];
+    try { if (typeof c2Save === 'function') c2Save(); } catch (e) {}
+    vbSave();
+    try { h2ScheduleRefresh(); } catch (e) {}
+    console.log('[Volleyball] 開發者：已重設排球秘笈測試（只清排球資料）');
+  } catch (e) { console.warn('[Volleyball] 重設', e); }
+}
