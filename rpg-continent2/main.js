@@ -25831,7 +25831,17 @@ function c2UmbSnapSync() {   // 用掉的耐久／爆掉的雨傘：不會因戰
   S.craftedItems.balloonUmbrella = c2UmbrellaCount();
   S.equippedUmbrellaDur = equippedUmbrella.currentDur;
 }
+// v0.3.86：雨傘耐久唯一的扣除來源＝成功主動格擋（reason 'block'）。其他來源一律拒絕（不扣），並留下紀錄
+//   每一次呼叫都記錄在 c2UmbConsumeLog（來源、是否扣除、扣前／扣後耐久、關卡、x、frame），作為驗收用的執行紀錄
+const C2_UMB_CONSUME_ALLOWED = { block: true };
+var c2UmbConsumeLog = [];
 function c2UmbConsume(reason) {
+  const ok = !!C2_UMB_CONSUME_ALLOWED[reason];
+  try {
+    c2UmbConsumeLog.push({ reason: String(reason), applied: ok && !!equippedUmbrella.id, before: equippedUmbrella.currentDur, stage: (LEVELS[currentLevelIndex] || {}).stageId, x: Math.round(player.x), frame: frameCount, stack: ok ? '' : String(new Error().stack || '').split('\n').slice(2, 4).join(' | ') });
+    if (c2UmbConsumeLog.length > 200) c2UmbConsumeLog.shift();
+  } catch (e) {}
+  if (!ok) { console.warn('[Umbrella] 拒絕扣耐久：來源「' + reason + '」不是成功格擋（雨傘耐久只在成功格擋時扣）'); return; }
   if (!equippedUmbrella.id) return;
   equippedUmbrella.currentDur = Math.max(0, equippedUmbrella.currentDur - 1);
   if (equippedUmbrella.currentDur <= 0) { c2UmbBreak(reason); return; }
@@ -27049,13 +27059,10 @@ function drawC3VentCalibOverlay() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  v0.3.83：氣球雨傘 × 風口 — 一次連續有效互動只扣 1 點耐久（在互動結束時結算；不是每秒、也不是每一格）
+//  v0.3.83：氣球雨傘 × 風口 — 互動追蹤（v0.3.86 起只留紀錄、不扣耐久；耐久只在成功格擋時扣）
 //   ・有效互動＝撐著氣球雨傘（目前裝備雨傘）＋正在被風口托起（player.windInfo）
-//   ・互動中短暫離開風口（graceSteps 內又回來）＝同一次互動；離開超過 graceSteps，或改拿別的裝備 → 結束並結算
-//   ・太短的接觸（少於 minSteps）不算一次互動、不扣
-//   ・結算時耐久剩 1 → 雨傘用完：沿用既有破掉流程（balloonPop、自動換備用、沒有就卸下）
-//   ・格擋蠍子是另外一件事（各自扣，不會因為同一件事扣兩次）
-//   ・暫停：遊戲不前進 → 不計；重新開始／換關／回家／通關：互動直接作廢（不扣）
+//   ・互動中短暫離開風口（graceSteps 內又回來）＝同一次互動；離開超過 graceSteps，或改拿別的裝備 → 結束（只寫紀錄）
+//   ・雨傘耐久：只有成功格擋才扣 1（見 c2UmbConsume）；風口、緩降、飄浮、換裝備、暫停、落地、通關都不扣
 // ════════════════════════════════════════════════════════════════════
 const C2_UMB_VENT = { minSteps: 12, graceSteps: 20 };
 var c2UmbVent = { active: false, steps: 0, since: 0, missing: 0, charged: 0 };
@@ -27072,11 +27079,8 @@ function c2UmbVentStep() {
   c2UmbVent.missing++;
   if (switched || c2UmbVent.missing > C2_UMB_VENT.graceSteps) {
     const n = c2UmbVent.steps; c2UmbVent.active = false; c2UmbVent.steps = 0; c2UmbVent.missing = 0;
-    if (n >= C2_UMB_VENT.minSteps && equippedUmbrella.id) {
-      c2UmbVent.charged++;
-      console.log('[Umbrella] 風口互動結束（' + (switched ? '換了裝備' : '離開風口') + '，持續 ' + n + ' 步）→ 雨傘耐久 −1');
-      c2UmbConsume('vent');
-    } else console.log('[Umbrella] 風口接觸太短（' + n + ' 步），不算一次互動');
+    // v0.3.86：使用者定案 — 風口上升／跳躍加高／進出風口／在風口裡換裝備都不扣雨傘耐久（移除 v0.3.83 的 c2UmbConsume('vent')）
+    console.log('[Umbrella] 風口互動結束（' + (switched ? '換了裝備' : '離開風口') + '，持續 ' + n + ' 步；不扣耐久）');
   }
 }
 
