@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.2-test-1',
+  VERSION: 'v0.2.2-test-2',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -1947,7 +1947,7 @@ function buildCards() {
     card.className = `card card-${id}`;
     card.dataset.opponent = id;
     card.innerHTML = `
-      <span class="card-level lv-${i}">${p.level}</span>
+      <span class="card-level lv-${Math.max(0, OPPONENT_ORDER.indexOf(id))}">${p.level}</span>
       <span class="card-img"><img alt="${p.name}" draggable="false"></span>
       <span class="card-name">${p.name}</span>
       <span class="card-desc">${p.desc}</span>
@@ -1957,7 +1957,9 @@ function buildCards() {
     img.onerror = () => { img.replaceWith(Object.assign(document.createElement('span'), { className: 'card-fallback', textContent: '●' })); };
     if (CHARACTER_VISUAL_CONFIG.CHARACTERS[id].poses.idle.facing === 1) img.classList.add('flip'); // 面向左邊的小V
     img.src = charImagePath(id, 'idle');
-    card.addEventListener('click', (e) => { e.preventDefault(); chooseOpponent(id); });
+    // 冒險比賽的賽前畫面：卡片只顯示對手資料，開賽改由「🏐 開始比賽」主按鈕（避免和主按鈕重複）
+    if (!EMBED) card.addEventListener('click', (e) => { e.preventDefault(); chooseOpponent(id); });
+    else { card.tabIndex = -1; card.setAttribute('aria-disabled', 'true'); }
     card.addEventListener('pointerenter', () => { selectedIndex = i; highlightCard(); });
     el.cards.appendChild(card);
   });
@@ -2357,10 +2359,13 @@ if (EMBED) {
   // 冒險比賽：只顯示這一場的對手；暫停選單「放棄這場比賽」；結算只有「返回小V的家」
   selectedIndex = 0;
   document.body.classList.add('embed-adventure');
-  const sub = el.title.querySelector('.sub'); if (sub) sub.textContent = '冒險比賽・點對手卡片開始';
-  const back = document.createElement('button'); back.type = 'button'; back.id = 'btnEmbedBack'; back.className = 'mid-btn'; back.textContent = '← 返回小V的家';
-  back.addEventListener('click', (e) => { e.preventDefault(); embedPost('close', { matchId: embedState.matchId, completed: embedState.resultSent }); });
-  const panel = el.title.querySelector('.panel'); if (panel) panel.appendChild(back);
+  const sub = el.title.querySelector('.sub'); if (sub) sub.textContent = '冒險比賽・準備好就按「開始比賽」';
+  // 賽前畫面：紫色主按鈕＝🏐 開始比賽（走原本的開賽流程）；返回小V的家＝下方較低調的次要按鈕
+  const start = document.createElement('button'); start.type = 'button'; start.id = 'btnEmbedStart'; start.className = 'mid-btn embed-start'; start.textContent = '🏐 開始比賽';
+  start.addEventListener('click', (e) => { e.preventDefault(); if (starting || game.state !== STATE.TITLE) return; chooseOpponent(titleOrder()[0]); });
+  const back = document.createElement('button'); back.type = 'button'; back.id = 'btnEmbedBack'; back.className = 'embed-back'; back.textContent = '← 返回小V的家';
+  back.addEventListener('click', (e) => { e.preventDefault(); if (starting) return; embedPost('close', { matchId: embedState.matchId, completed: embedState.resultSent }); });
+  const panel = el.title.querySelector('.panel'); if (panel) { panel.appendChild(start); panel.appendChild(back); }
   const pt = document.getElementById('btnPauseTitle'); if (pt) pt.textContent = '放棄這場比賽（回小V的家）';
   const ag = document.getElementById('btnAgain'); if (ag) ag.style.display = 'none';
   const ch = document.getElementById('btnChange'); if (ch) ch.textContent = '返回小V的家';

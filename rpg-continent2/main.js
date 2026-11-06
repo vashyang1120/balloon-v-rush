@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-2';
-const BUILD_TIME   = '2026-11-04 18:00';
+const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-3';
+const BUILD_TIME   = '2026-11-06 14:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27628,8 +27628,20 @@ function vbPickupExtra(t) {
   try { advNoteExplore(t); } catch (e) {}                                 // 第一大陸：本趟探索（id ＝ 2-2#recipe:balloonVolleyball）
   try { sfxPlay('secretDiscovered'); } catch (e) {}
   const known = vbUnlocked();
-  if (known) { spawnTreasurePickupEffect('📖 發現氣球排球的另一個秘密藏匿處！', '已經學會氣球排球秘笈（列入探索紀錄）'); showHint('🏐 發現氣球排球的另一個秘密藏匿處！', 300); }
-  else { spawnTreasurePickupEffect('📖 獲得氣球排球秘笈！', '通關後收進氣球秘笈'); showHint(t.foundMsg || '找到氣球排球秘笈！', 320); }
+  // v0.3.85 test-3：RPG 對話
+  //   第一次學會 → 沿用所有秘笈共用的流程：rpg020_find（第一幕「咦！發現了氣球秘笈！」）→ rpg007_recipe:balloonVolleyball（第二～四幕）
+  //   已經學會、在另一處又找到 → vb_found_again（兩幕）；不重播第一次的四幕
+  let rpg = false;
+  if (known) {
+    spawnTreasurePickupEffect('📖 發現氣球排球的另一個秘密藏匿處！', '已經學會氣球排球秘笈（列入探索紀錄）');
+    try { rpg = rpgRequest('vb_found_again', () => true); } catch (e) { rpg = false; }
+    if (!rpg) showHint('🏐 發現氣球排球的另一個秘密藏匿處！', 300);
+  } else {
+    spawnTreasurePickupEffect('📖 獲得氣球排球秘笈！', '通關後收進氣球秘笈');
+    currentRunStats.foundHiddenTreasureName = t.recipeName || '氣球排球秘笈';
+    try { rpg = (typeof rpgOnTreasureFound === 'function') && rpgOnTreasureFound(t); } catch (e) { rpg = false; }
+    if (!rpg) showHint(t.foundMsg || '找到氣球排球秘笈！', 320);
+  }
   console.log('[Volleyball] 找到氣球排球秘笈（' + sid + '）', { alreadyUnlocked: known });
   vbFocus();
 }
@@ -27818,6 +27830,22 @@ function vbEnsureNav() {
   RECIPES.push({ id: 'balloonVolleyball', name: '氣球排球', minigame: true, durability: 0, cost: Object.assign({}, VB_CONFIG.cost), emoji: '🏐', unlockKey: 'balloonVolleyball',
     effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。不論輸贏，正常完成都能拿到 260 ×4 與金幣。' });
   H2_PANEL_TITLES.volleyball = '氣球排球';
+  // v0.3.85 test-3：氣球排球秘笈 RPG 台詞（使用者確認的正式台詞，不得改寫）
+  //   第一幕「咦！發現了氣球秘笈！」由既有共用場景 rpg020_find 播放；這裡是第二～四幕（和氣球槌、棒棒糖相同的資料格式）
+  RPG_RECIPE_LINES.balloonVolleyball = [
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '原來是{g:氣球排球}的製作秘笈啊！' },
+    { sp: 'balloonv', face: 'balloonv_happy',    text: '只要用 3 條 {g:260 氣球}，就能做出一顆{g:氣球排球}！' },
+    { sp: 'balloonv', face: 'balloonv_happy',    text: '等回到家，就可以找蠍子怪、橘子怪和橘子王一起打排球了！' },
+  ];
+  wrapFn('rpgBuildScene', o => function (id) {
+    // 已經學會、在另一處又找到：兩幕（每次找到都播；不寫入對話紀錄）
+    if (id === 'vb_found_again') return { id, title: '又發現氣球排球秘笈', modeControlled: false, saveHistory: false, repeatable: true, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
+      { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！這裡也藏著{g:氣球排球秘笈}！' },
+      { sp: 'balloonv', face: 'balloonv_happy',     text: '雖然我已經學會了，不過又發現一個秘密地點了！' } ] };
+    const s = o.apply(this, arguments);
+    if (s && id === 'rpg007_recipe:balloonVolleyball') s.title = '發現秘笈：氣球排球';   // 對話紀錄顯示中文名稱
+    return s;
+  });
   wrapFn('h2RecipeState', o => function (r) { const st = o.apply(this, arguments); if (r && r.id === VB_CONFIG.recipeKey && !st.reason) { const why = vbCanCraft(); if (why) st.reason = why; } return st; });
   wrapFn('craftItem', o => function (id) {
     if (id === VB_CONFIG.recipeKey) { const why = vbCanCraft(); if (why) { console.warn('[Volleyball] 不能製作：' + why + '（沒有扣材料）'); return false; } }
@@ -27910,8 +27938,28 @@ function vbDevReset() {
     const inv = playerInventory;
     if (inv.unlockedRecipes) delete inv.unlockedRecipes[VB_CONFIG.recipeKey];
     if (inv.craftedItems) delete inv.craftedItems[VB_CONFIG.recipeKey];
-    delete inv.volleyball;
+    delete inv.volleyball;                                                     // 場次、補場、結算紀錄（settled／history）、比賽 session
+    // 3-2 探索紀錄（第二大陸 c2Flow）
     const f = c2Flow(); if (f.explore) delete f.explore[VB_CONFIG.exploreIds['3-2']];
+    // 2-2 探索紀錄（第一大陸：進行中挑戰的各關成績＋本關進行中紀錄）；只移除排球秘笈這一筆，金幣寶箱等其他紀錄不動
+    //   已完成挑戰的成績（best／recent／archived）是當時的成績快照，不修改
+    //   （3-2 通關時，挑戰紀錄的 3-2 成績也會記一筆 3-2#recipe:balloonVolleyball → 一起移除）
+    const vbIds = [VB_CONFIG.exploreIds['2-2'], VB_CONFIG.exploreIds['3-2']];
+    const strip = arr => arr.filter(x => !vbIds.includes(x));
+    try {
+      const d = advLoad(), run = d.active; let changed = false;
+      if (run) {
+        Object.values(run.stageResults || {}).forEach(r => { if (r && Array.isArray(r.explore) && r.explore.some(x => vbIds.includes(x))) { r.explore = strip(r.explore); changed = true; } });
+        if (run.live && Array.isArray(run.live.explore) && run.live.explore.some(x => vbIds.includes(x))) { run.live.explore = strip(run.live.explore); changed = true; }
+      }
+      if (changed) advSave(d);
+    } catch (e) { console.warn('[Volleyball] 重設探索紀錄', e); }
+    try { if (advAttempt && advAttempt.explore) vbIds.forEach(x => advAttempt.explore.delete(x)); } catch (e) {}
+    // 本關進行中：撿到但還沒通關的秘笈（避免重設後一通關又直接解鎖）、本關的「已撿到」標記
+    try { if (currentRunStats) { if (currentRunStats.pendingRecipeUnlocks) delete currentRunStats.pendingRecipeUnlocks[VB_CONFIG.recipeKey]; currentRunStats.vbFound = {}; } } catch (e) {}
+    try { (vbTreasureList || []).forEach(t => { if (t && t.id === 'volleyballRecipe') t.found = false; }); vbFocus(); } catch (e) {}
+    // 排球秘笈 RPG「已看過」紀錄（第二～四幕的首次顯示規則；其他對話紀錄不動）
+    try { const r = rpgLoad(); const k = 'rpg007_recipe:' + VB_CONFIG.recipeKey; if (r.seen) delete r.seen[k]; if (r.story) delete r.story[k]; rpgSave(); rpgAttempt.shown.delete(k); rpgAttempt.queued.delete(k); } catch (e) { console.warn('[Volleyball] 重設 RPG', e); }
     try { if (typeof c2Save === 'function') c2Save(); } catch (e) {}
     vbSave();
     try { h2ScheduleRefresh(); } catch (e) {}

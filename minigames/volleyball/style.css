@@ -363,3 +363,40 @@ html, body {
   pointer-events: none;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+
+/* ---------- 冒險比賽（?embed=adventure）賽前畫面 ---------- */
+/* 卡片只顯示對手資料，不能點擊開賽 */
+.embed-adventure .card { cursor: default; pointer-events: none; }
+.embed-adventure .card.focus, .embed-adventure .card:hover { transform: none; }
+/* 主按鈕：🏐 開始比賽（紫色、最醒目） */
+.embed-adventure .embed-start {
+  font-size: max(17px, calc(30px * var(--s)));
+  padding: calc(12px * var(--s)) calc(64px * var(--s));
+  margin: calc(8px * var(--s)) auto calc(4px * var(--s));
+}
+/* 次要按鈕：← 返回小V的家（低調的文字按鈕） */
+.embed-back {
+  display: block;
+  margin: calc(4px * var(--s)) auto 0;
+  min-height: 32px;
+  padding: calc(4px * var(--s)) calc(20px * var(--s));
+  border: calc(2px * var(--s)) solid rgba(255, 255, 255, .45);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, .88);
+  font-family: inherit;
+  font-size: max(13px, calc(19px * var(--s)));
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.embed-back:active { transform: translateY(calc(2px * var(--s))); }
+/* 賽前畫面只有一張卡片 → 卡片圖片略縮、說明不留空白行，讓兩顆按鈕完整放進面板 */
+.embed-adventure .card-img { height: calc(140px * var(--s)); }
+.embed-adventure .card-desc { min-height: 0; }
+.embed-adventure .panel-select { padding-bottom: calc(16px * var(--s)); }
+/* 手機橫向等矮螢幕：賽前畫面只有一張卡片 → 卡片圖片略縮，讓「開始比賽」和「返回小V的家」都完整顯示 */
+@media (max-height: 520px) {
+  .embed-adventure .card-img { height: calc(122px * var(--s)); }
+  .embed-adventure .card-desc { min-height: 0; }
+  .embed-adventure .help-line { margin-top: calc(8px * var(--s)); }
+}
