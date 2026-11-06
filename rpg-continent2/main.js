@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-3';
-const BUILD_TIME   = '2026-11-06 14:00';
+const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-4';
+const BUILD_TIME   = '2026-11-07 04:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27861,8 +27861,10 @@ function vbEnsureNav() {
     return r;
   });
   wrapFn('update', o => function () { try { if (gameState === 'playing') vbFocus(); } catch (e) {} return o.apply(this, arguments); });
-  // 小狗鼻子：排球秘笈只靠鼻子發亮（既有的「小狗嗅到寶物」對話 rpg006a／rpg006b 不為排球秘笈播放 → 不新增文字提醒）
-  wrapFn('rpgRequest', o => function (id) { try { if (/^rpg006[ab]_/.test(String(id)) && currentHiddenTreasure && currentHiddenTreasure.extra) return false; } catch (e) {} return o.apply(this, arguments); });
+  // 小狗鼻子（test-4 修正）：排球秘笈附近不播「鼻子發亮代表有寶物」的教學（rpg006a，前面冒險已學過）；
+  //   狗狗「汪！汪汪！」提醒（rpg006b）和其他寶物（例如 2-2 金幣寶箱）一樣照常播放
+  //   （rpg006a 被擋下時，既有流程會自動改播 rpg006b）
+  wrapFn('rpgRequest', o => function (id) { try { if (/^rpg006a_/.test(String(id)) && currentHiddenTreasure && currentHiddenTreasure.extra) return false; } catch (e) {} return o.apply(this, arguments); });
   wrapFn('checkHiddenTreasure', o => function () { const t = currentHiddenTreasure; if (t && t.extra) { try { vbPickupExtra(t); } catch (e) { console.warn('[Volleyball] 拾取', e); } return; } return o.apply(this, arguments); });
   // 通關：正式解鎖（只解鎖一次）→ 第二大陸探索紀錄 → 新關卡完成紀錄（補場次）
   wrapFn('triggerClear', o => function () {
