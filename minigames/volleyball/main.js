@@ -263,8 +263,11 @@ const COURT_VISUAL_CONFIG = {
     file: 'assets/court/volleyball_court_ground.png',  // 實際 2172×724，透明
     visibleLeft: 36, visibleRight: 2135,               // 可見寬 2100 → 縮放 0.6095
     visibleTop: 311,                                   // 平台上緣（平坦部分）→ 對齊物理地板
-    visibleBottom: 487,                                // 平台底部（16:9 畫面下緣會裁掉約 27 像素）
-    offsetX: 0, offsetY: 0,
+    visibleBottom: 487,                                // 平台底部
+    // v0.2.3（#05）：站立線＝球場白線中間。原本把「平台後緣」(311) 對到地板，角色腳底和網柱底座看起來站在平台後方的邊緣；
+    //   場地兩條白線在原圖 y 323～325 與 371～373，中間 ≈ 348 → (348 − 311) × 0.6095 ≈ 23 遊戲像素。
+    //   只把地面圖往上移 23 像素；物理地板 GROUND_Y、角色、球網、球的位置與碰撞全部不變。
+    offsetX: 0, offsetY: -23,
   },
   net: {
     file: 'assets/court/volleyball_net.png',           // 實際 1254×1254，透明，側視網柱
