@@ -26693,18 +26693,18 @@ function drawC3TreeArt(sx, t) {
   if (t._c3LandF != null) { const k = now - t._c3LandF; if (k >= 0 && k < A.landShakeFrames) shake = Math.sin(k * 1.9) * A.landShakePx * (1 - k / A.landShakeFrames); }   // 落地輕微震一下（只有畫面）
   const ang = c3TreeAngle(t), p = ang / (Math.PI / 2);                  // 倒下進度 0～1
   const pit = c3TreePitSide(t);
-  const imPit = pit ? c3TreeMasked('pit') : null, imBoth = c3TreeMasked('both');
+  const imPit = pit ? c3TreeMasked('pit') : null;
   const sink = (A.sinkPx || 0) * (1 - p);                               // 只有畫面：站著時往下沉，倒下時歸零（倒下後和樹幹橋對齊）
   ctx.save();
   c3TreeClip(cx);
   ctx.translate(G.px - cx, G.py + shake + sink);                       // 支點固定在世界座標
   ctx.rotate(ang);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  if (imBoth && (t.state !== 'standing')) {
-    ctx.drawImage(imBoth, G.imgX, G.imgY, G.w, G.h);                    // 兩側樹根都淡出的版本（不透明的樹幹）
-    const keep = Math.max(0, 1 - p * 2.2);                              // 前 45% 的倒下過程：沒有坑那一側的樹根慢慢淡出（不會一敲就消失）
-    if (keep > 0.01 && (imPit || img)) { ctx.globalAlpha = keep; ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h); ctx.globalAlpha = 1; }
-  } else ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h);         // 站著：坑那一側的樹根淡出（不會懸在坑上）
+  // v0.3.86 #08：倒下中／倒下後 → 畫完整原圖（不再用兩側樹根淡出的遮罩、不再交叉淡出 → 沒有霧化、半透明的樹根）
+  //   樹根跟著樹幹一起以支點旋轉：左側樹根翻起成直立的根盤；右側樹根轉到下方 → 地面下的部分被地面擋住（c3TreeClip），坑口上的部分自然垂進坑裡
+  //   站著：維持 v0.3.84 畫法（坑那一側樹根淡出）— 使用者決定：站立樹根與前景石頭列為素材缺口（需要崖邊用素材）
+  if (t.state !== 'standing') ctx.drawImage(img, G.imgX, G.imgY, G.w, G.h);
+  else ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h);
   ctx.restore();
   return true;
 }
