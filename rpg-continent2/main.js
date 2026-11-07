@@ -27947,3 +27947,141 @@ function vbDevReset() {
     console.log('[Volleyball] 開發者：已重設排球秘笈測試（只清排球資料）');
   } catch (e) { console.warn('[Volleyball] 重設', e); }
 }
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.86 #07：2-4 橘子王總結算後 → 前往第二大陸（3-1）
+//   ・第一大陸完成＝冒險存檔的永久進度 advProgressEnsure().cleared 含 2-4（正式挑戰通關才會寫入；重新開啟也在）
+//   ・小V的家（2-4 通關畫面）：主要「出發」→「🌊 前往第二大陸」；「👑 再打一次橘子王」改成旁邊獨立的按鈕（重戰入口保留）
+//   ・出發條件：沿用 1-2 → 1-3 的氣球槌檢查（背包裡要有氣球槌：craftedItems.basicHammer > 0）；沒有 → 黃色按鈕＋原因＋打開氣球秘笈（不自動製作、不扣材料）
+//   ・第一大陸總結算：保留「開始新的冒險」「回到小V的家」，新增「🌊 前往第二大陸」（先回小V的家，再走同一個出發檢查）
+//   ・世界地圖：沿用第一大陸地圖與飛行屋 — 從 2-4 飛到地圖上的港口（地圖既有的「海岸與港口」區域），再進入 3-1
+//     （第二大陸地圖、跨海交通（船）素材尚未提供 → 不自行生成；報告列為缺口。WORLD_MAP.links 記錄這條路線）
+//   ・3-1（正式玩家路線）：用背包裡真正的氣球劍／氣球槌（不換測試裝備）；小狗沿用 3-1 既有規則（測試用小狗同行、不扣陪伴次數）
+//     紀錄沿用第二大陸既有規則（test_only：不寫第一大陸正式成績、不重複結算第一大陸總成績、不發 V幣）
+//   ・3-1 通關 → 回小V的家 → 出發 → 3-2：沿用既有流程（不改）
+// ════════════════════════════════════════════════════════════════════
+const C2_TRAVEL = { harbor: { id: 'harbor', label: '港口', x: 45, y: 58 } };
+try { if (!WORLD_MAP.links.some(l => l.id === 'c1-c2')) WORLD_MAP.links.push({ id: 'c1-c2', from: 'continent1', to: 'continent2', via: 'harbor', transport: 'ship', art: 'missing' }); } catch (e) {}
+function c2Continent1Done() { try { return advProgressEnsure(advLoad()).cleared.includes('2-4'); } catch (e) { return false; } }
+function c2At24Clear() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.stageId === '2-4' && gameState === 'clear' && homeEntryMode !== 'failed'); }
+function c2ToC2Here() { return c2At24Clear() && c2Continent1Done(); }
+function c2HasHammer() { return ((playerInventory.craftedItems || {}).basicHammer || 0) > 0; }
+function c2ToC2State() {
+  if (!c2HasHammer()) return { kind: 'blocked', c2toC2: true, sub: '請先製作氣球槌', msg: '前往第二大陸前，需要先準備氣球槌。', detail: '第二大陸要用氣球槌敲倒大樹搭橋。打開氣球秘笈，先製作一把氣球槌吧！', fix: { card: 'recipes', focus: 'basicHammer', label: '打開氣球秘笈' } };
+  return { kind: 'go', c2toC2: true, sub: '🌊 前往第二大陸' };
+}
+// 世界地圖：飛行屋從 2-4 飛到港口（沿用 h2MapDepartFlight 的畫法；地圖沒載好 → 直接出發不等）
+function c2MapFlyToHarbor() {
+  try {
+    if (H2.flying || !h2MapReady()) return null;
+    const c = h2MapContinent(), from = c.nodes.find(n => n.stageId === '2-4'), to = C2_TRAVEL.harbor;
+    const wrap = h2$('h2-map-wrap'), home = h2$('h2-map-home'); if (!from || !wrap || !home) return null;
+    H2.flying = true; H2.map = { mode: 'flight', skip: false };
+    wrap.classList.add('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'false');
+    h2MapRender({ keepInfo: true });
+    const info = h2$('h2-map-info');
+    if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！前往 <b>' + h2Esc(to.label) + '</b>，準備渡海到第二大陸</span><small>點一下畫面可以跳過</small>';
+    const DUR = 1800, t0 = performance.now();
+    h2MapFlySfx(true);
+    return new Promise(resolve => {
+      const step = now => {
+        const k = Math.min(1, (now - t0) / DUR), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        home.style.left = (from.x + (to.x - from.x) * e) + '%'; home.style.top = (from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 4) + '%';
+        if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
+        home.style.left = to.x + '%'; home.style.top = to.y + '%';
+        h2MapFlySfx(false);
+        const skipped = H2.map && H2.map.skip;
+        if (info) info.innerHTML = '<span>⛵ 抵達港口！從這裡渡海，前往 <b>第二大陸・風之峽谷</b></span>';
+        setTimeout(() => {
+          H2.flying = false; H2.map = null;
+          wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true');
+          resolve();
+        }, skipped ? 300 : 1200);
+      };
+      requestAnimationFrame(step);
+    });
+  } catch (e) { H2.flying = false; H2.map = null; try { h2MapFlySfx(false); } catch (e2) {} return null; }
+}
+// 3-1 正式玩家路線（不需要開發者模式；不換測試裝備）
+function c2Enter31Main() {
+  if (!ADV_WORKSPACE) return;
+  if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
+  const idx = getLevelIndexByStageId('3-1'); if (idx < 0) return;
+  if (!c2Is31()) c2Proto.prevIdx = currentLevelIndex;
+  c2HideDone();
+  try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
+  try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
+  try { advHideFinalResults(); } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  advPlayMode = 'official'; advHomeCtx = null;
+  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;   // 3-1 既有規則：小狗同行（只在記憶體；不扣陪伴次數）
+  runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
+    advMarkTestEntry('c2-main-3-1');              // 第二大陸既有規則：test_only（不寫第一大陸正式成績、不重複總結算、不發 V幣）
+    currentLevelIndex = idx;
+    bringBalloonDog = true; levelStartBringDog = true;
+    adventureTestLoadoutActive = false;
+    loadLevel(idx);
+    initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();   // 背包裡真正的氣球劍／氣球槌
+    restart({ keepHp: false, preserveBringDog: false });
+    bringBalloonDog = true; levelStartBringDog = true;
+    try { initEquippedUmbrella(); } catch (e) {}
+    c2Proto.done = false; c2Proto.startedAt = Date.now();
+    gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    console.log('[第二大陸] 從 2-4 前往第二大陸 → 進入 3-1（氣球槌 ' + ((playerInventory.craftedItems || {}).basicHammer || 0) + ' 把、耐久 ' + (equippedHammer.currentDur || 0) + '）');
+  });
+}
+function c2GoContinent2(from) {
+  const g = c2ToC2State();
+  if (g.kind === 'blocked') { h2Toast(g.msg); try { h2ShowFix(g.fix); } catch (e) {} try { h2RenderAll(); } catch (e) {} return false; }
+  if (h2Busy(900, 'toC2')) return false;
+  console.log('[第二大陸] 出發（' + (from || 'home') + '）：氣球槌檢查通過 → 世界地圖 → 港口 → 3-1');
+  h2ClosePanel(); h2HideSummary();
+  const fly = c2MapFlyToHarbor();
+  if (fly) fly.then(c2Enter31Main); else c2Enter31Main();
+  return true;
+}
+function c2EnsureRematchBtn() {
+  let b = document.getElementById('h2-nav-rematch');
+  if (!b) {
+    const go = document.getElementById('h2-nav-go'); if (!go || !go.parentElement) return null;
+    b = document.createElement('button'); b.type = 'button'; b.id = 'h2-nav-rematch'; b.className = 'h2-pill h2-pill--purple'; b.innerHTML = '👑 再打一次橘子王'; b.style.whiteSpace = 'nowrap'; b.style.paddingLeft = b.style.paddingRight = '0.7em';
+    b.style.display = 'none';
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (h2Busy(600, 'rematch')) return; advStartBossRematch(); });
+    go.parentElement.insertBefore(b, go);
+  }
+  b.style.display = c2ToC2Here() ? '' : 'none';
+  return b;
+}
+(function v386C2Install() {
+  if (!ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v386c2) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v386c2 = true; globalThis[name] = w; };
+  wrapFn('h2DepartCheck', o => function () { if (c2ToC2Here()) return c2ToC2State(); return o.apply(this, arguments); });
+  wrapFn('h2Go', o => function () { if (c2ToC2Here()) { c2GoContinent2('home'); return; } return o.apply(this, arguments); });
+  wrapFn('h2RenderCenter', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      c2EnsureRematchBtn();
+      if (c2ToC2Here()) {
+        const go = h2$('h2-nav-go'), sp = go && go.querySelector('span'), nl = h2$('h2-nextline');
+        if (sp) sp.textContent = '前往第二大陸'; if (go) go.classList.remove('is-rematch');
+        if (nl) { nl.textContent = 'ⓘ 第一大陸完成！下一站：第二大陸 3-1 風之峽谷'; nl.parentElement.style.display = ''; }
+      }
+    } catch (e) {}
+    return r;
+  });
+  // 第一大陸總結算：新增「🌊 前往第二大陸」（正式完成才顯示；先回小V的家，再走同一個出發檢查）
+  wrapFn('advShowFinalResults', o => function (snap) {
+    const r = o.apply(this, arguments);
+    try {
+      const btns = document.querySelector('#adv-final-overlay .adv-final-btns');
+      if (btns && !document.getElementById('btn-adv-final-c2') && c2Continent1Done() && !(snap && snap.testOnly)) {
+        const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-adv-final-c2'; b.className = 'hv-ui-btn hv-ui-btn--primary'; b.textContent = '🌊 前往第二大陸';
+        b.onclick = e => { e.preventDefault(); advFinalGoHome(); setTimeout(() => { try { c2GoContinent2('final'); } catch (er) {} }, 350); };
+        btns.insertBefore(b, btns.firstChild);
+      }
+    } catch (e) {}
+    return r;
+  });
+  if (typeof window !== 'undefined') Object.assign(window, { c2GoContinent2, c2Continent1Done, debugToC2: () => { const o = { here: c2ToC2Here(), at24: c2At24Clear(), done: c2Continent1Done(), hammer: (playerInventory.craftedItems || {}).basicHammer || 0, state: c2ToC2State(), stage31Clears: c2Flow().stage31Clears || 0 }; console.log('[第二大陸]', o); return o; } });
+})();
