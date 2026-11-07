@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-4';
-const BUILD_TIME   = '2026-11-07 04:00';
+const GAME_VERSION = 'adventure-v0.3.86-continent2-integration-test-1';
+const BUILD_TIME   = '2026-11-07 10:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -28084,4 +28084,89 @@ function c2EnsureRematchBtn() {
     return r;
   });
   if (typeof window !== 'undefined') Object.assign(window, { c2GoContinent2, c2Continent1Done, debugToC2: () => { const o = { here: c2ToC2Here(), at24: c2At24Clear(), done: c2Continent1Done(), hammer: (playerInventory.craftedItems || {}).basicHammer || 0, state: c2ToC2State(), stage31Clears: c2Flow().stage31Clears || 0 }; console.log('[第二大陸]', o); return o; } });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.86：被氣球槌擊飛的蠍子撞到橘子怪 → DOUBLE KILL（延伸 v0.3.68 的連鎖撞擊，不另寫一套）
+//  ・只有「被氣球槌擊飛、正在旋轉飛出去的蠍子」（spinningEnemies）會觸發；小V的劍、槌碰到橘子怪仍然是武器爆掉（規則不變）
+//  ・會被撞倒的橘子怪（一般橘子怪本體碰撞框；和小V碰到會受傷的是同一個框）：
+//      orangeNemeses（一般橘子怪 balloonNemesis：直線／急速…）、chimneyOranges（煙囪橘子怪）、dualNozzleOranges（雙噴嘴橘子怪）、
+//      fanOranges（向上油幕橘子怪）、projectileOranges（飛行油彈橘子怪）
+//    這些橘子怪原本沒有血量欄位（武器打不到）；本版不新增血量，撞一次就倒＝需求裡的「HP 1 → 0」
+//  ・不算：2-4 橘子王（魔王，不在上面的陣列裡）、油幕、油彈、背景橘子
+//  ・撞到後：擊飛的蠍子和橘子怪一起消失 → chainImpactResult(…, 'killed')：DOUBLE KILL +50、音效、文字特效
+//    （本關分數 chainBonusScore 與正式挑戰 advAttempt.chain 都沿用原本那條路；同一組只算一次；沒有 Triple Kill）
+//  ・橘子怪倒下不算進「擊敗蠍子數」（player.enemiesDefeated／advAttempt.enemies 只記蠍子，原本的分母不變）
+//  ・同一關重試（restart）時倒下的橘子怪回到原位；換關（loadLevel）時清空
+// ════════════════════════════════════════════════════════════════════
+var c2DkHold = [];          // 這一關被撞倒的橘子怪 { arr, obj, idx }
+var c2DkFx = [];            // 橘子怪倒下的「啪！」碎片（純畫面）
+var c2DkLog = [];           // 測試用紀錄（最多 50 筆）
+function c2DkTypes() {
+  return [
+    { kind: 'orangeNemesis', name: '一般橘子怪', arr: orangeNemeses, box: o => ({ x: o.x + 4, y: o.y + 4, w: o.w - 8, h: o.h - 8 }) },
+    { kind: 'chimneyOrange', name: '煙囪橘子怪', arr: chimneyOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'dualNozzleOrange', name: '雙噴嘴橘子怪', arr: dualNozzleOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'fanOrange', name: '油幕橘子怪', arr: fanOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'projectileOrange', name: '油彈橘子怪', arr: projectileOranges, box: o => getProjectileOrangeBodyHitbox(o) },
+  ];
+}
+function c2DkOrangeId(t, o) { if (!o._dkId) o._dkId = 'orange:' + t.kind + '@' + Math.round(o.x); return o._dkId; }
+function c2DkCheck(s) {
+  if (!s || s.life <= 0) return false;
+  for (const t of c2DkTypes()) {
+    if (!Array.isArray(t.arr)) continue;
+    for (let i = 0; i < t.arr.length; i++) {
+      const o = t.arr[i];
+      if (!o || o.active === false || o.isBoss) continue;
+      const b = t.box(o);
+      if (!rectsOverlap(s.x, s.y, s.w, s.h, b.x, b.y, b.w, b.h)) continue;
+      // 撞倒：橘子怪從陣列拿掉（所有更新／碰撞／繪圖／音效迴圈自然略過），擊飛的蠍子同時消失
+      const id = c2DkOrangeId(t, o);
+      try { if (o._sfxVoice) { sfxStopVoice(o._sfxVoice, 60); o._sfxVoice = null; } } catch (e) {}
+      t.arr.splice(i, 1);
+      c2DkHold.push({ arr: t.arr, obj: o, idx: i });
+      s.life = 0;
+      const proxy = { x: o.x, y: o.y, w: o.w, h: o.h, advId: id };
+      const before = { dk: currentRunStats.doubleKills || 0, bonus: currentRunStats.chainBonusScore || 0 };
+      try { chainImpactResult(s, proxy, 'killed'); } catch (e) {}
+      c2DkFx.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, t: 0, life: 30, seed: Math.random() * 6.28 });
+      try { sfxPlay('balloonPop'); } catch (e) {}
+      try { c2DkLog.push({ frame: frameCount, stage: (LEVELS[currentLevelIndex] || {}).stageId, scorpion: s.sourceAdvId || ('r' + s.sourceId), orange: id, type: t.kind, name: t.name, doubleKillsBefore: before.dk, doubleKillsAfter: currentRunStats.doubleKills || 0, bonusAdded: (currentRunStats.chainBonusScore || 0) - before.bonus }); if (c2DkLog.length > 50) c2DkLog.shift(); } catch (e) {}
+      console.log('[DoubleKill] 擊飛的蠍子撞倒' + t.name + '（' + id + '）');
+      return true;
+    }
+  }
+  return false;
+}
+function c2DkRestore() {
+  // 依拿掉的相反順序放回原本位置（陣列順序和原本一樣）
+  for (let i = c2DkHold.length - 1; i >= 0; i--) { const h = c2DkHold[i]; if (h.arr.indexOf(h.obj) < 0) h.arr.splice(Math.min(h.idx, h.arr.length), 0, h.obj); }
+  c2DkHold = []; c2DkFx = [];
+}
+function c2DkDrawFx(cx) {
+  c2DkFx.forEach(f => {
+    const k = f.t / f.life, sx = f.x - cx, a = 1 - k;
+    ctx.save(); ctx.globalAlpha = Math.max(0, a);
+    for (let i = 0; i < 10; i++) {
+      const ang = f.seed + i * 0.628, r = 8 + k * 40;
+      ctx.fillStyle = i % 2 ? '#ff9a2e' : '#ffcf5a';
+      ctx.beginPath(); ctx.ellipse(sx + Math.cos(ang) * r, f.y + Math.sin(ang) * r * 0.8 + k * k * 14, 6 - k * 3.5, 3, ang, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+(function v386DkInstall() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v386dk) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v386dk = true; globalThis[name] = w; };
+  // 原本的更新先跑（蠍子撞蠍子：Double Kill／撞擊照舊）；還在飛、這一幀沒撞到蠍子的，再檢查有沒有撞到橘子怪
+  wrapFn('updateSpinningEnemies', o => function (dt) {
+    const r = o.apply(this, arguments);
+    try { for (const s of spinningEnemies) if (s.life > 0) c2DkCheck(s); } catch (e) {}
+    return r;
+  });
+  wrapFn('updateChainFx', o => function (dt) { const r = o.apply(this, arguments); for (let i = c2DkFx.length - 1; i >= 0; i--) { const f = c2DkFx[i]; f.t += (dt || 1); if (f.t >= f.life) c2DkFx.splice(i, 1); } return r; });
+  wrapFn('drawChainFx', o => function (cx) { try { c2DkDrawFx(cx); } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { try { c2DkRestore(); } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('loadLevel', o => function () { c2DkHold = []; c2DkFx = []; return o.apply(this, arguments); });
+  if (typeof window !== 'undefined') window.debugDoubleKillOrange = () => ({ log: c2DkLog.slice(), held: c2DkHold.map(h => h.obj._dkId), oranges: c2DkTypes().map(t => ({ type: t.kind, name: t.name, count: (t.arr || []).length, hp: '沒有血量欄位（撞一次就倒）' })) });
 })();
