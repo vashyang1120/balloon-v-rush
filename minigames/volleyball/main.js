@@ -12,7 +12,7 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.2-test-2',
+  VERSION: 'v0.2.3-test-1',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -99,7 +99,11 @@ const CONFIG = {
 // 【三位電腦對手與難度】v0.2.0
 // 三位共用同一套 AI 程式，只有下面的「決策參數」不同。
 // 不會改變任何物理（重力、球速、移動速度、跳躍、擊球力量都一樣）。
-// 橘子怪（中級）＝ v0.1 試玩時的電腦參數，原封不動。
+// 橘子怪（中級）＝ v0.1 試玩時的電腦參數，（到 v0.2.2 為止）。
+// v0.2.3（v0.3.86 #06）：玩家回饋中級、高級太難 → 只調決策參數；蠍子怪不變，橘子怪中幅降低、橘子王小幅降低。
+//   修改前：橘子怪 反應 0.14／誤差 42／嚴重失誤 0.14／起跳 0.55／擊球 0.65／往前 0.45／高吊 0.20
+//           橘子王 反應 0.10／誤差 26／嚴重失誤 0.08（誤差 110）／擊球 0.82／往前 0.60／高吊 0.08
+
 // =========================================================
 const AI_PROFILES = {
   scorpion: {
@@ -131,20 +135,20 @@ const AI_PROFILES = {
     desc: '反應正常，會接球也會進攻。',
     reward: '進階獎勵級距',
     ai: {
-      REACTION_TIME: 0.14,
-      PREDICT_ERROR: 42,
-      BIG_MISTAKE_CHANCE: 0.14,
+      REACTION_TIME: 0.17,
+      PREDICT_ERROR: 54,
+      BIG_MISTAKE_CHANCE: 0.19,
       BIG_MISTAKE_ERROR: 130,
       CONTACT_OFFSET: 20,
       DEADZONE: 10,
       HOME_X: 1010,
-      JUMP_CHANCE: 0.55,
+      JUMP_CHANCE: 0.50,
       JUMP_TRIGGER_DX: 80,
       JUMP_TRIGGER_MIN_Y: 280,
       JUMP_TRIGGER_MAX_Y: 470,
-      HIT_CHANCE: 0.65,
-      AIM_FORWARD_CHANCE: 0.45,
-      AIM_BACK_CHANCE: 0.20,
+      HIT_CHANCE: 0.60,
+      AIM_FORWARD_CHANCE: 0.36,
+      AIM_BACK_CHANCE: 0.25,
       PREDICT_MAX_TIME: 3.0,
     },
   },
@@ -154,10 +158,10 @@ const AI_PROFILES = {
     desc: '反應很快、落點很準，常常強力進攻！',
     reward: '高級獎勵級距',
     ai: {
-      REACTION_TIME: 0.10,
-      PREDICT_ERROR: 26,
-      BIG_MISTAKE_CHANCE: 0.08,
-      BIG_MISTAKE_ERROR: 110,
+      REACTION_TIME: 0.12,
+      PREDICT_ERROR: 38,
+      BIG_MISTAKE_CHANCE: 0.12,
+      BIG_MISTAKE_ERROR: 120,
       CONTACT_OFFSET: 22,
       DEADZONE: 8,
       HOME_X: 1010,
@@ -165,9 +169,9 @@ const AI_PROFILES = {
       JUMP_TRIGGER_DX: 80,
       JUMP_TRIGGER_MIN_Y: 280,
       JUMP_TRIGGER_MAX_Y: 470,
-      HIT_CHANCE: 0.82,
-      AIM_FORWARD_CHANCE: 0.60,
-      AIM_BACK_CHANCE: 0.08,
+      HIT_CHANCE: 0.78,
+      AIM_FORWARD_CHANCE: 0.50,
+      AIM_BACK_CHANCE: 0.12,
       PREDICT_MAX_TIME: 3.0,
     },
   },
