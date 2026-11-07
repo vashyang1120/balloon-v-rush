@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.85-continent2-volleyball-test-4';
-const BUILD_TIME   = '2026-11-07 04:00';
+const GAME_VERSION = 'adventure-v0.3.86-continent2-integration-test-1';
+const BUILD_TIME   = '2026-11-07 10:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -4727,7 +4727,7 @@ const C2_STAGE_31 = {
   ],
   buildWindVents: () => [
     makeWindVent({ id: 'A', x:  720, w: 80, h: 150 }),
-    makeWindVent({ id: 'C', x: 3410, w: 80, h: 150 }),
+    makeWindVent({ id: 'C', x: 3374, w: 80, h: 150 }),   // v0.3.86 #09：3410 → 3374（左移 36px；大小／高度／浮力不變）→ 岩石底座完整落在坑邊以內，不再裁切
   ],
   // 尖刺坑：x～x+w 地面挖空，坑底是尖刺；掉進去 → 受傷並退回 resetX（尖刺坑前方的安全地面）
   spikePits: [
@@ -25831,7 +25831,17 @@ function c2UmbSnapSync() {   // 用掉的耐久／爆掉的雨傘：不會因戰
   S.craftedItems.balloonUmbrella = c2UmbrellaCount();
   S.equippedUmbrellaDur = equippedUmbrella.currentDur;
 }
+// v0.3.86：雨傘耐久唯一的扣除來源＝成功主動格擋（reason 'block'）。其他來源一律拒絕（不扣），並留下紀錄
+//   每一次呼叫都記錄在 c2UmbConsumeLog（來源、是否扣除、扣前／扣後耐久、關卡、x、frame），作為驗收用的執行紀錄
+const C2_UMB_CONSUME_ALLOWED = { block: true };
+var c2UmbConsumeLog = [];
 function c2UmbConsume(reason) {
+  const ok = !!C2_UMB_CONSUME_ALLOWED[reason];
+  try {
+    c2UmbConsumeLog.push({ reason: String(reason), applied: ok && !!equippedUmbrella.id, before: equippedUmbrella.currentDur, stage: (LEVELS[currentLevelIndex] || {}).stageId, x: Math.round(player.x), frame: frameCount, stack: ok ? '' : String(new Error().stack || '').split('\n').slice(2, 4).join(' | ') });
+    if (c2UmbConsumeLog.length > 200) c2UmbConsumeLog.shift();
+  } catch (e) {}
+  if (!ok) { console.warn('[Umbrella] 拒絕扣耐久：來源「' + reason + '」不是成功格擋（雨傘耐久只在成功格擋時扣）'); return; }
   if (!equippedUmbrella.id) return;
   equippedUmbrella.currentDur = Math.max(0, equippedUmbrella.currentDur - 1);
   if (equippedUmbrella.currentDur <= 0) { c2UmbBreak(reason); return; }
@@ -26472,30 +26482,6 @@ function c3VentGeom(v) {
     base: { x: poolCx - V.poolX * s, y: baseBottom - (V.baseBottomY - V.cropY0) * s, w: 1536 * s, h: (V.cropY1 - V.cropY0) * s },
     flow: { x: poolCx - F.cx * fs, y: poolY + F.poolOverlap - F.y1 * fs + cal.flow, w: 1024 * fs, h: 1536 * fs } };
 }
-function c3VentBaseCut(v, G, base) {
-  const pits = (typeof c2Pits !== 'undefined' ? c2Pits : []);
-  const bx0 = G.base.x, bx1 = G.base.x + G.base.w;
-  let cutR = null, cutL = null;
-  pits.forEach(p => {
-    if (p.x >= v.x + v.w - 1 && p.x < bx1) cutR = cutR == null ? p.x : Math.min(cutR, p.x);
-    const pe = p.x + p.w; if (pe <= v.x + 1 && pe > bx0) cutL = cutL == null ? pe : Math.max(cutL, pe);
-  });
-  if (cutR == null && cutL == null) return null;
-  const rx = cutR == null ? null : Math.round(cutR - Math.round(bx0)), lx = cutL == null ? null : Math.round(cutL - Math.round(bx0));
-  const ck = 'cut|' + base.width + '|' + rx + '|' + lx; if (chapter3VentCache[ck]) return chapter3VentCache[ck];
-  let out = null;
-  try {
-    const c = document.createElement('canvas'); c.width = base.width; c.height = base.height; const g = c.getContext('2d');
-    g.drawImage(base, 0, 0);
-    const F = 8;
-    g.globalCompositeOperation = 'destination-out';
-    if (rx != null) { const gr = g.createLinearGradient(rx - F, 0, rx, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)'); g.fillStyle = gr; g.fillRect(rx - F, 0, F, c.height); g.fillStyle = '#000'; g.fillRect(rx, 0, c.width - rx, c.height); }
-    if (lx != null) { const gr = g.createLinearGradient(lx, 0, lx + F, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(lx, 0, F, c.height); g.fillStyle = '#000'; g.fillRect(0, 0, lx, c.height); }
-    g.globalCompositeOperation = 'source-over';
-    out = c;
-  } catch (e) { out = null; }
-  chapter3VentCache[ck] = out; return out;
-}
 function c3VentTile(kind, scale) {
   const ck = kind + '|' + scale.toFixed(4); if (chapter3VentCache[ck]) return chapter3VentCache[ck];
   const img = c3VentImg(kind); if (!img) return null;
@@ -26543,10 +26529,9 @@ function drawC3VentArt(v, cx, t) {
   });
   ctx.restore();
   // ② 岩石底座＋風池（擋住氣流根部）
-  //   v0.3.84：風口旁邊就是尖刺坑時（3-1 風口 C／3-2 風口 B2：風口右緣到坑只有 50px），岩石圈原本會伸到坑口上方約 40px，
-  //   看起來像可以站的地面、其實已經是坑 → 岩石只畫到坑邊（坑邊 8px 淡出），畫面上的地面＝實際的地面
-  const bc = (typeof c3VentBaseCut === 'function') ? c3VentBaseCut(v, G, base) : null;
-  ctx.drawImage(bc || base, Math.round(G.base.x + ox), Math.round(G.base.y));
+  //   v0.3.86 #09：移除 v0.3.84 的坑邊直線裁切＋淡出（c3VentBaseCut）→ 岩石底座完整畫出
+  //   （靠坑的 3-1 風口 C、3-2 風口 B2 改為左移 36px，岩石完整落在坑邊以內；使用者決定）
+  ctx.drawImage(base, Math.round(G.base.x + ox), Math.round(G.base.y));
   // v0.3.83：底座嵌進地面 — 在底座下半部再蓋一次地面的草地＋岩層（草叢在岩石前面），看起來像從地面長出來的岩石風口
   try { if (v.y >= GROUND_Y - 1 && typeof c3GroundStrip === 'function' && CHAPTER3_VENT_ART.vent.embedPx > 0) c3GroundStrip(G.base.x, G.base.x + G.base.w, GROUND_Y, GROUND_Y + CHAPTER3_VENT_ART.vent.embedPx, cx); } catch (e) {}
   return true;
@@ -26683,18 +26668,18 @@ function drawC3TreeArt(sx, t) {
   if (t._c3LandF != null) { const k = now - t._c3LandF; if (k >= 0 && k < A.landShakeFrames) shake = Math.sin(k * 1.9) * A.landShakePx * (1 - k / A.landShakeFrames); }   // 落地輕微震一下（只有畫面）
   const ang = c3TreeAngle(t), p = ang / (Math.PI / 2);                  // 倒下進度 0～1
   const pit = c3TreePitSide(t);
-  const imPit = pit ? c3TreeMasked('pit') : null, imBoth = c3TreeMasked('both');
+  const imPit = pit ? c3TreeMasked('pit') : null;
   const sink = (A.sinkPx || 0) * (1 - p);                               // 只有畫面：站著時往下沉，倒下時歸零（倒下後和樹幹橋對齊）
   ctx.save();
   c3TreeClip(cx);
   ctx.translate(G.px - cx, G.py + shake + sink);                       // 支點固定在世界座標
   ctx.rotate(ang);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  if (imBoth && (t.state !== 'standing')) {
-    ctx.drawImage(imBoth, G.imgX, G.imgY, G.w, G.h);                    // 兩側樹根都淡出的版本（不透明的樹幹）
-    const keep = Math.max(0, 1 - p * 2.2);                              // 前 45% 的倒下過程：沒有坑那一側的樹根慢慢淡出（不會一敲就消失）
-    if (keep > 0.01 && (imPit || img)) { ctx.globalAlpha = keep; ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h); ctx.globalAlpha = 1; }
-  } else ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h);         // 站著：坑那一側的樹根淡出（不會懸在坑上）
+  // v0.3.86 #08：倒下中／倒下後 → 畫完整原圖（不再用兩側樹根淡出的遮罩、不再交叉淡出 → 沒有霧化、半透明的樹根）
+  //   樹根跟著樹幹一起以支點旋轉：左側樹根翻起成直立的根盤；右側樹根轉到下方 → 地面下的部分被地面擋住（c3TreeClip），坑口上的部分自然垂進坑裡
+  //   站著：維持 v0.3.84 畫法（坑那一側樹根淡出）— 使用者決定：站立樹根與前景石頭列為素材缺口（需要崖邊用素材）
+  if (t.state !== 'standing') ctx.drawImage(img, G.imgX, G.imgY, G.w, G.h);
+  else ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h);
   ctx.restore();
   return true;
 }
@@ -27049,13 +27034,10 @@ function drawC3VentCalibOverlay() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  v0.3.83：氣球雨傘 × 風口 — 一次連續有效互動只扣 1 點耐久（在互動結束時結算；不是每秒、也不是每一格）
+//  v0.3.83：氣球雨傘 × 風口 — 互動追蹤（v0.3.86 起只留紀錄、不扣耐久；耐久只在成功格擋時扣）
 //   ・有效互動＝撐著氣球雨傘（目前裝備雨傘）＋正在被風口托起（player.windInfo）
-//   ・互動中短暫離開風口（graceSteps 內又回來）＝同一次互動；離開超過 graceSteps，或改拿別的裝備 → 結束並結算
-//   ・太短的接觸（少於 minSteps）不算一次互動、不扣
-//   ・結算時耐久剩 1 → 雨傘用完：沿用既有破掉流程（balloonPop、自動換備用、沒有就卸下）
-//   ・格擋蠍子是另外一件事（各自扣，不會因為同一件事扣兩次）
-//   ・暫停：遊戲不前進 → 不計；重新開始／換關／回家／通關：互動直接作廢（不扣）
+//   ・互動中短暫離開風口（graceSteps 內又回來）＝同一次互動；離開超過 graceSteps，或改拿別的裝備 → 結束（只寫紀錄）
+//   ・雨傘耐久：只有成功格擋才扣 1（見 c2UmbConsume）；風口、緩降、飄浮、換裝備、暫停、落地、通關都不扣
 // ════════════════════════════════════════════════════════════════════
 const C2_UMB_VENT = { minSteps: 12, graceSteps: 20 };
 var c2UmbVent = { active: false, steps: 0, since: 0, missing: 0, charged: 0 };
@@ -27072,11 +27054,8 @@ function c2UmbVentStep() {
   c2UmbVent.missing++;
   if (switched || c2UmbVent.missing > C2_UMB_VENT.graceSteps) {
     const n = c2UmbVent.steps; c2UmbVent.active = false; c2UmbVent.steps = 0; c2UmbVent.missing = 0;
-    if (n >= C2_UMB_VENT.minSteps && equippedUmbrella.id) {
-      c2UmbVent.charged++;
-      console.log('[Umbrella] 風口互動結束（' + (switched ? '換了裝備' : '離開風口') + '，持續 ' + n + ' 步）→ 雨傘耐久 −1');
-      c2UmbConsume('vent');
-    } else console.log('[Umbrella] 風口接觸太短（' + n + ' 步），不算一次互動');
+    // v0.3.86：使用者定案 — 風口上升／跳躍加高／進出風口／在風口裡換裝備都不扣雨傘耐久（移除 v0.3.83 的 c2UmbConsume('vent')）
+    console.log('[Umbrella] 風口互動結束（' + (switched ? '換了裝備' : '離開風口') + '，持續 ' + n + ' 步；不扣耐久）');
   }
 }
 
@@ -27112,7 +27091,7 @@ const C2_STAGE_32 = {
   ],
   buildWindVents: () => [
     makeWindVent({ id: 'B1', x:  890, w: 80, h: 150 }),
-    makeWindVent({ id: 'B2', x: 1410, w: 80, h: 150 }),
+    makeWindVent({ id: 'B2', x: 1374, w: 80, h: 150 }),   // v0.3.86 #09：1410 → 1374（左移 36px；大小／高度／浮力不變）→ 岩石底座完整落在坑 S1 邊以內，不再裁切
     makeWindVent({ id: 'C1', x: 2150, w: 80, h: 150 }),   // 小蠍子巡邏會經過（被吹起來；只有蠍子在風裡也聽得到風聲）
     makeWindVent({ id: 'E1', x: 3410, w: 80, h: 150 }),
   ],
@@ -27968,3 +27947,226 @@ function vbDevReset() {
     console.log('[Volleyball] 開發者：已重設排球秘笈測試（只清排球資料）');
   } catch (e) { console.warn('[Volleyball] 重設', e); }
 }
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.86 #07：2-4 橘子王總結算後 → 前往第二大陸（3-1）
+//   ・第一大陸完成＝冒險存檔的永久進度 advProgressEnsure().cleared 含 2-4（正式挑戰通關才會寫入；重新開啟也在）
+//   ・小V的家（2-4 通關畫面）：主要「出發」→「🌊 前往第二大陸」；「👑 再打一次橘子王」改成旁邊獨立的按鈕（重戰入口保留）
+//   ・出發條件：沿用 1-2 → 1-3 的氣球槌檢查（背包裡要有氣球槌：craftedItems.basicHammer > 0）；沒有 → 黃色按鈕＋原因＋打開氣球秘笈（不自動製作、不扣材料）
+//   ・第一大陸總結算：保留「開始新的冒險」「回到小V的家」，新增「🌊 前往第二大陸」（先回小V的家，再走同一個出發檢查）
+//   ・世界地圖：沿用第一大陸地圖與飛行屋 — 從 2-4 飛到地圖上的港口（地圖既有的「海岸與港口」區域），再進入 3-1
+//     （第二大陸地圖、跨海交通（船）素材尚未提供 → 不自行生成；報告列為缺口。WORLD_MAP.links 記錄這條路線）
+//   ・3-1（正式玩家路線）：用背包裡真正的氣球劍／氣球槌（不換測試裝備）；小狗沿用 3-1 既有規則（測試用小狗同行、不扣陪伴次數）
+//     紀錄沿用第二大陸既有規則（test_only：不寫第一大陸正式成績、不重複結算第一大陸總成績、不發 V幣）
+//   ・3-1 通關 → 回小V的家 → 出發 → 3-2：沿用既有流程（不改）
+// ════════════════════════════════════════════════════════════════════
+const C2_TRAVEL = { harbor: { id: 'harbor', label: '港口', x: 45, y: 58 } };
+try { if (!WORLD_MAP.links.some(l => l.id === 'c1-c2')) WORLD_MAP.links.push({ id: 'c1-c2', from: 'continent1', to: 'continent2', via: 'harbor', transport: 'ship', art: 'missing' }); } catch (e) {}
+function c2Continent1Done() { try { return advProgressEnsure(advLoad()).cleared.includes('2-4'); } catch (e) { return false; } }
+function c2At24Clear() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.stageId === '2-4' && gameState === 'clear' && homeEntryMode !== 'failed'); }
+function c2ToC2Here() { return c2At24Clear() && c2Continent1Done(); }
+function c2HasHammer() { return ((playerInventory.craftedItems || {}).basicHammer || 0) > 0; }
+function c2ToC2State() {
+  if (!c2HasHammer()) return { kind: 'blocked', c2toC2: true, sub: '請先製作氣球槌', msg: '前往第二大陸前，需要先準備氣球槌。', detail: '第二大陸要用氣球槌敲倒大樹搭橋。打開氣球秘笈，先製作一把氣球槌吧！', fix: { card: 'recipes', focus: 'basicHammer', label: '打開氣球秘笈' } };
+  return { kind: 'go', c2toC2: true, sub: '🌊 前往第二大陸' };
+}
+// 世界地圖：飛行屋從 2-4 飛到港口（沿用 h2MapDepartFlight 的畫法；地圖沒載好 → 直接出發不等）
+function c2MapFlyToHarbor() {
+  try {
+    if (H2.flying || !h2MapReady()) return null;
+    const c = h2MapContinent(), from = c.nodes.find(n => n.stageId === '2-4'), to = C2_TRAVEL.harbor;
+    const wrap = h2$('h2-map-wrap'), home = h2$('h2-map-home'); if (!from || !wrap || !home) return null;
+    H2.flying = true; H2.map = { mode: 'flight', skip: false };
+    wrap.classList.add('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'false');
+    h2MapRender({ keepInfo: true });
+    const info = h2$('h2-map-info');
+    if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！前往 <b>' + h2Esc(to.label) + '</b>，準備渡海到第二大陸</span><small>點一下畫面可以跳過</small>';
+    const DUR = 1800, t0 = performance.now();
+    h2MapFlySfx(true);
+    return new Promise(resolve => {
+      const step = now => {
+        const k = Math.min(1, (now - t0) / DUR), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        home.style.left = (from.x + (to.x - from.x) * e) + '%'; home.style.top = (from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 4) + '%';
+        if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
+        home.style.left = to.x + '%'; home.style.top = to.y + '%';
+        h2MapFlySfx(false);
+        const skipped = H2.map && H2.map.skip;
+        if (info) info.innerHTML = '<span>⛵ 抵達港口！從這裡渡海，前往 <b>第二大陸・風之峽谷</b></span>';
+        setTimeout(() => {
+          H2.flying = false; H2.map = null;
+          wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true');
+          resolve();
+        }, skipped ? 300 : 1200);
+      };
+      requestAnimationFrame(step);
+    });
+  } catch (e) { H2.flying = false; H2.map = null; try { h2MapFlySfx(false); } catch (e2) {} return null; }
+}
+// 3-1 正式玩家路線（不需要開發者模式；不換測試裝備）
+function c2Enter31Main() {
+  if (!ADV_WORKSPACE) return;
+  if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
+  const idx = getLevelIndexByStageId('3-1'); if (idx < 0) return;
+  if (!c2Is31()) c2Proto.prevIdx = currentLevelIndex;
+  c2HideDone();
+  try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
+  try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
+  try { advHideFinalResults(); } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  advPlayMode = 'official'; advHomeCtx = null;
+  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;   // 3-1 既有規則：小狗同行（只在記憶體；不扣陪伴次數）
+  runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
+    advMarkTestEntry('c2-main-3-1');              // 第二大陸既有規則：test_only（不寫第一大陸正式成績、不重複總結算、不發 V幣）
+    currentLevelIndex = idx;
+    bringBalloonDog = true; levelStartBringDog = true;
+    adventureTestLoadoutActive = false;
+    loadLevel(idx);
+    initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();   // 背包裡真正的氣球劍／氣球槌
+    restart({ keepHp: false, preserveBringDog: false });
+    bringBalloonDog = true; levelStartBringDog = true;
+    try { initEquippedUmbrella(); } catch (e) {}
+    c2Proto.done = false; c2Proto.startedAt = Date.now();
+    gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    console.log('[第二大陸] 從 2-4 前往第二大陸 → 進入 3-1（氣球槌 ' + ((playerInventory.craftedItems || {}).basicHammer || 0) + ' 把、耐久 ' + (equippedHammer.currentDur || 0) + '）');
+  });
+}
+function c2GoContinent2(from) {
+  const g = c2ToC2State();
+  if (g.kind === 'blocked') { h2Toast(g.msg); try { h2ShowFix(g.fix); } catch (e) {} try { h2RenderAll(); } catch (e) {} return false; }
+  if (h2Busy(900, 'toC2')) return false;
+  console.log('[第二大陸] 出發（' + (from || 'home') + '）：氣球槌檢查通過 → 世界地圖 → 港口 → 3-1');
+  h2ClosePanel(); h2HideSummary();
+  const fly = c2MapFlyToHarbor();
+  if (fly) fly.then(c2Enter31Main); else c2Enter31Main();
+  return true;
+}
+function c2EnsureRematchBtn() {
+  let b = document.getElementById('h2-nav-rematch');
+  if (!b) {
+    const go = document.getElementById('h2-nav-go'); if (!go || !go.parentElement) return null;
+    b = document.createElement('button'); b.type = 'button'; b.id = 'h2-nav-rematch'; b.className = 'h2-pill h2-pill--purple'; b.innerHTML = '<span style="font-size:0.9em;line-height:1">👑 再打一次</span><small style="line-height:1">橘子王</small>'; b.style.gap = '0.08em';   // 兩行：手機橫向（667／844 寬）也不會被截斷
+    b.style.display = 'none';
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (h2Busy(600, 'rematch')) return; advStartBossRematch(); });
+    go.parentElement.insertBefore(b, go);
+  }
+  b.style.display = c2ToC2Here() ? '' : 'none';
+  return b;
+}
+(function v386C2Install() {
+  if (!ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v386c2) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v386c2 = true; globalThis[name] = w; };
+  wrapFn('h2DepartCheck', o => function () { if (c2ToC2Here()) return c2ToC2State(); return o.apply(this, arguments); });
+  wrapFn('h2Go', o => function () { if (c2ToC2Here()) { c2GoContinent2('home'); return; } return o.apply(this, arguments); });
+  wrapFn('h2RenderCenter', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      c2EnsureRematchBtn();
+      if (c2ToC2Here()) {
+        const go = h2$('h2-nav-go'), sp = go && go.querySelector('span'), nl = h2$('h2-nextline');
+        if (sp) sp.textContent = '前往第二大陸'; if (go) go.classList.remove('is-rematch');
+        if (nl) { nl.textContent = 'ⓘ 第一大陸完成！下一站：第二大陸 3-1 風之峽谷'; nl.parentElement.style.display = ''; }
+      }
+    } catch (e) {}
+    return r;
+  });
+  // 第一大陸總結算：新增「🌊 前往第二大陸」（正式完成才顯示；先回小V的家，再走同一個出發檢查）
+  wrapFn('advShowFinalResults', o => function (snap) {
+    const r = o.apply(this, arguments);
+    try {
+      const btns = document.querySelector('#adv-final-overlay .adv-final-btns');
+      if (btns && !document.getElementById('btn-adv-final-c2') && c2Continent1Done() && !(snap && snap.testOnly)) {
+        const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-adv-final-c2'; b.className = 'hv-ui-btn hv-ui-btn--primary'; b.textContent = '🌊 前往第二大陸';
+        b.onclick = e => { e.preventDefault(); advFinalGoHome(); setTimeout(() => { try { c2GoContinent2('final'); } catch (er) {} }, 350); };
+        btns.insertBefore(b, btns.firstChild);
+      }
+    } catch (e) {}
+    return r;
+  });
+  if (typeof window !== 'undefined') Object.assign(window, { c2GoContinent2, c2Continent1Done, debugToC2: () => { const o = { here: c2ToC2Here(), at24: c2At24Clear(), done: c2Continent1Done(), hammer: (playerInventory.craftedItems || {}).basicHammer || 0, state: c2ToC2State(), stage31Clears: c2Flow().stage31Clears || 0 }; console.log('[第二大陸]', o); return o; } });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.86：被氣球槌擊飛的蠍子撞到橘子怪 → DOUBLE KILL（延伸 v0.3.68 的連鎖撞擊，不另寫一套）
+//  ・只有「被氣球槌擊飛、正在旋轉飛出去的蠍子」（spinningEnemies）會觸發；小V的劍、槌碰到橘子怪仍然是武器爆掉（規則不變）
+//  ・會被撞倒的橘子怪（一般橘子怪本體碰撞框；和小V碰到會受傷的是同一個框）：
+//      orangeNemeses（一般橘子怪 balloonNemesis：直線／急速…）、chimneyOranges（煙囪橘子怪）、dualNozzleOranges（雙噴嘴橘子怪）、
+//      fanOranges（向上油幕橘子怪）、projectileOranges（飛行油彈橘子怪）
+//    這些橘子怪原本沒有血量欄位（武器打不到）；本版不新增血量，撞一次就倒＝需求裡的「HP 1 → 0」
+//  ・不算：2-4 橘子王（魔王，不在上面的陣列裡）、油幕、油彈、背景橘子
+//  ・撞到後：擊飛的蠍子和橘子怪一起消失 → chainImpactResult(…, 'killed')：DOUBLE KILL +50、音效、文字特效
+//    （本關分數 chainBonusScore 與正式挑戰 advAttempt.chain 都沿用原本那條路；同一組只算一次；沒有 Triple Kill）
+//  ・橘子怪倒下不算進「擊敗蠍子數」（player.enemiesDefeated／advAttempt.enemies 只記蠍子，原本的分母不變）
+//  ・同一關重試（restart）時倒下的橘子怪回到原位；換關（loadLevel）時清空
+// ════════════════════════════════════════════════════════════════════
+var c2DkHold = [];          // 這一關被撞倒的橘子怪 { arr, obj, idx }
+var c2DkFx = [];            // 橘子怪倒下的「啪！」碎片（純畫面）
+var c2DkLog = [];           // 測試用紀錄（最多 50 筆）
+function c2DkTypes() {
+  return [
+    { kind: 'orangeNemesis', name: '一般橘子怪', arr: orangeNemeses, box: o => ({ x: o.x + 4, y: o.y + 4, w: o.w - 8, h: o.h - 8 }) },
+    { kind: 'chimneyOrange', name: '煙囪橘子怪', arr: chimneyOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'dualNozzleOrange', name: '雙噴嘴橘子怪', arr: dualNozzleOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'fanOrange', name: '油幕橘子怪', arr: fanOranges, box: o => ({ x: o.x, y: o.y, w: o.w, h: o.h }) },
+    { kind: 'projectileOrange', name: '油彈橘子怪', arr: projectileOranges, box: o => getProjectileOrangeBodyHitbox(o) },
+  ];
+}
+function c2DkOrangeId(t, o) { if (!o._dkId) o._dkId = 'orange:' + t.kind + '@' + Math.round(o.x); return o._dkId; }
+function c2DkCheck(s) {
+  if (!s || s.life <= 0) return false;
+  for (const t of c2DkTypes()) {
+    if (!Array.isArray(t.arr)) continue;
+    for (let i = 0; i < t.arr.length; i++) {
+      const o = t.arr[i];
+      if (!o || o.active === false || o.isBoss) continue;
+      const b = t.box(o);
+      if (!rectsOverlap(s.x, s.y, s.w, s.h, b.x, b.y, b.w, b.h)) continue;
+      // 撞倒：橘子怪從陣列拿掉（所有更新／碰撞／繪圖／音效迴圈自然略過），擊飛的蠍子同時消失
+      const id = c2DkOrangeId(t, o);
+      try { if (o._sfxVoice) { sfxStopVoice(o._sfxVoice, 60); o._sfxVoice = null; } } catch (e) {}
+      t.arr.splice(i, 1);
+      c2DkHold.push({ arr: t.arr, obj: o, idx: i });
+      s.life = 0;
+      const proxy = { x: o.x, y: o.y, w: o.w, h: o.h, advId: id };
+      const before = { dk: currentRunStats.doubleKills || 0, bonus: currentRunStats.chainBonusScore || 0 };
+      try { chainImpactResult(s, proxy, 'killed'); } catch (e) {}
+      c2DkFx.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, t: 0, life: 30, seed: Math.random() * 6.28 });
+      try { sfxPlay('balloonPop'); } catch (e) {}
+      try { c2DkLog.push({ frame: frameCount, stage: (LEVELS[currentLevelIndex] || {}).stageId, scorpion: s.sourceAdvId || ('r' + s.sourceId), orange: id, type: t.kind, name: t.name, doubleKillsBefore: before.dk, doubleKillsAfter: currentRunStats.doubleKills || 0, bonusAdded: (currentRunStats.chainBonusScore || 0) - before.bonus }); if (c2DkLog.length > 50) c2DkLog.shift(); } catch (e) {}
+      console.log('[DoubleKill] 擊飛的蠍子撞倒' + t.name + '（' + id + '）');
+      return true;
+    }
+  }
+  return false;
+}
+function c2DkRestore() {
+  // 依拿掉的相反順序放回原本位置（陣列順序和原本一樣）
+  for (let i = c2DkHold.length - 1; i >= 0; i--) { const h = c2DkHold[i]; if (h.arr.indexOf(h.obj) < 0) h.arr.splice(Math.min(h.idx, h.arr.length), 0, h.obj); }
+  c2DkHold = []; c2DkFx = [];
+}
+function c2DkDrawFx(cx) {
+  c2DkFx.forEach(f => {
+    const k = f.t / f.life, sx = f.x - cx, a = 1 - k;
+    ctx.save(); ctx.globalAlpha = Math.max(0, a);
+    for (let i = 0; i < 10; i++) {
+      const ang = f.seed + i * 0.628, r = 8 + k * 40;
+      ctx.fillStyle = i % 2 ? '#ff9a2e' : '#ffcf5a';
+      ctx.beginPath(); ctx.ellipse(sx + Math.cos(ang) * r, f.y + Math.sin(ang) * r * 0.8 + k * k * 14, 6 - k * 3.5, 3, ang, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+(function v386DkInstall() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v386dk) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v386dk = true; globalThis[name] = w; };
+  // 原本的更新先跑（蠍子撞蠍子：Double Kill／撞擊照舊）；還在飛、這一幀沒撞到蠍子的，再檢查有沒有撞到橘子怪
+  wrapFn('updateSpinningEnemies', o => function (dt) {
+    const r = o.apply(this, arguments);
+    try { for (const s of spinningEnemies) if (s.life > 0) c2DkCheck(s); } catch (e) {}
+    return r;
+  });
+  wrapFn('updateChainFx', o => function (dt) { const r = o.apply(this, arguments); for (let i = c2DkFx.length - 1; i >= 0; i--) { const f = c2DkFx[i]; f.t += (dt || 1); if (f.t >= f.life) c2DkFx.splice(i, 1); } return r; });
+  wrapFn('drawChainFx', o => function (cx) { try { c2DkDrawFx(cx); } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { try { c2DkRestore(); } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('loadLevel', o => function () { c2DkHold = []; c2DkFx = []; return o.apply(this, arguments); });
+  if (typeof window !== 'undefined') window.debugDoubleKillOrange = () => ({ log: c2DkLog.slice(), held: c2DkHold.map(h => h.obj._dkId), oranges: c2DkTypes().map(t => ({ type: t.kind, name: t.name, count: (t.arr || []).length, hp: '沒有血量欄位（撞一次就倒）' })) });
+})();
