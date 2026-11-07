@@ -4727,7 +4727,7 @@ const C2_STAGE_31 = {
   ],
   buildWindVents: () => [
     makeWindVent({ id: 'A', x:  720, w: 80, h: 150 }),
-    makeWindVent({ id: 'C', x: 3410, w: 80, h: 150 }),
+    makeWindVent({ id: 'C', x: 3374, w: 80, h: 150 }),   // v0.3.86 #09：3410 → 3374（左移 36px；大小／高度／浮力不變）→ 岩石底座完整落在坑邊以內，不再裁切
   ],
   // 尖刺坑：x～x+w 地面挖空，坑底是尖刺；掉進去 → 受傷並退回 resetX（尖刺坑前方的安全地面）
   spikePits: [
@@ -26482,30 +26482,6 @@ function c3VentGeom(v) {
     base: { x: poolCx - V.poolX * s, y: baseBottom - (V.baseBottomY - V.cropY0) * s, w: 1536 * s, h: (V.cropY1 - V.cropY0) * s },
     flow: { x: poolCx - F.cx * fs, y: poolY + F.poolOverlap - F.y1 * fs + cal.flow, w: 1024 * fs, h: 1536 * fs } };
 }
-function c3VentBaseCut(v, G, base) {
-  const pits = (typeof c2Pits !== 'undefined' ? c2Pits : []);
-  const bx0 = G.base.x, bx1 = G.base.x + G.base.w;
-  let cutR = null, cutL = null;
-  pits.forEach(p => {
-    if (p.x >= v.x + v.w - 1 && p.x < bx1) cutR = cutR == null ? p.x : Math.min(cutR, p.x);
-    const pe = p.x + p.w; if (pe <= v.x + 1 && pe > bx0) cutL = cutL == null ? pe : Math.max(cutL, pe);
-  });
-  if (cutR == null && cutL == null) return null;
-  const rx = cutR == null ? null : Math.round(cutR - Math.round(bx0)), lx = cutL == null ? null : Math.round(cutL - Math.round(bx0));
-  const ck = 'cut|' + base.width + '|' + rx + '|' + lx; if (chapter3VentCache[ck]) return chapter3VentCache[ck];
-  let out = null;
-  try {
-    const c = document.createElement('canvas'); c.width = base.width; c.height = base.height; const g = c.getContext('2d');
-    g.drawImage(base, 0, 0);
-    const F = 8;
-    g.globalCompositeOperation = 'destination-out';
-    if (rx != null) { const gr = g.createLinearGradient(rx - F, 0, rx, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)'); g.fillStyle = gr; g.fillRect(rx - F, 0, F, c.height); g.fillStyle = '#000'; g.fillRect(rx, 0, c.width - rx, c.height); }
-    if (lx != null) { const gr = g.createLinearGradient(lx, 0, lx + F, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(lx, 0, F, c.height); g.fillStyle = '#000'; g.fillRect(0, 0, lx, c.height); }
-    g.globalCompositeOperation = 'source-over';
-    out = c;
-  } catch (e) { out = null; }
-  chapter3VentCache[ck] = out; return out;
-}
 function c3VentTile(kind, scale) {
   const ck = kind + '|' + scale.toFixed(4); if (chapter3VentCache[ck]) return chapter3VentCache[ck];
   const img = c3VentImg(kind); if (!img) return null;
@@ -26553,10 +26529,9 @@ function drawC3VentArt(v, cx, t) {
   });
   ctx.restore();
   // ② 岩石底座＋風池（擋住氣流根部）
-  //   v0.3.84：風口旁邊就是尖刺坑時（3-1 風口 C／3-2 風口 B2：風口右緣到坑只有 50px），岩石圈原本會伸到坑口上方約 40px，
-  //   看起來像可以站的地面、其實已經是坑 → 岩石只畫到坑邊（坑邊 8px 淡出），畫面上的地面＝實際的地面
-  const bc = (typeof c3VentBaseCut === 'function') ? c3VentBaseCut(v, G, base) : null;
-  ctx.drawImage(bc || base, Math.round(G.base.x + ox), Math.round(G.base.y));
+  //   v0.3.86 #09：移除 v0.3.84 的坑邊直線裁切＋淡出（c3VentBaseCut）→ 岩石底座完整畫出
+  //   （靠坑的 3-1 風口 C、3-2 風口 B2 改為左移 36px，岩石完整落在坑邊以內；使用者決定）
+  ctx.drawImage(base, Math.round(G.base.x + ox), Math.round(G.base.y));
   // v0.3.83：底座嵌進地面 — 在底座下半部再蓋一次地面的草地＋岩層（草叢在岩石前面），看起來像從地面長出來的岩石風口
   try { if (v.y >= GROUND_Y - 1 && typeof c3GroundStrip === 'function' && CHAPTER3_VENT_ART.vent.embedPx > 0) c3GroundStrip(G.base.x, G.base.x + G.base.w, GROUND_Y, GROUND_Y + CHAPTER3_VENT_ART.vent.embedPx, cx); } catch (e) {}
   return true;
@@ -27116,7 +27091,7 @@ const C2_STAGE_32 = {
   ],
   buildWindVents: () => [
     makeWindVent({ id: 'B1', x:  890, w: 80, h: 150 }),
-    makeWindVent({ id: 'B2', x: 1410, w: 80, h: 150 }),
+    makeWindVent({ id: 'B2', x: 1374, w: 80, h: 150 }),   // v0.3.86 #09：1410 → 1374（左移 36px；大小／高度／浮力不變）→ 岩石底座完整落在坑 S1 邊以內，不再裁切
     makeWindVent({ id: 'C1', x: 2150, w: 80, h: 150 }),   // 小蠍子巡邏會經過（被吹起來；只有蠍子在風裡也聽得到風聲）
     makeWindVent({ id: 'E1', x: 3410, w: 80, h: 150 }),
   ],
