@@ -28045,7 +28045,7 @@ function c2EnsureRematchBtn() {
   let b = document.getElementById('h2-nav-rematch');
   if (!b) {
     const go = document.getElementById('h2-nav-go'); if (!go || !go.parentElement) return null;
-    b = document.createElement('button'); b.type = 'button'; b.id = 'h2-nav-rematch'; b.className = 'h2-pill h2-pill--purple'; b.innerHTML = '<span>👑 再打一次</span><small>橘子王</small>';   // 兩行：手機橫向（667／844 寬）也不會被截斷
+    b = document.createElement('button'); b.type = 'button'; b.id = 'h2-nav-rematch'; b.className = 'h2-pill h2-pill--purple'; b.innerHTML = '<span style="font-size:0.9em;line-height:1">👑 再打一次</span><small style="line-height:1">橘子王</small>'; b.style.gap = '0.08em';   // 兩行：手機橫向（667／844 寬）也不會被截斷
     b.style.display = 'none';
     b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); if (h2Busy(600, 'rematch')) return; advStartBossRematch(); });
     go.parentElement.insertBefore(b, go);
