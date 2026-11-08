@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-1';
-const BUILD_TIME   = '2026-11-08 17:20';
+const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-2';
+const BUILD_TIME   = '2026-11-08 19:45';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -28205,7 +28205,7 @@ var WS_TUNING = {
   drawK: 0.078,           // 遊戲像素／原圖像素（Idle 全身約 94px 寬；和普通蠍子畫面上看起來差不多大）
   anchorX: 630,           // Idle 原圖裡對齊碰撞框中心的 x（身體中段）
   footY: 1254,            // Idle 原圖裡的腳底線（圖片底邊）
-  footOffsetY: 13,        // 腳底線往下微調（遊戲像素；原圖最下緣是後腳的白色球，前腳在它上方 → 往下補，和普通蠍子一樣踩在地面上）
+  footOffsetY: 21,        // 腳底線往下微調（遊戲像素）。test-2：玩家回饋「走路有點浮」→ 對齊小V鞋底實際踩在草地上的高度（比碰撞框底部低約 8px）；13 → 21
   walkStep: 8,            // 走路每一幀停留幾個更新（60 次／秒）→ 01→02→03→01…
   // 攻擊
   firstDelay: 70,         // 進場後第一次可以攻擊前的等待（更新數）
@@ -28220,9 +28220,9 @@ var WS_TUNING = {
   // 風刃
   muzzleX: 133, muzzleY: 376, // Fire 原圖座標：尾刺尖端（風刃從這裡出現）
   bladeSpeed: 3.4,        // px／更新（約 200 px／秒；親子玩家看得到、來得及跳）
-  bladeW: 58,             // 風刃畫面寬度（px）
-  bladeHitR: 13,          // 風刃碰撞圓半徑（px；依風刃實際可見的月牙主體）
-  bladeHitFwd: 6,         // 碰撞圓中心往飛行方向前移（月牙主體偏前）
+  bladeW: 72,             // 風刃畫面寬度（px）。test-2：玩家回饋太小、沒有威力感 → 放大約 124%（58 → 72）
+  bladeHitR: 16,          // 風刃碰撞圓半徑（px；依風刃實際可見的月牙主體；test-2 跟著圖放大 13 → 16）
+  bladeHitFwd: 7,         // 碰撞圓中心往飛行方向前移（月牙主體偏前；test-2 6 → 7）
   bladeMaxDist: 900,      // 最遠飛行距離
   maxAimDeg: 60,          // 最大仰角／俯角（相對水平）
   // 雨傘格擋後
