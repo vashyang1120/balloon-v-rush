@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.86-continent2-integration-test-1';
-const BUILD_TIME   = '2026-11-07 10:30';
+const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-1';
+const BUILD_TIME   = '2026-11-08 17:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -28169,4 +28169,361 @@ function c2DkDrawFx(cx) {
   wrapFn('restart', o => function () { try { c2DkRestore(); } catch (e) {} return o.apply(this, arguments); });
   wrapFn('loadLevel', o => function () { c2DkHold = []; c2DkFx = []; return o.apply(this, arguments); });
   if (typeof window !== 'undefined') window.debugDoubleKillOrange = () => ({ log: c2DkLog.slice(), held: c2DkHold.map(h => h.obj._dkId), oranges: c2DkTypes().map(t => ({ type: t.kind, name: t.name, count: (t.arr || []).length, hp: '沒有血量欄位（撞一次就倒）' })) });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.87：風刃蠍子（wind-scorpion-integration-v0.1）— 第一次戰鬥整合測試
+//  ・只出現在開發者「🌀 風刃蠍子測試（3-T）」模式；正式關卡（3-1／3-2／第一大陸）完全沒有配置
+//  ・普通蠍子的變種：type 'scorpion'、variant 'windBlade'
+//      → 巡邏、地面、巡邏邊界、面向、碰撞傷害、劍／槌傷害、HP（1，和普通蠍子一樣）、死亡特效、槌子擊飛（含 Double Kill）全部沿用普通蠍子
+//  ・新增的只有：攻擊狀態機（WALK → CHARGE → FIRE → RECOVER → WALK）、獨立風刃、風刃被雨傘格擋後固定斜上彈開、畫面（10 張新素材）
+//  ・素材：assets/enemies/wind_scorpion/（和 assets/enemies/scorpion/、assets/enemies/orange/ 同一個規範）；原圖朝左，往右時程式水平鏡像
+//  ・素材只在進入測試模式時才載入（約 10MB；一般玩家不會下載）
+// ════════════════════════════════════════════════════════════════════
+const WS_ASSET_DIR = 'assets/enemies/wind_scorpion/';
+const WS_FILES = {
+  idle: 'wind_scorpion_idle.png', walk1: 'wind_scorpion_walk_01.png', walk2: 'wind_scorpion_walk_02.png', walk3: 'wind_scorpion_walk_03.png',
+  charge: 'wind_scorpion_charge.png', swirl: 'wind_scorpion_charge_swirl.png', fire: 'wind_scorpion_fire.png', blade: 'wind_scorpion_wind_blade.png',
+  hurt: 'wind_scorpion_hurt.png', defeat: 'wind_scorpion_defeat.png',
+};
+// 每一張角色圖對齊 Idle 的校準（原圖像素；s＝縮放、dx／dy＝放在 Idle 畫布上的左上角位置）
+//   各張原圖裡的蠍子大小、位置不一樣（例如 Hurt／Defeat 畫得比較小、Charge／Fire 往下偏）→ 用身體（鉗子、頭、身體前半）對齊 Idle，
+//   換動作時才不會突然變大變小、腳底跳位。數值用遮罩比對量出來，再用眼睛確認（報告附對照圖）。
+const WS_FRAME_CAL = {
+  idle:   { s: 1.00, dx: 0,   dy: 0 },
+  walk1:  { s: 1.03, dx: 5,   dy: 5 },
+  walk2:  { s: 1.00, dx: 25,  dy: 10 },
+  walk3:  { s: 1.01, dx: 25,  dy: 20 },
+  charge: { s: 1.01, dx: 40,  dy: -75 },
+  fire:   { s: 1.00, dx: 30,  dy: -50 },
+  hurt:   { s: 1.15, dx: -80, dy: -100 },
+  defeat: { s: 1.15, dx: -60, dy: -150 },
+};
+// 可調整參數（第一版測試值，不是定案；以使用者實測為準）
+var WS_TUNING = {
+  // 畫面
+  drawK: 0.078,           // 遊戲像素／原圖像素（Idle 全身約 94px 寬；和普通蠍子畫面上看起來差不多大）
+  anchorX: 630,           // Idle 原圖裡對齊碰撞框中心的 x（身體中段）
+  footY: 1254,            // Idle 原圖裡的腳底線（圖片底邊）
+  footOffsetY: 13,        // 腳底線往下微調（遊戲像素；原圖最下緣是後腳的白色球，前腳在它上方 → 往下補，和普通蠍子一樣踩在地面上）
+  walkStep: 8,            // 走路每一幀停留幾個更新（60 次／秒）→ 01→02→03→01…
+  // 攻擊
+  firstDelay: 70,         // 進場後第一次可以攻擊前的等待（更新數）
+  cooldown: 130,          // 收招後到下一次可以蓄力（約 2.2 秒）
+  rangeX: 520,            // 小V中心距離多近（水平）才會攻擊
+  rangeUp: 320, rangeDown: 140,   // 小V在蠍子上方／下方多遠以內
+  chargeFrames: 60,       // 蓄力 1.0 秒（建議 0.8～1.2 秒）
+  fireFrames: 16,         // Fire 姿勢停留
+  recoverFrames: 32,      // 收招（Idle 姿勢）後恢復巡邏
+  // 蓄力氣流（Charge 原圖座標：尾刺位置）
+  swirlX: 640, swirlY: 400, swirlSize0: 20, swirlSize1: 44, swirlSpin0: 0.06, swirlSpin1: 0.42, swirlFadeFrames: 9,
+  // 風刃
+  muzzleX: 133, muzzleY: 376, // Fire 原圖座標：尾刺尖端（風刃從這裡出現）
+  bladeSpeed: 3.4,        // px／更新（約 200 px／秒；親子玩家看得到、來得及跳）
+  bladeW: 58,             // 風刃畫面寬度（px）
+  bladeHitR: 13,          // 風刃碰撞圓半徑（px；依風刃實際可見的月牙主體）
+  bladeHitFwd: 6,         // 碰撞圓中心往飛行方向前移（月牙主體偏前）
+  bladeMaxDist: 900,      // 最遠飛行距離
+  maxAimDeg: 60,          // 最大仰角／俯角（相對水平）
+  // 雨傘格擋後
+  reflectDeg: 50,         // 固定往小V面向的斜上方 50° 彈開
+  reflectSpeed: 4.2, reflectLife: 48,
+};
+var wsImgs = {}, wsLoadPromise = null, wsReady = false, wsCanvases = {};
+var wsBlades = [];             // 飛行中的風刃（每一枚都會在命中／格擋／落地／飛出範圍／蠍子死亡／重置後移除）
+var wsLog = [];                // 測試用紀錄
+var wsFieldMode = false;       // 3-T 是否為風刃蠍子測試模式
+function wsLogPush(o) { try { o.frame = frameCount; wsLog.push(o); if (wsLog.length > 120) wsLog.shift(); } catch (e) {} }
+function wsLoadAssets() {
+  if (wsLoadPromise) return wsLoadPromise;
+  wsLoadPromise = Promise.all(Object.keys(WS_FILES).map(k => new Promise(res => {
+    const im = new Image(), src = resolveAdventureAssetSrc(WS_ASSET_DIR + WS_FILES[k]);
+    im.onload = () => { wsImgs[k] = im; res({ k, ok: true, w: im.naturalWidth, h: im.naturalHeight, src }); };
+    im.onerror = () => { console.error('[WindScorpion] ❌ 素材載入失敗：' + src); res({ k, ok: false, src }); };
+    im.src = src;
+  }))).then(list => {
+    wsReady = list.every(r => r.ok);
+    if (wsReady) { try { wsBuildCanvases(); } catch (e) { console.error('[WindScorpion] 建立畫面快取失敗', e); wsReady = false; } }
+    console.log('[WindScorpion] 素材 ' + list.filter(r => r.ok).length + '/10 載入' + (wsReady ? '完成' : '（有失敗）'));
+    window.__wsAssetList = list;
+    return list;
+  });
+  return wsLoadPromise;
+}
+// 畫面快取：每個動作先依校準畫到「Idle 空間」的小畫布（只是縮小繪製，原圖不變）
+const WS_SPACE = { x0: -180, y0: -220, x1: 1440, y1: 1300, q: 0.22 };
+function wsBuildCanvases() {
+  const S = WS_SPACE, W = Math.ceil((S.x1 - S.x0) * S.q), H = Math.ceil((S.y1 - S.y0) * S.q);
+  ['idle', 'walk1', 'walk2', 'walk3', 'charge', 'fire', 'hurt', 'defeat'].forEach(k => {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    const C = WS_FRAME_CAL[k], im = wsImgs[k];
+    g.drawImage(im, (C.dx - S.x0) * S.q, (C.dy - S.y0) * S.q, 1254 * C.s * S.q, 1254 * C.s * S.q);
+    wsCanvases[k] = c;
+  });
+  // 死亡特效／槌子擊飛沿用普通蠍子的畫法（getScorpionHurtImgForSkin）：做成和普通蠍子圖相同慣例的「朝右、500 寬」圖
+  //   普通蠍子：畫成 碰撞框寬×2.2（=105.6px）寬、腳底在圖高 88.3%（再 +8px）→ 這裡換算成同樣大小（WS_TUNING.drawK）與腳底位置
+  ['hurt', 'defeat'].forEach(k => {
+    const CW = 500, CH = 560, q = WS_TUNING.drawK * CW / (CONFIG.ENEMY_W * SCORPION_DRAW_SCALE);
+    const feet = CH * SCORPION_FOOT_ANCHOR_Y - SCORPION_DRAW_OFFSET_Y * CW / (CONFIG.ENEMY_W * SCORPION_DRAW_SCALE);
+    const c = document.createElement('canvas'); c.width = CW; c.height = CH; const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    const C = WS_FRAME_CAL[k];
+    g.translate(CW / 2, feet - WS_TUNING.footOffsetY * CW / (CONFIG.ENEMY_W * SCORPION_DRAW_SCALE)); g.scale(-1, 1);   // 原圖朝左 → 朝右（和普通蠍子圖同方向）
+    g.drawImage(wsImgs[k], (C.dx - WS_TUNING.anchorX) * q, (C.dy - WS_TUNING.footY) * q, 1254 * C.s * q, 1254 * C.s * q);
+    wsCanvases['norm_' + k] = c;
+  });
+}
+// 變種設定：和普通蠍子相同（HP 1、速度、傷害）；只多了 skinKey 與 wind-blade 標記
+ENEMY_VARIANTS.scorpion.windBlade = {
+  label: '風刃蠍子', skinKey: 'scorpion_wind', behaviorType: 'patrol',
+  baseSpeedMultiplier: 1.0, drawScaleMultiplier: 1.0, hp: 1, maxHp: 1, damage: 1,
+  abilityTags: ['melee', 'patrol', 'wind-blade'],
+};
+function wsIs(e) { return !!(e && e.type === 'scorpion' && e.variant === 'windBlade'); }
+function makeWindScorpion(x, patrolRange) { return Object.assign(makeChapter2Scorpion(x, patrolRange, 'windBlade'), { ws: null }); }
+function wsState(e) { if (!e.ws) e.ws = { st: 'walk', t: 0, cd: WS_TUNING.firstDelay, walkT: 0, swirlFade: 0, shots: 0 }; return e.ws; }
+function wsFace(e) { return (e.vx || 0) < 0 ? -1 : 1; }   // −1 朝左（原圖方向）、1 朝右（鏡像）
+// 原圖座標（某動作的原圖）→ 世界座標
+function wsPoint(e, frameKey, sx, sy) {
+  const C = WS_FRAME_CAL[frameKey], k = WS_TUNING.drawK, f = wsFace(e);
+  const ix = C.dx + sx * C.s, iy = C.dy + sy * C.s;                       // 換到 Idle 空間
+  const lx = (ix - WS_TUNING.anchorX) * k, ly = (iy - WS_TUNING.footY) * k;  // 以碰撞框中心、腳底為原點；原圖朝左
+  return { x: e.x + e.w / 2 + (f < 0 ? lx : -lx), y: e.y + e.h + WS_TUNING.footOffsetY + ly };
+}
+function wsMuzzle(e) { return wsPoint(e, 'fire', WS_TUNING.muzzleX, WS_TUNING.muzzleY); }
+function wsSwirlPos(e) { return wsPoint(e, 'charge', WS_TUNING.swirlX, WS_TUNING.swirlY); }
+function wsPlayerCenter() { return { x: player.x + player.w / 2, y: player.y + player.h / 2 }; }
+function wsCanAttack(e) {
+  if (gameState !== 'playing' || !(player.hp > 0)) return false;
+  const pc = wsPlayerCenter(), ex = e.x + e.w / 2, ey = e.y + e.h / 2;
+  if (Math.abs(pc.x - ex) > WS_TUNING.rangeX) return false;
+  if (pc.y < ey - WS_TUNING.rangeUp || pc.y > ey + WS_TUNING.rangeDown) return false;
+  if (e.x + e.w < cameraX - 20 || e.x > cameraX + CANVAS_W + 20) return false;   // 畫面外不攻擊
+  return true;
+}
+function wsFire(e) {
+  const m = wsMuzzle(e), pc = wsPlayerCenter(), f = wsFace(e);
+  let ang = Math.atan2(pc.y - m.y, pc.x - m.x);                          // 發射瞬間瞄準小V
+  // 只往蠍子面向的那一側；仰角／俯角最多 maxAimDeg
+  const max = WS_TUNING.maxAimDeg * Math.PI / 180;
+  let rel = f > 0 ? ang : Math.PI - ang; if (rel > Math.PI) rel -= Math.PI * 2;  // 相對面向的角度（往上為負）
+  rel = Math.max(-max, Math.min(max, rel));
+  ang = f > 0 ? rel : Math.PI - rel;
+  const sp = WS_TUNING.bladeSpeed;
+  const b = { x: m.x, y: m.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, ang, dist: 0, st: 'fly', t: 0, owner: e, id: (e.c2Id || 'W') + '#' + (++wsState(e).shots), blocked: 0 };
+  wsBlades.push(b);
+  wsLogPush({ ev: 'fire', id: b.id, x: Math.round(m.x), y: Math.round(m.y), deg: Math.round(-ang * 180 / Math.PI), face: f, target: { x: Math.round(pc.x), y: Math.round(pc.y) } });
+  try { sfxPlay('scorpionKnockback'); } catch (er) {}   // 沿用既有「咻」聲（沒有新音效素材）
+  return b;
+}
+function wsStep(e) {
+  const s = wsState(e);
+  if (!e.active) return;
+  s.t++;
+  if (s.st === 'walk') {
+    s.walkT++;
+    if (s.cd > 0) s.cd--;
+    else if (wsCanAttack(e)) {
+      const pc = wsPlayerCenter(), dir = pc.x >= e.x + e.w / 2 ? 1 : -1;
+      e.vx = dir * Math.abs(e.vx || e.baseVx || CONFIG.ENEMY_SPEED);       // 轉向小V（之後也往這個方向繼續巡邏）
+      s.st = 'charge'; s.t = 0; wsLogPush({ ev: 'charge', id: e.c2Id || '', face: dir });
+    }
+  } else if (s.st === 'charge') {
+    if (s.t >= WS_TUNING.chargeFrames) { wsFire(e); s.st = 'fire'; s.t = 0; s.swirlFade = WS_TUNING.swirlFadeFrames; }
+  } else if (s.st === 'fire') {
+    if (s.t >= WS_TUNING.fireFrames) { s.st = 'recover'; s.t = 0; }
+  } else if (s.st === 'recover') {
+    if (s.t >= WS_TUNING.recoverFrames) { s.st = 'walk'; s.t = 0; s.cd = WS_TUNING.cooldown; }
+  }
+  if (s.swirlFade > 0) s.swirlFade--;
+}
+function wsCircleRect(cx, cy, r, x, y, w, h) { const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h)); return (cx - nx) * (cx - nx) + (cy - ny) * (cy - ny) <= r * r; }
+function wsBladeHit(b) { return { x: b.x + Math.cos(b.ang) * WS_TUNING.bladeHitFwd, y: b.y + Math.sin(b.ang) * WS_TUNING.bladeHitFwd, r: WS_TUNING.bladeHitR }; }
+function wsUpdateBlades() {
+  for (let i = wsBlades.length - 1; i >= 0; i--) {
+    const b = wsBlades[i]; b.t++;
+    if (b.st === 'fly') {
+      b.x += b.vx; b.y += b.vy; b.dist += Math.hypot(b.vx, b.vy);
+      const h = wsBladeHit(b);
+      let end = '';
+      if (!b.owner || !b.owner.active) end = '蠍子被擊敗';
+      else if (h.y + h.r * 0.5 >= GROUND_Y) end = '碰到地面';
+      else if ((platforms || []).some(p => wsCircleRect(h.x, h.y, h.r * 0.6, p.x, p.y, p.w, p.h))) end = '碰到平台';
+      if (end) { b.st = 'fade'; b.t = 0; b.why = end; wsLogPush({ ev: 'end', id: b.id, why: end }); continue; }
+      if (b.dist > WS_TUNING.bladeMaxDist || b.x < cameraX - 200 || b.x > cameraX + CANVAS_W + 200 || b.y < -120) { wsLogPush({ ev: 'end', id: b.id, why: '飛出範圍' }); wsBlades.splice(i, 1); continue; }
+    } else if (b.st === 'reflect') {
+      b.x += b.vx; b.y += b.vy;
+      if (b.t >= WS_TUNING.reflectLife || b.y < -120) { wsBlades.splice(i, 1); continue; }
+    } else if (b.st === 'fade') {
+      if (b.t >= 12) { wsBlades.splice(i, 1); continue; }
+    }
+  }
+}
+// 雨傘格擋（沿用 c2BlockBox、c2BlockFxStart（67ms 停頓＋後座力＋光環）、c2UmbrellaBlock 音效、c2UmbConsume('block')）／命中小V（沿用 damagePlayer）
+function wsCheckBlades() {
+  if (!wsBlades.length) return;
+  const holding = !!(player.c2Block && umbEquipped());
+  const bx = holding ? c2BlockBox() : null;
+  const pr = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };   // 和 checkHazards 相同的小V判定框
+  for (const b of wsBlades) {
+    if (b.st !== 'fly') continue;
+    const h = wsBladeHit(b);
+    if (holding) {
+      const pcx = player.x + player.w / 2, front = bx.dir > 0 ? h.x >= pcx - 4 : h.x <= pcx + 4;
+      const coming = Math.sign(b.vx) === -bx.dir || Math.abs(b.vx) < 0.01;
+      const touch = wsCircleRect(h.x, h.y, h.r, bx.x, bx.y, bx.w, bx.h) || wsCircleRect(h.x, h.y, h.r, pr.x, pr.y, pr.w, pr.h);
+      if (touch && front && coming) {
+        const durBefore = equippedUmbrella.currentDur;
+        b.blocked++;
+        const a = WS_TUNING.reflectDeg * Math.PI / 180, rs = WS_TUNING.reflectSpeed;
+        b.st = 'reflect'; b.t = 0; b.vx = bx.dir * Math.cos(a) * rs; b.vy = -Math.sin(a) * rs; b.ang = Math.atan2(b.vy, b.vx);   // 固定斜上（不原路返回、不追蹤）
+        try { sfxPlay('c2UmbrellaBlock'); } catch (er) {}
+        try { c2BlockFxStart({}, bx); } catch (er) {}
+        console.log('[WindScorpion] 雨傘格擋風刃 ' + b.id + ' → 雨傘耐久 −1、風刃往斜上 ' + WS_TUNING.reflectDeg + '° 彈開');
+        c2UmbConsume('block');
+        wsLogPush({ ev: 'block', id: b.id, durBefore, durAfter: equippedUmbrella.currentDur, deg: WS_TUNING.reflectDeg, dir: bx.dir });
+        continue;
+      }
+    }
+    if (player.invincible > 0) continue;                       // 受擊無敵中：穿過（和既有油彈相同）
+    if (wsCircleRect(h.x, h.y, h.r, pr.x, pr.y, pr.w, pr.h)) {
+      const hp0 = player.hp;
+      damagePlayer();
+      b.st = 'fade'; b.t = 0; b.why = '命中小V';
+      wsLogPush({ ev: 'hit', id: b.id, hpBefore: hp0, hpAfter: player.hp });
+    }
+  }
+}
+// ── 畫面 ──
+function wsPose(e) {
+  const s = wsState(e);
+  if (e.hitFlash > 0) return 'hurt';
+  if (s.st === 'charge') return 'charge';
+  if (s.st === 'fire') return 'fire';
+  if (s.st === 'recover') return 'idle';
+  if (gameState !== 'playing') return 'idle';
+  return ['walk1', 'walk2', 'walk3'][Math.floor(s.walkT / WS_TUNING.walkStep) % 3];
+}
+function wsDrawScorpion(sx, e) {
+  const pose = wsPose(e), c = wsCanvases[pose]; if (!c) return false;
+  const S = WS_SPACE, k = WS_TUNING.drawK, f = wsFace(e);
+  const cxs = sx + e.w / 2, gy = e.y + e.h + WS_TUNING.footOffsetY;
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.translate(cxs, gy); if (f > 0) ctx.scale(-1, 1);
+  ctx.drawImage(c, (S.x0 - WS_TUNING.anchorX) * k, (S.y0 - WS_TUNING.footY) * k, (S.x1 - S.x0) * k, (S.y1 - S.y0) * k);
+  ctx.restore();
+  // 蓄力氣流（獨立素材；跟著尾刺；旋轉、放大、變亮）
+  const st = wsState(e);
+  if ((st.st === 'charge' || st.swirlFade > 0) && wsImgs.swirl) {
+    const p = wsSwirlPos(e), charging = st.st === 'charge';
+    const prog = charging ? Math.min(1, st.t / WS_TUNING.chargeFrames) : 1;
+    const fade = charging ? 1 : st.swirlFade / WS_TUNING.swirlFadeFrames;
+    const size = (WS_TUNING.swirlSize0 + (WS_TUNING.swirlSize1 - WS_TUNING.swirlSize0) * prog) * (charging ? 1 : 1 + (1 - fade) * 0.5);
+    st.swirlRot = (st.swirlRot || 0) + (WS_TUNING.swirlSpin0 + (WS_TUNING.swirlSpin1 - WS_TUNING.swirlSpin0) * prog) * (f > 0 ? 1 : -1);
+    ctx.save(); ctx.translate(p.x - cameraX, p.y); ctx.rotate(st.swirlRot);
+    ctx.globalAlpha = (0.35 + 0.6 * prog) * fade;
+    ctx.drawImage(wsImgs.swirl, -size / 2, -size / 2, size, size);
+    if (charging && prog > 0.75) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (prog - 0.75) * 4 * 0.35 * (0.7 + 0.3 * Math.sin(st.t * 0.9)); ctx.drawImage(wsImgs.swirl, -size / 2, -size / 2, size, size); }   // 快發射時更亮（閃爍＝蓄力完成提示）
+    ctx.restore();
+  }
+  return true;
+}
+function wsDrawBlades(cx) {
+  const im = wsImgs.blade; if (!im) return;
+  const w = WS_TUNING.bladeW, h = w * im.naturalHeight / im.naturalWidth;
+  wsBlades.forEach(b => {
+    const a = b.st === 'fly' ? 1 : b.st === 'reflect' ? Math.max(0, 1 - b.t / WS_TUNING.reflectLife) : Math.max(0, 1 - b.t / 12);
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(b.x - cx, b.y); ctx.rotate(b.ang - Math.PI);   // 原圖朝左（π）→ 依飛行方向旋轉
+    if (b.st === 'fade') ctx.scale(1 + b.t / 12 * 0.4, 1 + b.t / 12 * 0.4);
+    ctx.drawImage(im, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  });
+}
+function wsDebugOn() { return !!(typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS && typeof ADVENTURE_TEST_TOOLS_ENABLED !== 'undefined' && ADVENTURE_TEST_TOOLS_ENABLED && !c3VentDebugHidden && wsFieldMode); }
+function wsDrawDebug(cx) {
+  if (!wsDebugOn()) return;
+  ctx.save(); ctx.lineWidth = 1.5; ctx.font = 'bold 11px sans-serif';
+  enemies.forEach(e => {
+    if (!wsIs(e) || !e.active) return;
+    const s = wsState(e), x = e.x - cx;
+    ctx.strokeStyle = 'rgba(255,60,60,0.9)'; ctx.strokeRect(x + 4, e.y + 4, e.w - 8, e.h - 8);          // 碰撞傷害框（和普通蠍子相同）
+    const m = wsMuzzle(e); ctx.fillStyle = '#ff00ff'; ctx.beginPath(); ctx.arc(m.x - cx, m.y, 3.5, 0, Math.PI * 2); ctx.fill();   // 發射點
+    const sp = wsSwirlPos(e); ctx.strokeStyle = 'rgba(0,200,255,0.9)'; ctx.beginPath(); ctx.arc(sp.x - cx, sp.y, 4, 0, Math.PI * 2); ctx.stroke();
+    let txt = { walk: 'WALK', charge: 'CHARGE', fire: 'FIRE', recover: 'RECOVER' }[s.st] || s.st;
+    if (s.st === 'charge') txt += ' ' + ((WS_TUNING.chargeFrames - s.t) / 60).toFixed(2) + 's';
+    if (s.st === 'walk' && s.cd > 0) txt += ' 冷卻 ' + (s.cd / 60).toFixed(1) + 's';
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(x - 30, e.y - 104, 110, 16); ctx.fillStyle = '#fff'; ctx.fillText(txt, x - 26, e.y - 92);
+  });
+  wsBlades.forEach(b => {
+    const h = wsBladeHit(b);
+    ctx.strokeStyle = b.st === 'fly' ? 'rgba(255,230,0,0.95)' : 'rgba(160,160,160,0.8)'; ctx.beginPath(); ctx.arc(h.x - cx, h.y, h.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,255,120,0.95)'; ctx.beginPath(); ctx.moveTo(b.x - cx, b.y); ctx.lineTo(b.x - cx + b.vx * 10, b.y + b.vy * 10); ctx.stroke();   // 速度向量 ×10
+  });
+  if (player.c2Block && umbEquipped()) { const bx = c2BlockBox(); ctx.strokeStyle = 'rgba(80,160,255,0.9)'; ctx.strokeRect(bx.x - cx, bx.y, bx.w, bx.h); }
+  ctx.restore();
+}
+(function v387WsInstall() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v387ws) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v387ws = true; globalThis[name] = w; };
+  // 巡邏：普通蠍子的 updateEnemies 照常跑（冷卻、轉向、貼地）；蓄力／發射／收招時把這一步的移動還原（站定）
+  wrapFn('updateEnemies', o => function () {
+    const keep = [];
+    enemies.forEach(e => { if (wsIs(e) && e.active && wsState(e).st !== 'walk') keep.push([e, e.x, e.vx]); });
+    const r = o.apply(this, arguments);
+    keep.forEach(([e, x, vx]) => { e.x = x; e.vx = vx; });
+    try { enemies.forEach(e => { if (wsIs(e)) wsStep(e); }); wsUpdateBlades(); } catch (er) { console.error('[WindScorpion] update', er); }
+    return r;
+  });
+  wrapFn('checkHazards', o => function () { try { wsCheckBlades(); } catch (er) { console.error('[WindScorpion] blades', er); } return o.apply(this, arguments); });
+  wrapFn('drawEnemy', o => function (x, y, w, h, flashing, vx, e) { if (wsIs(e) && wsReady) { try { if (wsDrawScorpion(x, e)) return; } catch (er) {} } return o.apply(this, arguments); });
+  // 死亡特效（劍）：前 8 幀（白閃／紅光）用 Hurt，之後淡出用 Defeat；其他蠍子照舊
+  wrapFn('drawScorpionDefeatEffects', o => function (cx) {
+    const sw = [];
+    scorpionDefeatEffects.forEach(fx => { if (/^scorpion_wind/.test(fx.skinKey || '')) { sw.push([fx, fx.skinKey]); fx.skinKey = fx.timer < SCORPION_DEFEAT_FLASH_FRAMES ? 'scorpion_wind_hurt' : 'scorpion_wind_defeat'; } });
+    let r;
+    try { r = o.apply(this, arguments); } finally { sw.forEach(([fx, k]) => { fx.skinKey = k; }); }
+    try { wsDrawBlades(cx); wsDrawDebug(cx); } catch (er) {}
+    return r;
+  });
+  // 槌子擊飛：旋轉飛出的前 10 幀用 Hurt，之後 Defeat（擊飛物理、旋轉、Double Kill 全部是原本的）
+  wrapFn('updateSpinningEnemies', o => function () {
+    spinningEnemies.forEach(s => { if (/^scorpion_wind/.test(s.skinKey || '')) { s._wsT = (s._wsT || 0) + 1; s.skinKey = s._wsT <= 10 ? 'scorpion_wind_hurt' : 'scorpion_wind_defeat'; } });
+    return o.apply(this, arguments);
+  });
+  wrapFn('getScorpionHurtImgForSkin', o => function (k) {
+    if (/^scorpion_wind/.test(k || '') && wsReady) return wsCanvases[k === 'scorpion_wind_defeat' ? 'norm_defeat' : 'norm_hurt'];
+    return o.apply(this, arguments);
+  });
+  // 重置：換關／重試 → 清掉所有風刃與狀態
+  wrapFn('loadLevel', o => function (idx) { wsBlades = []; const lv = LEVELS[idx]; if (!(lv && lv.devUmbrellaField)) wsFieldMode = false; return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { wsBlades = []; const r = o.apply(this, arguments); try { enemies.forEach(e => { if (wsIs(e)) e.ws = null; }); } catch (er) {} return r; });
+  // 3-T：風刃蠍子測試模式（另一個入口；原本的雨傘測試場不變）
+  const baseEnemies = C2_UMBRELLA_FIELD.buildEnemies;
+  C2_UMBRELLA_FIELD.buildEnemies = function () {
+    if (!wsFieldMode) return baseEnemies.apply(this, arguments);
+    return [
+      Object.assign(makeWindScorpion(1450, 150), { c2Id: 'W1', c2Wind: true }),
+      Object.assign(makeChapter2Scorpion(2050, 100, 'normal'), { c2Id: 'T2', c2Wind: true }),   // 對照用的普通蠍子
+    ];
+  };
+  wrapFn('c2StartUmbrellaField', o => function () { wsFieldMode = !!window.__wsNext; window.__wsNext = false; return o.apply(this, arguments); });
+  window.c2StartWindScorpionField = function () {
+    showHint && showHint('🌀 風刃蠍子素材載入中…', 90);
+    return wsLoadAssets().then(() => {
+      if (!wsReady) { showHint('❌ 風刃蠍子素材載入失敗（看主控台）', 240); return; }
+      window.__wsNext = true; c2StartUmbrellaField();
+      setTimeout(() => { try { if (wsFieldMode) showHint('🌀 風刃蠍子測試（開發用）：往右走靠近牠；按 3 裝備雨傘、按住 Z 格擋風刃（F5 隱藏碰撞框）', 360); } catch (e) {} }, 600);
+    });
+  };
+  // 開發者面板按鈕（放在「☂️ 雨傘測試場」旁邊）
+  const addBtn = () => {
+    const box = document.getElementById('p2-dev-body'), ref = document.getElementById('btn-pause-test-c2-field');
+    if (!box || !ref || document.getElementById('btn-pause-test-c2-wind')) return !!document.getElementById('btn-pause-test-c2-wind');
+    const b = document.createElement('button'); b.id = 'btn-pause-test-c2-wind'; b.type = 'button'; b.className = ref.className;
+    b.textContent = '🌀 風刃蠍子測試（3-T，開發用）';
+    b.addEventListener('click', e => { e.preventDefault(); window.c2StartWindScorpionField(); });
+    ref.insertAdjacentElement('afterend', b); return true;
+  };
+  if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 40) clearInterval(t); }, 500); }
+  window.debugWindScorpion = () => ({ ready: wsReady, mode: wsFieldMode, tuning: Object.assign({}, WS_TUNING), enemies: enemies.filter(wsIs).map(e => ({ id: e.c2Id, active: e.active, x: Math.round(e.x), vx: e.vx, hp: e.hp, st: e.ws && e.ws.st, t: e.ws && e.ws.t, cd: e.ws && e.ws.cd, pose: e.active ? wsPose(e) : '' })), blades: wsBlades.map(b => ({ id: b.id, st: b.st, x: Math.round(b.x), y: Math.round(b.y), vx: +b.vx.toFixed(2), vy: +b.vy.toFixed(2), deg: Math.round(-b.ang * 180 / Math.PI) })), log: wsLog.slice(-40), assets: window.__wsAssetList || null });
 })();
