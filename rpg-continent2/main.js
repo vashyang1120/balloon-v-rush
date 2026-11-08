@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.89-ch3-wind-audio-test-1';
-const BUILD_TIME   = '2026-11-08 22:30';
+const GAME_VERSION = 'adventure-v0.3.90-adventure-fixes-test-1';
+const BUILD_TIME   = '2026-11-09 01:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -3184,7 +3184,7 @@ const RECIPES = [
   {
     id:         'basicHammer',
     name:       '基礎氣球槌',
-    effect:     '可以敲擊小怪，也可觸發特定場景機關（下一版開放）',
+    effect:     '可以敲擊小怪，也可觸發特定場景機關',   // v0.3.90 #11：氣球槌已能觸發場景機關（例如第三章倒樹）→ 移除過期的「（下一版開放）」
     durability: 6,                // v0.3.69：正式試玩數值（氣球劍 10、氣球槌 6；之後可能依實際遊玩調整）
     cost:       { roundBalloon: 2, balloon260: 1 },  // 2 顆圓氣球（槌頭）+ 1 條 260（握把）
     emoji:      '🔨',
@@ -4689,7 +4689,8 @@ const WIND_TUNING = {
   // v0.3.80 數值 1.2：完整重疊約浮起 25px；v0.3.82 改 1.5：完整重疊約 50px（理論 150×(1−1/1.5)）、身體 75% 在風裡約 31px、60% 以下（極邊緣）托不起來（水平重疊比例、高度衰減照舊）
 };
 var windVents = [];          // 目前關卡的風口（loadLevel 時依關卡建立）
-var c3VentDebugHidden = false;   // v0.3.84：開發者模式 F5 → 隱藏風口除錯資訊（只影響畫面；不存檔、不影響物理與 F4 校準值）
+var c3VentDebugHidden = true;    // v0.3.84：開發者模式 F5 切換風口除錯資訊（只影響畫面；不存檔、不影響物理與 F4 校準值）
+                                 // v0.3.90 #15：預設改成隱藏（以前預設顯示 → 有開發者模式的瀏覽器一進第三章就看到除錯數字）；每次進關恢復隱藏，F5 才顯示
 function makeWindVent(o) {
   // x／w：風口左緣與寬度；y：風口底部（地面）；h：風柱高度；dir：目前只有 'up'；strength：強度倍率；enabled：是否啟用
   return Object.assign({ x: 0, y: GROUND_Y, w: 80, h: 150, dir: 'up', strength: 1, maxUp: JUMP_FORCE + WIND_TUNING.maxUpExtra, enabled: true,
@@ -18310,7 +18311,7 @@ function renderGuidebook() {
     if (recipe.comingSoon)            { craftBtnText = '即將開放'; craftDisabled = true; }
 
     const durLine = recipe.durability > 0
-      ? `<div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>` : '';
+      ? `<div class="recipe-card__dur">耐久：可攻擊 ${recipe.durability} 次</div>` + v390HeldHtml(recipe.id, 'old') : '';
     const ownedLabel = isDog
       ? (owned > 0 ? '<span class="recipe-card__owned">已在小V的家</span>' : '')
       : recipe.eatOnCraft
@@ -20245,6 +20246,10 @@ function rpgSetSide(sideEl, key, active) {
   if (on && on !== next) on.classList.remove('rpg-pimg--on');
 }
 let rpgPageIdx = 0, rpgTypeStart = 0, rpgTypeDone = false, rpgRaf = 0, rpgOpenedAt = 0, rpgCurLeft = null, rpgCurRight = null;
+// v0.3.90 #14-B：3-2 的「汪！汪汪！」有觸發，但出現的位置（x≈826）剛好是玩家要跳上風口 B1（x 890）的地方；汪汪是「點一下就關」的一頁對話，
+//   原本只擋開啟後 0.25 秒內的誤觸 → 玩家連按空白鍵跳（或手機連點）時 0.3 秒內就被關掉，看起來像沒出現（2-2 的汪汪在起點附近、玩家還沒開始跳 → 看得到）
+const V390_DOG_GUARD_MS = 1200;   // 小狗提醒開啟後 1.2 秒內，前進／點畫面不關；之後照原本規則點一下就關
+var v390DogGuardLog = [];
 function rpgOpen(scene, opts) {
   const ui = !!(opts && opts.ui);
   if (rpgActive) return false;
@@ -20335,6 +20340,7 @@ function rpgHandleAction(act) {
   if (act === 'skip') { rpgClose('skipped'); return; }
   if (rpgActive.showcase && (act === 'showcasedone' || act === 'key')) { rpgClose('finished'); return; }
   if (performance.now() - rpgOpenedAt < 250 && !rpgActive.showcase) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
+  if (rpgActive.dogAlert && rpgActive.oneClick && performance.now() - rpgOpenedAt < V390_DOG_GUARD_MS) { try { v390DogGuardLog.push({ act, ms: Math.round(performance.now() - rpgOpenedAt), id: rpgActive.id }); } catch (e) {} return; }   // v0.3.90 #14：小狗提醒 1.2 秒內不被跳躍／移動鍵或連點關掉（略過鈕、Esc 在上面已處理）
   if (rpgActive.showcase) { if (act === 'showcasedone' || act === 'key') rpgClose('finished'); return; } // v0.3.62：觀察筆記由玩家按「看完了」才關（點畫面其他地方不會誤關）
   if (rpgActive.oneClick) { rpgClose('finished'); return; } // v0.3.60：狗狗汪汪一頁 → 點一下就關（不用先補完文字）
   // 第一次點：補完本頁；第二次點：下一頁
@@ -22601,7 +22607,7 @@ function h2PanelBody(kind, tab) {
       const st = h2RecipeState(r);
       const mats = '<div class="h2-mats">' + st.mats.map(x => '<span class="h2-mat' + (x.have >= x.q ? '' : ' is-low') + '">' + h2Icon(x.m) + h2Esc(matName(x.m)) + ' ' + x.have + ' / ' + x.q + (x.have >= x.q ? ' ✓' : '') + '</span>').join('') + '</div>';
       const badge = r.id === 'balloonDog' ? (st.owned ? '<span class="h2-count">在家</span>' : '') : r.eatOnCraft ? '' : '<span class="h2-count">' + st.owned + '</span>';
-      return h2RowHtml({ iconHtml: h2Icon(r.id), badge, name: r.name, desc: h2Esc(r.effect) + (r.durability > 0 ? '<br>耐久：可攻擊 ' + r.durability + ' 次' : ''), extra: mats,
+      return h2RowHtml({ iconHtml: h2Icon(r.id), badge, name: r.name, desc: h2Esc(r.effect) + (r.durability > 0 ? '<br>耐久：可攻擊 ' + r.durability + ' 次' : '') + v390HeldHtml(r.id, 'h2'), extra: mats,
         zero: !r.eatOnCraft && r.id !== 'balloonDog' && st.owned <= 0, attr: ' data-recipe-row="' + r.id + '"',
         side: '<button type="button" class="h2-pill h2-pill--green" data-h2-act="craft" data-key="' + r.id + '"' + (st.reason ? ' disabled' : '') + '>' + h2Esc(st.reason || '製作') + '</button>' });
     }).join('') + '</div><div class="h2-sub" style="margin-top:0.7em">製作成功會顯示實際用掉的材料；材料不足時不會扣任何東西。</div>';
@@ -27460,7 +27466,7 @@ function drawC2UmbCalPanel() {
         e.preventDefault(); e.stopImmediatePropagation();
         if (e.repeat) return;
         c3VentDebugHidden = !c3VentDebugHidden;
-        showHint(c3VentDebugHidden ? '🙈 F5：風口除錯資訊 隱藏（乾淨畫面；風口作用與 F4 校準值照舊）' : '👀 F5：風口除錯資訊 顯示', 150);
+        showHint(c3VentDebugHidden ? '🙈 F5：風口除錯資訊 隱藏（乾淨畫面；風口作用與 F4 校準值照舊）' : '👀 F5：風口除錯資訊 顯示（再按一次 F5 隱藏）', 150);
         console.log('[Chapter3Vent] F5 風口除錯資訊：' + (c3VentDebugHidden ? '隱藏' : '顯示'));
         return;
       }
@@ -28321,7 +28327,7 @@ function wsFire(e) {
   const b = { x: m.x, y: m.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, ang, dist: 0, st: 'fly', t: 0, owner: e, id: (e.c2Id || 'W') + '#' + (++wsState(e).shots), blocked: 0 };
   wsBlades.push(b);
   wsLogPush({ ev: 'fire', id: b.id, x: Math.round(m.x), y: Math.round(m.y), deg: Math.round(-ang * 180 / Math.PI), face: f, target: { x: Math.round(pc.x), y: Math.round(pc.y) } });
-  try { sfxPlay('scorpionKnockback'); } catch (er) {}   // 沿用既有「咻」聲（沒有新音效素材）
+  try { const v = sfxPlay('wsFire'); wsAudLog({ ev: 'fire', key: 'wsFire', file: 'enemy/orange_projectile_fly.mp3', id: b.id, played: !!v }); } catch (er) {}   // v0.3.90 #12：發射瞬間改用使用者指定的既有音效 orange_projectile_fly.mp3（只播一次；Charge／Flying 不變）
   return b;
 }
 function wsStep(e) {
@@ -28752,4 +28758,65 @@ function wsAudioFrame(playing) {
     flying: { playing: !!SFX.loops.wsFlying, instances: wsAudInstances('wsFlying'), starts: wsAud.starts.wsFlying, stops: wsAud.stops.wsFlying, status: SFX.status.wsFlying, url: (SFX.urls.wsFlying || '').replace(/\?.*$/, '') },
     blades: wsBladeAudioState(), log: wsAud.log.slice(-40),
   });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.90：冒險主線修正（adventure-fixes-v1.0）#11～#15
+//  #11 氣球槌說明移除「（下一版開放）」（直接改 RECIPES 文字）
+//  #12 風刃蠍子發射瞬間：orange_projectile_fly.mp3 播一次（wsFire；和飛行油彈橘子共用同一份音檔緩衝 bufferOf，不搬、不改原檔）
+//  #13 氣球秘笈：持有數量＋最舊一件（＝目前裝備中、下一次會扣耐久的那一件）的耐久度
+//      資料：背包 craftedItems（數量）＋ equippedSwordDur／equippedHammerDur／equippedUmbrellaDur（使用中那一件的耐久）
+//      判斷方式和 initEquippedSword／initEquippedHammer／initEquippedUmbrella 完全相同（存檔值 1～最大值 → 用存檔值；否則＝新的一把、滿耐久）
+//      其他備用的都是全新（滿耐久）；耗盡時 weaponBreak／c2UmbBreak 數量 −1、下一把滿耐久接續 → 和這裡顯示的一致
+//      唯讀：不改存檔格式、不改消耗順序
+//  #14 3-2 出發前的小狗尋寶提醒：原本只看「下一關的主要寶物 hiddenTreasure」→ 3-2 沒有主要寶物（排球秘笈放在 extraHiddenTreasures）而且
+//      3-1／3-2 通關後的出發目標是 3-2（不是 getNextLevelIndex）→ 一直判斷成「沒有寶物」。改成：出發目標＝實際會進入的關卡；主要寶物或任一個還沒探索的額外寶物
+//  #15 風口除錯資訊：預設隱藏；每次進關恢復隱藏；F5 切換（沿用原本的 F5 處理，不另外加監聽）
+// ════════════════════════════════════════════════════════════════════
+Object.assign(SFX_DEFS, {
+  wsFire: { path: 'enemy/orange_projectile_fly.mp3', vol: 0.55, minGapMs: 120, maxVoices: 2, bufferOf: 'orangeProjectileFly' },
+});
+function v390HeldInfo(id) {
+  const inv = playerInventory || {}, ci = inv.craftedItems || {};
+  let n, max, saved;
+  if (id === 'basicSword' || id === 'basicHammer') {
+    const r = RECIPES.find(q => q.id === id); if (!r) return null;
+    n = Math.max(0, Math.floor(Number(ci[id]) || 0)); max = r.durability;
+    saved = Number(id === 'basicSword' ? inv.equippedSwordDur : inv.equippedHammerDur) || 0;
+  } else if (id === 'balloonUmbrella' && typeof c2UmbrellaCount === 'function') {
+    n = c2UmbrellaCount(); max = UMBRELLA_MAX_DUR; saved = Number(inv.equippedUmbrellaDur) || 0;
+  } else return null;
+  if (n <= 0) return { n: 0, max, cur: null };
+  return { n, max, cur: (saved > 0 && saved <= max) ? saved : max };
+}
+function v390HeldHtml(id, style) {
+  const h = v390HeldInfo(id); if (!h) return '';
+  const txt = h.n > 0 ? ('持有：' + h.n + ' 把　｜　最舊一把耐久度：' + h.cur + '/' + h.max) : '持有：0　｜　耐久度：—';
+  const low = h.n > 0 && h.cur <= 1;
+  return style === 'old'
+    ? '<div class="recipe-card__held' + (low ? ' is-low' : '') + '" data-held="' + id + '">' + txt + '</div>'
+    : '<br><span class="h2-held' + (low ? ' is-low' : '') + '" data-held="' + id + '">' + txt + '</span>';
+}
+(function v390Install() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v390) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v390 = true; globalThis[name] = w; };
+  // #15：每次進關 → 風口除錯資訊恢復隱藏
+  wrapFn('loadLevel', o => function () { c3VentDebugHidden = true; return o.apply(this, arguments); });
+  // #14：出發前的小狗尋寶提醒
+  wrapFn('h2SniffInfo', o => function () {
+    try {
+      if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return o.apply(this, arguments);
+      let idx;
+      if ((typeof c2Is31Clear === 'function' && c2Is31Clear()) || (typeof c2Is32Clear === 'function' && c2Is32Clear())) idx = getLevelIndexByStageId('3-2');   // 小V的家「出發」實際會進入 3-2
+      else idx = (gameState === 'clear' && homeEntryMode !== 'failed') ? getNextLevelIndex(currentLevelIndex) : currentLevelIndex;
+      const lv = LEVELS[idx]; if (!lv) return o.apply(this, arguments);
+      const extra = (lv.extraHiddenTreasures || []).some(t => typeof vbExtraAvailable === 'function' && vbExtraAvailable(lv, t));
+      if (!extra) return o.apply(this, arguments);                        // 沒有額外寶物 → 完全照原本判斷（主要寶物）
+      const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0) || !!lv.forceDog;   // 3-2 一定有小狗同行
+      if (!hasDog) return { dog: false, text: '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！' };
+      if (nextBringDog || lv.forceDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
+      return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
+    } catch (e) { return o.apply(this, arguments); }
+  });
+  window.debugAdventureFixes = () => ({ ventDebugHidden: c3VentDebugHidden, sniff: (function () { try { return h2SniffInfo(); } catch (e) { return String(e); } })(),
+    held: ['basicSword', 'basicHammer', 'balloonUmbrella'].map(id => Object.assign({ id }, v390HeldInfo(id) || {})), fireSfx: { status: SFX.status.orangeProjectileFly, url: (SFX.urls.orangeProjectileFly || '').replace(/\?.*$/, '') } });
 })();
