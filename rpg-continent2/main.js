@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.90-adventure-fixes-test-1';
-const BUILD_TIME   = '2026-11-09 01:30';
+const GAME_VERSION = 'adventure-v0.3.91-volleyball-reward-ai-test-1';
+const BUILD_TIME   = '2026-11-09 04:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27511,11 +27511,22 @@ const VB_CONFIG = {
   exploreIds: { '2-2': '2-2#recipe:balloonVolleyball', '3-2': '3-2#recipe:balloonVolleyball' },
   cost: { balloon260: 3 },
   maxMatches: 3,
-  // 獎勵參數（第一版測試值；使用者尚未逐項確認 → 全部集中在這裡調整）
+  // 獎勵參數（volleyball-reward-ai-v1.1 正式定案；v0.3.91 起取代舊版「基本 10 金幣＋每分＋勝利加碼」）
+  //   勝利：依對手難度，下面就是一場的「完整總獎勵」（不疊加任何舊版獎勵；製作排球的 260 ×3 不從這裡扣）
+  //   輸球：260 ×4、圓氣球 0；金幣 ＝ 最後得分 × 該得分所在級距的單分價值（非累進、不分對手）
   reward: {
-    base: { balloon260: 4, coins: 10 },                                // 正常完成一場（不論輸贏）
-    perPoint: { scorpion: 1, orange: 2, orange_king: 3 },              // 玩家每得 1 分的金幣
-    winBonus: { scorpion: 5, orange: 10, orange_king: 15 },            // 勝利額外金幣
+    win: {
+      scorpion:    { balloon260: 6,  roundBalloon: 2, coins: 42 },
+      orange:      { balloon260: 8,  roundBalloon: 4, coins: 50 },
+      orange_king: { balloon260: 12, roundBalloon: 8, coins: 80 },
+    },
+    lose: { balloon260: 4, roundBalloon: 0 },
+    loseCoinTiers: [                                                    // 依「最後得分」選一個級距，整場得分 × 單分價值
+      { min: 0, max: 0, perPoint: 0 },
+      { min: 1, max: 2, perPoint: 3 },
+      { min: 3, max: 5, perPoint: 5 },
+      { min: 6, max: 6, perPoint: 7 },
+    ],
   },
   targetScore: 7,
   frameUrl: '../minigames/volleyball/index.html',
@@ -27546,10 +27557,19 @@ function vbTickets() { return Math.max(0, Math.floor(Number(((playerInventory.cr
 function vbSave() { try { saveInventory(); } catch (e) {} }
 
 // ── 獎勵計算（集中）──
+function vbLoseCoinPerPoint(score) {
+  const s = Math.max(0, Math.floor(Number(score) || 0));
+  const t = VB_CONFIG.reward.loseCoinTiers.find(x => s >= x.min && s <= x.max);
+  return t ? t.perPoint : 0;
+}
 function vbCalcReward(r) {
-  const R = VB_CONFIG.reward, pp = R.perPoint[r.opponentId] || 0, wb = r.winner === 'player' ? (R.winBonus[r.opponentId] || 0) : 0;
-  const coins = R.base.coins + r.playerScore * pp + wb;
-  return { balloon260: R.base.balloon260, coins, parts: { baseCoins: R.base.coins, pointCoins: r.playerScore * pp, perPoint: pp, winBonus: wb } };
+  const R = VB_CONFIG.reward;
+  if (r.winner === 'player') {
+    const w = R.win[r.opponentId] || { balloon260: 0, roundBalloon: 0, coins: 0 };
+    return { win: true, balloon260: w.balloon260, roundBalloon: w.roundBalloon, coins: w.coins, parts: { kind: 'win', opponentId: r.opponentId } };
+  }
+  const score = Math.max(0, Math.floor(Number(r.playerScore) || 0)), pp = vbLoseCoinPerPoint(score);
+  return { win: false, balloon260: R.lose.balloon260, roundBalloon: R.lose.roundBalloon, coins: score * pp, parts: { kind: 'lose', score, perPoint: pp } };
 }
 
 // ── 已經完成過的主線關卡（解鎖當下記下來 → 之前完成的不會變成新的額度）──
@@ -27725,13 +27745,14 @@ function vbSettle(d, c) {
   playerInventory.craftedItems[VB_CONFIG.recipeKey] = vbTickets() - 1;   // 用掉這顆排球
   v.matchesLeft = Math.max(0, v.matchesLeft - 1);
   playerInventory.balloon260 = (playerInventory.balloon260 || 0) + rw.balloon260;
+  playerInventory.roundBalloon = (playerInventory.roundBalloon || 0) + rw.roundBalloon;   // 圓氣球：沿用背包既有欄位 playerInventory.roundBalloon（關卡拾取也用同一個）
   playerInventory.coins = (playerInventory.coins || 0) + rw.coins;
   v.settled[d.matchId] = c.id;
   Object.assign(c, { state: 'done', matchId: d.matchId, settledAt: Date.now(), result: { playerScore: d.playerScore, cpuScore: d.cpuScore, winner: d.winner, difficulty: d.difficulty }, reward: rw, shown: false });
-  v.history.push({ t: 'match', at: Date.now(), session: c.id, matchId: d.matchId, opponent: c.opponent, score: d.playerScore + ':' + d.cpuScore, winner: d.winner, coins: rw.coins, b260: rw.balloon260 });
+  v.history.push({ t: 'match', at: Date.now(), session: c.id, matchId: d.matchId, opponent: c.opponent, score: d.playerScore + ':' + d.cpuScore, winner: d.winner, coins: rw.coins, b260: rw.balloon260, round: rw.roundBalloon });
   if (v.history.length > 60) v.history.splice(0, v.history.length - 60);
   vbSave();
-  console.log('[Volleyball] 比賽結算：' + c.opponent + ' ' + d.playerScore + '：' + d.cpuScore + ' → 260 +' + rw.balloon260 + '、金幣 +' + rw.coins + '（剩 ' + v.matchesLeft + ' 場）');
+  console.log('[Volleyball] 比賽結算：' + c.opponent + ' ' + d.playerScore + '：' + d.cpuScore + ' → 260 +' + rw.balloon260 + '、圓氣球 +' + rw.roundBalloon + '、金幣 +' + rw.coins + '（剩 ' + v.matchesLeft + ' 場）');
   try { h2ScheduleRefresh(); } catch (e) {}
   return true;
 }
@@ -27752,8 +27773,10 @@ function vbShowResult(c) {
   const op = vbOpp(c.opponent) || { name: c.opponent, level: '' }, r = c.result, w = c.reward, win = r.winner === 'player';
   vbShowModal('<div style="text-align:center;font-weight:bold;font-size:20px">' + (win ? '🏆 小V 獲勝！' : '🏐 比賽完成！') + '</div>'
     + '<div style="text-align:center;margin:4px 0 10px">小V ' + r.playerScore + ' ： ' + r.cpuScore + ' ' + h2Esc(op.name) + '（' + h2Esc(op.level) + '）</div>'
-    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('balloon260') + '</span><span>260 長條氣球 <b>+' + w.balloon260 + '</b>（完成比賽保底）</span></div>'
-    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('coins') + '</span><span>金幣 <b>+' + w.coins + '</b>（保底 ' + w.parts.baseCoins + '＋得分 ' + r.playerScore + ' × ' + w.parts.perPoint + (w.parts.winBonus ? '＋勝利 ' + w.parts.winBonus : '') + '）</span></div>'
+    + '<div style="font-weight:bold;margin:2px 0 4px">本場獲得</div>'
+    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('balloon260') + '</span><span>260 長條氣球 <b>+' + w.balloon260 + '</b></span></div>'
+    + (win ? '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('roundBalloon') + '</span><span>圓氣球 <b>+' + (w.roundBalloon || 0) + '</b></span></div>' : '')
+    + '<div class="vb-rrow"><span class="vb-rico">' + h2Icon('coins') + '</span><span>金幣 <b>+' + w.coins + '</b></span></div>'
     + '<div style="margin-top:8px;font-size:14px;color:#7a5a30">本輪剩餘場次：' + vbData().matchesLeft + '／' + VB_CONFIG.maxMatches + '</div>');
 }
 
@@ -27791,10 +27814,10 @@ function vbPanelHtml() {
   h += '<div class="vb-ops">';
   VB_CONFIG.opponents.forEach(o => {
     h += '<div class="vb-box vb-op"><img src="' + h2Esc(vbImg(o.id, left > 0 ? 'idle' : 'lose')) + '" alt="" draggable="false" onerror="this.style.visibility=\'hidden\'">'
-      + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>每得 1 分金幣 +' + R.perPoint[o.id] + '<br>勝利再 +' + R.winBonus[o.id] + '</small>'
+      + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>勝利獎勵：260 ×' + R.win[o.id].balloon260 + '<br>圓氣球 ×' + R.win[o.id].roundBalloon + '・金幣 ' + R.win[o.id].coins + '</small>'
       + '<button type="button" class="h2-pill ' + (left > 0 && t > 0 ? 'h2-pill--green' : 'h2-pill--yellow') + ' h2-pill--sm" data-vb-act="play" data-op="' + o.id + '">' + (left <= 0 ? '休息中' : t > 0 ? '開始比賽' : '先製作排球') + '</button></div>';
   });
-  h += '</div><div class="vb-note">每場正常完成（不論輸贏）：260 ×' + R.base.balloon260 + '＋金幣 ' + R.base.coins + '；先得 7 分獲勝。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），首次完成新的冒險關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
+  h += '</div><div class="vb-note">先得 7 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），首次完成新的冒險關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
   return h;
 }
 function vbEnsureNav() {
@@ -27816,7 +27839,7 @@ function vbEnsureNav() {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v385) { if (typeof o !== 'function') console.warn('[v0.3.85] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v385 = true; globalThis[name] = w; };
   // 秘笈與製作（沿用既有氣球秘笈）
   RECIPES.push({ id: 'balloonVolleyball', name: '氣球排球', minigame: true, durability: 0, cost: Object.assign({}, VB_CONFIG.cost), emoji: '🏐', unlockKey: 'balloonVolleyball',
-    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。不論輸贏，正常完成都能拿到 260 ×4 與金幣。' });
+    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。比賽完成後可以獲得 260、金幣等比賽獎勵，打贏還有圓氣球。' });
   H2_PANEL_TITLES.volleyball = '氣球排球';
   // v0.3.85 test-3：氣球排球秘笈 RPG 台詞（使用者確認的正式台詞，不得改寫）
   //   第一幕「咦！發現了氣球秘笈！」由既有共用場景 rpg020_find 播放；這裡是第二～四幕（和氣球槌、棒棒糖相同的資料格式）

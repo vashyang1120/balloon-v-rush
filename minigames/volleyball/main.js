@@ -12,7 +12,8 @@
 // 單位：位置 = 像素（1280×720 邏輯座標），速度 = 像素/秒，時間 = 秒
 // =========================================================
 const CONFIG = {
-  VERSION: 'v0.2.3-test-1',
+  VERSION: 'v0.2.4-test-1',
+  BUILD_TIME: '2026-11-09 04:30',
 
   // ---- 場地 ----
   WORLD_W: 1280,              // 邏輯寬度
@@ -82,6 +83,7 @@ const CONFIG = {
     AIM_FORWARD_CHANCE: 0.45, // 擊球時按「往前」的機率
     AIM_BACK_CHANCE: 0.20,    // 擊球時按「往後（高吊）」的機率
     PREDICT_MAX_TIME: 3.0,    // 預測最長秒數
+    HARD_BALL_DELAY: 0,       // v0.2.4：困難球（落點離自己很遠）額外反應延遲（秒）；0 ＝ 沒有
   },
 
   // ---- 比賽流程 ----
@@ -127,6 +129,7 @@ const AI_PROFILES = {
       AIM_FORWARD_CHANCE: 0.20, // 攻擊方向：往前壓的機率
       AIM_BACK_CHANCE: 0.35,    // 攻擊方向：高吊（好接）的機率
       PREDICT_MAX_TIME: 3.0,
+      HARD_BALL_DELAY: 0,
     },
   },
   orange: {
@@ -135,10 +138,13 @@ const AI_PROFILES = {
     desc: '反應正常，會接球也會進攻。',
     reward: '進階獎勵級距',
     ai: {
-      REACTION_TIME: 0.17,
-      PREDICT_ERROR: 54,
-      BIG_MISTAKE_CHANCE: 0.19,
-      BIG_MISTAKE_ERROR: 130,
+      // v0.2.4（volleyball-reward-ai-v1.1）：基礎難度再小幅降低（移動、跳躍、擊球頻率不變）
+      //   修改前（v0.2.3）：反應 0.17／誤差 54／嚴重失誤 0.19（誤差 130）／困難球延遲 0
+      REACTION_TIME: 0.18,
+      PREDICT_ERROR: 60,
+      BIG_MISTAKE_CHANCE: 0.20,
+      BIG_MISTAKE_ERROR: 138,
+      HARD_BALL_DELAY: 0.03,
       CONTACT_OFFSET: 20,
       DEADZONE: 10,
       HOME_X: 1010,
@@ -173,9 +179,51 @@ const AI_PROFILES = {
       AIM_FORWARD_CHANCE: 0.50,
       AIM_BACK_CHANCE: 0.12,
       PREDICT_MAX_TIME: 3.0,
+      HARD_BALL_DELAY: 0,
     },
   },
 };
+// 勝利／輸球獎勵（只用來在「獨立測試網址」的結算畫面顯示，不發放任何東西）
+// 冒險比賽的實際發放由冒險主線計算（rpg-continent2 VB_CONFIG.reward），兩邊數字相同
+const REWARD_PREVIEW = {
+  win: { scorpion: { b260: 6, round: 2, coins: 42 }, orange: { b260: 8, round: 4, coins: 50 }, orange_king: { b260: 12, round: 8, coins: 80 } },
+  lose: { b260: 4, round: 0 },
+  losePerPoint(score) { return score <= 0 ? 0 : score <= 2 ? 3 : score <= 5 ? 5 : 7; },
+};
+for (const id of Object.keys(REWARD_PREVIEW.win)) { const w = REWARD_PREVIEW.win[id]; AI_PROFILES[id].reward = `勝利：260×${w.b260}・圓氣球×${w.round}・金幣${w.coins}`; }
+
+// =========================================================
+// 【長回合疲勞】v0.2.4（volleyball-reward-ai-v1.1）
+// 同一球裡，玩家每「成功把球送過網到電腦場地」一次＝ 1 次有效回擊（按鍵、跳躍、空按、同一次碰撞的多個畫面都不算）
+// 疲勞程度 0～1：回擊次數 < startAt → 0；從 startAt 開始每多一次增加一格，到 fullAt 達到上限 1（不會再增加）
+// 疲勞只會讓電腦「判斷變慢、落點猜得比較不準、比較容易嚴重判斷錯誤、遠的球比較晚出發」
+//   ・不改移動速度、跳躍、擊球力量、球的物理、比分；電腦仍然會追球、會擊球
+// 每一球開始發球時歸零（不會跨球累積）
+// =========================================================
+const FATIGUE_CONFIG = {
+  HARD_BALL_DX: 260,          // 落點離電腦目前位置超過這個距離＝困難球
+  scorpion: {                 // 初級：第 3 次開始、第 6 次到上限、效果較明顯
+    enabled: true, startAt: 3, fullAt: 6,
+    reactionAdd: 0.10,        // 反應延遲最多 +0.10 秒
+    predictErrorAdd: 36,      // 落點預測誤差最多 +36 像素
+    bigMistakeAdd: 0.12,      // 嚴重判斷失誤機率最多 +12%
+    hardBallDelayAdd: 0.10,   // 困難球額外延遲最多 +0.10 秒（困難球救援能力衰減上限）
+  },
+  orange: {                   // 中級：第 4 次開始、第 7 次到上限、效果較輕
+    enabled: true, startAt: 4, fullAt: 7,
+    reactionAdd: 0.05,
+    predictErrorAdd: 18,
+    bigMistakeAdd: 0.06,
+    hardBallDelayAdd: 0.05,
+  },
+  orange_king: { enabled: false },  // 高級：本次不加入疲勞
+};
+function fatigueOf(opponentId, returns) {
+  const F = FATIGUE_CONFIG[opponentId];
+  if (!F || !F.enabled || returns < F.startAt) return 0;
+  return Math.min(1, (returns - F.startAt + 1) / (F.fullAt - F.startAt + 1));
+}
+
 const OPPONENT_ORDER = ['scorpion', 'orange', 'orange_king'];
 const DIFFICULTY_ID = { scorpion: 'beginner', orange: 'intermediate', orange_king: 'advanced' };
 
@@ -360,6 +408,10 @@ const game = {
   opponent: 'orange',      // 目前對手（scorpion / orange / orange_king）
   ticks: 0,
   winner: null,
+  // v0.2.4 長回合疲勞：本球的有效回擊次數（每次發球歸零）
+  rallyReturns: 0,
+  lastToucher: null,       // 'left' / 'right' / null（發球後還沒有人碰）
+  returnCounted: false,    // 玩家這一次碰球送過網，是否已經算過
 };
 
 const params = new URLSearchParams(location.search);
@@ -513,6 +565,9 @@ function startServe() {
   resetAI();
   placeBallForServe();
   game.pointWinner = null;
+  game.rallyReturns = 0;          // v0.2.4：新的一球 → 疲勞歸零
+  game.lastToucher = null;
+  game.returnCounted = false;
   game.ballEventId++;
   game.state = STATE.SERVE_READY;
   ai.serveTimer = CONFIG.CPU_SERVE_DELAY;
@@ -571,6 +626,8 @@ function serveBall(side, vx, vy) {
   ball.held = false;
   ball.vx = vx;
   ball.vy = vy;
+  game.lastToucher = null;        // 發球不算回擊
+  game.returnCounted = false;
   game.ballEventId++;
   game.state = STATE.RALLY;
 }
@@ -760,6 +817,7 @@ function doActiveHit(c, nx, ny) {
   c.poseTimer = CHARACTER_VISUAL_CONFIG.DIVE_POSE_TIME;
   sfx('ball_hit');
   c.touchCooldown = CONFIG.TOUCH_COOLDOWN;
+  markTouch(c);
   game.ballEventId++;
 }
 
@@ -786,8 +844,23 @@ function doNormalBounce(c, nx, ny) {
   ball.x = c.x + nx * (c.r + BR + 0.5);
   ball.y = c.y + ny * (c.r + BR + 0.5);
   c.touchCooldown = CONFIG.TOUCH_COOLDOWN;
+  markTouch(c);
   game.ballEventId++;
   sfx('ball_bounce');
+}
+
+// v0.2.4：記下最後碰球的一方（只供疲勞計數；不影響任何物理）
+function markTouch(c) {
+  game.lastToucher = c === player ? 'left' : 'right';
+  game.returnCounted = false;
+}
+// 有效回擊：玩家最後碰的球，球心從玩家場地越過網子中線到電腦場地 → 計 1 次（同一次送球只算一次）
+function countReturn(prevX) {
+  if (game.state !== STATE.RALLY || game.lastToucher !== 'left' || game.returnCounted) return;
+  if (prevX <= CONFIG.NET_X && ball.x > CONFIG.NET_X) {
+    game.returnCounted = true;
+    game.rallyReturns++;
+  }
 }
 
 function inHitRange(c) {
@@ -847,6 +920,7 @@ function stepBall(dt) {
     resolveCharacter(cpu);
     resolveNet(prevX); // 角色把球推向網時再確認一次
     clampBallSpeed();
+    countReturn(prevX);
 
     if (ball.y + BR >= CONFIG.GROUND_Y) {
       ball.y = CONFIG.GROUND_Y - BR;
@@ -913,6 +987,10 @@ const ai = {
   jumpRolled: -1,
   hitRolled: -1,
   serveTimer: 0,
+  fatigue: 0,          // v0.2.4：目前這顆來球的疲勞程度（0～1）
+  fatigueReturns: 0,   // 判斷疲勞時用的回擊次數
+  bigMistake: false,   // 這顆來球是否擲到嚴重判斷失誤（統計用）
+  hardDelay: 0,        // 這顆來球的困難球額外延遲（秒）
 };
 
 function resetAI() {
@@ -925,6 +1003,25 @@ function resetAI() {
   ai.jumpRolled = -1;
   ai.hitRolled = -1;
   ai.serveTimer = CONFIG.CPU_SERVE_DELAY;
+  ai.fatigue = 0;
+  ai.fatigueReturns = 0;
+  ai.bigMistake = false;
+  ai.hardDelay = 0;
+}
+
+// v0.2.4：這顆來球算第幾次回擊（玩家剛碰到、還沒過網的球，算成「即將送過來的那一次」）
+function incomingReturns() {
+  return game.rallyReturns + (game.lastToucher === 'left' && !game.returnCounted ? 1 : 0);
+}
+// 疲勞後的實際決策參數（疲勞 0 時與原本參數完全相同）
+function aiEff() {
+  const A = CONFIG.AI, F = FATIGUE_CONFIG[game.opponent], f = ai.fatigue;
+  if (!(f > 0) || !F || !F.enabled) return { REACTION_TIME: A.REACTION_TIME, PREDICT_ERROR: A.PREDICT_ERROR, BIG_MISTAKE_CHANCE: A.BIG_MISTAKE_CHANCE };
+  return {
+    REACTION_TIME: A.REACTION_TIME + F.reactionAdd * f,
+    PREDICT_ERROR: A.PREDICT_ERROR + F.predictErrorAdd * f,
+    BIG_MISTAKE_CHANCE: Math.min(0.6, A.BIG_MISTAKE_CHANCE + F.bigMistakeAdd * f),
+  };
 }
 
 // 簡化的軌跡預測（重力、牆、球網），不考慮角色
@@ -952,9 +1049,20 @@ function predictBall() {
 }
 
 function rollError() {
-  const A = CONFIG.AI;
-  if (Math.random() < A.BIG_MISTAKE_CHANCE) return (Math.random() < 0.5 ? -1 : 1) * A.BIG_MISTAKE_ERROR;
-  return (Math.random() + Math.random() - 1) * A.PREDICT_ERROR * 1.5;
+  const A = CONFIG.AI, E = aiEff();
+  ai.bigMistake = false;
+  if (Math.random() < E.BIG_MISTAKE_CHANCE) { ai.bigMistake = true; return (Math.random() < 0.5 ? -1 : 1) * A.BIG_MISTAKE_ERROR; }
+  return (Math.random() + Math.random() - 1) * E.PREDICT_ERROR * 1.5;
+}
+// 困難球額外延遲：只看「落點離電腦目前位置多遠」（基礎值＋疲勞增加量）；沒有困難球設定時不做任何計算
+function hardBallDelay() {
+  const A = CONFIG.AI, F = FATIGUE_CONFIG[game.opponent];
+  const add = (A.HARD_BALL_DELAY || 0) + (F && F.enabled && ai.fatigue > 0 ? F.hardBallDelayAdd * ai.fatigue : 0);
+  if (!(add > 0)) return 0;
+  const p = predictBall();
+  const x = p.contactX !== null ? p.contactX : p.landX;
+  if (x === null || x <= NET_RIGHT) return 0;
+  return Math.abs(x - cpu.x) > FATIGUE_CONFIG.HARD_BALL_DX ? add : 0;
 }
 
 function updateAI(dt) {
@@ -979,13 +1087,16 @@ function updateAI(dt) {
 
   if (game.ballEventId !== ai.seenEvent) {
     ai.seenEvent = game.ballEventId;
+    ai.fatigueReturns = incomingReturns();
+    ai.fatigue = fatigueOf(game.opponent, ai.fatigueReturns);
     ai.error = rollError();
-    ai.thinkTimer = A.REACTION_TIME; // 新的一球：先反應延遲再判斷
+    ai.hardDelay = hardBallDelay();
+    ai.thinkTimer = aiEff().REACTION_TIME + ai.hardDelay; // 新的一球：先反應延遲再判斷
   }
 
   ai.thinkTimer -= dt;
   if (ai.thinkTimer <= 0) {
-    ai.thinkTimer = A.REACTION_TIME * (0.7 + Math.random() * 0.6);
+    ai.thinkTimer = aiEff().REACTION_TIME * (0.7 + Math.random() * 0.6);
     const p = predictBall();
     ai.predContactX = p.contactX;
     ai.predLandX = p.landX;
@@ -1840,6 +1951,7 @@ function drawDebug() {
     `ball: x=${ball.x.toFixed(1)} y=${ball.y.toFixed(1)}  vx=${ball.vx.toFixed(1)} vy=${ball.vy.toFixed(1)} |v|=${Math.hypot(ball.vx, ball.vy).toFixed(0)}`,
     `AI land: ${ai.predLandX === null ? '-' : ai.predLandX.toFixed(0)}  contact: ${ai.predContactX === null ? '-' : ai.predContactX.toFixed(0)}  target: ${ai.targetX.toFixed(0)}`,
     `opponent: ${game.opponent} (${AI_PROFILES[game.opponent].level})  react=${A.REACTION_TIME} err=${A.PREDICT_ERROR} miss=${A.BIG_MISTAKE_CHANCE} hit=${A.HIT_CHANCE} jump=${A.JUMP_CHANCE}`,
+    `rally returns: ${game.rallyReturns}  fatigue: ${ai.fatigue.toFixed(2)} (n=${ai.fatigueReturns})  hardDelay=${ai.hardDelay.toFixed(2)}${ai.bigMistake ? '  BIG-MISTAKE' : ''}`,
     `player hit: ${player.hitTimer.toFixed(2)}${player.hitUsed ? ' used' : ''}  cpu hit: ${cpu.hitTimer.toFixed(2)}  input: ${['left', 'right', 'jump', 'hit'].filter(k => playerCtrl[k]).join(',') || '-'}`,
     `visual: ${visualMode}  V: ${sp('v')} ${poseOf(player)}${player.lookDir > 0 ? '→' : '←'}  CPU: ${sp(game.opponent)} ${poseOf(cpu)}${cpu.lookDir > 0 ? '→' : '←'}  ball: ${sprites.ball.status}`,
     `audio: ${au.unlocked ? (au.ctx || 'none') : 'locked'}  bgm=${au.current || '-'}${au.muted ? ' (muted)' : ''}   court: ${courtMode} bg=${courtArt.background.status} ground=${courtArt.ground.status} net=${courtArt.net.status}`,
@@ -2009,13 +2121,17 @@ function showGameOver() {
     showOverlay('over');
     return;
   }
-  // 只顯示獎勵規則與級距，不顯示數字、不發放任何東西
-  el.reward.innerHTML = `
-    <div class="rw-title">獎勵預覽（測試版不發放）</div>
-    <div class="rw-row"><span>完成比賽保底獎勵</span><b class="ok">✔ 已達成</b></div>
-    <div class="rw-row"><span>本場得分 ${game.score.left} 分</span><b>得分越高，獎勵越高</b></div>
-    <div class="rw-row"><span>對手難度：${p.level}</span><b>${p.reward}</b></div>
-    <div class="rw-row"><span>勝利加碼</span><b class="${playerWon ? 'ok' : 'no'}">${playerWon ? '✔ 獲得' : '— 未獲得'}</b></div>`;
+  // 獨立測試網址：只顯示這場在冒險裡會得到的比賽獎勵（不發放任何東西）
+  const W = REWARD_PREVIEW.win[game.opponent] || { b260: 0, round: 0, coins: 0 };
+  const loseCoins = game.score.left * REWARD_PREVIEW.losePerPoint(game.score.left);
+  el.reward.innerHTML = playerWon ? `
+    <div class="rw-title">比賽獎勵（測試版不發放）</div>
+    <div class="rw-row"><span>260 長條氣球</span><b>+${W.b260}</b></div>
+    <div class="rw-row"><span>圓氣球</span><b>+${W.round}</b></div>
+    <div class="rw-row"><span>金幣</span><b>+${W.coins}</b></div>` : `
+    <div class="rw-title">比賽獎勵（測試版不發放）</div>
+    <div class="rw-row"><span>260 長條氣球</span><b>+${REWARD_PREVIEW.lose.b260}</b></div>
+    <div class="rw-row"><span>金幣</span><b>+${loseCoins}</b></div>`;
   showOverlay('over');
 }
 
@@ -2348,7 +2464,9 @@ window.BalloonVolleyball = {
         ball: sprites.ball.status,
         court: { mode: courtMode, background: courtArt.background.status, ground: courtArt.ground.status, net: courtArt.net.status },
       },
-      ai: { targetX: ai.targetX, predLandX: ai.predLandX, profile: { ...CONFIG.AI } },
+      ai: { targetX: ai.targetX, predLandX: ai.predLandX, profile: { ...CONFIG.AI }, fatigue: ai.fatigue, fatigueReturns: ai.fatigueReturns, hardDelay: ai.hardDelay, bigMistake: ai.bigMistake },
+      rally: { returns: game.rallyReturns, lastToucher: game.lastToucher, returnCounted: game.returnCounted },
+      buildTime: CONFIG.BUILD_TIME,
       input: { ...playerCtrl },
       touch: { ...touchInput },
       audio: audio.stats(),
@@ -2357,6 +2475,59 @@ window.BalloonVolleyball = {
     };
   },
 };
+
+// =========================================================
+// v0.2.4：AI 難度比較測試介面（只有網址加 ?aitest=1 才存在；一般遊玩、冒險比賽都不會有）
+//   同一條球路、同一組亂數種子，讓三位對手在「第 n 次有效回擊」時各接一次 → 比較接球表現
+//   只呼叫遊戲原本的 fixedUpdate（同一套物理、同一套 AI），不改任何規則
+// =========================================================
+if (params.get('aitest') === '1') {
+  const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  window.BalloonVolleyballAITest = {
+    fatigueOf, FATIGUE_CONFIG, AI_PROFILES,
+    // 產生「玩家送過網」的測試球路（不考慮角色時會落在電腦場地）
+    makePaths(count, seed) {
+      const R = mulberry(seed || 1), out = [];
+      const save = { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy };
+      for (let k = 0; out.length < count && k < count * 50; k++) {
+        const pth = { x: 250 + R() * 310, y: 250 + R() * 270, vx: 250 + R() * 700, vy: -950 + R() * 1200, cpuX: 760 + R() * 420, seed: 1 + Math.floor(R() * 1e9) };
+        Object.assign(ball, { x: pth.x, y: pth.y, vx: pth.vx, vy: pth.vy });
+        const p = predictBall(); if (p.landX === null || p.landX <= NET_RIGHT + BR) continue;
+        pth.landX = p.landX; pth.contactX = p.contactX; out.push(pth);
+      }
+      Object.assign(ball, save);
+      return out;
+    },
+    // 讓 opponent 在第 returns 次有效回擊時接這條球路一次
+    trial(opponent, returns, pth) {
+      const realRandom = Math.random; Math.random = mulberry(pth.seed);
+      const dt = 1 / CONFIG.PHYSICS_HZ;
+      try {
+        setOpponent(opponent);
+        clearAllInputs(); resetCharacter(player); resetCharacter(cpu); resetAI();
+        player.x = player.minX; cpu.x = Math.max(cpu.minX, Math.min(cpu.maxX, pth.cpuX));
+        Object.assign(ball, { x: pth.x, y: pth.y, vx: pth.vx, vy: pth.vy, held: false });
+        game.state = STATE.RALLY; game.pausedFrom = null;
+        game.rallyReturns = Math.max(0, returns - 1); game.lastToucher = 'left'; game.returnCounted = false; game.ballEventId++;
+        const ideal = pth.contactX !== null && pth.contactX !== undefined ? pth.contactX : pth.landX;
+        const hard = Math.abs(ideal - cpu.x) > FATIGUE_CONFIG.HARD_BALL_DX;
+        let reaction = null, err = null, big = false, fat = null, nSeen = null, result = 'timeout', moved = false, cpuTouched = false;
+        for (let i = 0; i < 600; i++) {
+          fixedUpdate(dt);
+          if (i === 0) { reaction = ai.thinkTimer + dt; err = Math.abs(ai.error); big = ai.bigMistake; fat = ai.fatigue; nSeen = ai.fatigueReturns; }
+          if (cpuCtrl.left || cpuCtrl.right || cpuCtrl.jump) moved = true;
+          if (cpu.touchCooldown > 0 || cpu.hitUsed) cpuTouched = true;
+          if (cpuTouched && game.state === STATE.RALLY && ball.x < CONFIG.NET_X) { result = 'return'; break; }
+          if (game.state !== STATE.RALLY) { result = game.pointWinner === 'right' ? 'return' : 'miss'; break; }
+        }
+        return { opponent, returns, result, reaction, err, big, fatigue: fat, n: nSeen, hard, moved, cpuTouched, countAfter: game.rallyReturns };
+      } finally {
+        Math.random = realRandom;
+        game.state = STATE.TITLE; clearAllInputs();
+      }
+    },
+  };
+}
 
 // =========================================================
 // 啟動
