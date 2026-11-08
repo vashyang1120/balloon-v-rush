@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-3';
-const BUILD_TIME   = '2026-11-08 20:20';
+const GAME_VERSION = 'adventure-v0.3.88-orange-king-aim-test-1';
+const BUILD_TIME   = '2026-11-08 21:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -28529,4 +28529,107 @@ function wsDrawDebug(cx) {
   };
   if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 40) clearInterval(t); }, 500); }
   window.debugWindScorpion = () => ({ ready: wsReady, mode: wsFieldMode, tuning: Object.assign({}, WS_TUNING), enemies: enemies.filter(wsIs).map(e => ({ id: e.c2Id, active: e.active, x: Math.round(e.x), vx: e.vx, hp: e.hp, st: e.ws && e.ws.st, t: e.ws && e.ws.t, cd: e.ws && e.ws.cd, pose: e.active ? wsPose(e) : '' })), blades: wsBlades.map(b => ({ id: b.id, st: b.st, x: Math.round(b.x), y: Math.round(b.y), vx: +b.vx.toFixed(2), vy: +b.vy.toFixed(2), deg: Math.round(-b.ang * 180 / Math.PI) })), log: wsLog.slice(-40), assets: window.__wsAssetList || null });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.88：橘子王「看位置」攻擊（測試版；只在開發者「👑 橘子王看位置版（測試）」生效，正式 2-4 不變）
+//  ・出招順序維持原本固定輪替（ORANGE_KING_PATTERNS）；每一招開始預警的那一刻，看小V在哪裡決定打哪裡
+//      噴油：三個高度（low／mid／high）裡，選離小V身體中心最近的那一條（預警時間不變 → 看到油管發亮還來得及換高度）
+//      油彈：拋物線直接瞄準預警開始那一刻小V的位置（預測虛線照常顯示；之後不追蹤）
+//      震地油漬：一灘落在起跳那一刻小V的腳下，另外 1～2 灘隨機（彼此不重疊、地面一定留安全空間）
+//      衝撞：不變（本來就掃過整個地面與中層平台，最高平台是唯一安全點）
+//  ・預警、時間、傷害、喘氣、HP、金色油管環都不變
+// ════════════════════════════════════════════════════════════════════
+var okAimMode = false;
+var okAimLog = [];
+var OK_AIM_TUNING = {
+  lobFrames: 74,          // 油彈飛到目標點約幾個更新（原本固定路線約 74）
+  lobVxMin: 4, lobVxMax: 12,
+  lobApexMinY: 72,        // 弧頂不要高過 HUD
+  puddleMinGap: 140,      // 兩灘油漬左緣最少相距
+  puddleXMin: 10, puddleXMax: 610,   // 油漬左緣範圍（橘子王站位前方的地面）
+  puddleSafeGap: 110,     // 地面上至少留一段這麼寬的安全空間
+};
+function okAimLogPush(o) { try { o.t = Math.round(performance.now()); okAimLog.push(o); if (okAimLog.length > 80) okAimLog.shift(); } catch (e) {} }
+function okAimPlayerCenter() { return { x: player.x + player.w / 2, y: player.y + player.h / 2 }; }
+function okAimPickLane() {
+  const pc = okAimPlayerCenter();
+  let best = null;
+  ['low', 'mid', 'high'].forEach(k => { const y = getOrangeKingNozzle(k).y, d = Math.abs(y - pc.y); if (!best || d < best.d) best = { k, d, y }; });
+  return best;
+}
+function okAimLobRoute() {
+  const o = getOrangeKingLobOrigin(), pc = okAimPlayerCenter(), T = OK_AIM_TUNING;
+  const tx = Math.min(pc.x, o.x - 120), ty = pc.y;
+  let vx = -Math.max(T.lobVxMin, Math.min(T.lobVxMax, (o.x - tx) / T.lobFrames));
+  const apexOf = v => { const t = (o.x - tx) / Math.abs(v), g = ORANGE_KING.LOB_GRAVITY, vy0 = (ty - o.y - 0.5 * g * t * t) / t; return vy0 < 0 ? o.y - vy0 * vy0 / (2 * g) : Math.min(o.y, ty); };
+  let guard = 0; while (apexOf(vx) < T.lobApexMinY && Math.abs(vx) < T.lobVxMax && guard++ < 20) vx *= 1.08;   // 弧頂太高 → 飛快一點（弧線變低）
+  return { tx, ty, vx, apex: Math.round(apexOf(vx)) };
+}
+function okAimPuddleXs(px) {
+  const T = OK_AIM_TUNING, W = ORANGE_KING.PUDDLE_W;
+  const clampX = x => Math.max(T.puddleXMin, Math.min(T.puddleXMax, Math.round(x)));
+  for (let tries = 0; tries < 40; tries++) {
+    const xs = [clampX(px - W / 2)];                       // 一灘在小V腳下
+    const extra = Math.random() < 0.5 ? 1 : 2;             // 另外 1～2 灘隨機
+    for (let n = 0; n < 30 && xs.length < 1 + extra; n++) {
+      const x = clampX(T.puddleXMin + Math.random() * (T.puddleXMax - T.puddleXMin));
+      if (xs.every(q => Math.abs(q - x) >= T.puddleMinGap)) xs.push(x);
+    }
+    const s = xs.slice().sort((a, b) => a - b);            // 安全空間：地面（0～橘子王前方）上最大的空檔
+    let gap = s[0], end = ORANGE_KING.HOME_X;
+    for (let i = 0; i < s.length; i++) gap = Math.max(gap, (i + 1 < s.length ? s[i + 1] : end) - (s[i] + W));
+    if (gap >= T.puddleSafeGap) return s;
+  }
+  return ORANGE_KING_PUDDLE_SETS[0].slice();
+}
+(function v388OkAimInstall() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v388ok) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v388ok = true; globalThis[name] = w; };
+  wrapFn('runOrangeKingPatternStep', o => function () {
+    const b = orangeKingBoss;
+    if (!okAimMode || !b || !b.currentPattern) return o.apply(this, arguments);
+    const atk = b.currentPattern[b.patternStep], pc = okAimPlayerCenter();
+    if (atk === 'spray') {
+      const L = okAimPickLane();
+      b.activeLane = L.k; b.laneCursor++;
+      okAimLogPush({ atk, lane: L.k, laneY: Math.round(L.y), player: { x: Math.round(pc.x), y: Math.round(pc.y) } });
+      setOrangeKingPhase('sprayWarn'); return;
+    }
+    if (atk === 'lob') {
+      const R = okAimLobRoute();
+      b.activeLob = buildOrangeKingLob(R); b.lobCursor++;
+      okAimLogPush({ atk, tx: Math.round(R.tx), ty: Math.round(R.ty), vx: +R.vx.toFixed(2), apex: R.apex, player: { x: Math.round(pc.x), y: Math.round(pc.y) } });
+      setOrangeKingPhase('lobAim'); return;
+    }
+    if (atk === 'slam') b._okAimSlamX = pc.x;
+    return o.apply(this, arguments);
+  });
+  wrapFn('spawnOrangeKingPuddles', o => function () {
+    const b = orangeKingBoss;
+    if (!okAimMode || !b) return o.apply(this, arguments);
+    const px = b._okAimSlamX != null ? b._okAimSlamX : player.x + player.w / 2;
+    const xs = okAimPuddleXs(px); b.puddleCursor++;
+    xs.forEach(x => b.puddles.push({ x, w: ORANGE_KING.PUDDLE_W, ms: 0, life: ORANGE_KING.PUDDLE_LIFE_MS }));
+    okAimLogPush({ atk: 'slam', playerX: Math.round(px), puddles: xs });
+  });
+  // 入口：另一顆開發者按鈕；原本的「🍊 測試 2-4 橘子王」與正式 2-4 都是原本的固定版
+  //   開關只在「看位置版」按鈕 → 測試入口真正開始時打開；任何其他 loadLevel（正式 2-4、其他關卡、原本的測試按鈕）都會關掉
+  let loadingAim = false;
+  wrapFn('loadLevel', o => function () { if (!loadingAim) okAimMode = false; return o.apply(this, arguments); });
+  wrapFn('startOrangeKingBossTestLevel__impl', o => function () {
+    const aim = !!window.__okAimNext; window.__okAimNext = false;
+    loadingAim = aim; okAimMode = aim; if (aim) okAimLog = [];
+    try { return o.apply(this, arguments); } finally { loadingAim = false; if (aim) { okAimMode = true; try { showHint('👑 橘子王看位置版（測試）：出招順序不變，每一招都會看你在哪裡', 260); } catch (e) {} } }
+  });
+  window.startOrangeKingAimTest = function () { window.__okAimNext = true; return startOrangeKingBossTestLevel(); };
+  const addBtn = () => {
+    const ref = document.getElementById('btn-pause-test-orange-king');
+    if (!ref || document.getElementById('btn-pause-test-orange-king-aim')) return !!document.getElementById('btn-pause-test-orange-king-aim');
+    const b = document.createElement('button'); b.id = 'btn-pause-test-orange-king-aim'; b.type = 'button'; b.className = ref.className;
+    b.textContent = '👑 橘子王看位置版（測試）'; b.style.display = ref.style.display;
+    b.addEventListener('click', e => { e.preventDefault(); window.startOrangeKingAimTest(); });
+    ref.insertAdjacentElement('afterend', b); return true;
+  };
+  if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 40) clearInterval(t); }, 500); }
+  window.debugOrangeKingAim = () => ({ mode: okAimMode, tuning: Object.assign({}, OK_AIM_TUNING), log: okAimLog.slice(-30), lanes: ['low', 'mid', 'high'].map(k => { try { return k + ':' + Math.round(getOrangeKingNozzle(k).y); } catch (e) { return k; } }) });
 })();
