@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.88-orange-king-aim-test-1';
-const BUILD_TIME   = '2026-11-08 21:00';
+const GAME_VERSION = 'adventure-v0.3.89-ch3-wind-audio-test-1';
+const BUILD_TIME   = '2026-11-08 22:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27963,8 +27963,12 @@ function vbDevReset() {
 //     紀錄沿用第二大陸既有規則（test_only：不寫第一大陸正式成績、不重複結算第一大陸總成績、不發 V幣）
 //   ・3-1 通關 → 回小V的家 → 出發 → 3-2：沿用既有流程（不改）
 // ════════════════════════════════════════════════════════════════════
-const C2_TRAVEL = { harbor: { id: 'harbor', label: '港口', x: 45, y: 58 } };
-try { if (!WORLD_MAP.links.some(l => l.id === 'c1-c2')) WORLD_MAP.links.push({ id: 'c1-c2', from: 'continent1', to: 'continent2', via: 'harbor', transport: 'ship', art: 'missing' }); } catch (e) {}
+const C2_TRAVEL = {
+  harbor: { id: 'harbor', label: '港口', x: 45, y: 58 },
+  // v0.3.89：使用者回饋「飛行屋飛到地圖中間（港口）不對」→ 第二大陸地圖還沒有，所以先從 2-4 往右上方飛出地圖外（地圖框 overflow:hidden → 飛出去就看不到）
+  offmap: { id: 'offmap', label: '地圖外', x: 122, y: 2 },
+};
+try { if (!WORLD_MAP.links.some(l => l.id === 'c1-c2')) WORLD_MAP.links.push({ id: 'c1-c2', from: 'continent1', to: 'continent2', via: 'offmap', transport: 'flyingHome', art: 'missing' }); } catch (e) {}
 function c2Continent1Done() { try { return advProgressEnsure(advLoad()).cleared.includes('2-4'); } catch (e) { return false; } }
 function c2At24Clear() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.stageId === '2-4' && gameState === 'clear' && homeEntryMode !== 'failed'); }
 function c2ToC2Here() { return c2At24Clear() && c2Continent1Done(); }
@@ -27977,24 +27981,24 @@ function c2ToC2State() {
 function c2MapFlyToHarbor() {
   try {
     if (H2.flying || !h2MapReady()) return null;
-    const c = h2MapContinent(), from = c.nodes.find(n => n.stageId === '2-4'), to = C2_TRAVEL.harbor;
+    const c = h2MapContinent(), from = c.nodes.find(n => n.stageId === '2-4'), to = C2_TRAVEL.offmap;
     const wrap = h2$('h2-map-wrap'), home = h2$('h2-map-home'); if (!from || !wrap || !home) return null;
     H2.flying = true; H2.map = { mode: 'flight', skip: false };
     wrap.classList.add('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'false');
     h2MapRender({ keepInfo: true });
     const info = h2$('h2-map-info');
-    if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！前往 <b>' + h2Esc(to.label) + '</b>，準備渡海到第二大陸</span><small>點一下畫面可以跳過</small>';
+    if (info) info.innerHTML = '<span>🎈 氣球飛行屋出發！飛出第一大陸，前往 <b>第二大陸・風之峽谷</b></span><small>點一下畫面可以跳過</small>';
     const DUR = 1800, t0 = performance.now();
     h2MapFlySfx(true);
     return new Promise(resolve => {
       const step = now => {
-        const k = Math.min(1, (now - t0) / DUR), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-        home.style.left = (from.x + (to.x - from.x) * e) + '%'; home.style.top = (from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 4) + '%';
+        const k = Math.min(1, (now - t0) / DUR), e = k * k * (2 - k);   // v0.3.89：慢慢起飛、越飛越快，一路飛出地圖（不在地圖上停下）
+        home.style.left = (from.x + (to.x - from.x) * e) + '%'; home.style.top = (from.y + (to.y - from.y) * e - Math.sin(k * Math.PI) * 6) + '%';
         if (k < 1 && !(H2.map && H2.map.skip)) { requestAnimationFrame(step); return; }
         home.style.left = to.x + '%'; home.style.top = to.y + '%';
         h2MapFlySfx(false);
         const skipped = H2.map && H2.map.skip;
-        if (info) info.innerHTML = '<span>⛵ 抵達港口！從這裡渡海，前往 <b>第二大陸・風之峽谷</b></span>';
+        if (info) info.innerHTML = '<span>🎈 飛行屋飛出地圖了！下一站：<b>第二大陸・風之峽谷</b></span>';
         setTimeout(() => {
           H2.flying = false; H2.map = null;
           wrap.classList.remove('is-open', 'is-flight'); wrap.setAttribute('aria-hidden', 'true');
@@ -28532,7 +28536,7 @@ function wsDrawDebug(cx) {
 })();
 
 // ════════════════════════════════════════════════════════════════════
-//  v0.3.88：橘子王「看位置」攻擊（測試版；只在開發者「👑 橘子王看位置版（測試）」生效，正式 2-4 不變）
+//  v0.3.88：橘子王「看位置」攻擊（v0.3.89 起正式 2-4 也使用；開發者面板留「舊固定版（對照）」）
 //  ・出招順序維持原本固定輪替（ORANGE_KING_PATTERNS）；每一招開始預警的那一刻，看小V在哪裡決定打哪裡
 //      噴油：三個高度（low／mid／high）裡，選離小V身體中心最近的那一條（預警時間不變 → 看到油管發亮還來得及換高度）
 //      油彈：拋物線直接瞄準預警開始那一刻小V的位置（預測虛線照常顯示；之後不追蹤）
@@ -28540,7 +28544,8 @@ function wsDrawDebug(cx) {
 //      衝撞：不變（本來就掃過整個地面與中層平台，最高平台是唯一安全點）
 //  ・預警、時間、傷害、喘氣、HP、金色油管環都不變
 // ════════════════════════════════════════════════════════════════════
-var okAimMode = false;
+const OK_AIM_FORMAL = true;   // v0.3.89：正式 2-4 使用看位置版（改成 false ＝ 回到固定版）
+var okAimMode = OK_AIM_FORMAL;
 var okAimLog = [];
 var OK_AIM_TUNING = {
   lobFrames: 74,          // 油彈飛到目標點約幾個更新（原本固定路線約 74）
@@ -28612,24 +28617,139 @@ function okAimPuddleXs(px) {
     xs.forEach(x => b.puddles.push({ x, w: ORANGE_KING.PUDDLE_W, ms: 0, life: ORANGE_KING.PUDDLE_LIFE_MS }));
     okAimLogPush({ atk: 'slam', playerX: Math.round(px), puddles: xs });
   });
-  // 入口：另一顆開發者按鈕；原本的「🍊 測試 2-4 橘子王」與正式 2-4 都是原本的固定版
-  //   開關只在「看位置版」按鈕 → 測試入口真正開始時打開；任何其他 loadLevel（正式 2-4、其他關卡、原本的測試按鈕）都會關掉
-  let loadingAim = false;
-  wrapFn('loadLevel', o => function () { if (!loadingAim) okAimMode = false; return o.apply(this, arguments); });
+  // v0.3.89：使用者確認 → 正式 2-4（含重打、原本的「🍊 測試 2-4 橘子王」）全部改用看位置版
+  //   開發者面板保留一顆「舊固定版（對照）」按鈕，方便比較；只有按那顆時才關掉
+  let loadingFixed = false;
+  wrapFn('loadLevel', o => function () { if (!loadingFixed) okAimMode = OK_AIM_FORMAL; return o.apply(this, arguments); });
   wrapFn('startOrangeKingBossTestLevel__impl', o => function () {
-    const aim = !!window.__okAimNext; window.__okAimNext = false;
-    loadingAim = aim; okAimMode = aim; if (aim) okAimLog = [];
-    try { return o.apply(this, arguments); } finally { loadingAim = false; if (aim) { okAimMode = true; try { showHint('👑 橘子王看位置版（測試）：出招順序不變，每一招都會看你在哪裡', 260); } catch (e) {} } }
+    const fixed = !!window.__okFixedNext; window.__okFixedNext = false;
+    loadingFixed = fixed; okAimMode = !fixed && OK_AIM_FORMAL; okAimLog = [];
+    try { return o.apply(this, arguments); } finally { loadingFixed = false; okAimMode = !fixed && OK_AIM_FORMAL; if (fixed) { try { showHint('🍊 橘子王舊固定版（對照用）：出招位置固定，和 v0.3.87 以前一樣', 260); } catch (e) {} } }
   });
-  window.startOrangeKingAimTest = function () { window.__okAimNext = true; return startOrangeKingBossTestLevel(); };
+  window.startOrangeKingFixedTest = function () { window.__okFixedNext = true; return startOrangeKingBossTestLevel(); };
+  window.startOrangeKingAimTest = function () { window.__okFixedNext = false; return startOrangeKingBossTestLevel(); };
   const addBtn = () => {
     const ref = document.getElementById('btn-pause-test-orange-king');
-    if (!ref || document.getElementById('btn-pause-test-orange-king-aim')) return !!document.getElementById('btn-pause-test-orange-king-aim');
-    const b = document.createElement('button'); b.id = 'btn-pause-test-orange-king-aim'; b.type = 'button'; b.className = ref.className;
-    b.textContent = '👑 橘子王看位置版（測試）'; b.style.display = ref.style.display;
-    b.addEventListener('click', e => { e.preventDefault(); window.startOrangeKingAimTest(); });
+    if (!ref || document.getElementById('btn-pause-test-orange-king-fixed')) return !!document.getElementById('btn-pause-test-orange-king-fixed');
+    const b = document.createElement('button'); b.id = 'btn-pause-test-orange-king-fixed'; b.type = 'button'; b.className = ref.className;
+    b.textContent = '🍊 橘子王舊固定版（對照）'; b.style.display = ref.style.display;
+    b.addEventListener('click', e => { e.preventDefault(); window.startOrangeKingFixedTest(); });
     ref.insertAdjacentElement('afterend', b); return true;
   };
   if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 40) clearInterval(t); }, 500); }
   window.debugOrangeKingAim = () => ({ mode: okAimMode, tuning: Object.assign({}, OK_AIM_TUNING), log: okAimLog.slice(-30), lanes: ['low', 'mid', 'high'].map(k => { try { return k + ':' + Math.round(getOrangeKingNozzle(k).y); } catch (e) { return k; } }) });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.89：第三章正式改用風刃蠍子＋風刃音效（wind-scorpion-audio-v1.7.1）
+//  ① 3-1、3-2 的所有蠍子 → 風刃蠍子（位置、巡邏範圍、受風口影響、3-1 示範蠍子都照原本）
+//     ・3-1 示範蠍子：示範還沒結束前不攻擊（示範時才不會一邊被風托起一邊射小V）
+//     ・被風口托在空中時不開始蓄力
+//     ・素材加進第三章的載入畫面（windScorpion 群組；載入失敗不擋進關 → 那一關的風刃蠍子只會巡邏、畫成普通蠍子，不會射出看不見的風刃）
+//  ② 音效（沿用既有 SFX_DEFS／Web Audio 音效系統：自動跟著靜音、音效音量、切到背景）
+//     Charge：assets/audio/sfx/chapter3/wind_scorpion_charge.mp3 — 畫面裡有風刃蠍子在蓄力時播放（一個循環聲源，不會越疊越大聲），
+//             蓄力越久音量稍微變大（0.65 → 1.0，不改音高、不改速度）；發射／中斷／死亡／暫停／離開關卡／重新開始 → 停止
+//     Flying：assets/audio/sfx/chapter3/wind_scorpion_flying.mp3 — 綁定「還有風刃在飛」（一般飛行 fly＋被雨傘彈開後的反彈飛行 reflect 都算）
+//             一個循環聲源（多枚風刃也只有一個，不疊加）；格擋瞬間另外疊一次原本的雨傘格擋音效，飛行聲不中斷
+//             只有在風刃真的消失（命中、撞地形、飛出範圍、反彈飛完、關卡重置）才停止
+//     原始音檔保留在同一個資料夾（*_original.mp3，遊戲不載入）；正式檔是可無縫循環的短版（報告列出取用區段）
+// ════════════════════════════════════════════════════════════════════
+const WS_AUDIO = {
+  chargeVol0: 0.65, chargeVol1: 1.0,   // 蓄力開始 → 快發射（相對音量）
+  fadeInSec: 0.06, fadeOutSec: 0.08,   // 開始淡入、停止淡出（避免爆音）
+};
+Object.assign(SFX_DEFS, {
+  wsCharge: { path: 'chapter3/wind_scorpion_charge.mp3', vol: 0.8, loop: true, loopStart: 0.25, loopEnd: 3.25 },
+  wsFlying: { path: 'chapter3/wind_scorpion_flying.mp3', vol: 0.5, loop: true, loopStart: 0.25, loopEnd: 4.25 },
+});
+var wsAud = { log: [], fading: [], starts: { wsCharge: 0, wsFlying: 0 }, stops: { wsCharge: 0, wsFlying: 0 }, want: { wsCharge: false, wsFlying: false } };
+function wsAudLog(o) { try { o.t = Math.round(performance.now()); o.frame = frameCount; wsAud.log.push(o); if (wsAud.log.length > 200) wsAud.log.shift(); } catch (e) {} }
+function wsAudInstances(key) { wsAud.fading = wsAud.fading.filter(f => !f.ended); return (SFX.loops[key] ? 1 : 0) + wsAud.fading.filter(f => f.key === key).length; }
+function wsBladeAudioState() { return wsBlades.map(b => ({ id: b.id, st: b.st, reflected: b.blocked > 0 })); }
+function wsLoopStart(key, gain, why) {
+  if (SFX.loops[key]) return;
+  SFX.loopGainMul = SFX.loopGainMul || {}; SFX.loopGainMul[key] = 0.0001 / Math.max(0.0001, sfxVol(key));   // 從無聲開始，再淡入
+  sfxLoop(key, true);
+  const L = SFX.loops[key]; if (!L) return;                                                                 // 還沒解鎖／還沒載好 → 下一幀再試
+  try { const t = SFX.ctx.currentTime; L.g.gain.setValueAtTime(0.0001, t); L.g.gain.linearRampToValueAtTime(gain, t + WS_AUDIO.fadeInSec); } catch (e) {}
+  wsAud.starts[key]++; wsAudLog({ ev: 'start', key, why, blades: wsBladeAudioState() });
+}
+function wsLoopStop(key, why) {
+  const L = SFX.loops[key]; if (!L) return;
+  delete SFX.loops[key];
+  const f = { key, ended: false }; wsAud.fading.push(f);
+  try { L.src.onended = () => { f.ended = true; }; const t = SFX.ctx.currentTime; L.g.gain.cancelScheduledValues(t); L.g.gain.setValueAtTime(L.g.gain.value, t); L.g.gain.linearRampToValueAtTime(0.0001, t + WS_AUDIO.fadeOutSec); L.src.stop(t + WS_AUDIO.fadeOutSec + 0.02); }
+  catch (e) { try { L.src.stop(); } catch (e2) {} f.ended = true; }
+  setTimeout(() => { f.ended = true; }, 400);   // 保險：一定會從計數裡移除
+  wsAud.stops[key]++; wsAudLog({ ev: 'stop', key, why, blades: wsBladeAudioState() });
+}
+function wsAudioFrame(playing) {
+  // Charge：畫面裡（含左右 40px）正在蓄力的風刃蠍子
+  let prog = -1;
+  if (playing && wsReady) enemies.forEach(e => { if (!wsIs(e) || !e.active) return; const s = e.ws; if (!s || s.st !== 'charge') return; if (!sfxOnScreen(e.x, e.w, 40)) return; prog = Math.max(prog, Math.min(1, s.t / WS_TUNING.chargeFrames)); });
+  const wantC = prog >= 0;
+  if (wantC) {
+    const g = sfxVol('wsCharge') * (WS_AUDIO.chargeVol0 + (WS_AUDIO.chargeVol1 - WS_AUDIO.chargeVol0) * prog);
+    if (!SFX.loops.wsCharge) wsLoopStart('wsCharge', g, 'charge');
+    else { try { SFX.loops.wsCharge.g.gain.setTargetAtTime(g, SFX.ctx.currentTime, 0.08); } catch (e) {} }
+  } else if (SFX.loops.wsCharge) wsLoopStop('wsCharge', !playing ? 'notPlaying' : 'noCharge');
+  // Flying：還有風刃在「飛行」（fly 或 reflect）
+  const wantF = playing && wsBlades.some(b => b.st === 'fly' || b.st === 'reflect');
+  if (wantF) { if (!SFX.loops.wsFlying) wsLoopStart('wsFlying', sfxVol('wsFlying'), wsBlades.some(b => b.st === 'reflect') ? 'reflectFlying' : 'flying'); }
+  else if (SFX.loops.wsFlying) wsLoopStop('wsFlying', !playing ? 'notPlaying' : 'noBladeFlying');
+  wsAud.want.wsCharge = wantC; wsAud.want.wsFlying = wantF;
+}
+(function v389Install() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v389) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v389 = true; globalThis[name] = w; };
+  // ── ① 第三章正式關卡：蠍子全部改成風刃蠍子 ──
+  LEVELS.forEach(lv => {
+    if (!lv || lv.chapterId !== 3 || lv.devUmbrellaField || lv._v389ws || typeof lv.buildEnemies !== 'function') return;
+    const base = lv.buildEnemies; lv._v389ws = true;
+    lv.buildEnemies = function () {
+      return base.apply(this, arguments).map(e => { if ((e.type || 'scorpion') === 'scorpion' && (e.variant || 'normal') === 'normal') { e.type = 'scorpion'; e.variant = 'windBlade'; e.ws = null; } return e; });
+    };
+  });
+  // 攻擊條件：素材好了才攻擊；3-1 示範蠍子示範完才攻擊；被風托在空中不開始蓄力
+  wrapFn('wsCanAttack', o => function (e) {
+    if (!wsReady) return false;
+    if (e && e.c2Demo && (e.c2DemoInvuln || e.patrol !== e.c2DemoPatrol)) return false;
+    if (e && e.c2OnGround === false) return false;
+    return o.apply(this, arguments);
+  });
+  // 素材群組（第三章進關的載入畫面一起載；optional）
+  const WS_GROUP = 'windScorpion';
+  const addGroup = M => {
+    if (!M || M[WS_GROUP]) return M;
+    M[WS_GROUP] = Object.keys(WS_FILES).map(k => ({ path: WS_ASSET_DIR + WS_FILES[k], type: 'image', critical: false, label: 'windScorpion:' + k, altPaths: [],
+      apply: im => { wsImgs[k] = im; if (!wsReady && Object.keys(WS_FILES).every(q => wsImgs[q])) { try { wsBuildCanvases(); wsReady = true; console.log('[WindScorpion] 素材 10/10 載入完成（第三章）'); } catch (er) { console.error('[WindScorpion] 建立畫面快取失敗', er); } } },
+      fail: () => { console.error('[WindScorpion] ❌ 素材載入失敗：' + WS_FILES[k]); } }));
+    return M;
+  };
+  if (typeof ASSET_MANIFEST !== 'undefined' && ASSET_MANIFEST) addGroup(ASSET_MANIFEST);
+  wrapFn('buildAssetManifest', o => function () { return addGroup(o.apply(this, arguments)); });
+  wrapFn('getAssetGroupsForLevelBase', o => function (idx) { const r = o.apply(this, arguments); const lv = LEVELS[idx]; return (lv && lv.chapterId === 3 && !r.includes(WS_GROUP)) ? r.concat([WS_GROUP]) : r; });
+  wrapFn('wsLoadAssets', o => function () { if (wsReady) return Promise.resolve(Object.keys(WS_FILES).map(k => ({ k, ok: true }))); return o.apply(this, arguments); });
+  // ── ② 音效：每一幀依狀態開／關（和風口氣流聲同樣的「遊戲進行中」判斷）──
+  wrapFn('sfxSyncFrame', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      const hidden = (typeof document !== 'undefined' && document.hidden);
+      const playing = !hidden && gameState === 'playing' && !(typeof rpgActive !== 'undefined' && rpgActive && !rpgActive.ui)
+        && !(typeof isGameStartGateActive === 'function' && isGameStartGateActive()) && !(typeof assetGateActive !== 'undefined' && assetGateActive)
+        && !(typeof advIsBlockingGame === 'function' && advIsBlockingGame())
+        && !(typeof screenFreezeForTest !== 'undefined' && screenFreezeForTest);
+      wsAudioFrame(playing);
+    } catch (e) {}
+    return r;
+  });
+  // 換關／重新開始：立刻停（不等下一幀）
+  const stopAll = why => { try { wsLoopStop('wsCharge', why); wsLoopStop('wsFlying', why); } catch (e) {} };
+  wrapFn('loadLevel', o => function () { stopAll('loadLevel'); return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { stopAll('restart'); return o.apply(this, arguments); });
+  // 原本的「咻」聲（沿用 scorpionKnockback）照舊保留在發射瞬間；飛行聲從風刃開始移動時由 wsAudioFrame 開始
+  window.debugWindScorpionAudio = () => ({
+    charge: { playing: !!SFX.loops.wsCharge, instances: wsAudInstances('wsCharge'), starts: wsAud.starts.wsCharge, stops: wsAud.stops.wsCharge, status: SFX.status.wsCharge, url: (SFX.urls.wsCharge || '').replace(/\?.*$/, '') },
+    flying: { playing: !!SFX.loops.wsFlying, instances: wsAudInstances('wsFlying'), starts: wsAud.starts.wsFlying, stops: wsAud.stops.wsFlying, status: SFX.status.wsFlying, url: (SFX.urls.wsFlying || '').replace(/\?.*$/, '') },
+    blades: wsBladeAudioState(), log: wsAud.log.slice(-40),
+  });
 })();
