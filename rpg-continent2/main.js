@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-2';
-const BUILD_TIME   = '2026-11-08 19:45';
+const GAME_VERSION = 'adventure-v0.3.87-wind-scorpion-test-3';
+const BUILD_TIME   = '2026-11-08 20:20';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -26894,9 +26894,12 @@ function drawC3PlatformPieces(p, cx) {
   const mid = Math.round((x0 + x1) / 2);
   const lEnd = x0 + L.w, rStart = x1 - Rt.w;
   ctx.save();
-  if (lEnd >= rStart) {                                             // 短平台：左端＋右端（各畫到中線，不拉伸）
-    ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, y - 20, mid - x0 + 2, Rt.h + 40); ctx.clip(); ctx.drawImage(L.c, x0, y); ctx.restore();
-    ctx.save(); ctx.beginPath(); ctx.rect(mid, y - 20, x1 - mid + 2, Rt.h + 40); ctx.clip(); ctx.drawImage(Rt.c, rStart, y); ctx.restore();
+  if (lEnd >= rStart) {                                             // 短平台：左端＋右端（不拉伸）
+    // v0.3.87 test-3：接縫修正 — 原本左右各畫到「中線」，但左端圖（62px）比半個平台短時，中線前會空出 1～2px 透明縫（玩家截圖：3-T 左邊小平台中間有一條縫）
+    //   → 接點改在左右兩張「都有畫到」的範圍內（左端圖的右緣附近），兩邊重疊 1px；碰撞、位置都不變
+    const split = Math.min(lEnd, Math.max(rStart, mid));
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, y - 20, split - x0 + 3, Rt.h + 40); ctx.clip(); ctx.drawImage(L.c, x0, y); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(split, y - 20, x1 - split + 2, Rt.h + 40); ctx.clip(); ctx.drawImage(Rt.c, rStart, y); ctx.restore();
   } else {
     ctx.save(); ctx.beginPath(); ctx.rect(lEnd - 1, y - 20, rStart - lEnd + 2, M.h + 40); ctx.clip();
     for (let x = lEnd - 1; x < rStart + 1; x += M.w - 1) ctx.drawImage(M.c, x, y);   // 中段重複（每段重疊 1px，不會有透明縫）；最後一段被裁切
