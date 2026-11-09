@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.91-volleyball-reward-ai-test-1';
-const BUILD_TIME   = '2026-11-09 04:30';
+const GAME_VERSION = 'adventure-v0.3.92-ch3-wind-director-proto-test-1';
+const BUILD_TIME   = '2026-11-10 06:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -7592,10 +7592,9 @@ function updateHammerMelee() {
       t.state     = 'falling';
       t.fallTimer = 0;
       console.log('Tree falling');
-      if (!player.hammerHit) {
-        player.hammerHit = true;
-        consumeHammerDurability();
-      }
+      // v0.3.92：敲倒樹木（環境機關）不扣氣球槌耐久 — 只有有效打中敵人才扣（使用者定案）
+      //   不設 hammerHit：同一次揮槌如果之後也打到敵人，照原本規則扣一次
+      try { if (typeof wdLog === 'function') wdLog({ ev: 'treeHit', x: t.x, hammerDur: equippedHammer.currentDur }); } catch (e) {}
     }
   });
 }
@@ -28842,4 +28841,391 @@ function v390HeldHtml(id, style) {
   });
   window.debugAdventureFixes = () => ({ ventDebugHidden: c3VentDebugHidden, sniff: (function () { try { return h2SniffInfo(); } catch (e) { return String(e); } })(),
     held: ['basicSword', 'basicHammer', 'balloonUmbrella'].map(id => Object.assign({ id }, v390HeldInfo(id) || {})), fireSfx: { status: SFX.status.orangeProjectileFly, url: (SFX.urls.orangeProjectileFly || '').replace(/\?.*$/, '') } });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.92：第三章 3-2「峽谷遺跡型可轉向導風機關」幾何原型（ch3-wind-director-prototype-v0.1，設計規格 v0.3.2）
+//  ・只在開發者「🌬️ 導風機關測試（3-T，開發用）」出現；正式 3-1／3-2／第一大陸完全沒有配置
+//  ・沿用 3-T 測試場（測試雨傘 2 把、測試劍／槌 999、不寫背包、不寫成績、不發獎勵）
+//  ・氣球槌有效命中機關 → 30° → 45° → 60° → 30°（同一次揮槌只切換一次；不扣槌子耐久）
+//  ・方向性風力：沿用第三章風口的做法（重力＋跳躍＋雨傘緩降照舊），風把角色的速度「拉向」風的方向
+//      水平：風帶來的水平速度 wdVx（離開風流後在空中慢慢減弱、落地很快停下；不會無限推）
+//      垂直：和既有風口一樣有向上速度上限 maxUp
+//  ・尖刺坑：沿用第三章尖刺坑（地面缺口＋坑底尖刺圖）；這個測試場的坑每次受傷扣 0.5 HP，退回安全起點
+//  ・成功或失敗完全由實際物理軌跡決定（沒有「角度不是 45° 就失敗」之類的判斷）
+//  ・開發者除錯（F5 顯示／隱藏，預設隱藏）：風流範圍、風力向量、速度向量、碰撞框、槌子判定、飛行軌跡、落點、坑的碰撞區
+// ════════════════════════════════════════════════════════════════════
+var WD_TUNING = {                // 原型測試值（之後依試玩再調；只用在這個測試場，不影響 3-1／3-2 風口）
+  angles: [30, 45, 60],          // 三段噴風角度（度，0＝水平向右，90＝垂直向上）
+  startIndex: 0,                 // 初始角度：第 1 段（30°）
+  windSpeed: 14,                 // 風速：風想把角色帶到的速度（px／步）
+  maxUp: 10,                     // 向上速度上限（和既有風口一樣，風不會無限往上推）
+  pull: 0.35,                    // 風力大小：每一步把角色速度拉向風速的比例（0～1）
+  range: 220,                    // 有效噴風長度（從噴口沿風向）
+  width: 100,                    // 風流寬度
+  edge: 20,                      // 風流邊緣柔和寬度（越靠邊越弱）
+  back: 30,                      // 噴口後方也算進風流的距離（站在噴口前就會被吹到）
+  visualRange: 300,              // 畫面上風流畫多長（只影響畫面）
+  airDrag: 0.99,                 // 離開風流後，空中每一步保留多少風帶來的水平速度
+  groundFriction: 0.6,           // 落地後每一步保留多少（很快停下）
+  ramp: 0.35,                    // 進出風流的過渡（每一步）
+  deviceX: 390,                  // 機關底座左緣（轉軸在底座中央 x＝deviceX＋deviceW／2＝432）
+  deviceW: 84, deviceH: 52,      // 底座大小
+  nozzleH: 30,                   // 噴口轉軸離地高度
+  pitX: 520, pitW: 1000,         // 尖刺坑起點與寬度（比一個畫面寬：普通跳躍約 180px、撐傘助跑跳約 320px 都過不去）
+  farPlatW: 0, farPlatX: 0, farPlatH: 0,   // 對岸平台（寬 0＝不放；對岸地面本身就是安全平台）
+  startX: 150,                   // 安全起點
+  resetX: 200,                   // 掉進尖刺坑後的回收位置（機關左邊的地面）
+  pitDamage: 0.5,                // 這個測試坑每次有效受傷扣 0.5 HP（只在這個測試場）
+  length: 2400,
+};
+const WD_TUNING_DEFAULT = JSON.parse(JSON.stringify(WD_TUNING));
+var wdFieldMode = false;
+var wd = { idx: 0, ang: 30, dispAng: 30, lastSwing: -1, shake: 0, flash: 0, wdVx: 0, windT: 0, inFlow: 0, attempt: null, history: [], trails: {}, log: [], hitBoxes: null };
+function wdActive() { return wdFieldMode && typeof c2IsField === 'function' && c2IsField(); }
+function wdLog(o) { try { o.t = Math.round(performance.now()); wd.log.push(o); if (wd.log.length > 120) wd.log.shift(); } catch (e) {} }
+function wdPivot() { return { x: WD_TUNING.deviceX + WD_TUNING.deviceW / 2, y: GROUND_Y - WD_TUNING.nozzleH }; }
+function wdDeviceRect() { return { x: WD_TUNING.deviceX - 6, y: GROUND_Y - WD_TUNING.deviceH - 34, w: WD_TUNING.deviceW + 12, h: WD_TUNING.deviceH + 34 }; }   // 槌子可以敲到的範圍：底座＋噴嘴
+function wdResetState(full) {
+  if (full) { wd.idx = Math.max(0, Math.min(WD_TUNING.angles.length - 1, WD_TUNING.startIndex | 0)); wd.history = []; wd.trails = {}; }
+  wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; wd.lastSwing = player.hammerSwingId; wd.shake = 0; wd.flash = 0;
+  wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0; wd.attempt = null;
+}
+// 風流：角色身體中心在風流範圍內的強度（0～1）
+function wdFlowAt(px, py) {
+  const P = wdPivot(), a = wd.dispAng * Math.PI / 180, dx = Math.cos(a), dy = -Math.sin(a);
+  const rx = px - P.x, ry = py - P.y, s = rx * dx + ry * dy, lat = Math.abs(rx * dy - ry * dx);
+  if (s < -WD_TUNING.back || s > WD_TUNING.range || lat > WD_TUNING.width / 2) return 0;
+  const m = WD_TUNING.width / 2 - lat;
+  return m < WD_TUNING.edge ? Math.max(0, m / WD_TUNING.edge) : 1;
+}
+// updatePlayer 裡「重力＋風口之後、雨傘緩降與移動之前」呼叫（掛在 c2UmbrellaFallCap 前面）
+function wdApplyForce() {
+  if (!wdActive() || gameState !== 'playing') return;
+  const T = WD_TUNING, e = wdFlowAt(player.x + player.w / 2, player.y + player.h / 2);
+  wd.windT += ((e > 0 ? 1 : 0) - wd.windT) * T.ramp;
+  const k = T.pull * e * wd.windT;
+  wd.inFlow = k;
+  if (k > 0) {
+    const a = wd.dispAng * Math.PI / 180, tvx = T.windSpeed * Math.cos(a), tvy = Math.max(-T.windSpeed * Math.sin(a), -T.maxUp);
+    wd.wdVx += (tvx - wd.wdVx) * k;
+    player.vy += (tvy - player.vy) * k;
+    player.onGround = false;
+    if (!wd.attempt) wdStartAttempt();
+  }
+  if (wd.wdVx) {
+    const rightBound = Math.min(cameraX + CANVAS_W - 60, LEVEL_LENGTH - 20);
+    player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + wd.wdVx));
+  }
+}
+function wdStartAttempt() {
+  wd.attempt = { ang: wd.dispAng, idx: wd.idx, startX: Math.round(player.x + player.w / 2), startFrame: frameCount, maxH: 0, maxX: 0, frames: 0, umbrella: false, airborne: false, trail: [], result: null };
+  wdLog({ ev: 'start', ang: wd.dispAng, x: wd.attempt.startX });
+}
+function wdEndAttempt(result) {
+  const A = wd.attempt; if (!A) return;
+  A.result = result; A.landX = Math.round(player.x + player.w / 2); A.frames = frameCount - A.startFrame;
+  A.dist = A.landX - A.startX;
+  wd.history.push({ ang: A.ang, result, startX: A.startX, landX: A.landX, dist: A.dist, maxH: Math.round(A.maxH), maxX: Math.round(A.maxX), frames: A.frames, umbrella: A.umbrella });
+  if (wd.history.length > 60) wd.history.shift();
+  wd.trails[A.ang] = { pts: A.trail.slice(), result, landX: A.landX, maxH: Math.round(A.maxH) };
+  wdLog({ ev: 'end', ang: A.ang, result, landX: A.landX, maxH: Math.round(A.maxH), frames: A.frames });
+  wd.attempt = null;
+  const msg = { far: '✅ 飛到對岸了！（' + A.ang + '°）', near: '🛬 安全落地，但沒有飛過尖刺坑（' + A.ang + '°）— 敲機關換個角度再試', pit: '💥 掉進尖刺坑（' + A.ang + '°）' }[result];
+  if (msg && result !== 'pit') showHint(msg, 180);
+}
+// 每一步更新的最後：飛行紀錄、落地判定、尖刺坑
+function wdStep() {
+  if (!wdActive() || gameState !== 'playing') return;
+  const T = WD_TUNING, cxp = player.x + player.w / 2, feet = player.y + player.h;
+  if (player.onGround) wd.wdVx *= T.groundFriction; else if (!(wd.inFlow > 0)) wd.wdVx *= T.airDrag;
+  if (Math.abs(wd.wdVx) < 0.02) wd.wdVx = 0;
+  if (wd.shake > 0) wd.shake--; if (wd.flash > 0) wd.flash--;
+  // 角度：畫面（噴嘴）與實際風向一起轉（物理用的就是畫面上的角度 → 一定同步）
+  if (wd.dispAng !== wd.ang) { const d = wd.ang - wd.dispAng; wd.dispAng = Math.abs(d) < 0.6 ? wd.ang : wd.dispAng + d * 0.35; }
+  const A = wd.attempt;
+  if (A) {
+    A.frames = frameCount - A.startFrame;
+    A.maxH = Math.max(A.maxH, GROUND_Y - feet); A.maxX = Math.max(A.maxX, cxp);
+    if (!player.onGround) A.airborne = true;
+    if (typeof umbEquipped === 'function' && umbEquipped() && !player.onGround) A.umbrella = true;
+    if (frameCount % 2 === 0) A.trail.push([Math.round(cxp), Math.round(player.y + player.h / 2)]);
+    if (A.airborne && player.onGround && !(wd.inFlow > 0)) {
+      const pitEnd = T.pitX + T.pitW;
+      wdEndAttempt(cxp > pitEnd ? 'far' : 'near');
+    } else if (A.frames > 60 * 30) wdEndAttempt('timeout');
+  }
+  // 尖刺坑：角色中心在坑內、腳碰到尖端 → 受傷一次（0.5 HP）→ 退回安全起點
+  const pit = (typeof c2PitUnderPlayer === 'function') ? c2PitUnderPlayer() : null;
+  if (pit) wdPitHit(pit);
+}
+function wdPitHit(pit) {
+  const wasInv = player.invincible > 0;
+  if (wd.attempt) wdEndAttempt('pit');
+  if (!wasInv) {
+    const before = player.hp;
+    try { sfxOnPlayerHurt(); } catch (e) {}
+    player.hp = Math.max(0, Math.round((player.hp - WD_TUNING.pitDamage) * 2) / 2);   // 半格（0.5）單位
+    try { advNoteDamage(Math.max(0, before - Math.max(0, player.hp))); } catch (e) {}
+    player.invincible = 90;
+    try { currentRunStats.damageTaken++; } catch (e) {}
+    wdLog({ ev: 'pitHit', hpBefore: before, hpAfter: player.hp, pit: pit.id });
+    if (player.hp <= 0) { wd.wdVx = 0; wd.windT = 0; triggerFailed(); return; }   // 沿用原本的死亡流程
+  } else wdLog({ ev: 'pitInv', hp: player.hp });
+  player.x = WD_TUNING.resetX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
+  wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0; player.windT = 0; player.windInfo = null;
+  if (!wasInv) player.invincible = Math.min(player.invincible, C2_PIT.resetInvincible);
+  showHint(wasInv ? '💥 尖刺坑！退回起點（無敵時間也不能硬闖）' : '💥 被尖刺刺到了！扣 0.5 HP，退回起點 — 敲機關換個角度再試', 170);
+}
+// 氣球槌命中機關：沿用既有槌擊判定框（攻擊範圍、面向、hammerSwingId）；同一次揮槌只切換一次；不扣耐久
+function wdHammerCheck() {
+  if (!wdActive() || !(player.meleeHammerActive > 0) || activeSlot !== 'hammer' || !(equippedHammer && equippedHammer.id)) return;
+  const atkX = player.facingRight ? player.x + player.w : player.x - CONFIG.HAMMER_ATTACK_RANGE;
+  const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
+  const R = wdDeviceRect();
+  wd.hitBoxes = { atk: { x: atkX, y: atkY, w: CONFIG.HAMMER_ATTACK_RANGE, h: CONFIG.HAMMER_ATTACK_HEIGHT }, dev: R, t: frameCount };
+  if (!rectsOverlap(atkX, atkY, CONFIG.HAMMER_ATTACK_RANGE, CONFIG.HAMMER_ATTACK_HEIGHT, R.x, R.y, R.w, R.h)) return;
+  if (wd.lastSwing === player.hammerSwingId) return;                      // 同一次揮槌（多個畫面重疊）只算一次
+  wd.lastSwing = player.hammerSwingId;
+  const from = wd.ang;
+  wd.idx = (wd.idx + 1) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx];
+  wd.shake = 10; wd.flash = 24;
+  wdLog({ ev: 'switch', from, to: wd.ang, swing: player.hammerSwingId, hammerDur: equippedHammer.currentDur });
+  showHint('🔨 導風機關轉到 ' + wd.ang + '°', 90);
+}
+function wdSetAngleIndex(i) { wd.idx = ((i | 0) % WD_TUNING.angles.length + WD_TUNING.angles.length) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; }
+function wdReturnToStart(resetAngle) {
+  if (!wdActive()) return;
+  if (wd.attempt) wdEndAttempt('cancel');
+  player.x = WD_TUNING.startX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
+  wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0;
+  if (resetAngle) wdSetAngleIndex(WD_TUNING.startIndex);
+  cameraX = 0;
+  showHint(resetAngle ? '↩️ 回到起點，機關角度重設為 ' + wd.ang + '°' : '↩️ 回到起點（機關維持 ' + wd.ang + '°）', 120);
+}
+// ── 畫面：岩石底座＋可轉噴嘴＋三段刻度＋青藍色風流 ──
+function wdDrawDevice(cx) {
+  const T = WD_TUNING, P = wdPivot(), sh = wd.shake > 0 ? Math.sin(wd.shake * 2.1) * 2.5 : 0;
+  const bx = Math.round(T.deviceX - cx + sh), by = GROUND_Y, t = typeof frameCount === 'number' ? frameCount : 0;
+  if (bx > CANVAS_W + 400 || bx + T.deviceW < -400) return;
+  const a = wd.dispAng * Math.PI / 180, dx = Math.cos(a), dy = -Math.sin(a), px = P.x - cx + sh, py = P.y;
+  ctx.save();
+  // 風流（半透明青藍色，從噴口沿風向吹出）
+  const L = T.visualRange, hw = T.width / 2;
+  ctx.save(); ctx.translate(px, py); ctx.rotate(-a);
+  const g = ctx.createLinearGradient(0, 0, L, 0);
+  g.addColorStop(0, 'rgba(90,220,255,0.55)'); g.addColorStop(Math.min(0.95, T.range / L), 'rgba(90,220,255,0.28)'); g.addColorStop(1, 'rgba(90,220,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(10, -hw * 0.55); ctx.lineTo(L, -hw); ctx.lineTo(L, hw); ctx.lineTo(10, hw * 0.55); ctx.closePath(); ctx.fill();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    const k = ((t * 3.2 + i * 37) % L) / L, lx = 14 + k * (L - 30), lat = ((i % 5) / 4 - 0.5) * (hw * 1.2) * (0.55 + 0.45 * k);
+    ctx.globalAlpha = 0.95 * (1 - k * 0.8);
+    ctx.strokeStyle = 'rgba(20,90,130,0.85)'; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(lx, lat); ctx.lineTo(lx + 22, lat); ctx.stroke();
+    ctx.strokeStyle = 'rgb(200,250,255)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lx, lat); ctx.lineTo(lx + 22, lat); ctx.stroke();
+  }
+  ctx.globalAlpha = 1; ctx.restore();
+  // 固定底座（岩石色，接地）
+  ctx.fillStyle = '#6d5a48'; ctx.strokeStyle = '#3a2c20'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(bx - 6, by); ctx.lineTo(bx + 4, by - T.deviceH); ctx.lineTo(bx + T.deviceW - 4, by - T.deviceH); ctx.lineTo(bx + T.deviceW + 6, by); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,240,215,0.18)'; ctx.fillRect(bx + 8, by - T.deviceH + 6, T.deviceW - 16, 5);
+  ctx.strokeStyle = 'rgba(40,28,18,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(bx + 14, by - 12); ctx.lineTo(bx + 26, by - 22); ctx.moveTo(bx + T.deviceW - 16, by - 30); ctx.lineTo(bx + T.deviceW - 26, by - 18); ctx.stroke();
+  // 三段刻度（底座上的石製刻度盤：目前角度亮起）
+  const R = 50;
+  ctx.fillStyle = 'rgba(70,55,42,0.92)'; ctx.strokeStyle = '#2b2118'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.arc(px, py, R + 16, -Math.PI / 2 + 0.12, -Math.PI / 12 + 0.12); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.lineWidth = 4;
+  T.angles.forEach((deg, i) => {
+    const r = deg * Math.PI / 180, on = i === wd.idx;
+    ctx.strokeStyle = on ? '#ffe14d' : 'rgba(255,255,255,0.75)'; ctx.lineWidth = on ? 6 : 4;
+    ctx.beginPath(); ctx.moveTo(px + Math.cos(r) * (R - 2), py - Math.sin(r) * (R - 2)); ctx.lineTo(px + Math.cos(r) * (R + 12), py - Math.sin(r) * (R + 12)); ctx.stroke();
+    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = on ? '#ffe14d' : '#f2e6d8';
+    ctx.fillText(String(deg), px + Math.cos(r) * (R + 26), py - Math.sin(r) * (R + 26) + 4);
+  });
+  // 可旋轉導風噴口（繞固定軸心轉；底座不動）
+  ctx.save(); ctx.translate(px, py); ctx.rotate(-a);
+  ctx.fillStyle = wd.flash > 0 ? '#c9e9f2' : '#8fa3ad'; ctx.strokeStyle = '#2f3a40'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-10, -11); ctx.lineTo(34, -17); ctx.lineTo(34, 17); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#2f3a40'; ctx.fillRect(30, -17, 6, 34);
+  ctx.fillStyle = 'rgba(160,240,255,0.95)'; ctx.fillRect(36, -12, 4, 24);
+  ctx.restore();
+  ctx.fillStyle = '#4d3b2c'; ctx.strokeStyle = '#21170f'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#c7b39b'; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+  // 「可以敲」提示：角色靠近時，底座上方浮出槌子圖示
+  const near = Math.abs((player.x + player.w / 2) - (T.deviceX + T.deviceW / 2)) < 170 && !(wd.inFlow > 0);
+  if (near) {
+    const bob = Math.sin(t * 0.15) * 3;
+    ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🔨', bx + T.deviceW / 2, by - T.deviceH - 50 + bob);
+    ctx.font = 'bold 13px sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText(wd.ang + '°', bx + T.deviceW / 2, by + 18); ctx.fillStyle = '#fff'; ctx.fillText(wd.ang + '°', bx + T.deviceW / 2, by + 18);
+  }
+  // 對岸目標小旗（只是標示，不是判定）
+  const fx = T.pitX + T.pitW + 70 - cx;
+  if (fx > -30 && fx < CANVAS_W + 30) { ctx.strokeStyle = '#3a2c20'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(fx, by); ctx.lineTo(fx, by - 70); ctx.stroke(); ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.moveTo(fx, by - 70); ctx.lineTo(fx + 30, by - 61); ctx.lineTo(fx, by - 52); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+// ── 開發者除錯畫面（F5；預設隱藏）──
+function wdDrawDebug() {
+  if (!wdActive() || !(typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) || c3VentDebugHidden) return;
+  const cx = cameraX, T = WD_TUNING, P = wdPivot(), a = wd.dispAng * Math.PI / 180;
+  ctx.save();
+  // 風流作用區
+  ctx.save(); ctx.translate(P.x - cx, P.y); ctx.rotate(-a); ctx.setLineDash([6, 4]); ctx.strokeStyle = 'rgba(0,200,255,0.95)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(-T.back, -T.width / 2, T.range + T.back, T.width); ctx.setLineDash([]);
+  // 風力向量
+  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(T.windSpeed * 6, 0); ctx.stroke(); ctx.restore();
+  // 尖刺坑碰撞區（角色中心在坑內、腳低於地面 hitDepth）
+  ctx.fillStyle = 'rgba(255,40,40,0.25)'; ctx.fillRect(T.pitX - cx, GROUND_Y + C2_PIT.hitDepth, T.pitW, 30);
+  ctx.strokeStyle = 'rgba(255,60,60,0.9)'; ctx.lineWidth = 1.5; ctx.strokeRect(T.pitX - cx, GROUND_Y + C2_PIT.hitDepth, T.pitW, 30);
+  // 槌子判定（機關可敲範圍：黃；最近一次揮槌：橘）
+  const D = wdDeviceRect(); ctx.strokeStyle = '#ffe14d'; ctx.setLineDash([4, 3]); ctx.strokeRect(D.x - cx, D.y, D.w, D.h); ctx.setLineDash([]);
+  if (wd.hitBoxes && frameCount - wd.hitBoxes.t < 20) { const k = wd.hitBoxes.atk; ctx.strokeStyle = '#ff9a3c'; ctx.lineWidth = 2; ctx.strokeRect(k.x - cx, k.y, k.w, k.h); }
+  // 玩家碰撞框＋速度向量
+  ctx.strokeStyle = '#7CFC00'; ctx.lineWidth = 1.5; ctx.strokeRect(player.x - cx, player.y, player.w, player.h);
+  const pcx = player.x + player.w / 2 - cx, pcy = player.y + player.h / 2, vx = player.vx + wd.wdVx;
+  ctx.strokeStyle = '#ff4fd8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(pcx, pcy); ctx.lineTo(pcx + vx * 6, pcy + player.vy * 6); ctx.stroke();
+  // 飛行軌跡（每個角度最後一次＋目前這次）與落點
+  const col = { 30: '#ff7043', 45: '#66bb6a', 60: '#42a5f5' };
+  const drawTrail = (pts, c, land) => { if (!pts || pts.length < 2) return; ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.setLineDash([2, 4]); ctx.beginPath(); pts.forEach((p, i) => { if (i) ctx.lineTo(p[0] - cx, p[1]); else ctx.moveTo(p[0] - cx, p[1]); }); ctx.stroke(); ctx.setLineDash([]);
+    if (land != null) { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(land - cx, GROUND_Y - 2); ctx.lineTo(land - cx - 8, GROUND_Y - 16); ctx.lineTo(land - cx + 8, GROUND_Y - 16); ctx.closePath(); ctx.fill(); } };
+  Object.keys(wd.trails).forEach(k => { const tr = wd.trails[k]; drawTrail(tr.pts, col[k] || '#fff', tr.landX); });
+  if (wd.attempt) drawTrail(wd.attempt.trail, '#ffffff', null);
+  // 文字
+  const last = wd.history[wd.history.length - 1];
+  const lines = ['🌬️ 導風機關（F5 隱藏）角度 ' + wd.ang + '°（第 ' + (wd.idx + 1) + ' 段）　風速 ' + T.windSpeed + '　上升上限 ' + T.maxUp + '　風力 ' + T.pull + '　範圍 ' + T.range + '×' + T.width,
+    '角色：風 ' + Math.round(wd.inFlow / Math.max(0.0001, T.pull) * 100) + '%　風帶來的水平速度 ' + wd.wdVx.toFixed(2) + '　vy ' + player.vy.toFixed(2) + '　HP ' + player.hp + '　槌子耐久 ' + (equippedHammer.currentDur || 0),
+    '坑 ' + T.pitX + '～' + (T.pitX + T.pitW) + '（寬 ' + T.pitW + '）　回收 x ' + T.resetX + (last ? '　上一次：' + last.ang + '° ' + last.result + ' 最高 ' + last.maxH + ' 落點 ' + last.landX + ' 時間 ' + last.frames + '步' : ''),
+    '軌跡顏色：30° 橘　45° 綠　60° 藍　（R：回起點　Shift+R：回起點並重設角度）'];
+  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(8, 64, w, lines.length * 16 + 8);
+  ctx.fillStyle = '#cff'; lines.forEach((l, i) => ctx.fillText(l, 16, 80 + i * 16));
+  ctx.restore();
+}
+// ── 參數面板（開發者模式；只在這個測試場）──
+function wdPanelSync() {
+  let b = document.getElementById('wd-panel-btn'), p = document.getElementById('wd-panel');
+  const show = wdActive() && typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS && (gameState === 'playing' || gameState === 'paused');
+  if (!show) { if (b) b.style.display = 'none'; if (p) p.style.display = 'none'; return; }
+  if (!b) {
+    b = document.createElement('button'); b.id = 'wd-panel-btn'; b.type = 'button'; b.textContent = '⚙️ 導風參數';
+    b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:60;padding:6px 10px;border-radius:10px;border:2px solid #345;background:#e9fbff;font:bold 13px sans-serif;cursor:pointer';
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const q = document.getElementById('wd-panel'); if (q) q.style.display = q.style.display === 'none' ? 'block' : 'none'; wdPanelRender(); b.blur(); });
+    document.body.appendChild(b);
+  }
+  // 手機（觸控）：放在左上角愛心下方，不蓋到左下角的 ◀ ▶；電腦：左下角
+  const touch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
+  b.style.bottom = touch ? '' : '8px'; b.style.top = touch ? '92px' : '';
+  if (p) { p.style.bottom = touch ? '' : '46px'; p.style.top = touch ? '128px' : ''; p.style.maxHeight = touch ? '62vh' : '70vh'; }
+  b.style.display = '';
+  if (!p) {
+    p = document.createElement('div'); p.id = 'wd-panel'; p.style.display = 'none';
+    p.style.cssText += ';position:fixed;left:8px;bottom:46px;z-index:60;max-height:70vh;overflow:auto;background:rgba(12,24,34,0.92);color:#e6fbff;padding:8px 10px;border-radius:10px;font:12px monospace;width:300px';
+    document.body.appendChild(p); p.style.display = 'none';
+    p.addEventListener('keydown', e => e.stopPropagation(), true);
+  }
+}
+const WD_PANEL_FIELDS = [
+  ['angles', '三段角度（逗號）'], ['startIndex', '初始角度（第幾段，0 起算）'], ['windSpeed', '風速'], ['maxUp', '向上速度上限'], ['pull', '風力大小（0～1）'],
+  ['range', '有效噴風長度'], ['width', '風流寬度'], ['visualRange', '風流顯示長度'], ['airDrag', '空中保留'], ['deviceX', '機關位置 x'], ['nozzleH', '噴口離地高度'],
+  ['pitX', '尖刺坑起點'], ['pitW', '尖刺坑寬度'], ['farPlatX', '對岸平台 x'], ['farPlatW', '對岸平台寬（0＝不放）'], ['farPlatH', '對岸平台高度'], ['startX', '安全起點 x'], ['resetX', '回收座標 x'],
+];
+const WD_REBUILD_KEYS = ['pitX', 'pitW', 'farPlatX', 'farPlatW', 'farPlatH', 'deviceX'];
+function wdPanelRender() {
+  const p = document.getElementById('wd-panel'); if (!p || p.style.display === 'none') return;
+  p.innerHTML = '<b>🌬️ 導風機關參數（只在這個測試場，不存檔）</b><br><small>改完按「套用」；坑、平台、機關位置會重新開始測試場</small>'
+    + WD_PANEL_FIELDS.map(([k, n]) => '<div style="display:flex;justify-content:space-between;gap:6px;margin:3px 0"><label>' + n + '</label><input data-wd="' + k + '" value="' + (Array.isArray(WD_TUNING[k]) ? WD_TUNING[k].join(',') : WD_TUNING[k]) + '" style="width:90px"></div>').join('')
+    + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"><button data-wdb="apply">套用</button><button data-wdb="start">↩️ 回起點</button><button data-wdb="angle">↩️ 重設角度</button><button data-wdb="default">預設值</button><button data-wdb="copy">📋 複製</button></div>'
+    + '<div style="margin-top:6px">最近結果：<br>' + wd.history.slice(-6).reverse().map(h => h.ang + '° ' + h.result + ' 落點 ' + h.landX + ' 高 ' + h.maxH + (h.umbrella ? ' ☂️' : '')).join('<br>') + '</div>';
+  p.querySelectorAll('[data-wdb]').forEach(btn => btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wdPanelAction(btn.dataset.wdb); btn.blur(); }));
+}
+function wdPanelAction(act) {
+  const p = document.getElementById('wd-panel');
+  if (act === 'apply' && p) {
+    let rebuild = false;
+    p.querySelectorAll('[data-wd]').forEach(inp => {
+      const k = inp.dataset.wd, v = inp.value.trim();
+      let nv = k === 'angles' ? v.split(/[,，\s]+/).map(Number).filter(x => isFinite(x) && x > 0 && x < 90) : Number(v);
+      if (k === 'angles' ? nv.length < 1 : !isFinite(nv)) return;
+      if (JSON.stringify(nv) !== JSON.stringify(WD_TUNING[k])) { if (WD_REBUILD_KEYS.includes(k)) rebuild = true; WD_TUNING[k] = nv; }
+    });
+    wdLog({ ev: 'tuning', rebuild });
+    if (rebuild) { window.__wdNext = true; window.__wdKeep = true; c2StartUmbrellaField(); }
+    else { wdSetAngleIndex(Math.min(wd.idx, WD_TUNING.angles.length - 1)); showHint('⚙️ 已套用導風參數', 90); }
+  } else if (act === 'start') wdReturnToStart(false);
+  else if (act === 'angle') wdReturnToStart(true);
+  else if (act === 'default') { Object.keys(WD_TUNING_DEFAULT).forEach(k => { WD_TUNING[k] = JSON.parse(JSON.stringify(WD_TUNING_DEFAULT[k])); }); window.__wdNext = true; window.__wdKeep = true; c2StartUmbrellaField(); }
+  else if (act === 'copy') { const t = JSON.stringify(WD_TUNING); console.log('[WindDirector] 參數', t); try { const pr = navigator.clipboard && navigator.clipboard.writeText(t); if (pr && pr.catch) pr.catch(() => {}); } catch (e) {} showHint('📋 已複製導風參數（也印在主控台）', 120); }
+  setTimeout(wdPanelRender, 50);
+}
+(function v392Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v392) { if (typeof o !== 'function') console.warn('[v0.3.92] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v392 = true; globalThis[name] = w; };
+  // 3-T 測試場：導風機關模式（另一個入口；原本的雨傘測試場、風刃蠍子測試不變）
+  const F = C2_UMBRELLA_FIELD;
+  const base = { buildPlatforms: F.buildPlatforms, buildWindVents: F.buildWindVents, buildEnemies: F.buildEnemies, hints: F.hints, displayName: F.displayName, name: F.name, shortName: F.shortName };
+  F.buildPlatforms = function () { if (!wdFieldMode) return base.buildPlatforms.apply(this, arguments); const T = WD_TUNING; return T.farPlatW > 0 ? [{ x: T.farPlatX || (T.pitX + T.pitW + 40), y: GROUND_Y - (T.farPlatH || 60), w: T.farPlatW, h: 22 }] : []; };
+  F.buildWindVents = function () { return wdFieldMode ? [] : base.buildWindVents.apply(this, arguments); };
+  F.buildEnemies = function () { return wdFieldMode ? [] : base.buildEnemies.apply(this, arguments); };
+  Object.defineProperty(F, 'spikePits', { configurable: true, get() { return wdFieldMode ? [{ id: 'WD', x: WD_TUNING.pitX, w: WD_TUNING.pitW, resetX: WD_TUNING.resetX }] : undefined; } });
+  Object.defineProperty(F, 'hints', { configurable: true, get() { return wdFieldMode ? [] : base.hints; } });
+  ['displayName', 'name'].forEach(k => Object.defineProperty(F, k, { configurable: true, get() { return wdFieldMode ? '🌬️ 導風機關測試（開發用，不是 3-2）' : base[k]; } }));
+  Object.defineProperty(F, 'shortName', { configurable: true, get() { return wdFieldMode ? '導風機關測試（開發用）' : base.shortName; } });
+  wrapFn('c2StartUmbrellaField', o => function () {
+    wdFieldMode = !!window.__wdNext; window.__wdNext = false;
+    const keep = !!window.__wdKeep; window.__wdKeep = false;
+    const r = o.apply(this, arguments);
+    if (wdFieldMode) setTimeout(() => { try { if (!wdActive()) return; wdResetState(!keep); player.x = WD_TUNING.startX; cameraX = 0;
+      showHint('🌬️ 導風機關測試（開發用）：按 2 拿氣球槌、Z 敲機關換風向（30°→45°→60°）；按 3 撐雨傘；走進風裡飛過尖刺坑', 420);
+      console.log('[WindDirector] 導風機關測試開始（開發用，不是 3-2；不寫背包、不寫成績）', JSON.stringify(WD_TUNING)); } catch (e) { console.warn('[WindDirector]', e); } }, 0);
+    return r;
+  });
+  wrapFn('loadLevel', o => function (idx) { const lv = LEVELS[idx]; if (!(lv && lv.devUmbrellaField)) wdFieldMode = false; return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { const r = o.apply(this, arguments); if (wdActive()) { wdResetState(true); player.x = WD_TUNING.startX; } return r; });
+  // 3-T 開發測試場（雨傘／風刃蠍子／導風機關）：不記錄戰敗、受傷、耗時；失敗或結束時不把測試裝備（999）與測試場的狀態寫進背包
+  //   v0.3.92 測試時發現（main 上本來就這樣）：在 3-T 死亡 → 冒險挑戰紀錄多一次戰敗＋扣血，背包存檔的劍／槌耐久被寫成 999
+  const fieldNow = () => { try { return typeof c2IsField === 'function' && c2IsField(); } catch (e) { return false; } };
+  wrapFn('advEndLiveAttempt', o => function (type) {
+    if (fieldNow() && typeof advAttempt !== 'undefined' && advAttempt && !advAttempt.ended && advAttempt.stageId === '3-T') {
+      try { const at = advAttempt; at.ended = true; const d = advLoad(); if (d.active && d.active.challengeId === at.challengeId) { d.active.live = null; advSave(d); } } catch (e) {}
+      console.log('[3-T] 開發測試場：這次嘗試（' + type + '）不寫入冒險挑戰紀錄');
+      return;
+    }
+    return o.apply(this, arguments);
+  });
+  const keepInv = name => wrapFn(name, o => function () {
+    if (!fieldNow()) return o.apply(this, arguments);
+    const keep = JSON.stringify(playerInventory);
+    const r = o.apply(this, arguments);
+    try { const k = JSON.parse(keep); Object.keys(playerInventory).forEach(f => { if (!(f in k)) delete playerInventory[f]; }); Object.assign(playerInventory, k); saveInventory(); console.log('[3-T] 開發測試場：' + name + ' 後背包維持原狀（不寫入測試裝備）'); } catch (e) {}
+    return r;
+  });
+  keepInv('triggerFailed'); keepInv('c2CompleteField');
+  // 方向性風力：updatePlayer 裡重力＋風口之後、雨傘緩降之前
+  wrapFn('c2UmbrellaFallCap', o => function () { try { wdApplyForce(); } catch (e) { console.warn('[WindDirector] force', e); } return o.apply(this, arguments); });
+  // 氣球槌：沿用既有槌擊（命中敵人／樹木的處理不變）之後，再看有沒有敲到機關
+  wrapFn('updateHammerMelee', o => function () { const r = o.apply(this, arguments); try { wdHammerCheck(); } catch (e) { console.warn('[WindDirector] hammer', e); } return r; });
+  wrapFn('update', o => function () { const r = o.apply(this, arguments); try { wdStep(); } catch (e) { console.warn('[WindDirector] step', e); } return r; });
+  wrapFn('drawC2SpikePits', o => function (cx) { const r = o.apply(this, arguments); try { if (wdActive()) wdDrawDevice(cx); } catch (e) { console.warn('[WindDirector] draw', e); } return r; });
+  wrapFn('drawHUD', o => function () { try { wdDrawDebug(); } catch (e) {} try { wdPanelSync(); } catch (e) {} return o.apply(this, arguments); });
+  // 快捷鍵（只在這個測試場＋開發者模式）：R 回起點、Shift+R 回起點並重設角度
+  window.addEventListener('keydown', e => {
+    if (!wdActive() || !(typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) || gameState !== 'playing' || e.code !== 'KeyR' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typeof c3VentCalibActive === 'function' && c3VentCalibActive()) return;
+    e.preventDefault(); wdReturnToStart(e.shiftKey);
+  });
+  // 開發者面板按鈕（放在「🌀 風刃蠍子測試」旁邊）
+  window.c2StartWindDirectorField = function () { window.__wdNext = true; c2StartUmbrellaField(); };
+  const addBtn = () => {
+    const box = document.getElementById('p2-dev-body'), ref = document.getElementById('btn-pause-test-c2-wind') || document.getElementById('btn-pause-test-c2-field');
+    if (!box || !ref) return false;
+    if (document.getElementById('btn-pause-test-c2-wd')) return true;
+    const b = document.createElement('button'); b.id = 'btn-pause-test-c2-wd'; b.type = 'button'; b.className = ref.className;
+    b.textContent = '🌬️ 導風機關測試（3-T，開發用）';
+    b.addEventListener('click', e => { e.preventDefault(); window.c2StartWindDirectorField(); });
+    ref.insertAdjacentElement('afterend', b); return true;
+  };
+  if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 60) clearInterval(t); }, 500); }
+  window.debugWindDirector = () => ({ active: wdActive(), mode: wdFieldMode, tuning: JSON.parse(JSON.stringify(WD_TUNING)), idx: wd.idx, ang: wd.ang, dispAng: +wd.dispAng.toFixed(2), wdVx: +wd.wdVx.toFixed(3), inFlow: +wd.inFlow.toFixed(3), lastSwing: wd.lastSwing,
+    attempt: wd.attempt ? { ang: wd.attempt.ang, maxH: Math.round(wd.attempt.maxH), frames: wd.attempt.frames } : null, history: wd.history.slice(), log: wd.log.slice(-60),
+    player: { x: Math.round(player.x), cx: Math.round(player.x + player.w / 2), y: Math.round(player.y), vx: +player.vx.toFixed(2), vy: +player.vy.toFixed(2), hp: player.hp, inv: player.invincible, onGround: player.onGround },
+    hammer: { id: equippedHammer.id, dur: equippedHammer.currentDur, max: equippedHammer.maxDur, slot: activeSlot }, umbrella: { id: equippedUmbrella.id, dur: equippedUmbrella.currentDur, test: equippedUmbrella.test, stock: c2UmbTest.stock } });
 })();
