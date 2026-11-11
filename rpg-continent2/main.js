@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.92-ch3-wind-director-proto-test-1';
-const BUILD_TIME   = '2026-11-10 06:00';
+const GAME_VERSION = 'adventure-v0.3.93-ch3-wind-redirector-art-test-1';
+const BUILD_TIME   = '2026-11-11 20:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -28982,14 +28982,14 @@ function wdHammerCheck() {
   if (!wdActive() || !(player.meleeHammerActive > 0) || activeSlot !== 'hammer' || !(equippedHammer && equippedHammer.id)) return;
   const atkX = player.facingRight ? player.x + player.w : player.x - CONFIG.HAMMER_ATTACK_RANGE;
   const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
-  const R = wdDeviceRect();
+  const R = wdPadHitRect();   // v0.3.93：命中區＝玩家看到的紅色星星敲擊墊（紅墊＋金框），敲到底座、噴嘴或空氣都不算
   wd.hitBoxes = { atk: { x: atkX, y: atkY, w: CONFIG.HAMMER_ATTACK_RANGE, h: CONFIG.HAMMER_ATTACK_HEIGHT }, dev: R, t: frameCount };
   if (!rectsOverlap(atkX, atkY, CONFIG.HAMMER_ATTACK_RANGE, CONFIG.HAMMER_ATTACK_HEIGHT, R.x, R.y, R.w, R.h)) return;
   if (wd.lastSwing === player.hammerSwingId) return;                      // 同一次揮槌（多個畫面重疊）只算一次
   wd.lastSwing = player.hammerSwingId;
   const from = wd.ang;
   wd.idx = (wd.idx + 1) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx];
-  wd.shake = 10; wd.flash = 24;
+  wd.shake = 10; wd.flash = 24; wd.pressAt = frameCount;   // v0.3.93：敲擊墊下沉→回彈動畫（只影響畫面）
   wdLog({ ev: 'switch', from, to: wd.ang, swing: player.hammerSwingId, hammerDur: equippedHammer.currentDur });
   showHint('🔨 導風機關轉到 ' + wd.ang + '°', 90);
 }
@@ -29004,7 +29004,12 @@ function wdReturnToStart(resetAngle) {
   showHint(resetAngle ? '↩️ 回到起點，機關角度重設為 ' + wd.ang + '°' : '↩️ 回到起點（機關維持 ' + wd.ang + '°）', 120);
 }
 // ── 畫面：岩石底座＋可轉噴嘴＋三段刻度＋青藍色風流 ──
+//   v0.3.93：正式美術（四張 PNG）載好 → wdDrawArt；沒載好 → 照舊畫 v0.3.92 幾何原型（wdDrawDeviceGeom）
 function wdDrawDevice(cx) {
+  if (wdArtReady()) { wdDrawArt(cx); return; }
+  wdDrawDeviceGeom(cx);
+}
+function wdDrawDeviceGeom(cx) {
   const T = WD_TUNING, P = wdPivot(), sh = wd.shake > 0 ? Math.sin(wd.shake * 2.1) * 2.5 : 0;
   const bx = Math.round(T.deviceX - cx + sh), by = GROUND_Y, t = typeof frameCount === 'number' ? frameCount : 0;
   if (bx > CANVAS_W + 400 || bx + T.deviceW < -400) return;
@@ -29050,6 +29055,8 @@ function wdDrawDevice(cx) {
   ctx.restore();
   ctx.fillStyle = '#4d3b2c'; ctx.strokeStyle = '#21170f'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#c7b39b'; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+  // v0.3.93：美術沒載好時也標出敲擊墊位置（命中區和正式美術相同）
+  { const H = wdPadHitRect(); ctx.fillStyle = '#d8342c'; ctx.strokeStyle = '#7a4a10'; ctx.lineWidth = 2; ctx.fillRect(Math.round(H.x - cx), Math.round(H.y), Math.round(H.w), Math.round(H.h)); ctx.strokeRect(Math.round(H.x - cx), Math.round(H.y), Math.round(H.w), Math.round(H.h)); }
   // 「可以敲」提示：角色靠近時，底座上方浮出槌子圖示
   const near = Math.abs((player.x + player.w / 2) - (T.deviceX + T.deviceW / 2)) < 170 && !(wd.inFlow > 0);
   if (near) {
@@ -29076,7 +29083,8 @@ function wdDrawDebug() {
   ctx.fillStyle = 'rgba(255,40,40,0.25)'; ctx.fillRect(T.pitX - cx, GROUND_Y + C2_PIT.hitDepth, T.pitW, 30);
   ctx.strokeStyle = 'rgba(255,60,60,0.9)'; ctx.lineWidth = 1.5; ctx.strokeRect(T.pitX - cx, GROUND_Y + C2_PIT.hitDepth, T.pitW, 30);
   // 槌子判定（機關可敲範圍：黃；最近一次揮槌：橘）
-  const D = wdDeviceRect(); ctx.strokeStyle = '#ffe14d'; ctx.setLineDash([4, 3]); ctx.strokeRect(D.x - cx, D.y, D.w, D.h); ctx.setLineDash([]);
+  const D = wdPadHitRect(); ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(D.x - cx, D.y, D.w, D.h); ctx.setLineDash([]);
+  try { wdDrawArtDebug(cx); } catch (e) {}
   if (wd.hitBoxes && frameCount - wd.hitBoxes.t < 20) { const k = wd.hitBoxes.atk; ctx.strokeStyle = '#ff9a3c'; ctx.lineWidth = 2; ctx.strokeRect(k.x - cx, k.y, k.w, k.h); }
   // 玩家碰撞框＋速度向量
   ctx.strokeStyle = '#7CFC00'; ctx.lineWidth = 1.5; ctx.strokeRect(player.x - cx, player.y, player.w, player.h);
@@ -29133,6 +29141,8 @@ function wdPanelRender() {
   const p = document.getElementById('wd-panel'); if (!p || p.style.display === 'none') return;
   p.innerHTML = '<b>🌬️ 導風機關參數（只在這個測試場，不存檔）</b><br><small>改完按「套用」；坑、平台、機關位置會重新開始測試場</small>'
     + WD_PANEL_FIELDS.map(([k, n]) => '<div style="display:flex;justify-content:space-between;gap:6px;margin:3px 0"><label>' + n + '</label><input data-wd="' + k + '" value="' + (Array.isArray(WD_TUNING[k]) ? WD_TUNING[k].join(',') : WD_TUNING[k]) + '" style="width:90px"></div>').join('')
+    + '<div style="margin-top:8px;border-top:1px solid #4a6a7a;padding-top:4px"><b>🎨 美術校準（只影響畫面，不改風力）</b></div>'
+    + WD_ART_PANEL_FIELDS.map(([k, n]) => '<div style="display:flex;justify-content:space-between;gap:6px;margin:3px 0"><label>' + n + '</label><input data-wda="' + k + '" value="' + WD_ART[k] + '" style="width:90px"></div>').join('')
     + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"><button data-wdb="apply">套用</button><button data-wdb="start">↩️ 回起點</button><button data-wdb="angle">↩️ 重設角度</button><button data-wdb="default">預設值</button><button data-wdb="copy">📋 複製</button></div>'
     + '<div style="margin-top:6px">最近結果：<br>' + wd.history.slice(-6).reverse().map(h => h.ang + '° ' + h.result + ' 落點 ' + h.landX + ' 高 ' + h.maxH + (h.umbrella ? ' ☂️' : '')).join('<br>') + '</div>';
   p.querySelectorAll('[data-wdb]').forEach(btn => btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wdPanelAction(btn.dataset.wdb); btn.blur(); }));
@@ -29147,13 +29157,14 @@ function wdPanelAction(act) {
       if (k === 'angles' ? nv.length < 1 : !isFinite(nv)) return;
       if (JSON.stringify(nv) !== JSON.stringify(WD_TUNING[k])) { if (WD_REBUILD_KEYS.includes(k)) rebuild = true; WD_TUNING[k] = nv; }
     });
+    p.querySelectorAll('[data-wda]').forEach(inp => { const k = inp.dataset.wda, nv = Number(inp.value.trim()); if (isFinite(nv) && nv !== WD_ART[k]) WD_ART[k] = nv; });   // v0.3.93：美術校準（畫面）
     wdLog({ ev: 'tuning', rebuild });
     if (rebuild) { window.__wdNext = true; window.__wdKeep = true; c2StartUmbrellaField(); }
     else { wdSetAngleIndex(Math.min(wd.idx, WD_TUNING.angles.length - 1)); showHint('⚙️ 已套用導風參數', 90); }
   } else if (act === 'start') wdReturnToStart(false);
   else if (act === 'angle') wdReturnToStart(true);
-  else if (act === 'default') { Object.keys(WD_TUNING_DEFAULT).forEach(k => { WD_TUNING[k] = JSON.parse(JSON.stringify(WD_TUNING_DEFAULT[k])); }); window.__wdNext = true; window.__wdKeep = true; c2StartUmbrellaField(); }
-  else if (act === 'copy') { const t = JSON.stringify(WD_TUNING); console.log('[WindDirector] 參數', t); try { const pr = navigator.clipboard && navigator.clipboard.writeText(t); if (pr && pr.catch) pr.catch(() => {}); } catch (e) {} showHint('📋 已複製導風參數（也印在主控台）', 120); }
+  else if (act === 'default') { Object.keys(WD_TUNING_DEFAULT).forEach(k => { WD_TUNING[k] = JSON.parse(JSON.stringify(WD_TUNING_DEFAULT[k])); }); Object.assign(WD_ART, WD_ART_DEFAULT); window.__wdNext = true; window.__wdKeep = true; c2StartUmbrellaField(); }
+  else if (act === 'copy') { const t = JSON.stringify({ tuning: WD_TUNING, art: WD_ART }); console.log('[WindDirector] 參數', t); try { const pr = navigator.clipboard && navigator.clipboard.writeText(t); if (pr && pr.catch) pr.catch(() => {}); } catch (e) {} showHint('📋 已複製導風參數（也印在主控台）', 120); }
   setTimeout(wdPanelRender, 50);
 }
 (function v392Install() {
@@ -29227,5 +29238,219 @@ function wdPanelAction(act) {
   window.debugWindDirector = () => ({ active: wdActive(), mode: wdFieldMode, tuning: JSON.parse(JSON.stringify(WD_TUNING)), idx: wd.idx, ang: wd.ang, dispAng: +wd.dispAng.toFixed(2), wdVx: +wd.wdVx.toFixed(3), inFlow: +wd.inFlow.toFixed(3), lastSwing: wd.lastSwing,
     attempt: wd.attempt ? { ang: wd.attempt.ang, maxH: Math.round(wd.attempt.maxH), frames: wd.attempt.frames } : null, history: wd.history.slice(), log: wd.log.slice(-60),
     player: { x: Math.round(player.x), cx: Math.round(player.x + player.w / 2), y: Math.round(player.y), vx: +player.vx.toFixed(2), vy: +player.vy.toFixed(2), hp: player.hp, inv: player.invincible, onGround: player.onGround },
+    art: (function () { try { return wdArtInfo(); } catch (e) { return String(e); } })(),
     hammer: { id: equippedHammer.id, dur: equippedHammer.currentDur, max: equippedHammer.maxDur, slot: activeSlot }, umbrella: { id: equippedUmbrella.id, dur: equippedUmbrella.currentDur, test: equippedUmbrella.test, stock: c2UmbTest.stock } });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.93：導風機關正式美術整合（wind-redirector-integration-v1.6）
+//  ・只換畫面：v0.3.92 的風力物理（角度、風速、上升上限、風力、範圍、寬度、轉軸位置 wdPivot、尖刺坑、重試）一個數字都沒改
+//  ・四張已驗收 PNG（1254×1254 RGBA，原檔不修改）：assets/adventure/props/chapter3/wind_redirector_{base,nozzle,strike_pad,wind_flow}.png
+//  ・繪製順序（由後到前）：① 敲擊墊（機關左後方）→ ② 噴嘴（在刻度盤與寶石後面轉動）→ ③ 固定底座（刻度盤＋寶石＋旗子＋岩石）→ ④ 風流 → 之後才畫小V
+//  ・噴嘴繞「底座青藍色寶石中心」旋轉；噴嘴圖上的旋轉點在噴嘴後段金環的中心線上（不是 PNG 中心、不是噴嘴中心）
+//  ・風流左端（收束處）對準噴嘴出風口，和噴嘴、物理風向用同一個角度（wd.dispAng）
+//  ・槌子命中區＝紅色星星敲擊墊（紅墊＋金框）；成功敲擊 → 墊子下沉、彈簧壓縮、回彈（同一張 PNG 分段畫，不新增動作圖）
+//  ・透明邊緣：原圖有一些幾乎看不見的低透明度雜點（alpha < 12）→ 只在畫面暫存圖上清掉，原始 PNG 不動
+//  ・寶石離地高度和物理轉軸（離地 30px）不同：機關畫成和小V差不多高時，寶石在物理轉軸正上方約 9px（風流仍在物理風帶裡，見報告）
+// ════════════════════════════════════════════════════════════════════
+const WD_ART_ASSETS = {
+  base: 'assets/adventure/props/chapter3/wind_redirector_base.png',
+  nozzle: 'assets/adventure/props/chapter3/wind_redirector_nozzle.png',
+  pad: 'assets/adventure/props/chapter3/wind_redirector_strike_pad.png',
+  flow: 'assets/adventure/props/chapter3/wind_redirector_wind_flow.png',
+};
+// 素材量測值（圖檔像素；由原圖實際量出，不需要改）
+const WD_ART_SRC = {
+  base: { gemX: 670.7, gemY: 566.1, groundY: 1040 },              // 青藍色寶石中心、石座接地線（左下岩石最低 1056、右側 1028 → 取中間 1040）
+  nozzle: { mouthX: 1010, mouthY: 368, nativeDeg: 23 },           // 出風口（金色喇叭口中心）、原圖噴嘴朝向（往右上 23°）
+  pad: { x0: 96, x1: 501, y0: 476, cutTop: 702, cutBase: 792, groundY: 868, cx: 298 },   // 紅墊＋金框 x 96～501、y 476～702；彈簧 702～792；底部支承 792～868
+  flow: { tipX: 110, tipY: 752, nativeDeg: 10 },                  // 風流左端收束點、原圖風流整體朝向（往右上約 10°）
+};
+// 美術校準參數（集中在這裡；開發者「⚙️ 導風參數」面板可以即時調整；只影響畫面）
+var WD_ART = {
+  scale: 0.10,                   // 整體縮放（圖檔 1px → 遊戲 0.10px；底座約 96×84，和小V〔60×80〕差不多高）
+  baseX: 0, baseY: 9,            // 底座微調（遊戲 px；x 0＝寶石中心在物理轉軸正上方；y 9＝石座底部對齊小V腳踩的草地面〔地面線 GROUND_Y 往下 9px，和小V的鞋底同高〕）
+  nozzleX: 0, nozzleY: 0,        // 噴嘴轉軸微調（遊戲 px；0＝對準寶石中心）
+  nozzlePivotX: 571, nozzlePivotY: 554,   // 噴嘴圖上的旋轉中心（圖檔像素：噴嘴後段金環中心線上）
+  nozzleScale: 1,                // 噴嘴縮放（乘在整體縮放上）
+  nozzleRot: 0,                  // 噴嘴顯示角度微調（度；0＝和物理風向完全相同）
+  padX: -70, padY: 9,            // 敲擊墊位置（遊戲 px；x 相對寶石中心、y 相對地面線；9＝和石座同一個草地面）
+  padScale: 1.15,                // 敲擊墊縮放（乘在整體縮放上）
+  padPress: 5,                   // 敲擊墊下壓幅度（遊戲 px）
+  flowX: 0, flowY: 0,            // 風流微調（遊戲 px；X＝沿風向往前、Y＝垂直風向往下）
+  flowScale: 1.5,                // 風流縮放（乘在整體縮放上）
+  flowAlpha: 0.9,                // 風流透明度（0～1）
+};
+const WD_ART_DEFAULT = JSON.parse(JSON.stringify(WD_ART));
+const WD_ART_PRESS_STEPS = 18;   // 敲擊墊動畫長度（步；約 0.3 秒）
+const WD_ART_FLOW_ANIM = { fixed: 0.7, drift: 9, period: 80 };   // 風流：固定一層（70%）＋兩層沿風向慢慢往前飄（交叉淡入淡出，總亮度固定）
+const WD_ART_PANEL_FIELDS = [
+  ['scale', '1 整體縮放'], ['baseX', '2 底座 X'], ['baseY', '2 底座 Y'], ['nozzleX', '3 噴嘴 X'], ['nozzleY', '3 噴嘴 Y'],
+  ['nozzlePivotX', '4 噴嘴旋轉中心 X（圖檔）'], ['nozzlePivotY', '4 噴嘴旋轉中心 Y（圖檔）'], ['nozzleScale', '5 噴嘴縮放'], ['nozzleRot', '噴嘴角度微調（度）'],
+  ['padX', '6 敲擊墊 X'], ['padY', '6 敲擊墊 Y'], ['padScale', '7 敲擊墊縮放'], ['padPress', '8 敲擊墊下壓幅度'],
+  ['flowX', '9 風流 X（沿風向）'], ['flowY', '9 風流 Y（垂直風向）'], ['flowScale', '10 風流縮放'], ['flowAlpha', '11 風流透明度'],
+];
+const wdArtImgs = {}, wdArtStatus = {}, wdArtClean = {}, wdArtCache = {};
+function wdArtEntries() {
+  return Object.keys(WD_ART_ASSETS).map(k => ({ path: WD_ART_ASSETS[k], type: 'image', critical: false, label: 'windRedirector:' + k,
+    apply: im => { wdArtImgs[k] = im; wdArtStatus[k] = 'ok'; delete wdArtClean[k]; },
+    fail: () => { wdArtStatus[k] = 'error'; console.warn('[WindRedirectorArt] 美術載入失敗（改畫幾何原型）：' + k + ' → ' + WD_ART_ASSETS[k]); } }));
+}
+function wdArtImg(k) { const im = wdArtImgs[k]; return (im && im.complete && im.naturalWidth > 0) ? im : null; }
+function wdArtReady() { return !!(wdArtImg('base') && wdArtImg('nozzle') && wdArtImg('pad') && wdArtImg('flow')); }
+// 清掉低透明度雜點（alpha < 12）＋裁到內容範圍（省記憶體）；只做在暫存畫布，原始 PNG 不動
+//   讀不到像素（例如跨網域）→ 直接用原圖（不擋遊戲）
+function wdArtCleanSrc(k) {
+  if (wdArtClean[k]) return wdArtClean[k];
+  const img = wdArtImg(k); if (!img) return null;
+  let out = { c: img, ox: 0, oy: 0, cleaned: false, removed: 0 };
+  try {
+    const W = img.naturalWidth, H = img.naturalHeight, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, W, H), a = d.data;
+    let x0 = W, y0 = H, x1 = -1, y1 = -1, removed = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4 + 3, v = a[i];
+      if (!v) continue;
+      if (v < 12) { a[i] = 0; a[i - 1] = 0; a[i - 2] = 0; a[i - 3] = 0; removed++; continue; }
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x1 >= x0) {
+      g.putImageData(d, 0, 0);
+      const m = 2; x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(W - 1, x1 + m); y1 = Math.min(H - 1, y1 + m);
+      const cc = document.createElement('canvas'); cc.width = x1 - x0 + 1; cc.height = y1 - y0 + 1;
+      cc.getContext('2d').drawImage(c, x0, y0, cc.width, cc.height, 0, 0, cc.width, cc.height);
+      out = { c: cc, ox: x0, oy: y0, cleaned: true, removed };
+    }
+  } catch (e) { console.warn('[WindRedirectorArt] 透明邊緣清理略過（使用原圖）：' + k, e && e.message); }
+  wdArtClean[k] = out;
+  return out;
+}
+// 依縮放先縮成小圖（高品質縮圖，只做一次；不在每一格縮 1254px 原圖）
+function wdArtTile(k, scale) {
+  const ck = k + '|' + scale.toFixed(4); if (wdArtCache[ck]) return wdArtCache[ck];
+  const src = wdArtCleanSrc(k); if (!src) return null;
+  let t = null;
+  try {
+    const c = document.createElement('canvas');
+    const ox = src.ox * scale, oy = src.oy * scale;                         // 裁切後原點（遊戲 px）
+    const fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);               // 保留小數位移，縮圖後位置不跑掉
+    c.width = Math.max(1, Math.ceil(src.c.width * scale + fx) + 1); c.height = Math.max(1, Math.ceil(src.c.height * scale + fy) + 1);
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(src.c, fx, fy, src.c.width * scale, src.c.height * scale);
+    t = { c, ox: Math.floor(ox), oy: Math.floor(oy) };                     // 小圖左上角＝原圖 (0,0) 的位置 ＋ (ox, oy)
+  } catch (e) { t = null; }
+  wdArtCache[ck] = t;
+  return t;
+}
+// 全部的畫面位置（世界座標）：寶石、噴嘴轉軸、出風口、風流錨點、敲擊墊、命中區
+function wdArtGeom() {
+  const A = WD_ART, Sb = A.scale, B = WD_ART_SRC.base, N = WD_ART_SRC.nozzle, PD = WD_ART_SRC.pad, FL = WD_ART_SRC.flow;
+  const P = wdPivot();
+  const gx = P.x + A.baseX, gy = GROUND_Y - (B.groundY - B.gemY) * Sb + A.baseY;          // 寶石中心
+  const nx = gx + A.nozzleX, ny = gy + A.nozzleY, Sn = Sb * A.nozzleScale;               // 噴嘴轉軸
+  const visAng = (typeof wd.dispAng === 'number' ? wd.dispAng : wd.ang) + A.nozzleRot;   // 噴嘴顯示角度（＝物理風向＋微調）
+  const nr = (N.nativeDeg - visAng) * Math.PI / 180;                                       // 畫布旋轉量
+  const mx0 = (N.mouthX - A.nozzlePivotX) * Sn, my0 = (N.mouthY - A.nozzlePivotY) * Sn;
+  const mouth = { x: nx + mx0 * Math.cos(nr) - my0 * Math.sin(nr), y: ny + mx0 * Math.sin(nr) + my0 * Math.cos(nr) };
+  const fa = (typeof wd.dispAng === 'number' ? wd.dispAng : wd.ang) * Math.PI / 180;    // 風流角度＝物理風向（同一個來源）
+  const dx = Math.cos(fa), dy = -Math.sin(fa);
+  const anchor = { x: mouth.x + dx * A.flowX - dy * A.flowY, y: mouth.y + dy * A.flowX + dx * A.flowY };
+  const Sp = Sb * A.padScale, pcx = gx + A.padX, pBottom = GROUND_Y + A.padY;
+  const pox = pcx - PD.cx * Sp, poy = pBottom - PD.groundY * Sp;                            // 敲擊墊圖 (0,0) 的世界座標
+  const hit = { x: pox + PD.x0 * Sp - 3, y: poy + PD.y0 * Sp - 3, w: (PD.x1 - PD.x0) * Sp + 6, h: (PD.cutTop - PD.y0) * Sp + 3 };
+  return { Sb, Sn, Sp, Sf: Sb * A.flowScale, gem: { x: gx, y: gy }, base: { x: gx - B.gemX * Sb, y: gy - B.gemY * Sb },
+    pivot: { x: nx, y: ny }, nr, visAng, mouth, flowAng: fa, flowRot: (FL.nativeDeg * Math.PI / 180) - fa, anchor,
+    pad: { ox: pox, oy: poy, cx: pcx, top: poy + PD.y0 * Sp, bottom: pBottom }, hit, physPivot: P };
+}
+// 槌子命中區：紅色敲擊墊（紅墊＋金框；不含底座、噴嘴）
+function wdPadHitRect() { return wdArtGeom().hit; }
+// 敲擊墊下壓量（遊戲 px）：先快速下沉 → 回彈（小幅超過再回到原位）
+function wdPadPressOffset() {
+  if (typeof wd.pressAt !== 'number') return 0;
+  const t = (frameCount - wd.pressAt) / WD_ART_PRESS_STEPS;
+  if (!(t >= 0) || t >= 1) return 0;
+  const k = t < 0.22 ? t / 0.22 : Math.exp(-4.5 * (t - 0.22)) * Math.cos(10 * (t - 0.22));
+  return WD_ART.padPress * Math.max(-0.3, k) * (t < 0.22 ? 1 : (1 - t) / 0.78);
+}
+function wdDrawArt(cx) {
+  const G = wdArtGeom(), T = WD_TUNING, PD = WD_ART_SRC.pad, FL = WD_ART_SRC.flow;
+  if (G.base.x - cx > CANVAS_W + 300 || G.base.x - cx < -900) return;
+  const base = wdArtTile('base', G.Sb), noz = wdArtTile('nozzle', G.Sn), pad = wdArtTile('pad', G.Sp), flow = wdArtTile('flow', G.Sf);
+  if (!base || !noz || !pad || !flow) { wdDrawDeviceGeom(cx); return; }
+  const t = typeof frameCount === 'number' ? frameCount : 0;
+  ctx.save();
+  // ① 敲擊墊（左後方）：平常整張一次畫；敲擊動畫時分三段畫（底部支承不動、彈簧壓扁、紅墊＋金框往下）
+  const d = wdPadPressOffset();
+  const px0 = G.pad.ox - cx + pad.ox, py0 = G.pad.oy + pad.oy;
+  if (Math.abs(d) < 0.05) ctx.drawImage(pad.c, Math.round(px0), Math.round(py0));
+  else {
+    const Sp = G.Sp, y1 = PD.cutTop * Sp - pad.oy, y2 = PD.cutBase * Sp - pad.oy, W = pad.c.width, H = pad.c.height;
+    const X = Math.round(px0), Y = Math.round(py0);
+    ctx.drawImage(pad.c, 0, y1, W, y2 - y1, X, Y + y1 + d, W, Math.max(2, (y2 - y1) - d));   // 彈簧（被壓扁／拉長）
+    ctx.drawImage(pad.c, 0, y2, W, H - y2, X, Y + y2, W, H - y2);                             // 底部支承（不動）
+    ctx.drawImage(pad.c, 0, 0, W, y1 + 1, X, Y + d, W, y1 + 1);                               // 紅墊＋金框（往下）
+  }
+  // ② 噴嘴：繞寶石中心轉（在底座後面）
+  ctx.save(); ctx.translate(G.pivot.x - cx, G.pivot.y); ctx.rotate(G.nr);
+  ctx.drawImage(noz.c, -WD_ART.nozzlePivotX * G.Sn + noz.ox, -WD_ART.nozzlePivotY * G.Sn + noz.oy);
+  ctx.restore();
+  // ③ 固定底座（刻度盤、寶石、金環、旗子、岩石都不動）
+  ctx.drawImage(base.c, Math.round(G.base.x - cx + base.ox), Math.round(G.base.y + base.oy));
+  // ④ 風流：左端對準出風口、和噴嘴同一個角度；一層固定＋兩層沿風向慢慢往前飄（sin²＋cos²＝1 → 總亮度固定、不閃、不跳回）
+  ctx.save(); ctx.translate(G.anchor.x - cx, G.anchor.y); ctx.rotate(G.flowRot);
+  const fx = -FL.tipX * G.Sf + flow.ox, fy = -FL.tipY * G.Sf + flow.oy, nd = FL.nativeDeg * Math.PI / 180;
+  const FA = WD_ART_FLOW_ANIM, alpha = Math.max(0, Math.min(1, WD_ART.flowAlpha));
+  ctx.globalAlpha = alpha * FA.fixed; ctx.drawImage(flow.c, fx, fy);
+  const p = (t % FA.period) / FA.period;
+  [[p, Math.sin(Math.PI * p) ** 2], [(p + 0.5) % 1, Math.cos(Math.PI * p) ** 2]].forEach(([q, w]) => {
+    ctx.globalAlpha = alpha * (1 - FA.fixed) * w;
+    ctx.drawImage(flow.c, fx + Math.cos(nd) * q * FA.drift, fy - Math.sin(nd) * q * FA.drift);
+  });
+  ctx.restore();
+  // 「可以敲」提示：靠近時在敲擊墊上方浮出槌子；地面標示目前角度
+  const near = Math.abs((player.x + player.w / 2) - G.pad.cx) < 190 && !(wd.inFlow > 0);
+  if (near) {
+    const bob = Math.sin(t * 0.15) * 3;
+    ctx.globalAlpha = 1; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🔨', G.pad.cx - cx, G.pad.top - 16 + bob);
+    ctx.font = 'bold 13px sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText(wd.ang + '°', G.gem.x - cx, GROUND_Y + 30); ctx.fillStyle = '#fff'; ctx.fillText(wd.ang + '°', G.gem.x - cx, GROUND_Y + 30);
+  }
+  // 對岸目標小旗（只是標示，不是判定）
+  const fxF = T.pitX + T.pitW + 70 - cx, by = GROUND_Y;
+  if (fxF > -30 && fxF < CANVAS_W + 30) { ctx.globalAlpha = 1; ctx.strokeStyle = '#3a2c20'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(fxF, by); ctx.lineTo(fxF, by - 70); ctx.stroke(); ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.moveTo(fxF, by - 70); ctx.lineTo(fxF + 30, by - 61); ctx.lineTo(fxF, by - 52); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+// F5 除錯：美術錨點（寶石＝噴嘴轉軸：黃十字；物理轉軸：青十字；出風口：粉紅點；風流錨點：白圈）
+function wdDrawArtDebug(cx) {
+  const G = wdArtGeom(), cross = (x, y, c, r) => { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - cx - r, y); ctx.lineTo(x - cx + r, y); ctx.moveTo(x - cx, y - r); ctx.lineTo(x - cx, y + r); ctx.stroke(); };
+  cross(G.pivot.x, G.pivot.y, '#ffe14d', 7); cross(G.physPivot.x, G.physPivot.y, '#00e5ff', 7);
+  ctx.fillStyle = '#ff4fd8'; ctx.beginPath(); ctx.arc(G.mouth.x - cx, G.mouth.y, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(G.anchor.x - cx, G.anchor.y, 6, 0, Math.PI * 2); ctx.stroke();
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
+  ctx.fillText('寶石/轉軸 ' + Math.round(G.pivot.x) + ',' + Math.round(GROUND_Y - G.pivot.y) + '↑　物理轉軸 ' + Math.round(G.physPivot.x) + ',' + Math.round(GROUND_Y - G.physPivot.y) + '↑', G.pad.cx - cx - 30, GROUND_Y + 34);
+}
+function wdArtInfo() {
+  const G = wdArtGeom(), r = v => Math.round(v * 10) / 10;
+  return { ready: wdArtReady(), status: Object.assign({}, wdArtStatus), paths: Object.assign({}, WD_ART_ASSETS), art: Object.assign({}, WD_ART),
+    cleaned: Object.keys(wdArtClean).reduce((o, k) => { o[k] = { cleaned: wdArtClean[k].cleaned, removed: wdArtClean[k].removed }; return o; }, {}),
+    gem: { x: r(G.gem.x), y: r(G.gem.y) }, pivot: { x: r(G.pivot.x), y: r(G.pivot.y) }, physPivot: G.physPivot, mouth: { x: r(G.mouth.x), y: r(G.mouth.y) }, anchor: { x: r(G.anchor.x), y: r(G.anchor.y) },
+    visAng: r(G.visAng), flowAngDeg: r(G.flowAng * 180 / Math.PI), hit: { x: r(G.hit.x), y: r(G.hit.y), w: r(G.hit.w), h: r(G.hit.h) },
+    baseRect: { x: r(G.base.x + 154 * G.Sb), y: r(G.base.y + 215 * G.Sb), w: r((1110 - 154) * G.Sb), h: r((1056 - 215) * G.Sb) },
+    padTop: r(G.pad.top), padBottom: r(G.pad.bottom), press: r(wdPadPressOffset()), scales: { base: G.Sb, nozzle: G.Sn, pad: G.Sp, flow: G.Sf } };
+}
+(function v393Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  // 素材群組：只在 3-T 導風機關測試場載入（3-1／3-2／其他關卡不載）
+  try { getAssetManifest().wdart = wdArtEntries(); } catch (e) { console.warn('[WindRedirectorArt] 資產清單', e); }
+  const og = globalThis.getAssetGroupsForLevelBase;
+  if (typeof og === 'function' && !og._wdart) {
+    const w = function (idx) { const r = og.apply(this, arguments); const lv = LEVELS[idx]; return (lv && lv.stageId === '3-T' && wdFieldMode) ? r.concat(['wdart']) : r; };
+    Object.keys(og).forEach(k => { w[k] = og[k]; }); w._wdart = true; globalThis.getAssetGroupsForLevelBase = w;
+  }
+  // 保險：進入導風機關測試場時一定開始載入（載好之前畫幾何原型，不擋遊戲）
+  const os = globalThis.c2StartUmbrellaField;
+  if (typeof os === 'function' && !os._wdart) {
+    const w = function () { const r = os.apply(this, arguments); try { if (wdFieldMode) preloadAssetGroup('wdart'); } catch (e) {} return r; };
+    Object.keys(os).forEach(k => { w[k] = os[k]; }); w._wdart = true; globalThis.c2StartUmbrellaField = w;
+  }
 })();
