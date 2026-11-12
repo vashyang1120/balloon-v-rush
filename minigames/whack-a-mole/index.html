@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>打地鼠（暫名）｜whack-a-mole-v0.1.0-test-1</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css?v=0.1.0-test-1">
+</head>
+<body>
+  <!-- 《氣球小V：派對島大作戰》打地鼠 獨立原型 whack-a-mole-v0.1.0-test-1
+       不串接冒險主線、不讀寫存檔、不使用 Firebase / V幣 / 排行榜 -->
+  <div id="stage">
+    <div id="game">
+      <canvas id="board" aria-label="打地鼠遊戲畫面"></canvas>
+
+      <!-- 測試工具（位於右側欄，不遮九宮格） -->
+      <div id="debugBar">
+        <button id="dbgSame" type="button">同種子重來</button>
+        <button id="dbgNew" type="button">新種子</button>
+        <button id="dbgToggle" type="button">隱藏測試資訊</button>
+      </div>
+
+      <!-- 星靈對話 -->
+      <div id="spirit" class="hidden">
+        <div class="spirit-box">
+          <div class="spirit-icon" aria-hidden="true"><span>✦</span></div>
+          <div class="spirit-body">
+            <div class="spirit-name">星靈</div>
+            <div class="spirit-text"></div>
+          </div>
+          <button class="spirit-btn" type="button">知道了 ▶</button>
+        </div>
+      </div>
+
+      <!-- 結算 -->
+      <div id="result" class="overlay hidden">
+        <div class="panel">
+          <h2>時間到！</h2>
+          <div class="res-score-label">本局總分</div>
+          <div id="resScore" class="res-score">0</div>
+          <div id="resTier" class="res-tier"></div>
+          <div class="res-reward-title">模擬獲得獎勵（三級擇一）</div>
+          <ul id="resRewards" class="res-rewards"></ul>
+          <div id="resCost" class="res-cost"></div>
+          <div id="resDetail" class="res-detail"></div>
+          <div class="res-buttons">
+            <button id="btnSameSeed" type="button">同種子再玩</button>
+            <button id="btnNewSeed" type="button" class="primary">再玩一局</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 手機直拿提示 -->
+      <div id="rotate" class="overlay hidden">
+        <div class="panel"><h2>請將手機轉為橫式</h2><p>遊戲已暫停，轉回橫式後繼續</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/config.js?v=0.1.0-test-1"></script>
+  <script src="js/core.js?v=0.1.0-test-1"></script>
+  <script src="js/schedule.js?v=0.1.0-test-1"></script>
+  <script src="js/holes.js?v=0.1.0-test-1"></script>
+  <script src="js/hammer.js?v=0.1.0-test-1"></script>
+  <script src="js/goldring.js?v=0.1.0-test-1"></script>
+  <script src="js/boss.js?v=0.1.0-test-1"></script>
+  <script src="js/scoring.js?v=0.1.0-test-1"></script>
+  <script src="js/game.js?v=0.1.0-test-1"></script>
+  <script src="js/spirit.js?v=0.1.0-test-1"></script>
+  <script src="js/render.js?v=0.1.0-test-1"></script>
+  <script src="js/input.js?v=0.1.0-test-1"></script>
+  <script src="js/main.js?v=0.1.0-test-1"></script>
+</body>
+</html>

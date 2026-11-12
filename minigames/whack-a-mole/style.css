@@ -1,0 +1,110 @@
+/* 打地鼠 whack-a-mole-v0.1.0-test-1 */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%; background: #1d1433; overflow: hidden;
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+#stage {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+/* 遊戲區固定 16:9，等比縮放填滿螢幕 */
+#game {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  width: min(100dvw, calc(100dvh * 16 / 9));
+  height: min(100dvh, calc(100dvw * 9 / 16));
+  container-type: size;
+}
+#board {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; touch-action: none; cursor: none;
+}
+.hidden { display: none !important; }
+
+/* ---------- 測試工具列（右側欄底部） ---------- */
+#debugBar {
+  position: absolute; right: 1.2%; bottom: 2.6%;
+  width: 20%; display: flex; flex-wrap: wrap; gap: 0.6cqh;
+  justify-content: center;
+}
+#debugBar button {
+  flex: 1 1 45%;
+  font-family: inherit; font-weight: 700; font-size: 1.9cqh; line-height: 1.2;
+  padding: 1.1cqh 0.6cqw; border-radius: 1cqh; border: 0;
+  background: #3a4a72; color: #fff; cursor: pointer;
+}
+#debugBar button:hover { background: #4b5f93; }
+#debugBar.collapsed button:not(#dbgToggle) { display: none; }
+#debugBar.collapsed #dbgToggle { flex: 0 0 auto; opacity: 0.55; }
+
+/* ---------- 星靈對話 ---------- */
+#spirit {
+  position: absolute; inset: 0;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 4cqh; background: rgba(12, 6, 30, 0.35);
+}
+.spirit-box {
+  width: 62%; min-height: 20cqh;
+  display: flex; align-items: center; gap: 2cqw;
+  padding: 2.4cqh 2.4cqw;
+  background: linear-gradient(180deg, #5b3aa6, #3d2479);
+  border: 0.5cqh solid #e8d8ff; border-radius: 2.4cqh;
+  box-shadow: 0 1cqh 4cqh rgba(0, 0, 0, 0.45);
+  color: #fff; cursor: pointer;
+  animation: spiritIn 0.18s ease-out;
+}
+@keyframes spiritIn { from { transform: translateY(3cqh); opacity: 0; } to { transform: none; opacity: 1; } }
+.spirit-icon {
+  flex: 0 0 auto; width: 12cqh; height: 12cqh; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fffbe0, #ffd84a 55%, #e0a800);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 3cqh rgba(255, 230, 120, 0.8);
+}
+.spirit-icon span { font-size: 7cqh; color: #fff; text-shadow: 0 0 1cqh #b07a00; }
+.spirit-body { flex: 1 1 auto; }
+.spirit-name { font-size: 2.4cqh; font-weight: 800; color: #ffe680; margin-bottom: 0.8cqh; }
+.spirit-text { font-size: 3.6cqh; font-weight: 700; line-height: 1.45; }
+.spirit-btn {
+  flex: 0 0 auto; align-self: flex-end;
+  font-family: inherit; font-weight: 800; font-size: 2.8cqh; line-height: 1.2;
+  padding: 1.6cqh 2.4cqw; border-radius: 1.4cqh; border: 0;
+  background: #ffd84a; color: #4a2a00; cursor: pointer;
+}
+
+/* ---------- 結算 / 直拿提示 ---------- */
+.overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(12, 6, 30, 0.62);
+}
+.panel {
+  min-width: 44%; max-width: 70%;
+  padding: 3.4cqh 3.4cqw; border-radius: 3cqh;
+  background: #fffaf0; color: #3a2466; text-align: center;
+  box-shadow: 0 1cqh 5cqh rgba(0, 0, 0, 0.45);
+}
+.panel h2 { margin: 0 0 1cqh; font-size: 5cqh; }
+.panel p { font-size: 2.6cqh; margin: 0; }
+.res-score-label { font-size: 2.4cqh; color: #7a68a6; }
+.res-score { font-size: 11cqh; font-weight: 900; line-height: 1.05; color: #5b3aa6; }
+.res-tier { display: inline-block; margin: 0.6cqh 0 1.6cqh; padding: 0.8cqh 2cqw; border-radius: 99px; font-size: 3cqh; font-weight: 800; color: #fff; }
+.tier-basic { background: #6aa84f; }
+.tier-mid { background: #3d85c6; }
+.tier-high { background: linear-gradient(90deg, #f1a400, #e06666); }
+.res-reward-title { font-size: 2.3cqh; color: #7a68a6; font-weight: 700; }
+.res-rewards { list-style: none; padding: 0; margin: 1cqh 0 1.4cqh; display: flex; gap: 1.2cqw; justify-content: center; flex-wrap: wrap; }
+.res-rewards li { background: #fff0c2; border: 0.3cqh solid #f1c232; border-radius: 1.4cqh; padding: 1cqh 1.6cqw; font-size: 3cqh; font-weight: 800; color: #6b4a00; }
+.res-cost { font-size: 2cqh; color: #9a8cc0; }
+.res-detail { font-size: 2cqh; color: #9a8cc0; margin-top: 0.6cqh; }
+.res-buttons { display: flex; gap: 1.6cqw; justify-content: center; margin-top: 2.4cqh; }
+.res-buttons button {
+  font-family: inherit; font-weight: 800; font-size: 3cqh; line-height: 1.2;
+  padding: 1.8cqh 3cqw; border-radius: 1.6cqh; border: 0;
+  background: #e3dcf5; color: #3a2466; cursor: pointer;
+}
+.res-buttons button.primary { background: #ffd84a; color: #4a2a00; }
