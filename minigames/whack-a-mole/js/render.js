@@ -15,12 +15,34 @@
     orange: '#f5891f', orangeDark: '#b5560a',
     spike: '#8c7fa8', spikeDark: '#544870',
     gold: '#ffd23f', goldDark: '#c99400',
-    yellow: '#ffd84a', purple: '#8a4fd6', purpleDark: '#5b2aa0'
+    yellow: '#ffd84a', purple: '#8a4fd6', purpleDark: '#5b2aa0',
+    hammerPink: '#f06aa8', hammerPurple: '#8b5cf6', hammerBlue: '#8ec8f2', hammerBlueDark: '#4f8fc4'
   };
 
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
   function easeOut(x) { x = clamp01(x); return 1 - (1 - x) * (1 - x); }
   function easeOutBack(x) { x = clamp01(x); var c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
+
+  /* ---------- v0.1.1：正式素材繪製輔助 ---------- */
+  function asset(key) { return WAM.Assets ? WAM.Assets.get(key) : null; }
+  function spriteFor(type, hit) {
+    if (type === 'scorpion' && hit) return asset('scorpionHit') || asset('scorpion');
+    return asset(type);
+  }
+  // 以 bbox 底部中央為原點、指定寬度等比例繪製（只裁掉透明邊，不拉伸），回傳繪製高度
+  function drawSprite(ctx, e, w, flash) {
+    var b = e.def.bbox, bw = b[2] - b[0], bh = b[3] - b[1], s = w / bw;
+    ctx.drawImage(e.img, b[0], b[1], bw, bh, -w / 2, -bh * s, w, bh * s);
+    if (flash > 0) { // 受擊閃光：疊一層同圖亮化，不修改原圖
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, flash) * 0.65;
+      ctx.drawImage(e.img, b[0], b[1], bw, bh, -w / 2, -bh * s, w, bh * s);
+      ctx.restore();
+    }
+    return bh * s;
+  }
+  function spriteHeight(e, w) { var b = e.def.bbox; return (b[3] - b[1]) * w / (b[2] - b[0]); }
 
   function Renderer(canvas, grid, game) {
     this.canvas = canvas;
@@ -91,6 +113,15 @@
     sky.addColorStop(1, '#fff3d6');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, WAM.VIEW_W, WAM.VIEW_H);
+    // v0.1.1：冒險主線第一章氣球森林背景（遠景＋中景），等比例填滿
+    var far = asset('bgFar'), mid = asset('bgMid');
+    if (far) {
+      drawCover(ctx, far.img);
+      if (mid) drawCover(ctx, mid.img);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(0, 0, WAM.VIEW_W, WAM.VIEW_H);
+      return;
+    }
     // 遠處的氣球（派對島氣氛，純裝飾幾何）
     var cols = ['#ff8fb1', '#ffd84a', '#8fd3ff', '#b79cff'];
     for (var i = 0; i < 6; i++) {
@@ -101,6 +132,12 @@
       ctx.globalAlpha = 1;
     }
   };
+
+  function drawCover(ctx, img) {
+    var s = Math.max(WAM.VIEW_W / img.naturalWidth, WAM.VIEW_H / img.naturalHeight);
+    var w = img.naturalWidth * s, h = img.naturalHeight * s;
+    ctx.drawImage(img, (WAM.VIEW_W - w) / 2, (WAM.VIEW_H - h) / 2, w, h);
+  }
 
   Renderer.prototype.drawField = function (ctx) {
     var gr = this.grid.grid;
@@ -189,6 +226,23 @@
       h = Math.min(easeOut((t - tg.s) / C.RISE_TIME), easeOut((tg.e - t) / C.FALL_TIME), 1);
     }
     if (h <= 0.001) return;
+    var spr = spriteFor(tg.type, tg.hitAt !== null);
+    if (spr) {
+      // 正式圖片：底部從洞口中線下方升起，前緣蓋住下半身
+      var sw = C.SPRITE_WIDTH[tg.type] * this.grid.cellW * cell.scale;
+      var sh = spriteHeight(spr, sw);
+      var upB = cell.cy + cell.ry * 0.45;
+      var downB = cell.cy + cell.ry + sh + 4;
+      var by = downB + (upB - downB) * h;
+      var flash = tg.hitAt !== null ? 1 - clamp01((t - tg.hitAt) / 0.18) : 0;
+      ctx.save();
+      this.clipHole(ctx, cell.cx, cell.cy, cell.rx, cell.ry, R);
+      ctx.translate(cell.cx, by);
+      if (squash > 0) ctx.scale(1 + squash * 0.12, 1 - squash * 0.16);
+      drawSprite(ctx, spr, sw, flash);
+      ctx.restore();
+      return;
+    }
     var upY = cell.cy - R * 0.82;
     var downY = cell.cy + R * 1.7;
     var y = downY + (upY - downY) * h;
@@ -316,6 +370,19 @@
     glow.addColorStop(1, 'rgba(255,230,120,0)');
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(x, y, R * 2.1, 0, Math.PI * 2); ctx.fill();
+    var rs = asset('ring');
+    if (rs) { // v0.1.1：冒險主線橘子王的金色油管環
+      var rw = C.SPRITE_WIDTH.ring * this.grid.cellW * cell.scale * appear;
+      ctx.translate(x, y + spriteHeight(rs, rw) / 2);
+      drawSprite(ctx, rs, rw, 0.25 + 0.2 * Math.sin(t * 6));
+      ctx.translate(-x, -(y + spriteHeight(rs, rw) / 2));
+      for (var j = 0; j < 4; j++) {
+        var aj = t * 2.2 + j * Math.PI / 2;
+        star(ctx, x + Math.cos(aj) * R * 1.3, y + Math.sin(aj) * R * 1.3, R * 0.16, '#fffbe0');
+      }
+      ctx.restore();
+      return;
+    }
     // 金色圓環
     ctx.lineWidth = R * 0.34;
     ctx.strokeStyle = COLORS.goldDark;
@@ -382,6 +449,19 @@
     var upY = b.cy - R * 0.78, downY = b.cy + R * 1.4;
     var y = downY + (upY - downY) * h;
     var react = boss.reactAmount(t);
+    var bs = asset('boss');
+    if (bs) { // v0.1.1：冒險主線橘子王（等比例放大，明顯大於普通目標）
+      var bw = C.SPRITE_WIDTH.boss * this.grid.cellW;
+      var bh = spriteHeight(bs, bw);
+      var upB = b.cy + b.ry * 0.5, downB = b.cy + b.ry + bh + 4;
+      var byy = downB + (upB - downB) * h;
+      ctx.save();
+      this.clipHole(ctx, b.cx, b.cy, b.rx, b.ry, bh / 4 + 10);
+      ctx.translate(b.cx + (react ? Math.sin(t * 160) * 8 * react : 0), byy + react * 8);
+      ctx.scale(1 + react * 0.05, 1 - react * 0.06);
+      drawSprite(ctx, bs, bw, react);
+      ctx.restore();
+    } else {
     ctx.save();
     this.clipHole(ctx, b.cx, b.cy, b.rx, b.ry, R);
     ctx.translate(b.cx + (react ? Math.sin(t * 160) * 8 * react : 0), y + react * 10);
@@ -410,6 +490,7 @@
       ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
+    }
 
     // 前緣
     ctx.save();
@@ -477,7 +558,7 @@
         for (var i = 0; i < 12; i++) {
           var ang = i * Math.PI / 6 + 0.3;
           var d = 30 + easeOut(k / 0.5) * 120;
-          ctx.fillStyle = i % 2 ? COLORS.yellow : COLORS.purple;
+          ctx.fillStyle = i % 2 ? COLORS.hammerPink : COLORS.hammerPurple;
           ctx.save();
           ctx.translate(p.x + Math.cos(ang) * d, p.y + Math.sin(ang) * d + k * k * 160);
           ctx.rotate(ang + k * 8);
@@ -543,10 +624,34 @@
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(angle);
-    // 握把（紫色）
-    ctx.fillStyle = COLORS.purpleDark;
+    var hs = asset('hammer');
+    if (hs && mode !== 'broken') {
+      // v0.1.1：冒險主線氣球槌圖片。握把末端對齊轉軸、槌頭對齊打擊點，
+      // 揮擊時間、角度、判定完全沿用原型
+      var hd = hs.def, ax = hd.head[0] - hd.grip[0], ay = hd.head[1] - hd.grip[1];
+      var sc = L / Math.sqrt(ax * ax + ay * ay);
+      ctx.rotate(-Math.atan2(ay, ax));
+      ctx.scale(sc, sc);
+      if (mode === 'gold') {
+        ctx.shadowColor = 'rgba(255,215,60,0.95)';
+        ctx.shadowBlur = 40;
+        ctx.drawImage(hs.gold || hs.img, -hd.grip[0], -hd.grip[1]);
+        ctx.shadowBlur = 0;
+        for (var gs = 0; gs < 3; gs++) {
+          var ga = t * 5 + gs * 2.1;
+          star(ctx, hd.head[0] - hd.grip[0] + Math.cos(ga) * 95, hd.head[1] - hd.grip[1] + Math.sin(ga) * 80, 16, '#fffbe0');
+        }
+      } else {
+        ctx.drawImage(hs.img, -hd.grip[0], -hd.grip[1]);
+      }
+      ctx.restore();
+      return;
+    }
+    var official = !!hs; // 有正式圖片時，破裂狀態也用同色系
+    // 握把
+    ctx.fillStyle = official ? COLORS.hammerBlueDark : COLORS.purpleDark;
     roundRect(ctx, -L * 0.08, -L * 0.055, L * 0.98, L * 0.11, L * 0.05); ctx.fill();
-    ctx.fillStyle = COLORS.purple;
+    ctx.fillStyle = official ? COLORS.hammerBlue : COLORS.purple;
     for (var i = 0; i < 6; i++) {
       ctx.save(); ctx.translate(L * (0.05 + i * 0.14), 0); ctx.rotate(0.6);
       ctx.fillRect(-L * 0.015, -L * 0.07, L * 0.03, L * 0.14); ctx.restore();
@@ -554,7 +659,8 @@
     ctx.translate(L, 0);
     if (mode === 'broken') {
       // 破掉的氣球碎片
-      ctx.fillStyle = COLORS.yellow; ctx.strokeStyle = '#a07a00'; ctx.lineWidth = 2;
+      ctx.fillStyle = official ? COLORS.hammerPink : COLORS.yellow;
+      ctx.strokeStyle = official ? '#a8326e' : '#a07a00'; ctx.lineWidth = 2;
       var shreds = [[-0.05, -0.12, 0.5], [0.06, 0.02, -0.4], [-0.02, 0.14, 0.9]];
       shreds.forEach(function (s) {
         ctx.save(); ctx.translate(L * s[0], L * s[1]); ctx.rotate(s[2]);
@@ -562,6 +668,7 @@
         ctx.moveTo(-L * 0.1, 0); ctx.lineTo(-L * 0.03, -L * 0.07); ctx.lineTo(L * 0.02, -L * 0.02);
         ctx.lineTo(L * 0.09, -L * 0.08); ctx.lineTo(L * 0.1, L * 0.04); ctx.lineTo(-L * 0.04, L * 0.06); ctx.closePath();
         ctx.fill(); ctx.stroke(); ctx.restore();
+        if (official) ctx.fillStyle = ctx.fillStyle === COLORS.hammerPink.toLowerCase() ? COLORS.hammerPurple : COLORS.hammerPink;
       });
       ctx.fillStyle = COLORS.purple;
       ctx.beginPath(); ctx.arc(0, 0, L * 0.06, 0, Math.PI * 2); ctx.fill();
@@ -712,7 +819,7 @@
       ctx.fillText('正常', x + 16, 430);
       ctx.font = '600 18px ' + FONT;
       ctx.fillStyle = '#e6dbff';
-      ctx.fillText('黃色＋紫色氣球槌', x + 16, 462);
+      ctx.fillText(asset('hammer') ? '派對島氣球槌' : '黃色＋紫色氣球槌', x + 16, 462);
     }
 
     // 提示（金環 / Boss）——放在側欄，不蓋住九宮格
@@ -739,7 +846,11 @@
     var items = [['scorpion', '蠍子怪'], ['orange', '橘子怪'], ['spike', '尖刺']];
     for (var i = 0; i < items.length; i++) {
       var ix = x + 30 + i * ((w - 20) / 3), iy = ly + 50;
-      ctx.save(); ctx.translate(ix, iy); drawCharacter(ctx, items[i][0], 20, t, false); ctx.restore();
+      ctx.save(); ctx.translate(ix, iy);
+      var ls = spriteFor(items[i][0], false);
+      if (ls) { ctx.translate(0, 24); drawSprite(ctx, ls, items[i][0] === 'orange' ? 50 : 60, 0); }
+      else drawCharacter(ctx, items[i][0], 20, t, false);
+      ctx.restore();
       ctx.fillStyle = '#fff'; ctx.font = '600 15px ' + FONT; ctx.textAlign = 'center';
       ctx.fillText(items[i][1], ix, iy + 46);
       ctx.textAlign = 'left';
@@ -814,6 +925,16 @@
     line('空敲', String(g.scoring.counts.empty));
     line('擋下', '過快' + g.rejected.tooFast + '・爆槌中' + g.rejected.broken);
     if (g.lastResult) line('上一擊', g.lastResult.outcome + ' @' + g.lastResult.t.toFixed(2) + ' (' + g.lastResult.source + ')');
+    if (WAM.Assets) {
+      var ar = WAM.Assets.report(), ak = Object.keys(ar), okN = ak.filter(function (k) { return ar[k] === 'ok'; }).length;
+      var bad = ak.filter(function (k) { return ar[k] === 'failed'; });
+      line('圖片素材', okN + '/' + ak.length + (bad.length ? '（' + bad.length + ' 張失敗→幾何備援）' : ''), bad.length ? '#ff8a8a' : '#7ee08a');
+    }
+    if (WAM.Audio) {
+      var au = WAM.Audio.report(), sk = Object.keys(au.sfx);
+      var sOk = sk.filter(function (k) { return au.sfx[k] === 'ok' || au.sfx[k] === 'html' || au.sfx[k] === 'fetched'; }).length;
+      line('音訊', au.ctx + '・音效' + sOk + '/' + sk.length + '・BGM ' + au.bgm);
+    }
     ctx.fillStyle = '#6f7d99'; ctx.font = '500 12px ' + FONT;
     ctx.fillText('按 ` 鍵可隱藏／顯示測試資訊', x, WAM.VIEW_H - 140);
     ctx.restore();
