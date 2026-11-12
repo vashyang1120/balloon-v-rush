@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.94-wind-redirector-feedback-test-1';
-const BUILD_TIME   = '2026-11-12 11:00';
+const GAME_VERSION = 'adventure-v0.3.95-redirector-items-test-1';
+const BUILD_TIME   = '2026-11-12 15:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -25016,6 +25016,7 @@ function c2PitUnderPlayer() {
 }
 function c2PitHazardStep() {
   const p = c2PitUnderPlayer(); if (!p) return;
+  if (p.wd) return;                                              // v0.3.95：導風解謎專用坑（3-2）不扣血 → 交給 wdStep／wdPitHit（播 Hurt、回安全起點）
   const wasInv = player.invincible > 0;
   if (!wasInv) damagePlayer();                                   // 一般受傷（沿用原本規則）
   if (!(player.hp > 0) || gameState !== 'playing') return;       // 這一下沒血了 → 交給原本的失敗流程
@@ -28889,7 +28890,9 @@ var WD_TUNING = {                // 原型測試值（之後依試玩再調；�
 const WD_TUNING_DEFAULT = JSON.parse(JSON.stringify(WD_TUNING));
 var wdFieldMode = false;
 var wd = { idx: 0, ang: 30, dispAng: 30, lastSwing: -1, shake: 0, flash: 0, wdVx: 0, windT: 0, inFlow: 0, attempt: null, history: [], trails: {}, log: [], hitBoxes: null };
-function wdActive() { return wdFieldMode && typeof c2IsField === 'function' && c2IsField(); }
+function wdFieldActive() { return wdFieldMode && typeof c2IsField === 'function' && c2IsField(); }   // 3-T 導風機關測試場（開發用）
+var wd32On = false;   // v0.3.95：3-2 正式關卡裡的導風機關（loadLevel 時依關卡設定）
+function wdActive() { return wdFieldActive() || (wd32On && typeof c2Is32 === 'function' && c2Is32()); }
 function wdLog(o) { try { o.t = Math.round(performance.now()); wd.log.push(o); if (wd.log.length > 120) wd.log.shift(); } catch (e) {} }
 function wdPivot() { return { x: WD_TUNING.deviceX + WD_TUNING.deviceW / 2, y: GROUND_Y - WD_TUNING.nozzleH }; }
 function wdDeviceRect() { return { x: WD_TUNING.deviceX - 6, y: GROUND_Y - WD_TUNING.deviceH - 34, w: WD_TUNING.deviceW + 12, h: WD_TUNING.deviceH + 34 }; }   // 槌子可以敲到的範圍：底座＋噴嘴
@@ -28974,7 +28977,7 @@ function wdStep() {
   }
   // 尖刺坑：角色中心在坑內、腳碰到尖端 → 受傷一次（0.5 HP）→ 退回安全起點
   const pit = (typeof c2PitUnderPlayer === 'function') ? c2PitUnderPlayer() : null;
-  if (pit) wdPitHit(pit);
+  if (pit && pit.wd) wdPitHit(pit);   // v0.3.95：只處理導風解謎專用坑（3-2 的 S1／S2 照舊由 c2PitHazardStep 處理）
 }
 // v0.3.94（#22）：導風解謎失敗不扣 HP。掉進這個測試坑 → 結束這次飛行紀錄 → 回到機關旁的安全起點（HP、道具耐久都不變）→ 可以重新調角度再挑戰
 //   不呼叫受傷、不進入死亡流程；回到起點後腳在安全地面上（不在坑裡）→ 下一步不會再被判定掉坑，不會連續回收
@@ -28985,6 +28988,11 @@ function wdPitHit(pit) {
   player.x = WD_TUNING.resetX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0; player.windT = 0; player.windInfo = null;
   wd.pitRecovers = (wd.pitRecovers || 0) + 1;
+  // v0.3.95（#26）：不扣血，但仍有「碰到尖刺」的回饋 — 播既有受傷音效（sfxOnPlayerHurt：player/player_hurt.mp3＋小狗同行時 dog_hurt.mp3）
+  //   ＋和一般尖刺坑相同長度的受傷閃爍（24 步）。同一次掉坑只會進來一次（回到起點後腳在安全地面，下一步不會再判定）→ 只播一次
+  //   不呼叫 damagePlayer → HP、盾牌、受傷次數、挑戰紀錄都不變
+  try { sfxOnPlayerHurt(); wd.pitHurtSfx = (wd.pitHurtSfx || 0) + 1; } catch (e) {}
+  player.invincible = Math.max(player.invincible || 0, C2_PIT.resetInvincible);
   showHint('💨 沒飛過尖刺坑，回到起點 — 敲機關換個角度再試（不扣血）', 170);
 }
 // 氣球槌命中機關（v0.3.94 #21）：以「槌頭真正敲下來的那一張動作圖」（第 4 張 hero_hammer_attack_04，揮槌第 18～23 步）判定
@@ -29059,7 +29067,7 @@ function wdMechStep() {
 }
 function wdSetAngleIndex(i) { wd.idx = ((i | 0) % WD_TUNING.angles.length + WD_TUNING.angles.length) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; try { if (wd.mech && wd.mech.rotVoice) sfxStopVoice(wd.mech.rotVoice, 60); } catch (e) {} wd.mech = { state: 'idle' }; wd.pressAt = null; }
 function wdReturnToStart(resetAngle) {
-  if (!wdActive()) return;
+  if (!wdFieldActive()) return;   // v0.3.95：只在 3-T 測試場（3-2 正式關卡不瞬移）
   if (wd.attempt) wdEndAttempt('cancel');
   player.x = WD_TUNING.startX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0;
@@ -29175,7 +29183,7 @@ function wdDrawDebug() {
 // ── 參數面板（開發者模式；只在這個測試場）──
 function wdPanelSync() {
   let b = document.getElementById('wd-panel-btn'), p = document.getElementById('wd-panel');
-  const show = wdActive() && typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS && (gameState === 'playing' || gameState === 'paused');
+  const show = wdFieldActive() && typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS && (gameState === 'playing' || gameState === 'paused');   // v0.3.95：參數面板只在 3-T 測試場
   if (!show) { if (b) b.style.display = 'none'; if (p) p.style.display = 'none'; return; }
   if (!b) {
     b = document.createElement('button'); b.id = 'wd-panel-btn'; b.type = 'button'; b.textContent = '⚙️ 導風參數';
@@ -29241,7 +29249,7 @@ function wdPanelAction(act) {
   F.buildPlatforms = function () { if (!wdFieldMode) return base.buildPlatforms.apply(this, arguments); const T = WD_TUNING; return T.farPlatW > 0 ? [{ x: T.farPlatX || (T.pitX + T.pitW + 40), y: GROUND_Y - (T.farPlatH || 60), w: T.farPlatW, h: 22 }] : []; };
   F.buildWindVents = function () { return wdFieldMode ? [] : base.buildWindVents.apply(this, arguments); };
   F.buildEnemies = function () { return wdFieldMode ? [] : base.buildEnemies.apply(this, arguments); };
-  Object.defineProperty(F, 'spikePits', { configurable: true, get() { return wdFieldMode ? [{ id: 'WD', x: WD_TUNING.pitX, w: WD_TUNING.pitW, resetX: WD_TUNING.resetX }] : undefined; } });
+  Object.defineProperty(F, 'spikePits', { configurable: true, get() { return wdFieldMode ? [{ id: 'WD', x: WD_TUNING.pitX, w: WD_TUNING.pitW, resetX: WD_TUNING.resetX, wd: true }] : undefined; } });
   Object.defineProperty(F, 'hints', { configurable: true, get() { return wdFieldMode ? [] : base.hints; } });
   ['displayName', 'name'].forEach(k => Object.defineProperty(F, k, { configurable: true, get() { return wdFieldMode ? '🌬️ 導風機關測試（開發用，不是 3-2）' : base[k]; } }));
   Object.defineProperty(F, 'shortName', { configurable: true, get() { return wdFieldMode ? '導風機關測試（開發用）' : base.shortName; } });
@@ -29255,7 +29263,7 @@ function wdPanelAction(act) {
     return r;
   });
   wrapFn('loadLevel', o => function (idx) { const lv = LEVELS[idx]; if (!(lv && lv.devUmbrellaField)) wdFieldMode = false; return o.apply(this, arguments); });
-  wrapFn('restart', o => function () { const r = o.apply(this, arguments); if (wdActive()) { wdResetState(true); player.x = WD_TUNING.startX; } return r; });
+  wrapFn('restart', o => function () { const r = o.apply(this, arguments); if (wdFieldActive()) { wdResetState(true); player.x = WD_TUNING.startX; } else if (wdActive()) wdResetState(true); return r; });   // v0.3.95：3-2 重新開始只重設機關，不把小V搬到機關前
   // 3-T 開發測試場（雨傘／風刃蠍子／導風機關）：不記錄戰敗、受傷、耗時；失敗或結束時不把測試裝備（999）與測試場的狀態寫進背包
   //   v0.3.92 測試時發現（main 上本來就這樣）：在 3-T 死亡 → 冒險挑戰紀錄多一次戰敗＋扣血，背包存檔的劍／槌耐久被寫成 999
   const fieldNow = () => { try { return typeof c2IsField === 'function' && c2IsField(); } catch (e) { return false; } };
@@ -29284,7 +29292,7 @@ function wdPanelAction(act) {
   wrapFn('drawHUD', o => function () { try { wdDrawDebug(); } catch (e) {} try { wdPanelSync(); } catch (e) {} return o.apply(this, arguments); });
   // 快捷鍵（只在這個測試場＋開發者模式）：R 回起點、Shift+R 回起點並重設角度
   window.addEventListener('keydown', e => {
-    if (!wdActive() || !(typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) || gameState !== 'playing' || e.code !== 'KeyR' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!wdFieldActive() || !(typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) || gameState !== 'playing' || e.code !== 'KeyR' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     if (typeof c3VentCalibActive === 'function' && c3VentCalibActive()) return;
     e.preventDefault(); wdReturnToStart(e.shiftKey);
   });
@@ -29543,4 +29551,143 @@ function wdArtInfo() {
     const w = function () { const r = os.apply(this, arguments); try { if (wdFieldMode) preloadAssetGroup('wdart'); } catch (e) {} return r; };
     Object.keys(os).forEach(k => { w[k] = os[k]; }); w._wdart = true; globalThis.c2StartUmbrellaField = w;
   }
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.95 階段 A：導風機關正式加入 3-2＋音效修正（#25／#26）
+//  ① 3-2 新增最後一段「F 導風機關」：原本 A～E 區、終點前的金幣、蠍子 E2 都不動；終點往後移，在 E 區後面接一段平地＋導風解謎
+//     ・整段直接沿用 3-T 已驗收的配置（機關、尖刺坑、起點、回收點的「相對位置」一個數字都不改）→ 只整段平移 WD_STAGE32.off
+//       （物理只看角色和機關的相對位置；攝影機也是同一套 lead 0.40／ease 0.12 跟隨 → 飛行手感與測試場相同，3-2 實測結果見報告）
+//     ・平移量：起點離蠍子 E2 巡邏右端（4420）超過風刃蠍子的攻擊距離 520px → 在機關前準備時不會被風刃打擾
+//     ・3-2 的導風坑（id WD）只走導風解謎的失敗流程：不扣血、播 Hurt、回到機關左邊的安全起點；S1／S2 照舊（扣血、退回）
+//  ② #25 風流聲：assets/audio/sfx/chapter3/wind_scorpion_flying.mp3（和風刃蠍子飛行聲共用同一份音檔緩衝 bufferOf，不改名、不複製）
+//     ・獨立的循環聲源 wdFlowLoop（自己的音量節點；風刃蠍子的 wsFlying 照舊，互不影響）
+//     ・音量依「角色中心 ↔ 噴嘴轉軸」實際距離：遠 → 不播；靠近 → 小聲開始；越近越大；站在機關旁 → 中等音量
+//       真的被風推動（wd.inFlow＝現有導風物理算出的風力，不是看有沒有按跳躍）→ 這個音效設定的最大音量
+//     ・每一步只調整同一個聲源的音量（平滑），不重播、不多開；離開範圍淡出後停止；暫停／離開關卡／回家／換關 → 停止
+// ════════════════════════════════════════════════════════════════════
+const WD_STAGE32 = {
+  off: 4800,          // 3-T 配置整段平移量：起點 4950、回收 5000、機關 5190～5274、導風坑 5320～6220、對岸平地 6220～終點 7100
+  length: 7300,       // 3-2 新長度（終點 7100；原本 4900／終點 4700）。45° 一直按右最遠落點約 6814 → 落地後還有約 290px 平地才到終點
+  hintX: 4760,        // 走到這裡出現導風機關提示
+};
+var wdLayoutOff = 0;
+const WD_LAYOUT_KEYS = ['deviceX', 'pitX', 'startX', 'resetX'];
+function wdSetLayoutOffset(o) {
+  const d = (o || 0) - wdLayoutOff; if (!d) return;
+  WD_LAYOUT_KEYS.forEach(k => { WD_TUNING[k] += d; });
+  if (WD_TUNING.farPlatX) WD_TUNING.farPlatX += d;
+  wdLayoutOff = o || 0;
+}
+const WD_FLOW_AUDIO = {
+  key: 'wdFlowLoop',
+  farDist: 620,       // 超過這個距離（px）→ 音量 0（停止播放）
+  nearDist: 170,      // 這個距離以內（站在機關旁）→ nearVol
+  nearVol: 0.45,      // 站在機關旁：中等音量（相對這個音效的最大音量）
+  flyVol: 1.0,        // 真的被風推動／被風帶著飛：最大（＝SFX_DEFS 的 vol 0.5 × 音效總音量；不是遊戲全域 100%）
+  carryVx: 4,         // 離開風流後，風帶來的水平速度 ≥ 4px／步 → 仍算被風帶著飛（最大音量）；越慢越小
+  tauIn: 0.12,        // 變大聲的平滑時間（秒）
+  tauOut: 0.35,       // 變小聲／離開範圍淡出（秒）
+  tauStop: 0.08,      // 暫停、離開遊戲畫面時快速淡出
+  stopBelow: 0.004,   // 淡到這麼小才真的停止聲源
+};
+Object.assign(SFX_DEFS, {
+  // 循環區段和風刃蠍子飛行聲相同（跳過檔頭檔尾靜音）；vol 0.5＝和風刃蠍子飛行聲同級，比槌擊 0.85、轉向 0.8 小
+  wdFlowLoop: { path: 'chapter3/wind_scorpion_flying.mp3', vol: 0.5, loop: true, loopStart: 0.25, loopEnd: 4.25, bufferOf: 'wsFlying' },
+});
+var wdFlow = { est: 0, target: 0, dist: null, push: 0, starts: 0, stops: 0, fading: [], log: [], playing: false };
+function wdFlowLog(o) { try { o.t = Math.round(performance.now()); o.frame = frameCount; wdFlow.log.push(o); if (wdFlow.log.length > 120) wdFlow.log.shift(); } catch (e) {} }
+function wdFlowInstances() { wdFlow.fading = wdFlow.fading.filter(f => !f.ended); return (SFX.loops[WD_FLOW_AUDIO.key] ? 1 : 0) + wdFlow.fading.length; }
+function wdFlowStop(why, fast) {
+  const K = WD_FLOW_AUDIO.key, L = SFX.loops[K]; wdFlow.est = 0;
+  if (!L) return;
+  delete SFX.loops[K];
+  const f = { ended: false }; wdFlow.fading.push(f);
+  try { L.src.onended = () => { f.ended = true; }; const t = SFX.ctx.currentTime, ft = fast ? 0.05 : 0.12; L.g.gain.cancelScheduledValues(t); L.g.gain.setValueAtTime(L.g.gain.value, t); L.g.gain.linearRampToValueAtTime(0.0001, t + ft); L.src.stop(t + ft + 0.02); }
+  catch (e) { try { L.src.stop(); } catch (e2) {} f.ended = true; }
+  setTimeout(() => { f.ended = true; }, 400);
+  wdFlow.stops++; wdFlowLog({ ev: 'stop', why });
+}
+// 目標音量（相對 0～1）：距離＋是否真的被風推動
+function wdFlowTarget() {
+  const A = WD_FLOW_AUDIO, P = wdPivot();
+  const d = Math.hypot(player.x + player.w / 2 - P.x, player.y + player.h / 2 - P.y);
+  let v = 0;
+  if (d < A.farDist) { const k = Math.min(1, (A.farDist - d) / Math.max(1, A.farDist - A.nearDist)); v = A.nearVol * k * k * (3 - 2 * k); }   // 平順漸強
+  const push = Math.max(0, Math.min(1, (wd.inFlow || 0) / Math.max(0.0001, WD_TUNING.pull)));   // 導風物理：這一步風力占滿風力的比例
+  // 被風帶起來的整段飛行（這一次導風飛行還在空中、身上還有風帶來的水平速度 wd.wdVx）也算「正式飛行」→ 落地才回到距離音量
+  const carry = (wd.attempt && !player.onGround) ? Math.max(0, Math.min(1, Math.abs(wd.wdVx || 0) / A.carryVx)) : 0;
+  wdFlow.dist = Math.round(d); wdFlow.push = +push.toFixed(3); wdFlow.carry = +carry.toFixed(3);
+  return Math.max(v, A.flyVol * Math.max(push, carry));
+}
+function wdFlowAudioFrame(playing, dtSec) {
+  const A = WD_FLOW_AUDIO, K = A.key;
+  const active = playing && wdActive();
+  wdFlow.playing = active;
+  const tgt = active ? wdFlowTarget() : 0;
+  wdFlow.target = +tgt.toFixed(3);
+  const L = SFX.loops[K];
+  if (!L) {
+    wdFlow.est = 0;
+    if (tgt <= A.stopBelow * 2) return;
+    if (!(typeof sfxCanPlay === 'function' && sfxCanPlay())) return;
+    SFX.loopGainMul = SFX.loopGainMul || {}; SFX.loopGainMul[K] = 0.0001 / Math.max(0.0001, sfxVol(K));   // 從無聲開始
+    sfxLoop(K, true);
+    if (!SFX.loops[K]) return;   // 還沒解鎖／音檔還沒載好 → 下一步再試（不會一直建立新的聲源）
+    wdFlow.starts++; wdFlowLog({ ev: 'start', dist: wdFlow.dist, push: wdFlow.push, target: wdFlow.target });
+  }
+  const tau = !active ? A.tauStop : (tgt > wdFlow.est ? A.tauIn : A.tauOut);
+  const dt = Math.max(0.001, Math.min(0.1, dtSec || 1 / 60));
+  wdFlow.est += (tgt - wdFlow.est) * (1 - Math.exp(-dt / tau));
+  if (tgt <= 0 && wdFlow.est < A.stopBelow) { wdFlowStop(active ? 'outOfRange' : 'notPlaying'); return; }
+  const L2 = SFX.loops[K];
+  try { L2.g.gain.setTargetAtTime(Math.max(0.0001, sfxVol(K) * wdFlow.est), SFX.ctx.currentTime, 0.03); } catch (e) {}
+}
+(function v395AInstall() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v395a) { if (typeof o !== 'function') console.warn('[v0.3.95] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v395a = true; globalThis[name] = w; };
+  // ── ① 3-2 關卡資料：只在最後加一段（原本內容都不動）──
+  const S = C2_STAGE_32, O = WD_STAGE32.off;
+  S.wdStage = true;
+  S.length = WD_STAGE32.length;                                   // 終點 4700 → 6900
+  (S.cameraZones || []).forEach(z => { if (z.id === 'ALL') { z.x1 = S.length; z.camMax = S.length - CANVAS_W; } });
+  S.hints = S.hints.concat([{ triggerX: WD_STAGE32.hintX, msg: '🌬️ 導風機關！拿氣球槌（電腦按 2）敲紅色星星墊，噴嘴會轉 30°→45°→60°；選對角度、撐雨傘走進風裡，飛過長長的尖刺坑！', shown: false, duration: 320 }]);
+  const basePits = S.spikePits;
+  Object.defineProperty(S, 'spikePits', { configurable: true, enumerable: true,
+    get() { return wd32On ? basePits.concat([{ id: 'WD', x: WD_TUNING.pitX, w: WD_TUNING.pitW, resetX: WD_TUNING.resetX, wd: true }]) : basePits; } });
+  // 換關：3-2 → 機關整段平移到 3-2 的位置、角度回到 30°；其他關卡 → 回到測試場原位
+  wrapFn('loadLevel', o => function (idx) {
+    const lv = LEVELS[idx];
+    wdFlowStop('loadLevel', true);
+    wd32On = !!(lv && lv.stageId === '3-2' && lv.wdStage);
+    wdSetLayoutOffset(wd32On ? O : 0);
+    if (wd32On) { try { wdResetState(true); } catch (e) {} wd.pitRecovers = 0; wd.pitHurtSfx = 0; }
+    return o.apply(this, arguments);
+  });
+  wrapFn('restart', o => function () { wdFlowStop('restart', true); return o.apply(this, arguments); });
+  // 素材：3-2 進關的載入畫面也載入導風機關四張正式圖
+  const og = globalThis.getAssetGroupsForLevelBase;
+  if (typeof og === 'function' && !og._wd32) {
+    const w = function (idx) { const r = og.apply(this, arguments); const lv = LEVELS[idx]; return (lv && lv.stageId === '3-2' && lv.wdStage && !r.includes('wdart')) ? r.concat(['wdart']) : r; };
+    Object.keys(og).forEach(k => { w[k] = og[k]; }); w._wd32 = true; globalThis.getAssetGroupsForLevelBase = w;
+  }
+  // ── ② 風流聲：每一步依狀態調整（和風刃蠍子音效同樣的「遊戲進行中」判斷）──
+  let lastT = 0;
+  wrapFn('sfxSyncFrame', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      const now = performance.now(), dt = lastT ? (now - lastT) / 1000 : 1 / 60; lastT = now;
+      const hidden = (typeof document !== 'undefined' && document.hidden);
+      const playing = !hidden && gameState === 'playing' && !(typeof rpgActive !== 'undefined' && rpgActive && !rpgActive.ui)
+        && !(typeof isGameStartGateActive === 'function' && isGameStartGateActive()) && !(typeof assetGateActive !== 'undefined' && assetGateActive)
+        && !(typeof advIsBlockingGame === 'function' && advIsBlockingGame())
+        && !(typeof screenFreezeForTest !== 'undefined' && screenFreezeForTest);
+      wdFlowAudioFrame(playing, dt);
+    } catch (e) {}
+    return r;
+  });
+  window.debugWdFlowAudio = () => ({ key: WD_FLOW_AUDIO.key, playing: !!SFX.loops[WD_FLOW_AUDIO.key], instances: wdFlowInstances(), starts: wdFlow.starts, stops: wdFlow.stops,
+    dist: wdFlow.dist, push: wdFlow.push, carry: wdFlow.carry, target: wdFlow.target, est: +wdFlow.est.toFixed(4), gain: SFX.loops[WD_FLOW_AUDIO.key] ? +(SFX.loops[WD_FLOW_AUDIO.key].g.gain.value).toFixed(4) : 0,
+    defVol: sfxVol(WD_FLOW_AUDIO.key), status: SFX.status.wsFlying, url: (SFX.urls.wsFlying || '').replace(/\?.*$/, ''), active: wdActive(), wd32On, layoutOff: wdLayoutOff,
+    wsFlying: { playing: !!SFX.loops.wsFlying }, log: wdFlow.log.slice(-40), pitRecovers: wd.pitRecovers || 0, pitHurtSfx: wd.pitHurtSfx || 0, cfg: Object.assign({}, WD_FLOW_AUDIO) });
 })();
