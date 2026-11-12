@@ -15423,7 +15423,7 @@ function drawVersionInfo() {
       ctx.textAlign = 'right';
       ctx.fillText(
         // v0.3.75：F8 只在開發者模式有作用 → 一般玩家不再顯示「F8 畫面暫停」
-        '[TEST MODE]' + ((typeof advDevHotkeysOn === 'function' && advDevHotkeysOn()) ? ' F8 畫面暫停' : '') + '｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
+        '[TEST MODE]' + ((typeof advDevHotkeysOn === 'function' && advDevHotkeysOn()) ? ' F8 畫面暫停' : '') + '｜runtime hammer: ' + ((HAMMER_ATTACK_VISUAL_TEST_LOADOUT && advDevMode() && adventureTestLoadoutActive) ? 'ON' : 'OFF'),   // v0.3.96：只有開發者模式真的套用測試裝備時才是 ON（一般遊玩用正式武器）
         CANVAS_W - 14,
         32
       );
