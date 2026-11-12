@@ -23,13 +23,38 @@
       img.decoding = 'async';
       img.onload = function () {
         if (!img.naturalWidth) { tryNext(); return; }
-        entry.img = img; entry.src = src; entry.status = 'ok';
+        entry.img = img; entry.src = src;
+        makeCache(entry);
+        entry.status = 'ok';
         if (key === 'hammer') buildGoldHammer(entry);
       };
       img.onerror = tryNext;
       img.src = src;
     }
     tryNext();
+  }
+
+  // 大圖顯示副本：只是縮小解析度，不改內容；失敗就直接用原圖
+  function makeCache(entry) {
+    var img = entry.img, cw = entry.def.cacheW;
+    entry.draw = img; entry.k = 1;
+    if (!cw || img.naturalWidth <= cw) return;
+    try {
+      var k = cw / img.naturalWidth;
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(img.naturalWidth * k);
+      cv.height = Math.round(img.naturalHeight * k);
+      var c = cv.getContext('2d');
+      c.imageSmoothingEnabled = true;
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(img, 0, 0, cv.width, cv.height);
+      entry.draw = cv; entry.k = cv.width / img.naturalWidth;
+    } catch (e) { entry.draw = img; entry.k = 1; }
+  }
+  // 以「原圖像素座標」繪製（自動換算到顯示副本）
+  function blit(ctx, e, sx, sy, sw, sh, dx, dy, dw, dh) {
+    var k = e.k || 1;
+    ctx.drawImage(e.draw || e.img, sx * k, sy * k, sw * k, sh * k, dx, dy, dw, dh);
   }
 
   // 金色氣球槌：沒有獨立金色圖片 → 用原圖 + 程式金色濾鏡（不改原檔、不改外型）
@@ -66,5 +91,5 @@
     return out;
   }
 
-  WAM.Assets = { loadAll: loadAll, get: get, report: report, images: images };
+  WAM.Assets = { loadAll: loadAll, get: get, report: report, images: images, blit: blit };
 })(window);
