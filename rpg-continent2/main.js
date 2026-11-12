@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.97-adventure-progress-integrity-test-1';
-const BUILD_TIME   = '2026-11-12 21:30';
+const GAME_VERSION = 'adventure-v0.3.98-ch3-stage33-prototype-test-1';
+const BUILD_TIME   = '2026-11-13 01:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -30475,4 +30475,480 @@ function v397StarOrangeStep() {
   // 旋轉飛出的橘子怪：用橘子怪原本的圖畫（槌子擊飛的繪圖迴圈會用 skinKey 取圖）
   wrapFn('getScorpionHurtImgForSkin', o => function (k) { if (k === 'v397_orange') return getOrangeEnemyImg('idle') || o.call(this, 'scorpion_normal'); return o.apply(this, arguments); });
   if (typeof window !== 'undefined') window.debugStarOrange397 = () => ({ star: v395StarActive(), oranges: orangeNemeses.length, held: c2DkHold.map(h => h.obj._dkId), spinning: spinningEnemies.map(s => ({ orange: !!s.isOrange, x: Math.round(s.x), life: s.life, ang: +s.angle.toFixed(2) })), log: v397StarOrangeLog.slice(), doubleKills: currentRunStats.doubleKills || 0, chainBonus: currentRunStats.chainBonusScore || 0 });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.98：第三章 3-3 雛形「風之峽谷・蠍群岩道」＋兩種新蠍子（疾風蠍子怪、磐甲風刃蠍）
+//  ・這是「可玩雛形」：關卡骨架、敵人配置、基本戰鬥節奏、新素材接入、主要互動；數值都是第一版測試值，不是最終平衡
+//  ・新敵人都是普通蠍子的變種（type 'scorpion'）→ 巡邏、地面、碰撞、劍／槌傷害、死亡特效、槌子擊飛、Double Kill、無敵星星全部沿用
+//    新增的只有：各自的狀態機、畫面（16 張使用者提供的原圖，程式只縮小快取、不改圖檔）、紅色準星／衝刺風流殘影／暈眩星星／盔甲提示（程式畫）
+//  ・素材：assets/enemies/swift_scorpion/、assets/enemies/armored_scorpion/（原圖朝左，往右時程式水平鏡像）；只在進入 3-3 時才載入
+// ════════════════════════════════════════════════════════════════════
+const C3S_DIR = { swift: 'assets/enemies/swift_scorpion/', armored: 'assets/enemies/armored_scorpion/' };
+const C3S_FILES = {
+  swift: { base: 'swift_scorpion_base.png', walk1: 'swift_scorpion_walk_01.png', walk2: 'swift_scorpion_walk_02.png', walk3: 'swift_scorpion_walk_03.png',
+    dash: 'swift_scorpion_dash.png', hurt: 'swift_scorpion_hurt.png', stun: 'swift_scorpion_hardstun_dizzy.png', recover: 'swift_scorpion_exhausted_recover.png' },
+  armored: { base: 'armored_scorpion_base.png', walk: 'armored_scorpion_walk_idlealt.png', guard: 'armored_scorpion_guard.png', guardLow: 'armored_scorpion_guard_low.png',
+    hurt: 'armored_scorpion_hurt.png', break: 'armored_scorpion_armorbreak.png', exposed: 'armored_scorpion_exposed.png', defeat: 'armored_scorpion_defeat.png' },
+};
+// 每張原圖裡角色實際範圍（透明度 > 24 的外框：[圖寬, 圖高, 左, 上, 右, 下]；離線量測）→ 換動作時以「腳底中心」對齊
+const C3S_BBOX = {
+  swift: { base: [1254, 1254, 90, 162, 1155, 1088], walk1: [1254, 1254, 36, 94, 1182, 1077], walk2: [1254, 1254, 99, 120, 1143, 1058], walk3: [1254, 1254, 82, 122, 1172, 1096],
+    dash: [1254, 1254, 21, 331, 1227, 1009], hurt: [1254, 1254, 30, 71, 1216, 1126], stun: [1254, 1254, 60, 149, 1124, 1111], recover: [1410, 1116, 67, 201, 1344, 1076] },
+  armored: { base: [1254, 1254, 42, 100, 1193, 1155], walk: [1254, 1254, 52, 94, 1189, 1143], guard: [1254, 1254, 57, 100, 1201, 1168], guardLow: [1254, 1254, 44, 97, 1126, 1130],
+    hurt: [1254, 1254, 61, 71, 1201, 1136], break: [1254, 1254, 92, 95, 1159, 1166], exposed: [1254, 1254, 70, 61, 1191, 1143], defeat: [1254, 1254, 33, 389, 1217, 1091] },
+};
+// 可調整參數（第一版雛形值；之後依實測細修）
+var C3S_TUNING = {
+  swift: {
+    drawK: 0.078, footOffsetY: 4, walkStep: 7, hp: 2,
+    speedMul: 1.35,            // 巡邏比普通蠍子快一點
+    rangeX: 400, rangeUp: 120, rangeDown: 90,   // 小V在多近會開始鎖定
+    firstDelay: 50, cooldown: 130,             // 進場後第一次可以衝刺前的等待／衝完到下一次可以鎖定（約 2.2 秒）
+    lockFrames: 54, lockFollow: 0.55,          // 鎖定 0.9 秒：前 55% 準星跟著小V，之後固定（給玩家時間跳開）
+    dashSpeed: 8, dashMax: 440, overshoot: 70, // 衝刺：每步 8px、最遠 440px、衝過準星 70px 停下
+    stunFrames: 84,                            // 衝刺後硬直約 1.4 秒（定案方向）：碰到不會受傷、打一下就倒
+    recoverFrames: 24,                         // 喘口氣（Exhausted／Recover）0.4 秒後回到巡邏
+  },
+  armored: {
+    drawK: 0.092, footOffsetY: 4, walkStep: 16, hp: 2,
+    speedMul: 0.55,            // 重裝型：走得慢
+    guardRangeX: 250, guardUp: 170,            // 小V在正前方多近會舉起盔甲
+    turnFrames: 48,                            // 小V繞到背後 → 0.8 秒後才轉過來（背後是弱點）
+    armorMax: 2,                               // 正面盔甲：劍打一下 −1、氣球槌（或擊飛的蠍子）一下 −2
+    breakFrames: 30, exposedFrames: 150,       // 破甲 0.5 秒 → 暴露弱點 2.5 秒（打一下就倒；碰到不會受傷）→ 盔甲長回來
+    hurtFrames: 14, blockPush: 16,             // 盔甲擋下攻擊：Hurt 姿勢、小V被輕輕推開
+  },
+};
+var c3sImgs = { swift: {}, armored: {} }, c3sCanv = { swift: {}, armored: {} }, c3sReady = false, c3sLog = [];
+function c3sLogPush(o) { try { o.frame = frameCount; c3sLog.push(o); if (c3sLog.length > 160) c3sLog.shift(); } catch (e) {} }
+function c3sType(e) { return (e && e.type === 'scorpion') ? (e.variant === 'gale' ? 'swift' : e.variant === 'armored' ? 'armored' : null) : null; }
+function c3sBuildCanvases() {
+  ['swift', 'armored'].forEach(T => {
+    const K = C3S_TUNING[T].drawK, Q = 1.6;   // 快取用 1.6 倍解析度（畫面更清楚；原圖不變）
+    Object.keys(C3S_FILES[T]).forEach(k => {
+      const im = c3sImgs[T][k], B = C3S_BBOX[T][k]; if (!im) return;
+      const bw = B[4] - B[2], bh = B[5] - B[3];
+      const c = document.createElement('canvas'); c.width = Math.ceil(bw * K * Q); c.height = Math.ceil(bh * K * Q);
+      const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+      g.drawImage(im, B[2], B[3], bw, bh, 0, 0, c.width, c.height);
+      c3sCanv[T][k] = c;
+    });
+    // 死亡特效／槌子擊飛（沿用普通蠍子的畫法）：做成普通蠍子圖的慣例「朝右、500 寬、腳底在 88.3%」
+    const W = T === 'swift' ? CONFIG.ENEMY_W : 62;
+    (T === 'swift' ? [['hurt', 'hurt'], ['defeat', 'stun']] : [['hurt', 'hurt'], ['defeat', 'defeat']]).forEach(([name, k]) => {
+      const B = C3S_BBOX[T][k], im = c3sImgs[T][k]; if (!im) return;
+      const CW = 500, CH = 560, q = K * CW / (W * SCORPION_DRAW_SCALE);
+      const feet = CH * SCORPION_FOOT_ANCHOR_Y - SCORPION_DRAW_OFFSET_Y * CW / (W * SCORPION_DRAW_SCALE);
+      const c = document.createElement('canvas'); c.width = CW; c.height = CH; const g = c.getContext('2d');
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+      const bw = (B[4] - B[2]) * q, bh = (B[5] - B[3]) * q;
+      g.translate(CW / 2, feet); g.scale(-1, 1);
+      g.drawImage(im, B[2], B[3], B[4] - B[2], B[5] - B[3], -bw / 2, -bh, bw, bh);
+      c3sCanv[T]['norm_' + name] = c;
+    });
+  });
+}
+// 變種設定（HP、速度、skin）；其餘和普通蠍子相同
+ENEMY_VARIANTS.scorpion.gale = { label: '疾風蠍子怪', skinKey: 'scorpion_swift', behaviorType: 'patrol', baseSpeedMultiplier: C3S_TUNING.swift.speedMul, drawScaleMultiplier: 1.0, hp: C3S_TUNING.swift.hp, maxHp: C3S_TUNING.swift.hp, damage: 1, abilityTags: ['melee', 'patrol', 'dash'] };
+ENEMY_VARIANTS.scorpion.armored = { label: '磐甲風刃蠍', skinKey: 'scorpion_armored', behaviorType: 'patrol', baseSpeedMultiplier: C3S_TUNING.armored.speedMul, drawScaleMultiplier: 1.0, hp: C3S_TUNING.armored.hp, maxHp: C3S_TUNING.armored.hp, damage: 1, abilityTags: ['melee', 'patrol', 'guard'] };
+function makeSwiftScorpion(x, range) { return Object.assign(makeChapter2Scorpion(x, range, 'gale'), { c3s: null }); }
+function makeArmoredScorpion(x, range) { const e = makeChapter2Scorpion(x, range, 'armored'); e.w = 62; e.h = 50; e.y = GROUND_Y - e.h; e.c3s = null; return e; }
+function c3sState(e) {
+  if (!e.c3s) e.c3s = c3sType(e) === 'swift' ? { st: 'walk', t: 0, cd: C3S_TUNING.swift.firstDelay, walkT: 0, face: (e.vx || 0) < 0 ? -1 : 1, tx: 0, ty: 0, trail: [], dashes: 0 }
+    : { st: 'walk', t: 0, walkT: 0, face: (e.vx || 0) < 0 ? -1 : 1, armor: C3S_TUNING.armored.armorMax, hurtT: 0, low: false, lost: 0, want: 0, breaks: 0, blocks: 0 };
+  return e.c3s;
+}
+function c3sFace(e) { const s = e.c3s; if (s && s.st !== 'walk') return s.face; return (e.vx || 0) < 0 ? -1 : 1; }
+function c3sPC() { return { x: player.x + player.w / 2, y: player.y + player.h / 2, feet: player.y + player.h }; }
+function c3sOnScreen(e) { return e.x + e.w > cameraX - 20 && e.x < cameraX + CANVAS_W + 20; }
+function c3sPitAhead(x, w) { return (c2Pits || []).some(p => x + w > p.x - 6 && x < p.x + p.w + 6); }
+// ── 疾風蠍子怪：WALK → LOCK（紅色準星）→ DASH（衝刺＋風流殘影）→ STUN（硬直 1.4 秒）→ RECOVER → WALK ──
+function c3sSwiftStep(e) {
+  const T = C3S_TUNING.swift, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
+  s.t++;
+  if (s.st === 'walk') {
+    s.walkT++; s.face = (e.vx || 0) < 0 ? -1 : 1;
+    if (s.cd > 0) { s.cd--; return; }
+    if (gameState !== 'playing' || !(player.hp > 0) || !c3sOnScreen(e)) return;
+    if (Math.abs(pc.x - ex) > T.rangeX || pc.y < e.y - T.rangeUp || pc.y > e.y + e.h + T.rangeDown) return;
+    s.face = pc.x >= ex ? 1 : -1; e.vx = s.face * Math.abs(e.vx || CONFIG.ENEMY_SPEED);
+    s.st = 'lock'; s.t = 0; s.tx = pc.x; s.ty = pc.feet; c3sLogPush({ ev: 'lock', id: e.c2Id, face: s.face, tx: Math.round(s.tx) });
+  } else if (s.st === 'lock') {
+    if (s.t < T.lockFrames * T.lockFollow) { const want = pc.x >= ex ? 1 : -1; if (want === s.face) { s.tx = pc.x; s.ty = pc.feet; } }   // 前半段準星跟著小V（不會轉身）
+    if (s.t >= T.lockFrames) { s.st = 'dash'; s.t = 0; s.from = e.x; s.trail = []; s.dashes++; c3sLogPush({ ev: 'dash', id: e.c2Id, from: Math.round(e.x), tx: Math.round(s.tx) }); try { sfxPlay('wsFire'); } catch (er) {} }
+  } else if (s.st === 'dash') {
+    const nx = e.x + s.face * T.dashSpeed, ncx = nx + e.w / 2;
+    let why = '';
+    if (c3sPitAhead(nx, e.w)) why = '前面是尖刺坑';
+    else if (Math.abs(nx - s.from) > T.dashMax) why = '衝到最遠';
+    else if (s.face > 0 ? ncx > s.tx + T.overshoot : ncx < s.tx - T.overshoot) why = '衝過準星';
+    else if (nx < 10 || nx + e.w > LEVEL_LENGTH - 10) why = '關卡邊界';
+    if (why) { s.st = 'stun'; s.t = 0; s.trailFade = 12; c3sLogPush({ ev: 'stun', id: e.c2Id, why, x: Math.round(e.x), dist: Math.round(Math.abs(e.x - s.from)) }); return; }
+    e.x = nx; if (s.t % 2 === 0) { s.trail.push(e.x); if (s.trail.length > 5) s.trail.shift(); }
+  } else if (s.st === 'stun') {
+    if (s.trailFade > 0) s.trailFade--;
+    if (s.t >= T.stunFrames) { s.st = 'recover'; s.t = 0; c3sLogPush({ ev: 'recover', id: e.c2Id }); }
+  } else if (s.st === 'recover') {
+    if (s.t >= T.recoverFrames) {
+      s.st = 'walk'; s.t = 0; s.cd = T.cooldown; s.trail = [];
+      // 衝刺後在新的位置繼續巡邏（巡邏範圍不跨進尖刺坑）
+      e.patrol = e.x; let r = e.patrolRange0 || e.patrolRange; while (r > 20 && c3sPitAhead(e.x - r, e.w + 2 * r)) r -= 10; e.patrolRange = r;
+      c3sLogPush({ ev: 'walk', id: e.c2Id, patrol: Math.round(e.patrol), range: r });
+    }
+  }
+}
+// ── 磐甲風刃蠍：WALK →（小V在正前方）GUARD／GUARD_LOW →（盔甲被打掉）ARMOR BREAK → EXPOSED（弱點 2.5 秒）→ 盔甲長回來 ──
+//    小V繞到背後 → TURN（0.8 秒後才轉身）；背後沒有盔甲
+function c3sArmoredStep(e) {
+  const T = C3S_TUNING.armored, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
+  s.t++; if (s.hurtT > 0) s.hurtT--;
+  const dx = pc.x - ex, side = dx >= 0 ? 1 : -1;
+  const near = gameState === 'playing' && player.hp > 0 && c3sOnScreen(e) && Math.abs(dx) < T.guardRangeX && pc.y > e.y - T.guardUp && pc.y < e.y + e.h + 60;
+  if (s.st === 'walk') {
+    s.walkT++; s.face = (e.vx || 0) < 0 ? -1 : 1;
+    if (near) { if (side === s.face) { s.st = 'guard'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'guard', id: e.c2Id }); } else { s.st = 'turn'; s.t = 0; s.want = side; } }
+  } else if (s.st === 'turn') {
+    if (s.t >= T.turnFrames) { s.face = s.want; e.vx = s.face * Math.abs(e.vx || CONFIG.ENEMY_SPEED); s.st = near ? 'guard' : 'walk'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'turned', id: e.c2Id, face: s.face }); }
+  } else if (s.st === 'guard') {
+    s.low = pc.y < e.y - 30;                               // 小V在上方（跳起來／平台上）→ Guard_Low（把身體壓低）
+    if (near && side !== s.face) { s.st = 'turn'; s.t = 0; s.want = side; }
+    else if (!near) { if (++s.lost > 40) { s.st = 'walk'; s.t = 0; } } else s.lost = 0;
+  } else if (s.st === 'break') {
+    if (s.t >= T.breakFrames) { s.st = 'exposed'; s.t = 0; c3sLogPush({ ev: 'exposed', id: e.c2Id }); }
+  } else if (s.st === 'exposed') {
+    if (s.t >= T.exposedFrames) { s.armor = T.armorMax; s.st = 'walk'; s.t = 0; c3sLogPush({ ev: 'armorBack', id: e.c2Id }); }
+  }
+}
+function c3sStep(e) { const T = c3sType(e); if (!T || !e.active) return; if (T === 'swift') c3sSwiftStep(e); else c3sArmoredStep(e); }
+// 擊中（劍／槌／擊飛的蠍子／無敵星星）：依狀態決定
+function c3sOnHit(o, e, amount, source, onKill, rest) {
+  const T = c3sType(e), s = c3sState(e);
+  if (source === 'star') return o.call(this, e, Math.max(amount, e.hp), source, onKill, ...rest);
+  if (T === 'swift') {
+    if (s.st === 'stun' || s.st === 'recover') { c3sLogPush({ ev: 'hitStunned', id: e.c2Id, source }); return o.call(this, e, Math.max(amount, e.hp), source, onKill, ...rest); }   // 硬直中：一下就倒
+    const r = o.call(this, e, amount, source, onKill, ...rest);
+    if (r === true && s.st === 'lock') { s.st = 'walk'; s.t = 0; s.cd = 50; c3sLogPush({ ev: 'lockCancelled', id: e.c2Id }); }   // 鎖定中被打 → 取消這次衝刺
+    return r;
+  }
+  // 磐甲風刃蠍
+  if (s.st === 'break' || s.st === 'exposed') { c3sLogPush({ ev: 'hitExposed', id: e.c2Id, source }); return o.call(this, e, Math.max(amount, e.hp), source, onKill, ...rest); }   // 暴露弱點：一下就倒
+  const pcx = player.x + player.w / 2, front = source === 'spinning' ? true : ((pcx >= e.x + e.w / 2 ? 1 : -1) === s.face);
+  if (!front) { c3sLogPush({ ev: 'hitBack', id: e.c2Id, source }); return o.call(this, e, amount, source, onKill, ...rest); }   // 背後：沒有盔甲（HP 2）
+  if (source !== 'hammer' && (e.hurtCooldown || 0) > 0) return false;
+  e.hurtCooldown = SCORPION_HURT_COOLDOWN_FRAMES;
+  const dmg = (source === 'hammer' || source === 'spinning') ? 2 : 1;
+  s.armor = Math.max(0, s.armor - dmg); s.blocks++;
+  try { sfxPlay('c2UmbrellaBlock'); if (source === 'hammer') sfxPlay('hammerHit'); } catch (er) {}
+  if (source === 'sword' || source === 'hammer') { const away = pcx >= e.x + e.w / 2 ? 1 : -1; player.x += away * C3S_TUNING.armored.blockPush; }
+  if (s.armor <= 0) { s.st = 'break'; s.t = 0; s.breaks++; s.hurtT = 0; try { sfxPlay('scorpionHurt'); } catch (er) {} c3sLogPush({ ev: 'armorBreak', id: e.c2Id, source }); }
+  else { s.hurtT = C3S_TUNING.armored.hurtFrames; c3sLogPush({ ev: 'armorHit', id: e.c2Id, source, armor: s.armor }); }
+  return true;
+}
+// ── 畫面 ──
+function c3sPose(e) {
+  const T = c3sType(e), s = c3sState(e);
+  if (T === 'swift') {
+    if (e.hitFlash > 0) return 'hurt';
+    if (s.st === 'lock') return 'base';
+    if (s.st === 'dash') return 'dash';
+    if (s.st === 'stun') return 'stun';
+    if (s.st === 'recover') return 'recover';
+    if (gameState !== 'playing') return 'base';
+    return ['walk1', 'walk2', 'walk3'][Math.floor(s.walkT / C3S_TUNING.swift.walkStep) % 3];
+  }
+  if (e.hitFlash > 0 || s.hurtT > 0) return 'hurt';
+  if (s.st === 'break') return 'break';
+  if (s.st === 'exposed') return 'exposed';
+  if (s.st === 'guard') return s.low ? 'guardLow' : 'guard';
+  if (s.st === 'turn' || gameState !== 'playing') return 'base';
+  return Math.floor(s.walkT / C3S_TUNING.armored.walkStep) % 2 ? 'walk' : 'base';
+}
+function c3sBlit(T, pose, cxs, feetY, face, alpha) {
+  const c = c3sCanv[T][pose]; if (!c) return false;
+  const B = C3S_BBOX[T][pose], K = C3S_TUNING[T].drawK, w = (B[4] - B[2]) * K, h = (B[5] - B[3]) * K;
+  ctx.save(); if (alpha != null) ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.translate(cxs, feetY); if (face > 0) ctx.scale(-1, 1);
+  ctx.drawImage(c, -w / 2, -h, w, h); ctx.restore(); return true;
+}
+function c3sDraw(sx, e) {
+  const T = c3sType(e), s = c3sState(e), pose = c3sPose(e), face = c3sFace(e), cfg = C3S_TUNING[T];
+  if (!c3sCanv[T][pose]) return false;
+  const cxs = sx + e.w / 2, feet = e.y + e.h + cfg.footOffsetY, t = frameCount;
+  if (T === 'swift') {
+    // 衝刺風流殘影（程式畫）：前幾步的位置畫半透明的 Dash 身影＋往後拖的風線
+    if (s.st === 'dash' || (s.st === 'stun' && s.trailFade > 0)) {
+      const fade = s.st === 'dash' ? 1 : s.trailFade / 12;
+      s.trail.forEach((x, i) => c3sBlit(T, 'dash', x - cameraX + e.w / 2, feet, face, (0.08 + 0.07 * i) * fade));
+      ctx.save(); ctx.strokeStyle = 'rgba(200,250,255,' + (0.75 * fade) + ')'; ctx.lineCap = 'round';
+      for (let i = 0; i < 4; i++) { const yy = feet - 10 - i * 11, len = 34 + 18 * ((i * 7 + t) % 3), x0 = cxs - face * (24 + i * 6); ctx.lineWidth = 3 - i * 0.5; ctx.beginPath(); ctx.moveTo(x0, yy); ctx.quadraticCurveTo(x0 - face * len * 0.5, yy - 5, x0 - face * len, yy + 2); ctx.stroke(); }
+      ctx.restore();
+    }
+    if (s.st === 'lock') {   // 鎖定時微微下蹲抖動（蓄力感）
+      const k = Math.min(1, s.t / C3S_TUNING.swift.lockFrames);
+      c3sBlit(T, pose, cxs + Math.sin(t * 1.3) * 1.5 * k, feet + 2 * k, face);
+    } else c3sBlit(T, pose, cxs, feet, face);
+    // 紅色準星（程式畫）：前段跟著小V、後段固定並閃爍 → 準星固定了就是要衝過來
+    if (s.st === 'lock') {
+      const k = Math.min(1, s.t / C3S_TUNING.swift.lockFrames), fixed = s.t >= C3S_TUNING.swift.lockFrames * C3S_TUNING.swift.lockFollow;
+      const x = s.tx - cameraX, y = s.ty - 38, r = 30 - 8 * k;   // 準星畫在小V身上（身體中段）
+      ctx.save(); ctx.globalAlpha = fixed ? (0.65 + 0.35 * Math.sin(t * 0.8)) : 0.45 + 0.4 * k;
+      ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3; ctx.shadowColor = 'rgba(255,0,0,0.7)'; ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = '#ff2a2a'; ctx.fill();
+      [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([a, b]) => { ctx.beginPath(); ctx.moveTo(x + a * (r - 7), y + b * (r - 7)); ctx.lineTo(x + a * (r + 9), y + b * (r + 9)); ctx.stroke(); });
+      ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.globalAlpha *= 0.6; ctx.beginPath(); ctx.moveTo(cxs, feet - 6); ctx.lineTo(x, feet - 6); ctx.stroke();   // 地上的衝刺路線
+      ctx.restore();
+      ctx.save(); ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff3b3b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeText('!', cxs, e.y - 26); ctx.fillText('!', cxs, e.y - 26); ctx.restore();
+    }
+    // 硬直：頭上轉圈的星星（程式畫）
+    if (s.st === 'stun') {
+      ctx.save(); ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#a06a00'; ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) { const a = t * 0.12 + i * Math.PI * 2 / 3, x = cxs + Math.cos(a) * 20, y = e.y - 14 + Math.sin(a) * 6; c3sStar(x, y, 6); }
+      ctx.restore();
+    }
+    return true;
+  }
+  // 磐甲風刃蠍
+  c3sBlit(T, pose, cxs + (s.hurtT > 0 ? Math.sin(t * 2.2) * 2 : 0), feet, face);
+  if (s.st === 'guard' || s.st === 'walk' || s.st === 'turn') {
+    // 正面盔甲提示（程式畫）：舉盾時正前方一道金色弧光；頭上的盔甲格數
+    if (s.st === 'guard') {
+      ctx.save(); ctx.strokeStyle = 'rgba(255,214,90,' + (0.55 + 0.25 * Math.sin(t * 0.25)) + ')'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      const fx = cxs + face * (e.w / 2 + 14), fy = feet - 26;
+      ctx.beginPath(); ctx.arc(fx - face * 18, fy, 30, face > 0 ? -1.0 : Math.PI - 1.0 + 0, face > 0 ? 1.0 : Math.PI + 1.0); ctx.stroke(); ctx.restore();
+    }
+    for (let i = 0; i < C3S_TUNING.armored.armorMax; i++) c3sShield(cxs - 9 + i * 18, e.y - 30, i < s.armor);
+  }
+  if (s.st === 'exposed' || s.st === 'break') {
+    // 暴露弱點（程式畫）：閃爍的「弱點！」
+    const a = s.st === 'break' ? 1 : 0.6 + 0.4 * Math.sin(t * 0.4);
+    ctx.save(); ctx.globalAlpha = a; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#7a2b00'; ctx.lineWidth = 4;
+    ctx.strokeText('弱點！', cxs, e.y - 28); ctx.fillText('弱點！', cxs, e.y - 28);
+    if (s.st === 'exposed') { const left = 1 - s.t / C3S_TUNING.armored.exposedFrames; ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(cxs - 22, e.y - 22, 44, 5); ctx.fillStyle = '#ffd34d'; ctx.fillRect(cxs - 22, e.y - 22, 44 * left, 5); }
+    ctx.restore();
+  }
+  return true;
+}
+function c3sStar(x, y, r) { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); }
+function c3sShield(x, y, on) { ctx.save(); ctx.beginPath(); ctx.moveTo(x - 6, y - 7); ctx.lineTo(x + 6, y - 7); ctx.lineTo(x + 6, y); ctx.quadraticCurveTo(x, y + 8, x, y + 8); ctx.quadraticCurveTo(x, y + 8, x - 6, y); ctx.closePath(); ctx.fillStyle = on ? '#ffcf4a' : 'rgba(80,80,80,0.55)'; ctx.strokeStyle = on ? '#8a5a00' : 'rgba(30,30,30,0.6)'; ctx.lineWidth = 1.5; ctx.fill(); ctx.stroke(); ctx.restore(); }
+
+// ════════════════════════════════════════════════════════════════════
+//  3-3 關卡（四段式雛形）
+//   A 開場熟悉段（0～1500）：疾風蠍子怪 ×1，平地、沒有其他威脅 → 看懂「鎖定 → 衝刺 → 頭暈」
+//   B 磐甲風刃蠍初登場（1500～2800）：磐甲 ×1（單獨）→ 之後一隻普通風刃蠍子；正面打不動、用槌子敲破盔甲或繞到背後
+//   C 平台＋混合遭遇（2800～4500）：低／中／高三種高度的平台、尖刺坑（倒樹橋或踏腳石）、疾風 ×1＋風刃 ×1
+//   D 小型綜合戰（4500～6200）：磐甲＋疾風＋風刃；上方有平台可以繞過 → 同時有威脅的最多 2～3 隻
+//   不需要打倒任何敵人也能通關（可以跳過、走平台繞過）；坑旁一定有不用槌子的路線（踏腳石）
+// ════════════════════════════════════════════════════════════════════
+const C2_STAGE_33 = {
+  chapterId: 3, stageId: '3-3', devPrototype: true, noTimeLimit: true,
+  displayName: '3-3 風之峽谷・蠍群岩道（雛形）', name: '3-3 風之峽谷・蠍群岩道', shortName: '蠍群岩道',
+  length: 6400, emoji: '⚔️',
+  hints: [
+    { triggerX:   30, msg: '⚔️ 3-3 蠍群岩道：這裡的蠍子比較多，看清楚牠們的動作再行動！', shown: false, duration: 240 },
+    { triggerX:  620, msg: '💨 疾風蠍子怪：出現紅色準星就是要衝過來了！跳起來躲開，牠衝完會頭暈，趁機打一下就倒', shown: false, duration: 340 },
+    { triggerX: 1650, msg: '🛡️ 磐甲風刃蠍：正面有硬殼！用氣球槌敲破盔甲，或繞到牠背後；露出「弱點！」時打一下就倒', shown: false, duration: 360 },
+    { triggerX: 2850, msg: '🪜 平台有低、中、高三層，可以從上面繞過蠍子；坑上有踏腳石，也可以用氣球槌敲樹搭橋', shown: false, duration: 300 },
+    { triggerX: 4600, msg: '🦂 最後一段！三種蠍子一起出現，可以走上面的平台繞過去', shown: false, duration: 260 },
+  ],
+  buildPlatforms: () => [
+    { x:  480, y: GROUND_Y -  90, w: 150, h: 22 },   // A：練跳的低平台（也可以站上去看疾風蠍子衝刺）
+    { x: 2420, y: GROUND_Y - 100, w: 160, h: 22 },   // B：風刃蠍子前面的低平台
+    { x: 2920, y: GROUND_Y -  90, w: 170, h: 22 },   // C：低
+    { x: 3140, y: GROUND_Y - 180, w: 170, h: 22 },   // C：中
+    { x: 3370, y: GROUND_Y - 270, w: 230, h: 22 },   // C：高（獎勵）
+    { x: 3660, y: GROUND_Y - 180, w: 150, h: 22 },   // C：往下的中平台
+    { x: 3935, y: GROUND_Y - 110, w:  90, h: 22 },   // C：尖刺坑上的踏腳石（不用槌子也過得去）
+    { x: 4760, y: GROUND_Y -  90, w: 150, h: 22 },   // D：低
+    { x: 4980, y: GROUND_Y - 180, w: 220, h: 22 },   // D：中（從磐甲上方繞過）
+    { x: 5270, y: GROUND_Y -  90, w: 150, h: 22 },   // D：低（下來）
+    { x: 5520, y: GROUND_Y - 130, w: 170, h: 22 },   // D：疾風蠍子上方的平台
+  ],
+  buildWindVents: () => [],
+  spikePits: [ { id: 'S1', x: 3850, w: 200, resetX: 3600 } ],
+  cameraZones: [ { id: 'ALL', x0: 0, x1: 6400, camMin: 0, camMax: 5440, lead: 0.40, ease: 0.12 } ],
+  buildCoins: () => [
+    [200,55],[260,55],[530,140],[580,140],[900,55],[1300,55],
+    [1700,55],[1780,55],[2460,150],[2540,150],
+    [2980,140],[3200,230],[3260,230],[3420,320],[3490,320],[3560,320],[3700,230],[3975,160],
+    [4200,55],[4400,55],[4800,140],[5040,230],[5120,230],[5320,140],[5580,180],[5640,180],[6000,55],
+  ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+  buildBalloons: () => [ [1000, 60], [2500, 160], [3460, 330], [3980, 170], [5080, 240], [5600, 190] ]
+    .map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+  buildSpikes: () => [], buildTackHazards: () => [],
+  buildTrees: () => [
+    // 和 3-2 同一棵正式樹木（支點在坑左邊 31px）：樹幹橋跨過坑 S1 3850～4050
+    { x: 3819, y: 0, h: 358, trunkW: 34, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 253, walkable: true, pivotRight: true, c3Art: true },
+  ],
+  buildEnemies: () => [
+    Object.assign(makeSwiftScorpion(1100, 150), { c2Id: 'A-G1', c2Wind: true, patrolRange0: 150 }),     // A：疾風 ×1
+    Object.assign(makeArmoredScorpion(2000, 110), { c2Id: 'B-R1', c2Wind: true }),                       // B：磐甲 ×1（單獨）
+    Object.assign(makeWindScorpion(2650, 70), { c2Id: 'B-W1', c2Wind: true }),                           // B：普通風刃 ×1
+    Object.assign(makeSwiftScorpion(3250, 110), { c2Id: 'C-G2', c2Wind: true, patrolRange0: 110 }),     // C：平台下方的疾風
+    Object.assign(makeWindScorpion(4330, 90), { c2Id: 'C-W2', c2Wind: true }),                           // C：坑後的風刃
+    Object.assign(makeArmoredScorpion(5000, 80), { c2Id: 'D-R2', c2Wind: true }),                        // D：磐甲
+    Object.assign(makeSwiftScorpion(5520, 110), { c2Id: 'D-G3', c2Wind: true, patrolRange0: 110 }),     // D：疾風
+    Object.assign(makeWindScorpion(5930, 60), { c2Id: 'D-W3', c2Wind: true }),                           // D：風刃（終點前）
+  ],
+  buildOranges: () => [], buildRoundBalloons: () => [],
+  hiddenTreasure: null, extraHiddenTreasures: [],
+};
+if (ADV_WORKSPACE) {
+  const i32 = LEVELS.findIndex(l => l && l.stageId === '3-2');
+  if (i32 >= 0) LEVELS.splice(i32 + 1, 0, C2_STAGE_33); else LEVELS.push(C2_STAGE_33);
+}
+function c2Is33() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.stageId === '3-3'); }
+function c2Is33Clear() { return c2Is33() && gameState === 'clear' && homeEntryMode !== 'failed'; }
+// 從小V的家進入 3-3（3-2 通關後）；mode 'dev'（開發者面板）才配發測試裝備
+function c2Start33(mode) {
+  if (!ADV_WORKSPACE) return;
+  const dev = mode === 'dev' && advDevMode();
+  const dog = nextBringDog === true;
+  v396DevDog = false;
+  if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
+  const idx = getLevelIndexByStageId('3-3'); if (idx < 0) return;
+  c2HideDone();
+  try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
+  try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
+  try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
+  bringBalloonDog = dog; levelStartBringDog = dog; nextBringDog = false;
+  runWithAssetGate(getAssetGroupsForLevel(idx), '蠍群岩道準備中...', () => {
+    advMarkTestEntry('c2-stage-3-3');            // 第二大陸既有規則（test_only）：不進第一大陸正式挑戰、成績、排行
+    currentLevelIndex = idx;
+    bringBalloonDog = dog; levelStartBringDog = dog;
+    if (!dev) adventureTestLoadoutActive = false;
+    loadLevel(idx);
+    initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();
+    if (dev) applyAdventureTestLoadout();
+    restart({ keepHp: false, preserveBringDog: true });
+    if (dev) applyAdventureTestLoadout();
+    bringBalloonDog = dog; levelStartBringDog = dog; if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = dog;
+    try { initEquippedUmbrella(); } catch (e) {}
+    c2Proto.done = false; c2Proto.startedAt = Date.now();
+    gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
+    if (typeof window.showPauseBtn === 'function') window.showPauseBtn();
+    console.log('[3-3] 進入 3-3 蠍群岩道（雛形）' + (dev ? '（開發測試裝備）' : ''));
+  });
+}
+// 3-3 正常通關：和 3-1／3-2 同一套（第一次記錄；每次保留這一次收集的材料；同一次遊玩只結算一次；不發 V幣、不寫正式成績）
+function c2Complete33() {
+  if (c2Proto.done) return; c2Proto.done = true;
+  const sec = +(elapsedSec || 0).toFixed(1);
+  const flow = c2Flow();
+  const first = !(flow.stage33 && flow.stage33.claimed);
+  const got = { coins: currentRunStats.coins || 0, b260: currentRunStats.balloon260 || 0, round: currentRunStats.roundBalloon || 0 };
+  if (!c2SettleOnce('33')) { console.warn('[3-3] 這一次遊玩已經結算過 → 不重複結算'); return; }
+  const kills = enemies.filter(e => !e.active).length;
+  if (first) flow.stage33 = { claimed: true, claimedAt: Date.now(), coins: got.coins, b260: got.b260, sec };
+  flow.stage33Runs = flow.stage33Runs || []; flow.stage33Runs.push({ at: Date.now(), coins: got.coins, b260: got.b260, round: got.round, sec, kills }); if (flow.stage33Runs.length > 20) flow.stage33Runs.splice(0, flow.stage33Runs.length - 20);
+  flow.stage33Clears = (flow.stage33Clears || 0) + 1; flow.stage33LastSec = sec;
+  flow.stage33BestSec = flow.stage33BestSec ? Math.min(flow.stage33BestSec, sec) : sec;
+  c2ClearGuard = true;
+  try { triggerClear(); } finally { c2ClearGuard = false; try { saveInventory(); } catch (e) {} }
+  try {
+    if (H2.pendingSummary) {
+      const rows = H2.pendingSummary.rows;
+      rows.push({ icon: null, emoji: '🎒', text: '本次取得 金幣 ' + got.coins + '・260 ×' + got.b260 + '（' + v396BagLabel() + (first ? '' : '；重玩也會取得') + '）', val: '' });
+      rows.push({ icon: null, emoji: '🦂', text: '打倒蠍子 ' + kills + '／' + enemies.length + ' 隻（不用全部打倒也能通關）', val: '' });
+      rows.push({ icon: null, emoji: '⏱️', text: '通關時間 ' + c2FmtSec(sec) + '（只記錄，不計 V幣與正式成績）', val: '' });
+      H2.pendingSummary.title = '3-3 蠍群岩道 通關！（雛形）';
+    }
+  } catch (e) {}
+  console.log('[3-3] 正常通關 → 回到小V的家', { first, got, sec, kills });
+}
+(function v398Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v398) { if (typeof o !== 'function') console.warn('[v0.3.98] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v398 = true; globalThis[name] = w; };
+  // 素材群組：只在 3-3 的載入畫面一起載（16 張；optional）
+  const G = 'ch3NewScorpions';
+  const addGroup = M => {
+    if (!M || M[G]) return M;
+    M[G] = [];
+    ['swift', 'armored'].forEach(T => Object.keys(C3S_FILES[T]).forEach(k => M[G].push({ path: C3S_DIR[T] + C3S_FILES[T][k], type: 'image', critical: false, label: 'c3s:' + T + ':' + k, altPaths: [],
+      apply: im => { c3sImgs[T][k] = im; const all = ['swift', 'armored'].every(t => Object.keys(C3S_FILES[t]).every(q => c3sImgs[t][q])); if (all && !c3sReady) { try { c3sBuildCanvases(); c3sReady = true; console.log('[3-3] 新蠍子素材 16/16 載入完成'); } catch (er) { console.error('[3-3] 建立畫面快取失敗', er); } } },
+      fail: () => { console.error('[3-3] ❌ 素材載入失敗：' + C3S_FILES[T][k]); } })));
+    return M;
+  };
+  if (typeof ASSET_MANIFEST !== 'undefined' && ASSET_MANIFEST) addGroup(ASSET_MANIFEST);
+  wrapFn('buildAssetManifest', o => function () { return addGroup(o.apply(this, arguments)); });
+  wrapFn('getAssetGroupsForLevelBase', o => function (idx) { const r = o.apply(this, arguments); const lv = LEVELS[idx]; return (lv && lv.stageId === '3-3' && !r.includes(G)) ? r.concat([G]) : r; });
+  // 移動：普通蠍子的巡邏照常跑；不在 WALK 狀態時把這一步的移動還原（站定／衝刺由狀態機控制）
+  wrapFn('updateEnemies', o => function () {
+    const keep = [];
+    enemies.forEach(e => { if (c3sType(e) && e.active && c3sState(e).st !== 'walk') keep.push([e, e.x, e.vx]); });
+    const r = o.apply(this, arguments);
+    keep.forEach(([e, x, vx]) => { e.x = x; e.vx = vx; });
+    try { enemies.forEach(e => { if (c3sType(e)) c3sStep(e); }); } catch (er) { console.error('[3-3] enemy step', er); }
+    return r;
+  });
+  // 碰撞傷害：疾風蠍子硬直／喘氣中、磐甲破甲／暴露弱點中，碰到不會受傷（讓玩家敢靠近打）
+  wrapFn('checkHazards', o => function () {
+    const off = [];
+    enemies.forEach(e => { const T = c3sType(e); if (!T || !e.active || !e.c3s) return; const st = e.c3s.st; if ((T === 'swift' && (st === 'stun' || st === 'recover')) || (T === 'armored' && (st === 'break' || st === 'exposed'))) { e.active = false; off.push(e); } });
+    try { return o.apply(this, arguments); } finally { off.forEach(e => { e.active = true; }); }
+  });
+  wrapFn('damageScorpionEnemy', o => function (e, amount, source, onKill, ...rest) {
+    if (c3sType(e) && e.active) { try { return c3sOnHit.call(this, o, e, amount, source, onKill, rest); } catch (er) { console.error('[3-3] hit', er); } }
+    return o.call(this, e, amount, source, onKill, ...rest);
+  });
+  wrapFn('drawEnemy', o => function (x, y, w, h, flashing, vx, e) { if (c3sType(e) && c3sReady) { try { if (c3sDraw(x, e)) return; } catch (er) { console.error('[3-3] draw', er); } } return o.apply(this, arguments); });
+  // 死亡特效（劍）／槌子擊飛：前段 Hurt、後段 Defeat（疾風沒有 Defeat 圖 → 用 HardStun 暈倒姿勢）
+  wrapFn('drawScorpionDefeatEffects', o => function () {
+    const sw = [];
+    scorpionDefeatEffects.forEach(fx => { const m = /^scorpion_(swift|armored)$/.exec(fx.skinKey || ''); if (m) { sw.push([fx, fx.skinKey]); fx.skinKey = 'c3s_' + m[1] + (fx.timer < SCORPION_DEFEAT_FLASH_FRAMES ? '_hurt' : '_defeat'); } });
+    try { return o.apply(this, arguments); } finally { sw.forEach(([fx, k]) => { fx.skinKey = k; }); }
+  });
+  wrapFn('updateSpinningEnemies', o => function () {
+    spinningEnemies.forEach(s => { const m = /^(?:scorpion|c3s)_(swift|armored)/.exec(s.skinKey || ''); if (m) { s._c3sT = (s._c3sT || 0) + 1; s.skinKey = 'c3s_' + m[1] + (s._c3sT <= 10 ? '_hurt' : '_defeat'); if (m[1] === 'armored' && !s._c3sScaled) { s._c3sScaled = true; } } });
+    return o.apply(this, arguments);
+  });
+  wrapFn('getScorpionHurtImgForSkin', o => function (k) {
+    const m = /^c3s_(swift|armored)_(hurt|defeat)$/.exec(k || '');
+    if (m && c3sReady) return c3sCanv[m[1]]['norm_' + m[2]];
+    return o.apply(this, arguments);
+  });
+  wrapFn('restart', o => function () { const r = o.apply(this, arguments); try { enemies.forEach(e => { if (c3sType(e)) e.c3s = null; }); } catch (er) {} return r; });
+  // 3-3 終點 → 正常通關
+  wrapFn('checkFinish', o => function () {
+    if (c2Is33()) { if (gameState === 'playing' && player.x + player.w >= FINISH_X) c2Complete33(); return; }
+    return o.apply(this, arguments);
+  });
+  // 小V的家：3-2 通關後 → 出發＝前往 3-3；3-3 通關後 → 再玩一次 3-3（3-4 尚未開放）
+  wrapFn('h2DepartCheck', o => function () {
+    if (c2Is32Clear()) return { kind: 'go', c2go33: true, sub: '⚔️ 前往 3-3 蠍群岩道' };
+    if (c2Is33Clear()) return { kind: 'go', c2replay33: true, sub: '🔁 再玩一次 3-3（3-4 尚未開放）' };
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2Go', o => function () {
+    if (c2Is32Clear() || c2Is33Clear()) { if (!h2Busy(900, 'c2go33')) { console.log('[3-3] 從小V的家出發 → 3-3'); c2Start33(); } return; }
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2RenderCenter', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      const nl = h2$('h2-nextline');
+      if (nl && c2Is32Clear()) { nl.textContent = 'ⓘ 下一關：3-3 風之峽谷・蠍群岩道'; nl.parentElement.style.display = ''; }
+      if (nl && c2Is33Clear()) { nl.textContent = 'ⓘ 3-3 蠍群岩道 已完成（通關 ' + (c2Flow().stage33Clears || 1) + ' 次）・3-4 尚未開放'; nl.parentElement.style.display = ''; }
+    } catch (e) {}
+    return r;
+  });
+  // 重新整理：3-3 中途離開 → 回到 3-2 的小V之家（v0.3.97 的同一套規則）
+  try { if (Array.isArray(V397_C2_ORDER) && !V397_C2_ORDER.includes('3-3')) V397_C2_ORDER.push('3-3'); } catch (e) {}
+  wrapFn('v397C2Cleared', o => function (sid) { if (sid === '3-3') { const f = c2Flow(); return (f.stage33Clears || 0) > 0 || !!f.stage33; } return o.apply(this, arguments); });
+  // 開發者面板：「⚔️ 測試 3-3（開發用）」
+  const addBtn = () => {
+    const box = document.getElementById('p2-dev-body'), ref = document.getElementById('btn-pause-test-vb-32') || document.getElementById('btn-pause-test-c2-wind');
+    if (!box || !ref || document.getElementById('btn-pause-test-c2-33')) return !!document.getElementById('btn-pause-test-c2-33');
+    const b = document.createElement('button'); b.id = 'btn-pause-test-c2-33'; b.type = 'button'; b.className = ref.className;
+    b.textContent = '⚔️ 測試 3-3 蠍群岩道（雛形，開發用）';
+    b.addEventListener('click', ev => { ev.preventDefault(); c2Start33('dev'); });
+    ref.insertAdjacentElement('afterend', b); return true;
+  };
+  if (!addBtn()) { let n = 0; const t = setInterval(() => { if (addBtn() || ++n > 40) clearInterval(t); }, 500); }
+  if (typeof window !== 'undefined') Object.assign(window, { c2Start33,
+    debug33: () => ({ stage: (LEVELS[currentLevelIndex] || {}).stageId, gs: gameState, ready: c3sReady, flow: { stage33: c2Flow().stage33 || null, clears: c2Flow().stage33Clears || 0 },
+      enemies: enemies.filter(e => e.type === 'scorpion').map(e => ({ id: e.c2Id, v: e.variant, active: e.active, x: Math.round(e.x), hp: e.hp, st: e.c3s ? e.c3s.st : (e.ws ? e.ws.st : 'walk'), t: e.c3s && e.c3s.t, armor: e.c3s && e.c3s.armor, pose: (c3sType(e) && e.active) ? c3sPose(e) : null })),
+      log: c3sLog.slice(-60), tuning: JSON.parse(JSON.stringify(C3S_TUNING)) }) });
+  console.log('[v0.3.98] 3-3 蠍群岩道（雛形）、疾風蠍子怪、磐甲風刃蠍已載入');
 })();
