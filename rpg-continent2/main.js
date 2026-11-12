@@ -29781,7 +29781,7 @@ function v395UseStar() {
   v395L({ ev: 'starUse', haveBefore: have, haveAfter: inv.items.invincibleStar, gs: gameState });
   try { sfxPlay('ringGet'); } catch (e) {}
   showHint('⭐ 無敵星星！' + V395_STAR.seconds + ' 秒內不會受到一般傷害', 200);
-  try { if (document.getElementById('pause-bag-panel') && document.getElementById('pause-bag-panel').style.display !== 'none') openPauseBag(); } catch (e) {}
+  try { const bp = document.getElementById('pause-bag-panel'); if (bp && bp.style.display === 'flex') openPauseBag(); } catch (e) {}   // 從暫停背包使用 → 刷新背包數量（背包沒開時不打開）
   return true;
 }
 // ── 商店（盾牌、翼靴、組合包、背包升級）──
@@ -29878,7 +29878,7 @@ function v395Img(key) {
   if (!im) { im = new Image(); im.decoding = 'async'; im.onerror = () => { im._bad = true; }; im.src = (typeof resolveAdventureAssetSrc === 'function') ? resolveAdventureAssetSrc(p) : p; v395ImgCache[key] = im; }
   return (im.complete && im.naturalWidth > 0) ? im : null;
 }
-const V395_PICKUP_DRAW = { coinBag: 46, b260Bundle: 54, roundBundle: 50 };   // 畫面大小（遊戲 px；比一般金幣、260 大一些，看得出是一整袋／一整組）
+const V395_PICKUP_DRAW = { coinBag: 54, b260Bundle: 66, roundBundle: 60 };   // 畫面大小（遊戲 px；比一般金幣、260 大一些，看得出是一整袋／一整組）
 function v395DrawPickup(o, sx, sy) {
   const k = o.v395Kind, im = v395Img(k), S = V395_PICKUP_DRAW[k] || 44;
   const t = typeof frameCount === 'number' ? frameCount : 0;
