@@ -160,14 +160,50 @@
     ctx.drawImage(img, (WAM.VIEW_W - w) / 2, (WAM.VIEW_H - h) / 2, w, h);
   }
 
+  // 平台定位：找「九個洞口（含草邊）都落在草地上」的最小等比例縮放，
+  // 讓四角花草蘑菇盡量露在資訊欄之間。只影響畫面，不動洞口座標與判定。
+  Renderer.prototype.platformFit = function (ground) {
+    var key = this.grid.compact ? 'c' : 'n';
+    if (this._fit && this._fit.key === key) return this._fit;
+    var d = ground.def, b = d.bbox, E = d.edge, cells = this.grid.cells;
+    var hb = asset('holeBack'), o = hb ? hb.def.opening : [866, 521, 452];
+    function halfAt(y) {
+      if (y <= E[0][0]) return E[0][1];
+      for (var i = 1; i < E.length; i++) if (y <= E[i][0]) {
+        var a = E[i - 1], c = E[i], u = (y - a[0]) / (c[0] - a[0]);
+        return a[1] + (c[1] - a[1]) * u;
+      }
+      return E[E.length - 1][1];
+    }
+    var near = 0;
+    cells.forEach(function (c) { near = Math.max(near, c.cy + c.ry); });
+    var gx = this.grid.grid.x + this.grid.grid.w / 2;
+    var best = null;
+    for (var s = 0.55; s <= 1.6 && !best; s += 0.01) {
+      var bottom = near + 14 + (b[3] - d.grassBottom) * s;
+      var ok = cells.every(function (c) {
+        var k = c.rx / o[2];
+        var rimTop = c.cy - (o[1] - 205) * k;            // 洞口草邊頂端
+        var yTop = b[3] - (bottom - rimTop) / s;          // 換算回平台圖片 y
+        if (yTop < E[0][0]) return false;
+        var yMid = b[3] - (bottom - c.cy) / s;
+        var ext = Math.abs(c.cx - gx) + 600 * k + 6;      // 洞口圖左右最寬處
+        return ext <= halfAt(yMid) * s;
+      });
+      if (ok) best = { key: key, s: s, bottom: bottom };
+    }
+    this._fit = best || { key: key, s: (this.grid.grid.h + 70) / (b[3] - b[1]), bottom: this.grid.grid.y + this.grid.grid.h + 22 };
+    return this._fit;
+  };
+
   Renderer.prototype.drawField = function (ctx) {
     var gr = this.grid.grid;
     var ground = asset('ground');
-    if (ground) { // v0.1.2：草地平台圖，等比例縮放（高度蓋滿九宮格，兩側邊緣藏在資訊欄後）
+    if (ground) { // v0.1.2：森林九宮格平台圖，等比例縮放（不拉伸）
       var b = ground.def.bbox, bw = b[2] - b[0], bh = b[3] - b[1];
-      var s = (gr.h + 70) / bh;
-      var bottom = gr.y + gr.h + 22;
-      var cxm = gr.x + gr.w / 2;
+      var fit = this.platformFit(ground);
+      var s = fit.s, bottom = fit.bottom;
+      var cxm = gr.x + gr.w / 2 - (ground.def.centerX - (b[0] + b[2]) / 2) * s;
       blit(ctx, ground, b[0], b[1], bw, bh, cxm - bw * s / 2, bottom - bh * s, bw * s, bh * s);
       return;
     }
@@ -269,7 +305,7 @@
       // 正式圖片：底部從洞口中線下方升起，前緣蓋住下半身
       var sw = C.SPRITE_WIDTH[tg.type] * this.grid.cellW * cell.scale;
       var sh = spriteHeight(spr, sw);
-      var upB = cell.cy + cell.ry * 0.45;
+      var upB = cell.cy + cell.ry * (asset('holeFront') ? C.HOLE_SINK : 0.45);
       var downB = cell.cy + cell.ry + sh + 4;
       var by = downB + (upB - downB) * h;
       // 有專用受擊圖（蠍子怪、橘子怪）就不再疊白光，保留原圖配色
@@ -500,10 +536,12 @@
       var bw = C.SPRITE_WIDTH.boss * this.grid.cellW;
       var bh = spriteHeight(bs, bw);
       var bhIdle = asset('boss') ? spriteHeight(asset('boss'), bw) : bh; // 升起位置以一般圖為準
-      var upB = b.cy + b.ry * 0.5, downB = b.cy + b.ry + Math.max(bh, bhIdle) + 4;
+      var art = !!(asset('holeBack') && asset('holeFront'));
+      var bry = art ? b.rx * 149 / 452 : b.ry;                     // 洞口圖的高寬比
+      var upB = b.cy + bry * (art ? C.HOLE_SINK : 0.5), downB = b.cy + bry + Math.max(bh, bhIdle) + 4;
       var byy = downB + (upB - downB) * h;
       ctx.save();
-      this.clipHole(ctx, b.cx, b.cy, b.rx, b.ry, bh / 4 + 10);
+      this.clipHole(ctx, b.cx, b.cy, b.rx, bry, bh / 4 + 10);
       ctx.translate(b.cx + (react ? Math.sin(t * 160) * 8 * react : 0), byy + react * 8);
       ctx.scale(1 + react * 0.05, 1 - react * 0.06);
       drawSprite(ctx, bs, bw, react * 0.5);

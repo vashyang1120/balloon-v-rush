@@ -113,7 +113,8 @@
     } catch (e) { ctx = null; }
   }
 
-  function play(key) {
+  // delaySec：延後播放（只在遊戲已結束時使用，例如第 30 秒讓金槌結束音先響）
+  function play(key, delaySec) {
     var def = A.SFX[key];
     if (!def) return;
     var now = performance.now();
@@ -129,14 +130,15 @@
         g.gain.value = def.vol;
         src.connect(g); g.connect(master);
         var off = def.offset || 0;
+        var when = ctx.currentTime + (delaySec || 0);
         if (def.duration) {
           // 截一小段時，最後 0.08 秒淡出避免爆音
-          var t0 = ctx.currentTime, end = t0 + def.duration;
-          g.gain.setValueAtTime(def.vol, Math.max(t0, end - 0.08));
+          var end = when + def.duration;
+          g.gain.setValueAtTime(def.vol, Math.max(when, end - 0.08));
           g.gain.linearRampToValueAtTime(0, end);
-          src.start(0, off, def.duration);
+          src.start(when, off, def.duration);
         } else {
-          src.start(0, off);
+          src.start(when, off);
         }
         voices[key] = (voices[key] || 0) + 1; totalVoices++;
         src.onended = function () { voices[key]--; totalVoices--; };
@@ -146,8 +148,8 @@
         var el = pool[0].paused ? pool[0] : pool[1];
         el.volume = Math.min(1, def.vol);
         el.currentTime = def.offset || 0;
-        var p = el.play();
-        if (p && p.catch) p.catch(function () {});
+        var go = function () { var p = el.play(); if (p && p.catch) p.catch(function () {}); };
+        if (delaySec) setTimeout(go, delaySec * 1000); else go();
         if (def.duration) {
           var tok = (el._tok || 0) + 1; el._tok = tok;
           setTimeout(function () { if (el._tok === tok) el.pause(); }, def.duration * 1000);
@@ -155,6 +157,42 @@
         lastPlay[key] = now;
       }
     } catch (e) { /* 音效失敗不影響遊戲 */ }
+  }
+
+  /* ---------- 無敵槌倒數提示音（v0.1.2-test-2：Web Audio 即時合成，不用音檔） ----------
+   * 'tick'    ：剩 3、2 秒，短促可愛的「嗶」
+   * 'tickHigh'：剩 1 秒，較高音
+   * 'goldEnd' ：金槌結束，三個音快速往下（像氣球洩氣的「嘟嘟嘟」）
+   * 何時播放由 main.js 依遊戲時鐘判斷；這裡只負責發聲，播放不會阻塞遊戲。 */
+  var TONE_VOL = 0.22;
+  function blip(freq, at, dur, vol, type) {
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'triangle';
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(master);
+    o.start(at); o.stop(at + dur + 0.02);
+  }
+  function tone(kind) {
+    if (!ctx || !master) return;
+    try {
+      if (ctx.state === 'suspended') ctx.resume();
+      var t = ctx.currentTime + 0.005;
+      if (kind === 'tick') {
+        blip(1046.5, t, 0.11, TONE_VOL);                 // C6
+        blip(2093, t, 0.06, TONE_VOL * 0.25, 'sine');    // 一點泛音，聽起來更清脆
+      } else if (kind === 'tickHigh') {
+        blip(1568, t, 0.15, TONE_VOL * 1.1);             // G6
+        blip(3136, t, 0.07, TONE_VOL * 0.25, 'sine');
+      } else if (kind === 'goldEnd') {
+        blip(1568, t, 0.09, TONE_VOL);                   // G6
+        blip(1318.5, t + 0.08, 0.09, TONE_VOL);          // E6
+        blip(1046.5, t + 0.16, 0.09, TONE_VOL);          // C6
+        blip(523.25, t + 0.24, 0.22, TONE_VOL * 0.9, 'sine'); // C5 收尾
+      }
+    } catch (e) { /* 提示音失敗不影響遊戲 */ }
   }
 
   /* ---------- BGM ---------- */
@@ -226,7 +264,7 @@
   }
 
   WAM.Audio = {
-    preload: preload, bindUnlock: bindUnlock, play: play,
+    preload: preload, bindUnlock: bindUnlock, play: play, tone: tone,
     bgmStart: bgmStart, bgmSetPaused: bgmSetPaused, bgmFadeOut: bgmFadeOut, bgmStop: bgmStop,
     setSuspended: setSuspended, report: report
   };

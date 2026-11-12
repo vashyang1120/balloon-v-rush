@@ -1,4 +1,4 @@
-/* 打地鼠 whack-a-mole-v0.1.2-test-1 */
+/* 打地鼠 whack-a-mole-v0.1.2-test-2 */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; height: 100%; background: #1d1433; overflow: hidden;
@@ -42,44 +42,78 @@ html, body {
 #debugBar.collapsed button:not(#dbgToggle) { display: none; }
 #debugBar.collapsed #dbgToggle { flex: 0 0 auto; opacity: 0.55; }
 
-/* ---------- 星靈對話 ---------- */
-#spirit {
+/* ---------- 星靈對話（v0.1.2-test-2：比照冒險主線 rpg-test #rpg-overlay） ----------
+ * 冒險主線以 960×540 為基準、--rk = 寬度 / 960；這裡 --rk = 遊戲區寬度的 1/960（長度單位），手機橫式等比縮放 */
+#spirit.rpg {
+  --rk: calc(100cqw / 960);
+  position: absolute; inset: 0; z-index: 30; overflow: hidden; cursor: pointer;
+  animation: rpgFadeIn 0.2s ease-out;
+}
+@keyframes rpgFadeIn { from { opacity: 0; } to { opacity: 1; } }
+#spirit .rpg-mask {
   position: absolute; inset: 0;
-  display: flex; align-items: flex-end; justify-content: center;
-  padding-bottom: 4cqh; background: rgba(12, 6, 30, 0.35);
+  background: linear-gradient(180deg, rgba(30,14,64,0.42) 0%, rgba(24,10,56,0.62) 60%, rgba(16,8,40,0.78) 100%);
 }
-.spirit-box {
-  width: 62%; min-height: 20cqh;
-  display: flex; align-items: center; gap: 2cqw;
-  padding: 2.4cqh 2.4cqw;
-  background: linear-gradient(180deg, #5b3aa6, #3d2479);
-  border: 0.5cqh solid #e8d8ff; border-radius: 2.4cqh;
-  box-shadow: 0 1cqh 4cqh rgba(0, 0, 0, 0.45);
-  color: #fff; cursor: pointer;
-  animation: spiritIn 0.18s ease-out;
+#spirit .rpg-side {
+  position: absolute; bottom: calc(132 * var(--rk));
+  right: calc(26 * var(--rk)); width: calc(330 * var(--rk)); height: calc(330 * var(--rk));
 }
-@keyframes spiritIn { from { transform: translateY(3cqh); opacity: 0; } to { transform: none; opacity: 1; } }
-.spirit-icon {
-  flex: 0 0 auto; width: 12cqh; height: 12cqh; border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fffbe0, #ffd84a 55%, #e0a800);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 3cqh rgba(255, 230, 120, 0.8);
+#spirit .rpg-backdrop {
+  position: absolute; left: 4%; right: 4%; top: 12%; bottom: -4%;
+  border-radius: 50% 50% 46% 46%;
+  background: radial-gradient(ellipse at 50% 58%, rgba(78,58,170,0.88) 0%, rgba(52,36,128,0.72) 45%, rgba(40,26,100,0) 74%);
 }
-.spirit-icon span { font-size: 7cqh; color: #fff; text-shadow: 0 0 1cqh #b07a00; }
-.spirit-img { display: none; }
-/* v0.1.1：冒險主線星靈立繪（載入失敗時自動退回 ✦ 圖示） */
-.spirit-icon.has-img { width: 19cqh; height: 19cqh; margin: -5cqh 0 -2cqh; background: none; box-shadow: none; border-radius: 0; }
-.spirit-icon.has-img .spirit-img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0.6cqh 1cqh rgba(0,0,0,0.35)); }
-.spirit-icon.has-img span { display: none; }
-.spirit-body { flex: 1 1 auto; }
-.spirit-name { font-size: 2.4cqh; font-weight: 800; color: #ffe680; margin-bottom: 0.8cqh; }
-.spirit-text { font-size: 3.6cqh; font-weight: 700; line-height: 1.45; }
-.spirit-btn {
-  flex: 0 0 auto; align-self: flex-end;
-  font-family: inherit; font-weight: 800; font-size: 2.8cqh; line-height: 1.2;
-  padding: 1.6cqh 2.4cqw; border-radius: 1.4cqh; border: 0;
-  background: #ffd84a; color: #4a2a00; cursor: pointer;
+#spirit .rpg-pimg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; object-position: 50% 100%; display: none;
+  filter: drop-shadow(0 calc(4 * var(--rk)) calc(10 * var(--rk)) rgba(10,0,30,0.55));
+  animation: spiritPop 0.22s ease-out;
 }
+@keyframes spiritPop { from { transform: translateY(calc(12 * var(--rk))) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+#spirit .spirit-fallback {
+  position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%);
+  font-size: calc(150 * var(--rk)); color: #ffe680; text-shadow: 0 0 calc(20 * var(--rk)) #b07a00;
+}
+/* 立繪載入成功（main.js / spirit.js 加上 has-img）→ 顯示圖片、隱藏 ✦ 備援 */
+#spirit .spirit-icon.has-img .rpg-pimg { display: block; }
+#spirit .spirit-icon.has-img .spirit-fallback { display: none; }
+#spirit .rpg-box {
+  position: absolute; left: calc(20 * var(--rk)); right: calc(20 * var(--rk)); bottom: calc(14 * var(--rk));
+  height: calc(150 * var(--rk)); box-sizing: border-box;
+  padding: calc(30 * var(--rk)) calc(190 * var(--rk)) calc(18 * var(--rk)) calc(34 * var(--rk));
+  border: calc(3 * var(--rk)) solid rgba(196,170,255,0.85); border-radius: calc(22 * var(--rk));
+  box-shadow: 0 0 calc(24 * var(--rk)) rgba(162,140,255,0.45), inset 0 calc(1 * var(--rk)) 0 rgba(255,255,255,0.18);
+}
+#spirit .rpg-box-bg {
+  position: absolute; inset: 0; border-radius: calc(19 * var(--rk)); pointer-events: none; z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(12,6,34,0.22) 0%, rgba(12,6,34,0.10) 100%),
+    linear-gradient(160deg, rgba(44,28,108,0.78) 0%, rgba(26,16,72,0.78) 100%);
+}
+#spirit .rpg-name {
+  position: absolute; z-index: 1; top: 0; left: calc(34 * var(--rk)); transform: translateY(-55%);
+  padding: calc(5 * var(--rk)) calc(20 * var(--rk)); border-radius: 999px;
+  background: linear-gradient(135deg, #fff2a0, #ffd23a); color: #3a1460;
+  font-weight: 900; font-size: calc(20 * var(--rk)); letter-spacing: 0.06em;
+  border: calc(2 * var(--rk)) solid #fff3c4; box-shadow: 0 calc(3 * var(--rk)) calc(8 * var(--rk)) rgba(0,0,0,0.35);
+}
+#spirit .rpg-text {
+  position: relative; z-index: 1;
+  color: #fff; font-size: calc(25 * var(--rk)); line-height: 1.55; font-weight: 700; min-height: 3em;
+  text-shadow: 0 calc(2 * var(--rk)) calc(3 * var(--rk)) rgba(10,0,30,0.85), 0 0 calc(6 * var(--rk)) rgba(10,0,30,0.6);
+}
+/* 繼續／開始按鈕：沿用冒險主線 .rpg-next 的金色＋跳動，放大成明顯的按鈕 */
+#spirit .rpg-next {
+  position: absolute; z-index: 1; right: calc(22 * var(--rk)); bottom: calc(18 * var(--rk));
+  background: linear-gradient(135deg, #fff2a0, #ffd23a); color: #3a1460;
+  border: calc(2 * var(--rk)) solid #fff3c4; border-radius: 999px;
+  padding: calc(10 * var(--rk)) calc(24 * var(--rk));
+  font-family: inherit; font-size: calc(22 * var(--rk)); font-weight: 900; cursor: pointer;
+  box-shadow: 0 calc(3 * var(--rk)) calc(8 * var(--rk)) rgba(0,0,0,0.35);
+  animation: rpgNextBlink 0.9s ease-in-out infinite;
+}
+@keyframes rpgNextBlink { 50% { transform: translateY(calc(3 * var(--rk))); } }
+#spirit .rpg-next:active { transform: scale(0.95); }
 
 /* ---------- 結算 / 直拿提示 ---------- */
 .overlay {

@@ -30,7 +30,9 @@
     },
     onEnd: function (result) {
       AU.bgmFadeOut();
-      AU.play('result');
+      // 第 30 秒若第二把金槌仍有效，會同時響「金槌結束音」→ 結算音延後 0.55 秒，兩者不互相干擾
+      var goldAtEnd = game.hammer.goldFrom >= 0 && Math.abs(game.hammer.goldUntil - C.GAME_DURATION) < 1e-6;
+      AU.play('result', goldAtEnd ? 0.55 : 0);
       showResult(result);
     }
   });
@@ -53,7 +55,7 @@
   function newRound(seed) {
     $('result').classList.add('hidden');
     AU.bgmStop();
-    prevBroken = false; prevBoss = false;
+    prevBroken = false; prevBoss = false; cueT = 0;
     game.reset(seed);
     updateSeedUrl(seed);
     // 開場星靈對話：關閉後 30 秒才開始
@@ -122,10 +124,32 @@
   });
 
   /* ---------- 主迴圈 ---------- */
+  /* 無敵槌倒數：只看遊戲時鐘（星靈對話、直拿、切分頁暫停時時鐘不動 → 不會偷偷前進）
+   * - 必須主動敲中金環才有金槌；沒取得就沒有倒數
+   * - 晚取得只播之後的節點；已錯過的不補播；每個節點最多一次（cueT 只會往前） */
+  var cueT = 0;
+  function goldCues() {
+    if (game.state !== 'playing' && game.state !== 'ended') return;
+    var t = game.clock.t, h = game.hammer;
+    if (t <= cueT) return;
+    if (h.goldFrom >= 0) {
+      var U = h.goldUntil;
+      var nodes = C.GOLD_COUNTDOWN.map(function (sec, i, a) {
+        return { at: U - sec, kind: i === a.length - 1 ? 'tickHigh' : 'tick' };
+      });
+      nodes.push({ at: U, kind: 'goldEnd' });
+      nodes.forEach(function (n) {
+        if (n.at > cueT + 1e-6 && n.at <= t + 1e-6 && n.at > h.goldFrom + 1e-6) AU.tone(n.kind);
+      });
+    }
+    cueT = t;
+  }
+
   var prevBroken = false, prevBoss = false;
   function frame() {
     var now = performance.now();
     game.update(now);
+    goldCues();
     // 音訊跟著遊戲時鐘（只讀狀態，不改判定）
     if (game.state === 'playing') {
       var t = game.clock.t;
