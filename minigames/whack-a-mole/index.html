@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>打地鼠（暫名）｜whack-a-mole-v0.1.2-test-2</title>
+  <title>氣球槌打地鼠｜whack-a-mole-v0.1.3-test-1</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=0.1.2-test-2">
+  <link rel="stylesheet" href="style.css?v=0.1.3-test-1">
 </head>
 <body>
-  <!-- 《氣球小V：派對島大作戰》打地鼠 獨立原型 whack-a-mole-v0.1.2-test-2
+  <!-- 《氣球小V：派對島大作戰》打地鼠 獨立原型 whack-a-mole-v0.1.3-test-1
        不串接冒險主線、不讀寫存檔、不使用 Firebase / V幣 / 排行榜 -->
   <div id="stage">
     <div id="game">
-      <canvas id="board" aria-label="打地鼠遊戲畫面"></canvas>
+      <canvas id="board" aria-label="氣球槌打地鼠遊戲畫面"></canvas>
 
       <!-- 測試工具（位於右側欄，不遮九宮格） -->
       <div id="debugBar">
@@ -25,7 +25,7 @@
 
       <!-- 星靈對話 -->
       <div id="spirit" class="rpg hidden">
-        <!-- v0.1.2-test-2：比照冒險主線 RPG 對話介面（右側大型立繪＋下方深紫對話框） -->
+        <!-- v0.1.3-test-1：比照冒險主線 RPG 對話介面（右側大型立繪＋下方深紫對話框） -->
         <div class="rpg-mask"></div>
         <div class="rpg-side rpg-side--right spirit-icon" aria-hidden="true">
           <div class="rpg-backdrop"></div>
@@ -37,6 +37,15 @@
           <div class="rpg-name" data-sp="spirit">星靈</div>
           <div class="rpg-text spirit-text"></div>
           <button class="rpg-next spirit-btn" type="button">知道了 ▶</button>
+        </div>
+      </div>
+
+      <!-- v0.1.3：暫停按鈕（右上角）與暫停畫面 -->
+      <button id="btnPause" class="pause-btn hidden" type="button" aria-label="暫停">❚❚ 暫停</button>
+      <div id="pauseOverlay" class="overlay pause-overlay hidden">
+        <div class="panel">
+          <h2>遊戲已暫停</h2>
+          <button id="btnResume" type="button" class="resume-btn">▶ 繼續遊戲</button>
         </div>
       </div>
 
@@ -65,20 +74,20 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=0.1.2-test-2"></script>
-  <script src="js/core.js?v=0.1.2-test-2"></script>
-  <script src="js/schedule.js?v=0.1.2-test-2"></script>
-  <script src="js/holes.js?v=0.1.2-test-2"></script>
-  <script src="js/hammer.js?v=0.1.2-test-2"></script>
-  <script src="js/goldring.js?v=0.1.2-test-2"></script>
-  <script src="js/boss.js?v=0.1.2-test-2"></script>
-  <script src="js/scoring.js?v=0.1.2-test-2"></script>
-  <script src="js/game.js?v=0.1.2-test-2"></script>
-  <script src="js/assets.js?v=0.1.2-test-2"></script>
-  <script src="js/audio.js?v=0.1.2-test-2"></script>
-  <script src="js/spirit.js?v=0.1.2-test-2"></script>
-  <script src="js/render.js?v=0.1.2-test-2"></script>
-  <script src="js/input.js?v=0.1.2-test-2"></script>
-  <script src="js/main.js?v=0.1.2-test-2"></script>
+  <script src="js/config.js?v=0.1.3-test-1"></script>
+  <script src="js/core.js?v=0.1.3-test-1"></script>
+  <script src="js/schedule.js?v=0.1.3-test-1"></script>
+  <script src="js/holes.js?v=0.1.3-test-1"></script>
+  <script src="js/hammer.js?v=0.1.3-test-1"></script>
+  <script src="js/goldring.js?v=0.1.3-test-1"></script>
+  <script src="js/boss.js?v=0.1.3-test-1"></script>
+  <script src="js/scoring.js?v=0.1.3-test-1"></script>
+  <script src="js/game.js?v=0.1.3-test-1"></script>
+  <script src="js/assets.js?v=0.1.3-test-1"></script>
+  <script src="js/audio.js?v=0.1.3-test-1"></script>
+  <script src="js/spirit.js?v=0.1.3-test-1"></script>
+  <script src="js/render.js?v=0.1.3-test-1"></script>
+  <script src="js/input.js?v=0.1.3-test-1"></script>
+  <script src="js/main.js?v=0.1.3-test-1"></script>
 </body>
 </html>

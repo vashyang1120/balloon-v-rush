@@ -286,15 +286,49 @@
     ctx.clip();
   };
 
+  // v0.1.3：普通目標可見寬度 = 洞口圖可見寬度 × 比例（Alpha 實際範圍；洞口圖未載入時用舊比例）
+  Renderer.prototype.targetWidth = function (type, cell) {
+    var hb = asset('holeBack'), r = C.SPRITE_HOLE_RATIO[type];
+    if (hb && r) return r * C.HOLE_VISIBLE_W * cell.rx / hb.def.opening[2];
+    return C.SPRITE_WIDTH[type] * this.grid.cellW * cell.scale;
+  };
+  // 同一洞口、在這個目標被敲中之後才出現的下一個目標（排程本來就排好，只是查詢）
+  Renderer.prototype.nextOnHole = function (tg) {
+    var list = this.game.pending;
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (p !== tg && p.hole === tg.hole && p.s > tg.hitAt) return p;
+    }
+    return null;
+  };
+
   Renderer.prototype.drawTargetInHole = function (ctx, cell, tg, t) {
     var R = cell.charR;
     var h; // 0 = 在洞裡，1 = 完全升起
-    var squash = 0, dizzy = false;
+    var squash = 0, dizzy = false, shakeX = 0, pop = 0;
     if (tg.hitAt !== null) {
-      var k = clamp01((t - tg.hitAt) / C.HIT_LEAVE_TIME);
-      var hAtHit = Math.min(1, (tg.hitAt - tg.s) / C.RISE_TIME, (tg.e - tg.hitAt) / C.FALL_TIME);
-      h = Math.max(0, hAtHit * (1 - easeOut(k)));
-      squash = 1 - k;
+      // v0.1.3 受擊演出（純畫面；命中當下已計分、目標已不能再被敲）：
+      //   0 ～ HURT_HOLD(0.35s)：受擊圖清楚停在洞口（若在升起／下降途中被敲，先快速彈到完全升起）
+      //   HURT_HOLD ～ HIT_LEAVE_TIME(0.55s)：退洞
+      // 同一洞口的下一個目標若在這之前就依排程出現 → 受擊殘影提前讓位，排程完全不變
+      var dt = t - tg.hitAt;
+      var hold = C.HURT_HOLD, leave = C.HIT_LEAVE_TIME;
+      var nx = this.nextOnHole(tg);
+      if (nx && nx.s - tg.hitAt < leave) {
+        leave = Math.max(0.06, nx.s - tg.hitAt);
+        hold = Math.max(0, Math.min(hold, leave - 0.1));
+      }
+      if (dt >= leave) return;
+      var hAtHit = Math.max(0, Math.min(1, (tg.hitAt - tg.s) / C.RISE_TIME, (tg.e - tg.hitAt) / C.FALL_TIME));
+      if (dt < hold) {
+        h = hAtHit + (1 - hAtHit) * easeOut(dt / 0.08);
+        shakeX = Math.sin(dt * 70) * 5 * (1 - dt / hold);
+        pop = 1 - clamp01(dt / 0.12);
+      } else {
+        var kk = clamp01((dt - hold) / Math.max(0.01, leave - hold));
+        h = 1 - kk * kk;
+        squash = kk * 0.6;
+      }
       dizzy = true;
     } else {
       h = Math.min(easeOut((t - tg.s) / C.RISE_TIME), easeOut((tg.e - t) / C.FALL_TIME), 1);
@@ -303,7 +337,7 @@
     var spr = spriteFor(tg.type, tg.hitAt !== null);
     if (spr) {
       // 正式圖片：底部從洞口中線下方升起，前緣蓋住下半身
-      var sw = C.SPRITE_WIDTH[tg.type] * this.grid.cellW * cell.scale;
+      var sw = this.targetWidth(tg.type, cell);
       var sh = spriteHeight(spr, sw);
       var upB = cell.cy + cell.ry * (asset('holeFront') ? C.HOLE_SINK : 0.45);
       var downB = cell.cy + cell.ry + sh + 4;
@@ -313,7 +347,8 @@
       var flash = tg.hitAt !== null && !hasHitArt ? 1 - clamp01((t - tg.hitAt) / 0.18) : 0;
       ctx.save();
       this.clipHole(ctx, cell.cx, cell.cy, cell.rx, cell.ry, R);
-      ctx.translate(cell.cx, by);
+      ctx.translate(cell.cx + shakeX, by);
+      if (pop > 0) ctx.scale(1 + pop * 0.07, 1 - pop * 0.05);
       if (squash > 0) ctx.scale(1 + squash * 0.12, 1 - squash * 0.16);
       drawSprite(ctx, spr, sw, flash);
       ctx.restore();
@@ -324,7 +359,7 @@
     var y = downY + (upY - downY) * h;
     ctx.save();
     this.clipHole(ctx, cell.cx, cell.cy, cell.rx, cell.ry, R);
-    ctx.translate(cell.cx, y);
+    ctx.translate(cell.cx + shakeX, y);
     if (squash > 0) ctx.scale(1 + squash * 0.18, 1 - squash * 0.22);
     drawCharacter(ctx, tg.type, R, t, dizzy);
     ctx.restore();
@@ -848,6 +883,24 @@
     ctx.restore();
   };
 
+  // v0.1.3：金槌最後 3 秒，滑鼠游標旁的小倒數（橘紅、每秒跳一下）
+  Renderer.prototype.drawGoldBadge = function (ctx, x, y, t) {
+    var gl = this.game.hammer.goldLeft(t);
+    var sec = Math.ceil(gl - 1e-6), fr = gl - Math.floor(gl - 1e-6);
+    var beat = easeOut(clamp01((fr - 0.75) / 0.25));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1 + 0.4 * beat, 1 + 0.4 * beat);
+    ctx.fillStyle = '#ff5a1f';
+    ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 34px ' + FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(sec), 0, 2);
+    ctx.restore();
+  };
+
   Renderer.prototype.drawHammers = function (ctx, t) {
     var g = this.game;
     if (g.state !== 'playing' && g.state !== 'intro') return;
@@ -889,6 +942,7 @@
         this.drawHammerAt(ctx, this.mouse.x, this.mouse.y, ang, mode, t);
       }
       if (mode === 'broken') this.drawRepairBadge(ctx, this.mouse.x + 50, this.mouse.y + 50, t);
+      if (mode === 'gold' && g.hammer.goldLeft(t) <= 3) this.drawGoldBadge(ctx, this.mouse.x + 52, this.mouse.y + 52, t);
     }
   };
 
@@ -903,12 +957,8 @@
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#ffe680';
     ctx.font = '900 40px ' + FONT;
-    ctx.fillText('打地鼠', x + 8, 66);
-    ctx.font = '600 18px ' + FONT;
-    ctx.fillStyle = '#e6dbff';
-    ctx.fillText('（暫名）', x + 138, 64);
-    ctx.font = '600 ' + (this.grid.compact ? 15 : 17) + 'px ' + FONT;
-    ctx.fillText('氣球小V：派對島大作戰', x + 8, 94);
+    ctx.fillText(C.TITLE, x + 8, 66, w - 8);   // v0.1.3：正式名稱，移除「暫名」與副標題
+    ctx.translate(0, -28);                       // 副標題原本佔的高度收回，下方資訊整體上移
 
     // 分數
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
@@ -952,6 +1002,28 @@
       roundRect(ctx, x + 16, 470, (w - 32) * (1 - rl / C.BREAK_DURATION), 8, 4); ctx.fill();
     } else if (mode === 'gold') {
       var gl = g.hammer.goldLeft(t);
+      if (gl <= 3) {
+        // v0.1.3：最後 3 秒警示——橘紅閃動底色＋大字倒數，每秒跳一下（跟遊戲時鐘，暫停時不動）
+        var sec = Math.ceil(gl - 1e-6), fr = gl - Math.floor(gl - 1e-6);
+        var beat = easeOut(clamp01((fr - 0.75) / 0.25));
+        ctx.fillStyle = 'rgba(255,' + Math.round(90 + 60 * (1 - beat)) + ',30,0.96)';
+        roundRect(ctx, x, 360, w, 128, 16); ctx.fill();
+        ctx.save();
+        ctx.translate(x + w - 52, 438);
+        var sc = 1 + 0.45 * beat;
+        ctx.scale(sc, sc);
+        ctx.textAlign = 'center';
+        ctx.font = '900 76px ' + FONT;
+        ctx.lineWidth = 8; ctx.strokeStyle = '#7a1a00';
+        ctx.strokeText(String(sec), 0, 26);
+        ctx.fillStyle = '#fff6c4';
+        ctx.fillText(String(sec), 0, 26);
+        ctx.restore();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 20px ' + FONT;
+        ctx.fillText('氣球槌', x + 16, 390);
+        ctx.font = '900 30px ' + FONT;
+      }
       ctx.fillText('金色無敵槌', x + 16, 430);
       ctx.font = '800 22px ' + FONT;
       ctx.fillText('無敵剩 ' + gl.toFixed(1) + ' 秒', x + 16, 462);
