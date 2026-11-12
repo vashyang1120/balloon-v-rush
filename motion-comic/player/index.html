@@ -68,12 +68,17 @@
   body.mc-embed #endTag { display: none; }
   #skipAllStart { font-size: 13px; padding: 7px 18px; opacity: .8; }
   #startHint { font-size: 13px; opacity: .85; }
+  /* adventure-v0.3.94（#18）：嵌入冒險遊戲時只留一顆「略過故事」＝略過整段五幕（不再有容易誤按的「略過本幕」），按鈕清楚可見 */
+  body.mc-embed #skipBtn { display: none !important; }
+  body.mc-embed .ctrl { opacity: .92; }
+  body.mc-embed #skipAllBtn { font-size: 15px; padding: 10px 20px; background: rgba(40, 24, 10, 0.72); border-color: rgba(255, 207, 107, 0.75); }
+  @media (max-height: 500px) { body.mc-embed #skipAllBtn { font-size: 13px; padding: 8px 14px; } }
 </style>
 </head>
 <body>
 <div id="host"></div>
 <div class="ctrl">
-  <button class="btn embed-only" id="skipAllBtn" type="button" title="略過整段開場故事，直接開始冒險">略過整段故事 ⏭⏭</button>
+  <button class="btn embed-only" id="skipAllBtn" type="button" title="略過整段開場故事（五幕），直接開始冒險">略過故事 ⏭⏭</button>
   <button class="btn" id="skipBtn" type="button">略過本幕 ⏭</button>
   <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
   <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
@@ -111,6 +116,32 @@
   const post = (event, data) => { if (!EMBED) return; try { window.parent.postMessage(Object.assign({ type: 'mc-embed', session: SESSION, event }, data || {}), TARGET); } catch (_) {} };
   if (EMBED) { document.body.classList.add('mc-embed'); post('alive'); }
 
+  // adventure-v0.3.94（#18）：嵌入模式的「略過故事」從頁面一打開就能用（原本要等全部圖片載完才接上按鈕 → 載入中按了沒反應）
+  //   略過＝結束整段五幕：停止播放、停掉所有漫畫聲音（BGM／環境音 Loop／音效），再通知遊戲（只通知一次）
+  //   嵌入時鍵盤 Esc／S 也是略過整段（單獨開啟播放器時仍是「略過本幕」，不變）
+  let embedDone = false;
+  const mcRefs = { player: null, audio: null };
+  function finishEmbed(how) {
+    if (!EMBED || embedDone) return;
+    embedDone = true;
+    try { if (mcRefs.player) mcRefs.player.pause(); } catch (_) {}
+    try { const a = mcRefs.audio; if (a) { a.stopAll(0); a._stopPreview(); a.setMuted(true); } } catch (_) {}
+    post('done', { how });
+  }
+  if (EMBED) {
+    $('skipAllBtn').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    $('skipAllStart').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' || e.key === 's' || e.key === 'S') { e.preventDefault(); e.stopImmediatePropagation(); finishEmbed('skipped'); }
+    }, true);
+    window.addEventListener('message', e => {   // 遊戲要求停止（例如遊戲要關掉漫畫時）
+      if (e.source !== window.parent || (TARGET !== '*' && e.origin !== location.origin)) return;
+      const d = e.data || {};
+      if (d.type !== 'mc-host' || d.session !== SESSION) return;
+      if (d.cmd === 'stop') { embedDone = true; try { mcRefs.player && mcRefs.player.pause(); mcRefs.audio && mcRefs.audio.stopAll(0); mcRefs.audio && mcRefs.audio.setMuted(true); } catch (_) {} }
+    });
+  }
+
   // 讀取專案：本機儲存 → 指定 JSON（HTTP）→ 內建專案（file:// 也能用）
   async function loadProject() {
     if (params.get('source') === 'local') {
@@ -139,7 +170,7 @@
     onEnd: () => { endTag.classList.add('show'); if (EMBED) finishEmbed('ended'); },
     onPlayState: p => { $('pauseBtn').textContent = p ? '暫停 ⏸' : '繼續 ▶'; },
   });
-  window.mcPlayer = player;
+  window.mcPlayer = player; mcRefs.player = player;
   // v0.3.2：音訊引擎（專案沒有 audio 時不做任何事）
   // 播放頁的音量／靜音只存在這台裝置
   const AKEY = 'mc-player-audio';
@@ -147,16 +178,47 @@
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(AKEY) || '{}')); } catch (_) {}
   const savePref = () => { try { localStorage.setItem(AKEY, JSON.stringify(pref)); } catch (_) {} };
   const audio = new MotionComic.AudioEngine({ onStatus: () => { if (typeof updateSound === 'function') updateSound(); } });
-  window.mcAudio = audio;
+  window.mcAudio = audio; mcRefs.audio = audio;
   audio.attach(player);
   player.setProject(project);
-  $('loadMsg').textContent = '正在載入圖片…';
-  $('loadBar').style.width = '30%';
-  const report = await player.loadAssets();
-  $('loadBar').style.width = '100%';
+  // adventure-v0.3.94（#17）：真正的載入進度＝已完成（成功或失敗）的圖片＋聲音檔數 ÷ 全部檔數
+  //   原本：一開始設 30%，等全部圖片載完直接跳 100%，同一瞬間就開始播放 → 畫面上看到停在 30% 就開始故事；聲音沒有算進去
+  //   現在：每 0.1 秒依實際狀態更新；圖片和聲音（本來就同時在背景下載）都完成才顯示 100%，讓 100% 確實畫出來之後才開始故事
+  //   聲音最多再等 20 秒（網路很慢時不讓玩家一直等；沒載完的聲音照原本方式在背景繼續載）
+  const imgIds = Object.keys(project.assets || {});
+  const audIds = Object.keys((project.audio && project.audio.assets) || {});
+  const loadTotal = imgIds.length + audIds.length;
+  const loadDone = () => {
+    let n = 0;
+    imgIds.forEach(id => { const s = player.assetState[id]; if (s && (s.ok || s.failed)) n++; });
+    audIds.forEach(id => { const s = audio.assets && audio.assets[id]; if (s && (s.status === 'ok' || s.status === 'error')) n++; });
+    return n;
+  };
+  const showLoad = () => {
+    const n = loadDone(), pct = loadTotal ? Math.floor(n * 100 / loadTotal) : 100;
+    $('loadBar').style.width = pct + '%';
+    $('loadMsg').textContent = `正在載入故事… ${pct}%（${n} / ${loadTotal}）`;
+    window.mcLoadProgress = { done: n, total: loadTotal, pct };
+    return pct;
+  };
+  showLoad();
+  const loadTick = setInterval(showLoad, 100);
+  const imgJob = player.loadAssets();
+  const audJob = audio.hasAudio() ? audio.loadAssets() : Promise.resolve([]);
+  const report = await imgJob;
+  await Promise.race([audJob, new Promise(r => setTimeout(r, 20000))]);
+  clearInterval(loadTick);
+  const finalPct = showLoad();
   const failed = report.filter(r => !r.ok);
-  $('loadMsg').innerHTML = `來源：${from}<br>圖片 ${report.length - failed.length} / ${report.length} 張可用` +
-    (failed.length ? `<br>缺少：${failed.map(f => f.label).join('、')}` : '');
+  const audRep = audio.hasAudio() ? audio.assetReport() : [];
+  const audOk = audRep.filter(r => r.ok).length;
+  $('loadMsg').innerHTML = (finalPct >= 100 ? '載入完成 100%' : `已載入 ${finalPct}%（聲音在背景繼續載入）`) +
+    `<br>圖片 ${report.length - failed.length} / ${report.length} 張可用` + (audRep.length ? `、聲音 ${audOk} / ${audRep.length} 個可用` : '') +
+    (failed.length ? `<br>缺少：${failed.map(f => f.label).join('、')}` : '') + `<br>來源：${from}`;
+  // 讓最後的進度（100%）確實顯示出來：等進度條動畫（0.25 秒）跑完＋畫面更新兩次
+  await new Promise(r => setTimeout(r, 320));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  window.mcLoadProgress = Object.assign({}, window.mcLoadProgress, { shownAt: performance.now(), barWidth: getComputedStyle($('loadBar')).width, barMax: getComputedStyle($('loadBar').parentElement).width });
 
   function applyRange() {
     const sc = parseInt(params.get('scene'), 10);
@@ -195,25 +257,8 @@
   }
   updateSound();
 
-  // v0.3.73：嵌入模式結束（播完 ended／略過整段 skipped）：先停掉所有漫畫聲音，再通知遊戲（只通知一次）
-  let embedDone = false;
-  function finishEmbed(how) {
-    if (!EMBED || embedDone) return;
-    embedDone = true;
-    try { player.pause(); } catch (_) {}
-    try { audio.stopAll(0); audio._stopPreview(); audio.setMuted(true); } catch (_) {}
-    post('done', { how });
-  }
-  if (EMBED) {
-    $('skipAllBtn').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
-    $('skipAllStart').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
-    window.addEventListener('message', e => {   // 遊戲要求停止（例如遊戲要關掉漫畫時）
-      if (e.source !== window.parent || (TARGET !== '*' && e.origin !== location.origin)) return;
-      const d = e.data || {};
-      if (d.type !== 'mc-host' || d.session !== SESSION) return;
-      if (d.cmd === 'stop') { embedDone = true; try { player.pause(); audio.stopAll(0); audio.setMuted(true); } catch (_) {} }
-    });
-  }
+  // v0.3.73：嵌入模式結束（播完 ended／略過整段 skipped）→ finishEmbed（adventure-v0.3.94 起定義在最前面，載入中也能略過）
+  if (embedDone) return;   // 載入中已經略過：不再開始故事
 
   async function enterMobileLandscape() {
     if (EMBED) return;   // v0.3.73：嵌入時全螢幕／橫向交給遊戲（iframe 內切全螢幕會讓遊戲離開全螢幕）
@@ -222,6 +267,7 @@
     try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
   }
   function beginStory() {
+    if (embedDone) return;   // adventure-v0.3.94：已略過整段 → 不開始
     $('startScreen').hidden = true;
     endTag.classList.remove('show');
     player.replay();
@@ -261,7 +307,7 @@
       e.preventDefault();
       if (player.blocked) player.continueDialogue(); else player.togglePlay();
     }
-    if (e.key === 's' || e.key === 'S' || e.key === 'Escape') player.skipScene();
+    if (!EMBED && (e.key === 's' || e.key === 'S' || e.key === 'Escape')) player.skipScene();   // 嵌入時 Esc／S＝略過整段（上面已處理）
     if (e.key === 'r' || e.key === 'R') { endTag.classList.remove('show'); player.replay(); }
   });
 })();
