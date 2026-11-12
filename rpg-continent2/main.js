@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.93-ch3-wind-redirector-art-test-1';
-const BUILD_TIME   = '2026-11-11 20:00';
+const GAME_VERSION = 'adventure-v0.3.94-wind-redirector-feedback-test-1';
+const BUILD_TIME   = '2026-11-12 11:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -24027,6 +24027,7 @@ function ocPlay(done, reason, opts) {
   fr.id = 'oc-frame'; fr.title = '開場動態漫畫'; fr.setAttribute('allow', 'autoplay');
   const url = new URL(OPENING_COMIC.path, location.href);
   url.searchParams.set('embed', '1'); url.searchParams.set('autostart', '1'); url.searchParams.set('session', session);
+  url.searchParams.set('v', GAME_VERSION);   // v0.3.94：播放頁快取識別（漫畫播放頁的載入進度與略過修正一定會載到新版）
   fr.src = url.href;
   host.appendChild(fr); host.classList.add('is-open');
   let alive = false, ended = false;
@@ -25591,6 +25592,9 @@ Object.assign(SFX_DEFS, {
   c2TreeGroundImpact:  { path: 'chapter3/tree_ground_impact.mp3',   vol: 0.9,  minGapMs: 500,  maxVoices: 1 },
   c2UmbrellaBlock:     { path: 'chapter3/umbrella_block_bounce.mp3', vol: 0.85, minGapMs: 120, maxVoices: 2 },
   c2WindVentLoop:      { path: 'chapter3/wind_vent_loop.mp3',       vol: 0.55, loop: true },
+  // v0.3.94（#23）：導風機關（使用者挑選的原始音檔，只改檔名放進第三章音效目錄）
+  wdRedirectorHit:     { path: 'chapter3/wind_redirector_hit.mp3',    vol: 0.85, minGapMs: 250, maxVoices: 1 },   // 槌子真正敲中星星墊
+  wdRedirectorRotate:  { path: 'chapter3/wind_redirector_rotate.mp3', vol: 0.8,  minGapMs: 250, maxVoices: 1 },   // 噴嘴開始轉動（到位時淡出）
 });
 // 第三章 BGM（實際存在：assets/audio/bgm/chapter3_wind_canyon_bgm.mp3）
 // 獨立環境風聲 assets/audio/bgm/chapter3_wind_ambient.mp3：GitHub 目前沒有這個檔案 → 不載入、不播放（不另外疊一層風聲）
@@ -28858,25 +28862,28 @@ function v390HeldHtml(id, style) {
 var WD_TUNING = {                // 原型測試值（之後依試玩再調；只用在這個測試場，不影響 3-1／3-2 風口）
   angles: [30, 45, 60],          // 三段噴風角度（度，0＝水平向右，90＝垂直向上）
   startIndex: 0,                 // 初始角度：第 1 段（30°）
-  windSpeed: 14,                 // 風速：風想把角色帶到的速度（px／步）
-  maxUp: 10,                     // 向上速度上限（和既有風口一樣，風不會無限往上推）
+  windSpeed: 18,                 // 風速：風想把角色帶到的速度（px／步）（v0.3.94：14 → 18，45° 撐傘不按方向鍵也能飛過坑）
+  maxUp: 11.5,                   // 向上速度上限（風不會無限往上推）（v0.3.94：10 → 11.5）
+  openAngle: 45,                 // v0.3.94 角度推力校準：噴嘴後段的進氣口在這個角度正對石座裡的風道（全開＝風速 100%）
+  offThrust: 0.45,               // 偏離 15° 以上（30°、60°）時進氣口只對到一部分 → 風速剩 45%（中間角度平順變化，轉動途中也連續）
+  thrustBand: 15,                // 從全開到最弱的角度差（度）
   pull: 0.35,                    // 風力大小：每一步把角色速度拉向風速的比例（0～1）
   range: 220,                    // 有效噴風長度（從噴口沿風向）
   width: 100,                    // 風流寬度
   edge: 20,                      // 風流邊緣柔和寬度（越靠邊越弱）
   back: 30,                      // 噴口後方也算進風流的距離（站在噴口前就會被吹到）
   visualRange: 300,              // 畫面上風流畫多長（只影響畫面）
-  airDrag: 0.99,                 // 離開風流後，空中每一步保留多少風帶來的水平速度
+  airDrag: 0.993,                // 離開風流後，空中每一步保留多少風帶來的水平速度（v0.3.94：0.99 → 0.993）
   groundFriction: 0.6,           // 落地後每一步保留多少（很快停下）
   ramp: 0.35,                    // 進出風流的過渡（每一步）
   deviceX: 390,                  // 機關底座左緣（轉軸在底座中央 x＝deviceX＋deviceW／2＝432）
   deviceW: 84, deviceH: 52,      // 底座大小
-  nozzleH: 30,                   // 噴口轉軸離地高度
-  pitX: 520, pitW: 1000,         // 尖刺坑起點與寬度（比一個畫面寬：普通跳躍約 180px、撐傘助跑跳約 320px 都過不去）
+  nozzleH: 62,                   // 噴口轉軸離地高度（v0.3.94：30 → 62，對準放大後正式美術的青藍色寶石中心）
+  pitX: 520, pitW: 900,          // 尖刺坑起點與寬度（v0.3.94：1000 → 900；仍比普通跳躍約 180px、撐傘助跑跳約 320px 寬很多）
   farPlatW: 0, farPlatX: 0, farPlatH: 0,   // 對岸平台（寬 0＝不放；對岸地面本身就是安全平台）
   startX: 150,                   // 安全起點
   resetX: 200,                   // 掉進尖刺坑後的回收位置（機關左邊的地面）
-  pitDamage: 0.5,                // 這個測試坑每次有效受傷扣 0.5 HP（只在這個測試場）
+  // v0.3.94（#22）：導風解謎失敗不扣 HP → 掉進這個測試坑只回到安全起點（原本的 pitDamage 0.5 取消）
   length: 2400,
 };
 const WD_TUNING_DEFAULT = JSON.parse(JSON.stringify(WD_TUNING));
@@ -28890,6 +28897,8 @@ function wdResetState(full) {
   if (full) { wd.idx = Math.max(0, Math.min(WD_TUNING.angles.length - 1, WD_TUNING.startIndex | 0)); wd.history = []; wd.trails = {}; }
   wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; wd.lastSwing = player.hammerSwingId; wd.shake = 0; wd.flash = 0;
   wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0; wd.attempt = null;
+  try { if (wd.mech && wd.mech.rotVoice) sfxStopVoice(wd.mech.rotVoice, 60); } catch (e) {}
+  wd.mech = { state: 'idle' }; wd.pressAt = null;   // v0.3.94：機關狀態機回到靜止
 }
 // 風流：角色身體中心在風流範圍內的強度（0～1）
 function wdFlowAt(px, py) {
@@ -28899,6 +28908,14 @@ function wdFlowAt(px, py) {
   const m = WD_TUNING.width / 2 - lat;
   return m < WD_TUNING.edge ? Math.max(0, m / WD_TUNING.edge) : 1;
 }
+// v0.3.94（#24）角度推力校準：噴嘴的進氣口在 openAngle（45°）正對石座裡的風道 → 風速 100%；
+//   偏離越多、進氣口被擋住越多（30°／60° 剩 offThrust＝45%）。用目前的噴嘴角度（wd.dispAng）計算，轉動途中連續變化。
+//   這是力的大小，不是成功／失敗判定：飛不飛得過完全由風、重力、雨傘與玩家操作的實際軌跡決定。
+function wdThrust(ang) {
+  const T = WD_TUNING, band = Math.max(1, T.thrustBand || 15), d = Math.abs((typeof ang === 'number' ? ang : wd.dispAng) - (T.openAngle != null ? T.openAngle : 45));
+  const off = T.offThrust != null ? T.offThrust : 1;
+  return off + (1 - off) * Math.max(0, 1 - d / band);
+}
 // updatePlayer 裡「重力＋風口之後、雨傘緩降與移動之前」呼叫（掛在 c2UmbrellaFallCap 前面）
 function wdApplyForce() {
   if (!wdActive() || gameState !== 'playing') return;
@@ -28907,7 +28924,7 @@ function wdApplyForce() {
   const k = T.pull * e * wd.windT;
   wd.inFlow = k;
   if (k > 0) {
-    const a = wd.dispAng * Math.PI / 180, tvx = T.windSpeed * Math.cos(a), tvy = Math.max(-T.windSpeed * Math.sin(a), -T.maxUp);
+    const a = wd.dispAng * Math.PI / 180, V = T.windSpeed * wdThrust(wd.dispAng), tvx = V * Math.cos(a), tvy = Math.max(-V * Math.sin(a), -T.maxUp);
     wd.wdVx += (tvx - wd.wdVx) * k;
     player.vy += (tvy - player.vy) * k;
     player.onGround = false;
@@ -28941,8 +28958,8 @@ function wdStep() {
   if (player.onGround) wd.wdVx *= T.groundFriction; else if (!(wd.inFlow > 0)) wd.wdVx *= T.airDrag;
   if (Math.abs(wd.wdVx) < 0.02) wd.wdVx = 0;
   if (wd.shake > 0) wd.shake--; if (wd.flash > 0) wd.flash--;
-  // 角度：畫面（噴嘴）與實際風向一起轉（物理用的就是畫面上的角度 → 一定同步）
-  if (wd.dispAng !== wd.ang) { const d = wd.ang - wd.dispAng; wd.dispAng = Math.abs(d) < 0.6 ? wd.ang : wd.dispAng + d * 0.35; }
+  // 角度：v0.3.94 由機關狀態機（敲擊 → 下壓 → 轉向 → 回彈）推進 wd.dispAng；畫面（噴嘴、風流）與物理風向都用 wd.dispAng → 一定同步
+  wdMechStep();
   const A = wd.attempt;
   if (A) {
     A.frames = frameCount - A.startFrame;
@@ -28959,41 +28976,88 @@ function wdStep() {
   const pit = (typeof c2PitUnderPlayer === 'function') ? c2PitUnderPlayer() : null;
   if (pit) wdPitHit(pit);
 }
+// v0.3.94（#22）：導風解謎失敗不扣 HP。掉進這個測試坑 → 結束這次飛行紀錄 → 回到機關旁的安全起點（HP、道具耐久都不變）→ 可以重新調角度再挑戰
+//   不呼叫受傷、不進入死亡流程；回到起點後腳在安全地面上（不在坑裡）→ 下一步不會再被判定掉坑，不會連續回收
+//   只改這個導風原型專用的測試坑；3-1／3-2／第一大陸的尖刺、敵人傷害、生命系統都不變（c2PitHazardStep 照舊）
 function wdPitHit(pit) {
-  const wasInv = player.invincible > 0;
   if (wd.attempt) wdEndAttempt('pit');
-  if (!wasInv) {
-    const before = player.hp;
-    try { sfxOnPlayerHurt(); } catch (e) {}
-    player.hp = Math.max(0, Math.round((player.hp - WD_TUNING.pitDamage) * 2) / 2);   // 半格（0.5）單位
-    try { advNoteDamage(Math.max(0, before - Math.max(0, player.hp))); } catch (e) {}
-    player.invincible = 90;
-    try { currentRunStats.damageTaken++; } catch (e) {}
-    wdLog({ ev: 'pitHit', hpBefore: before, hpAfter: player.hp, pit: pit.id });
-    if (player.hp <= 0) { wd.wdVx = 0; wd.windT = 0; triggerFailed(); return; }   // 沿用原本的死亡流程
-  } else wdLog({ ev: 'pitInv', hp: player.hp });
+  wdLog({ ev: 'pitRecover', hp: player.hp, pit: pit.id });
   player.x = WD_TUNING.resetX; player.y = GROUND_Y - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   wd.wdVx = 0; wd.windT = 0; wd.inFlow = 0; player.windT = 0; player.windInfo = null;
-  if (!wasInv) player.invincible = Math.min(player.invincible, C2_PIT.resetInvincible);
-  showHint(wasInv ? '💥 尖刺坑！退回起點（無敵時間也不能硬闖）' : '💥 被尖刺刺到了！扣 0.5 HP，退回起點 — 敲機關換個角度再試', 170);
+  wd.pitRecovers = (wd.pitRecovers || 0) + 1;
+  showHint('💨 沒飛過尖刺坑，回到起點 — 敲機關換個角度再試（不扣血）', 170);
 }
-// 氣球槌命中機關：沿用既有槌擊判定框（攻擊範圍、面向、hammerSwingId）；同一次揮槌只切換一次；不扣耐久
+// 氣球槌命中機關（v0.3.94 #21）：以「槌頭真正敲下來的那一張動作圖」（第 4 張 hero_hammer_attack_04，揮槌第 18～23 步）判定
+//   ・按下攻擊鍵時（第 1～3 張：舉槌、揮起）不算 → 星星墊不會提前下壓
+//   ・槌頭位置＝第 4 張圖上氣球槌頭的實際範圍（圖檔 x 328～387、y 280～376，依小V的繪製大小與面向換算），和紅色墊面（紅墊＋金框）重疊才算命中
+//   ・同一次揮槌（hammerSwingId）只算一次；機關還在「下壓／轉向／回彈」時再敲不會重複切換（不會角度跳動或重複播聲音）
+//   ・不扣槌子耐久（不呼叫 consumeHammerDurability）；不改槌子攻擊動畫與敵人判定
+const WD_HAMMER_HEAD = { frame: 3, x0: 328, x1: 387, y0: 280, y1: 376, fallback: { x: 77.6, w: 23.4, y: 44.9, h: 38.2 } };
+function wdHammerHeadRect() {
+  if (!(player.hammerAnimTimer > 0)) return null;
+  const total = HAMMER_ATTACK_ASSETS.length * HAMMER_ATTACK_FRAME_DUR, el = total - player.hammerAnimTimer;
+  const fi = Math.min(Math.floor(el / HAMMER_ATTACK_FRAME_DUR), HAMMER_ATTACK_ASSETS.length - 1);
+  if (fi !== WD_HAMMER_HEAD.frame) return null;
+  const H = WD_HAMMER_HEAD, img = (typeof hammerAttackImgs !== 'undefined') ? hammerAttackImgs[H.frame] : null;
+  let x0, x1, y0, y1;
+  if (img && img.width) {
+    const hr = getHeroDrawRect(img, HAMMER_ATTACK_SCALE_MULTIPLIER, 0), k = hr.dW / img.width;
+    x0 = hr.dX + H.x0 * k; x1 = hr.dX + H.x1 * k; y0 = hr.dY + H.y0 * k; y1 = hr.dY + H.y1 * k;
+  } else { const F = H.fallback; x0 = F.x; x1 = F.x + F.w; y0 = F.y; y1 = F.y + F.h; }
+  if (!player.facingRight) { const a = player.w - x1, b = player.w - x0; x0 = a; x1 = b; }   // 面向左：圖是左右翻轉畫的
+  return { x: player.x + x0, y: player.y + y0, w: x1 - x0, h: y1 - y0, el };
+}
 function wdHammerCheck() {
-  if (!wdActive() || !(player.meleeHammerActive > 0) || activeSlot !== 'hammer' || !(equippedHammer && equippedHammer.id)) return;
-  const atkX = player.facingRight ? player.x + player.w : player.x - CONFIG.HAMMER_ATTACK_RANGE;
-  const atkY = player.y + (player.h - CONFIG.HAMMER_ATTACK_HEIGHT) / 2;
-  const R = wdPadHitRect();   // v0.3.93：命中區＝玩家看到的紅色星星敲擊墊（紅墊＋金框），敲到底座、噴嘴或空氣都不算
-  wd.hitBoxes = { atk: { x: atkX, y: atkY, w: CONFIG.HAMMER_ATTACK_RANGE, h: CONFIG.HAMMER_ATTACK_HEIGHT }, dev: R, t: frameCount };
-  if (!rectsOverlap(atkX, atkY, CONFIG.HAMMER_ATTACK_RANGE, CONFIG.HAMMER_ATTACK_HEIGHT, R.x, R.y, R.w, R.h)) return;
-  if (wd.lastSwing === player.hammerSwingId) return;                      // 同一次揮槌（多個畫面重疊）只算一次
+  if (!wdActive() || activeSlot !== 'hammer' || !(equippedHammer && equippedHammer.id)) return;
+  const head = wdHammerHeadRect(); if (!head) return;
+  const R = wdPadHitRect();   // 命中區＝玩家看到的紅色星星墊面（紅墊＋金框），敲到底座、噴嘴、彈簧下方或空氣都不算
+  wd.hitBoxes = { atk: head, dev: R, t: frameCount };
+  const ox = Math.min(head.x + head.w, R.x + R.w) - Math.max(head.x, R.x), oy = Math.min(head.y + head.h, R.y + R.h) - Math.max(head.y, R.y);
+  if (!(ox >= 6 && oy >= 1)) return;
+  if (wd.lastSwing === player.hammerSwingId) return;                      // 同一次揮槌（第 4 張圖停留的 6 步）只算一次
   wd.lastSwing = player.hammerSwingId;
+  if (wd.mech && wd.mech.state !== 'idle') { wdLog({ ev: 'hitBusy', state: wd.mech.state, swing: player.hammerSwingId }); return; }   // 還在轉：這一下不算（不會跳角度）
+  wdMechHit();
+}
+// ── 機關狀態機（v0.3.94 #23）：idle → hit（敲擊聲＋墊子快速下壓）→ rotating（轉向聲＋噴嘴與風一起轉）→ settling（墊子回彈）→ idle ──
+const WD_MECH = {
+  hitToRotate: 6,      // 命中後第 6 步（0.1 秒：墊子已壓到底）噴嘴才開始轉
+  rotateFrames: 30,    // 噴嘴轉到下一段角度花 30 步（0.5 秒），風向同步轉
+  settleFrames: 16,    // 噴嘴到位後，墊子在 16 步（約 0.27 秒）內回彈到原位
+  pressInFrames: 3,    // 墊子下壓到底只要 3 步（很快）
+  hitSfx: { key: 'wdRedirectorHit', offset: 0.03, vol: 1 },        // 有效聲音從檔案第 0.04 秒開始（前面 30ms 是靜音）→ 從 0.03 秒播，和墊子下壓同一步出聲
+  rotateSfx: { key: 'wdRedirectorRotate', offset: 0.05, vol: 1, fadeMs: 140 },   // 齒輪聲從 0.05 秒開始；噴嘴到位時 0.14 秒淡出（不播完整 1.5 秒）
+};
+function wdMechHit() {
   const from = wd.ang;
   wd.idx = (wd.idx + 1) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx];
-  wd.shake = 10; wd.flash = 24; wd.pressAt = frameCount;   // v0.3.93：敲擊墊下沉→回彈動畫（只影響畫面）
-  wdLog({ ev: 'switch', from, to: wd.ang, swing: player.hammerSwingId, hammerDur: equippedHammer.currentDur });
+  wd.mech = { state: 'hit', t0: frameCount, from: wd.dispAng, to: wd.ang, swing: player.hammerSwingId, rotT0: null, setT0: null, rotVoice: null };
+  wd.shake = 0; wd.flash = 24; wd.pressAt = frameCount;
+  const v = (typeof sfxPlay === 'function') ? sfxPlay(WD_MECH.hitSfx.key, { offset: WD_MECH.hitSfx.offset, vol: WD_MECH.hitSfx.vol }) : false;
+  wdLog({ ev: 'switch', from, to: wd.ang, swing: player.hammerSwingId, hammerDur: equippedHammer.currentDur, hitFrame: frameCount, hammerEl: (wdHammerHeadRect() || {}).el, sfx: v ? 'hit' : 'hit(未出聲)' });
   showHint('🔨 導風機關轉到 ' + wd.ang + '°', 90);
 }
-function wdSetAngleIndex(i) { wd.idx = ((i | 0) % WD_TUNING.angles.length + WD_TUNING.angles.length) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; }
+function wdMechStep() {
+  const M = wd.mech; if (!M || M.state === 'idle') return;
+  const t = frameCount - M.t0;
+  if (M.state === 'hit' && t >= WD_MECH.hitToRotate) {
+    M.state = 'rotating'; M.rotT0 = frameCount;
+    M.rotVoice = (typeof sfxPlay === 'function') ? sfxPlay(WD_MECH.rotateSfx.key, { offset: WD_MECH.rotateSfx.offset, vol: WD_MECH.rotateSfx.vol }) : false;
+    wdLog({ ev: 'rotateStart', frame: frameCount, from: M.from, to: M.to, sfx: M.rotVoice ? 'rotate' : 'rotate(未出聲)' });
+  }
+  if (M.state === 'rotating') {
+    const p = Math.min(1, (frameCount - M.rotT0) / WD_MECH.rotateFrames), e = p * p * (3 - 2 * p);   // 平順起停
+    wd.dispAng = M.from + (M.to - M.from) * e;
+    if (p >= 1) {
+      wd.dispAng = M.to; M.state = 'settling'; M.setT0 = frameCount;
+      try { if (M.rotVoice && typeof sfxStopVoice === 'function') sfxStopVoice(M.rotVoice, WD_MECH.rotateSfx.fadeMs); } catch (e) {}
+      wdLog({ ev: 'rotateEnd', frame: frameCount, ang: M.to });
+    }
+  } else if (M.state === 'settling' && frameCount - M.setT0 >= WD_MECH.settleFrames) {
+    M.state = 'idle'; wdLog({ ev: 'settled', frame: frameCount });
+  }
+}
+function wdSetAngleIndex(i) { wd.idx = ((i | 0) % WD_TUNING.angles.length + WD_TUNING.angles.length) % WD_TUNING.angles.length; wd.ang = WD_TUNING.angles[wd.idx]; wd.dispAng = wd.ang; try { if (wd.mech && wd.mech.rotVoice) sfxStopVoice(wd.mech.rotVoice, 60); } catch (e) {} wd.mech = { state: 'idle' }; wd.pressAt = null; }
 function wdReturnToStart(resetAngle) {
   if (!wdActive()) return;
   if (wd.attempt) wdEndAttempt('cancel');
@@ -29134,6 +29198,7 @@ function wdPanelSync() {
 const WD_PANEL_FIELDS = [
   ['angles', '三段角度（逗號）'], ['startIndex', '初始角度（第幾段，0 起算）'], ['windSpeed', '風速'], ['maxUp', '向上速度上限'], ['pull', '風力大小（0～1）'],
   ['range', '有效噴風長度'], ['width', '風流寬度'], ['visualRange', '風流顯示長度'], ['airDrag', '空中保留'], ['deviceX', '機關位置 x'], ['nozzleH', '噴口離地高度'],
+  ['openAngle', '進氣口全開角度'], ['offThrust', '偏離時風力比例（0～1）'], ['thrustBand', '全開→最弱的角度差'],
   ['pitX', '尖刺坑起點'], ['pitW', '尖刺坑寬度'], ['farPlatX', '對岸平台 x'], ['farPlatW', '對岸平台寬（0＝不放）'], ['farPlatH', '對岸平台高度'], ['startX', '安全起點 x'], ['resetX', '回收座標 x'],
 ];
 const WD_REBUILD_KEYS = ['pitX', 'pitW', 'farPlatX', 'farPlatW', 'farPlatH', 'deviceX'];
@@ -29268,18 +29333,20 @@ const WD_ART_SRC = {
 };
 // 美術校準參數（集中在這裡；開發者「⚙️ 導風參數」面板可以即時調整；只影響畫面）
 var WD_ART = {
-  scale: 0.10,                   // 整體縮放（圖檔 1px → 遊戲 0.10px；底座約 96×84，和小V〔60×80〕差不多高）
+  scale: 0.15,                   // 整體縮放（v0.3.94 #19：0.10 → 0.15＝1.5 倍；底座約 143×126，比小V〔60×80〕高一些、細節看得到）
   baseX: 0, baseY: 9,            // 底座微調（遊戲 px；x 0＝寶石中心在物理轉軸正上方；y 9＝石座底部對齊小V腳踩的草地面〔地面線 GROUND_Y 往下 9px，和小V的鞋底同高〕）
   nozzleX: 0, nozzleY: 0,        // 噴嘴轉軸微調（遊戲 px；0＝對準寶石中心）
   nozzlePivotX: 571, nozzlePivotY: 554,   // 噴嘴圖上的旋轉中心（圖檔像素：噴嘴後段金環中心線上）
   nozzleScale: 1,                // 噴嘴縮放（乘在整體縮放上）
   nozzleRot: 0,                  // 噴嘴顯示角度微調（度；0＝和物理風向完全相同）
-  padX: -70, padY: 9,            // 敲擊墊位置（遊戲 px；x 相對寶石中心、y 相對地面線；9＝和石座同一個草地面）
-  padScale: 1.15,                // 敲擊墊縮放（乘在整體縮放上）
-  padPress: 5,                   // 敲擊墊下壓幅度（遊戲 px）
+  padX: -100, padY: 9,           // 敲擊墊位置（遊戲 px；x 相對寶石中心、y 相對地面線；9＝和石座同一個草地面）
+  padScale: 0.92,                // 敲擊墊縮放（乘在整體縮放上 → 0.138；比 v0.3.93 大 1.2 倍。紅色墊面離地 23～54px，
+                                 //   正好在氣球槌第 4 張動作圖〔敲下來〕槌頭的高度：再大的話槌頭會敲在彈簧／底座，不是墊面）
+  padPress: 9,                   // 敲擊墊下壓幅度（遊戲 px；v0.3.93 是 5。彈簧從 12px 壓到 3px，不會穿進墊子底座）
   flowX: 0, flowY: 0,            // 風流微調（遊戲 px；X＝沿風向往前、Y＝垂直風向往下）
-  flowScale: 1.5,                // 風流縮放（乘在整體縮放上）
+  flowScale: 0.93,               // 風流縮放（乘在整體縮放上 → 0.14；風流從出風口畫到物理風力範圍的末端〔轉軸前方 220px〕）
   flowAlpha: 0.9,                // 風流透明度（0～1）
+  flowWeakAlpha: 0.55,           // v0.3.94：風力只剩 45% 的角度（30°、60°）風流透明度乘 0.55 → 看得出風比較弱（和實際推力一致）
 };
 const WD_ART_DEFAULT = JSON.parse(JSON.stringify(WD_ART));
 const WD_ART_PRESS_STEPS = 18;   // 敲擊墊動畫長度（步；約 0.3 秒）
@@ -29288,7 +29355,7 @@ const WD_ART_PANEL_FIELDS = [
   ['scale', '1 整體縮放'], ['baseX', '2 底座 X'], ['baseY', '2 底座 Y'], ['nozzleX', '3 噴嘴 X'], ['nozzleY', '3 噴嘴 Y'],
   ['nozzlePivotX', '4 噴嘴旋轉中心 X（圖檔）'], ['nozzlePivotY', '4 噴嘴旋轉中心 Y（圖檔）'], ['nozzleScale', '5 噴嘴縮放'], ['nozzleRot', '噴嘴角度微調（度）'],
   ['padX', '6 敲擊墊 X'], ['padY', '6 敲擊墊 Y'], ['padScale', '7 敲擊墊縮放'], ['padPress', '8 敲擊墊下壓幅度'],
-  ['flowX', '9 風流 X（沿風向）'], ['flowY', '9 風流 Y（垂直風向）'], ['flowScale', '10 風流縮放'], ['flowAlpha', '11 風流透明度'],
+  ['flowX', '9 風流 X（沿風向）'], ['flowY', '9 風流 Y（垂直風向）'], ['flowScale', '10 風流縮放'], ['flowAlpha', '11 風流透明度'], ['flowWeakAlpha', '風力弱的角度風流透明度倍率'],
 ];
 const wdArtImgs = {}, wdArtStatus = {}, wdArtClean = {}, wdArtCache = {};
 function wdArtEntries() {
@@ -29326,19 +29393,35 @@ function wdArtCleanSrc(k) {
   wdArtClean[k] = out;
   return out;
 }
-// 依縮放先縮成小圖（高品質縮圖，只做一次；不在每一格縮 1254px 原圖）
-function wdArtTile(k, scale) {
-  const ck = k + '|' + scale.toFixed(4); if (wdArtCache[ck]) return wdArtCache[ck];
+// 依縮放先縮成小圖（只做一次；不在每一格縮 1254px 原圖）
+//   v0.3.94（#20）畫質：
+//   ・會旋轉的噴嘴、風流：小圖做成 2 倍大（ss＝2），旋轉時再縮一半畫上去。原本是「先縮成畫面大小 → 再旋轉」＝取樣兩次，
+//     第二次旋轉取樣把細節再糊掉一次（實測和 Python Lanczos 標準縮圖比：36.9 dB → 41.7 dB，越高越接近原圖）
+//   ・不旋轉的底座、敲擊墊：一次高品質縮到畫面大小、畫在整數像素上（只取樣一次）。
+//     也試過「逐次減半」縮圖：實測反而比較糊（細節量 0.034 vs 0.040），所以沒有採用
+function wdArtTile(k, scale, ss) {
+  ss = ss || 1;
+  const ck = k + '|' + scale.toFixed(4) + '|' + ss; if (wdArtCache[ck]) return wdArtCache[ck];
   const src = wdArtCleanSrc(k); if (!src) return null;
   let t = null;
   try {
+    const S = scale * ss;                                                    // 小圖解析度（ss 倍）
+    const cur = src.c;
     const c = document.createElement('canvas');
-    const ox = src.ox * scale, oy = src.oy * scale;                         // 裁切後原點（遊戲 px）
-    const fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);               // 保留小數位移，縮圖後位置不跑掉
-    c.width = Math.max(1, Math.ceil(src.c.width * scale + fx) + 1); c.height = Math.max(1, Math.ceil(src.c.height * scale + fy) + 1);
-    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-    g.drawImage(src.c, fx, fy, src.c.width * scale, src.c.height * scale);
-    t = { c, ox: Math.floor(ox), oy: Math.floor(oy) };                     // 小圖左上角＝原圖 (0,0) 的位置 ＋ (ox, oy)
+    const ox = src.ox * scale, oy = src.oy * scale;                          // 裁切後原點（遊戲 px）
+    const g = c.getContext('2d');
+    if (ss === 1) {
+      const fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);              // 保留小數位移，縮圖後位置不跑掉
+      c.width = Math.max(1, Math.ceil(src.c.width * S + fx) + 1); c.height = Math.max(1, Math.ceil(src.c.height * S + fy) + 1);
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+      g.drawImage(cur, fx, fy, src.c.width * S, src.c.height * S);
+      t = { c, ox: Math.floor(ox), oy: Math.floor(oy), ss: 1 };
+    } else {
+      c.width = Math.max(1, Math.ceil(src.c.width * S) + 1); c.height = Math.max(1, Math.ceil(src.c.height * S) + 1);
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+      g.drawImage(cur, 0, 0, src.c.width * S, src.c.height * S);
+      t = { c, ox, oy, ss };                                                 // 畫的時候寬高 ÷ ss
+    }
   } catch (e) { t = null; }
   wdArtCache[ck] = t;
   return t;
@@ -29365,18 +29448,19 @@ function wdArtGeom() {
 }
 // 槌子命中區：紅色敲擊墊（紅墊＋金框；不含底座、噴嘴）
 function wdPadHitRect() { return wdArtGeom().hit; }
-// 敲擊墊下壓量（遊戲 px）：先快速下沉 → 回彈（小幅超過再回到原位）
+// 敲擊墊下壓量（遊戲 px；v0.3.94 #21／#23 依機關狀態）：
+//   命中那一步開始下壓，3 步壓到底（快）→ 噴嘴轉向期間保持壓住 → 噴嘴到位後回彈（小幅往上彈一點再回到原位，不像彈跳玩具）
 function wdPadPressOffset() {
-  if (typeof wd.pressAt !== 'number') return 0;
-  const t = (frameCount - wd.pressAt) / WD_ART_PRESS_STEPS;
-  if (!(t >= 0) || t >= 1) return 0;
-  const k = t < 0.22 ? t / 0.22 : Math.exp(-4.5 * (t - 0.22)) * Math.cos(10 * (t - 0.22));
-  return WD_ART.padPress * Math.max(-0.3, k) * (t < 0.22 ? 1 : (1 - t) / 0.78);
+  const M = wd.mech; if (!M || M.state === 'idle' || typeof M.t0 !== 'number') return 0;
+  const P = WD_ART.padPress, t = frameCount - M.t0;
+  if (M.state === 'hit' || M.state === 'rotating') { const k = Math.min(1, (t + 1) / WD_MECH.pressInFrames); return P * (1 - (1 - k) * (1 - k)); }
+  if (M.state === 'settling') { const s = (frameCount - M.setT0) / WD_MECH.settleFrames; return s >= 1 ? 0 : P * Math.exp(-4.5 * s) * Math.cos(2.4 * Math.PI * s) * (1 - 0.3 * s); }
+  return 0;
 }
 function wdDrawArt(cx) {
   const G = wdArtGeom(), T = WD_TUNING, PD = WD_ART_SRC.pad, FL = WD_ART_SRC.flow;
   if (G.base.x - cx > CANVAS_W + 300 || G.base.x - cx < -900) return;
-  const base = wdArtTile('base', G.Sb), noz = wdArtTile('nozzle', G.Sn), pad = wdArtTile('pad', G.Sp), flow = wdArtTile('flow', G.Sf);
+  const base = wdArtTile('base', G.Sb), noz = wdArtTile('nozzle', G.Sn, 2), pad = wdArtTile('pad', G.Sp), flow = wdArtTile('flow', G.Sf, 2);
   if (!base || !noz || !pad || !flow) { wdDrawDeviceGeom(cx); return; }
   const t = typeof frameCount === 'number' ? frameCount : 0;
   ctx.save();
@@ -29393,19 +29477,24 @@ function wdDrawArt(cx) {
   }
   // ② 噴嘴：繞寶石中心轉（在底座後面）
   ctx.save(); ctx.translate(G.pivot.x - cx, G.pivot.y); ctx.rotate(G.nr);
-  ctx.drawImage(noz.c, -WD_ART.nozzlePivotX * G.Sn + noz.ox, -WD_ART.nozzlePivotY * G.Sn + noz.oy);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(noz.c, -WD_ART.nozzlePivotX * G.Sn + noz.ox, -WD_ART.nozzlePivotY * G.Sn + noz.oy, noz.c.width / noz.ss, noz.c.height / noz.ss);
   ctx.restore();
   // ③ 固定底座（刻度盤、寶石、金環、旗子、岩石都不動）
   ctx.drawImage(base.c, Math.round(G.base.x - cx + base.ox), Math.round(G.base.y + base.oy));
   // ④ 風流：左端對準出風口、和噴嘴同一個角度；一層固定＋兩層沿風向慢慢往前飄（sin²＋cos²＝1 → 總亮度固定、不閃、不跳回）
   ctx.save(); ctx.translate(G.anchor.x - cx, G.anchor.y); ctx.rotate(G.flowRot);
   const fx = -FL.tipX * G.Sf + flow.ox, fy = -FL.tipY * G.Sf + flow.oy, nd = FL.nativeDeg * Math.PI / 180;
-  const FA = WD_ART_FLOW_ANIM, alpha = Math.max(0, Math.min(1, WD_ART.flowAlpha));
-  ctx.globalAlpha = alpha * FA.fixed; ctx.drawImage(flow.c, fx, fy);
+  const thr = wdThrust(wd.dispAng), off = WD_TUNING.offThrust != null ? WD_TUNING.offThrust : 1;
+  const weak = off < 1 ? Math.max(0, Math.min(1, (thr - off) / (1 - off))) : 1;      // 1＝全開（45°）、0＝最弱（30°／60°）
+  const FA = WD_ART_FLOW_ANIM, alpha = Math.max(0, Math.min(1, WD_ART.flowAlpha)) * (WD_ART.flowWeakAlpha + (1 - WD_ART.flowWeakAlpha) * weak);
+  const fw = flow.c.width / flow.ss, fh = flow.c.height / flow.ss;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.globalAlpha = alpha * FA.fixed; ctx.drawImage(flow.c, fx, fy, fw, fh);
   const p = (t % FA.period) / FA.period;
   [[p, Math.sin(Math.PI * p) ** 2], [(p + 0.5) % 1, Math.cos(Math.PI * p) ** 2]].forEach(([q, w]) => {
     ctx.globalAlpha = alpha * (1 - FA.fixed) * w;
-    ctx.drawImage(flow.c, fx + Math.cos(nd) * q * FA.drift, fy - Math.sin(nd) * q * FA.drift);
+    ctx.drawImage(flow.c, fx + Math.cos(nd) * q * FA.drift, fy - Math.sin(nd) * q * FA.drift, fw, fh);
   });
   ctx.restore();
   // 「可以敲」提示：靠近時在敲擊墊上方浮出槌子；地面標示目前角度
@@ -29427,7 +29516,8 @@ function wdDrawArtDebug(cx) {
   ctx.fillStyle = '#ff4fd8'; ctx.beginPath(); ctx.arc(G.mouth.x - cx, G.mouth.y, 3.5, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(G.anchor.x - cx, G.anchor.y, 6, 0, Math.PI * 2); ctx.stroke();
   ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
-  ctx.fillText('寶石/轉軸 ' + Math.round(G.pivot.x) + ',' + Math.round(GROUND_Y - G.pivot.y) + '↑　物理轉軸 ' + Math.round(G.physPivot.x) + ',' + Math.round(GROUND_Y - G.physPivot.y) + '↑', G.pad.cx - cx - 30, GROUND_Y + 34);
+  ctx.fillText('寶石/轉軸 ' + Math.round(G.pivot.x) + ',' + Math.round(GROUND_Y - G.pivot.y) + '↑　物理轉軸 ' + Math.round(G.physPivot.x) + ',' + Math.round(GROUND_Y - G.physPivot.y) + '↑　風力 ' + Math.round(wdThrust(wd.dispAng) * 100) + '%　機關 ' + ((wd.mech && wd.mech.state) || 'idle'), G.pad.cx - cx - 30, GROUND_Y + 34);
+  if (wd.hitBoxes && wd.hitBoxes.atk && frameCount - wd.hitBoxes.t < 30) { const h = wd.hitBoxes.atk; ctx.strokeStyle = '#ff4fd8'; ctx.lineWidth = 2; ctx.strokeRect(h.x - cx, h.y, h.w, h.h); }   // 槌頭（第 4 張動作圖）
 }
 function wdArtInfo() {
   const G = wdArtGeom(), r = v => Math.round(v * 10) / 10;
