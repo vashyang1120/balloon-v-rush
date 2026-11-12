@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.95-redirector-items-test-1';
-const BUILD_TIME   = '2026-11-12 15:00';
+const GAME_VERSION = 'adventure-v0.3.96-adventure-flow-items-fix-test-1';
+const BUILD_TIME   = '2026-11-12 19:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -87,7 +87,15 @@ var ADV_DEVTEST = (function () {
     const isAdv = k => typeof k === 'string' && notMapped(k) && ADV_DEVTEST_PATTERNS.some(re => re.test(k));
     // v0.3.80：工作區模式下，其餘 balloonV… 鍵（身份、設定、校正）也改存到 __c2（開發者模式旗標本身除外）
     const isOwn = k => !!WS && typeof k === 'string' && /^balloonV/.test(k) && k !== 'balloonV_devTools' && !k.startsWith('balloonV_devFreshTest_v1') && notMapped(k);
-    const map = k => isAdv(k) ? k + (st.on ? ADV_DEVTEST_SUFFIX : WS) : (isOwn(k) ? k + WS : k);
+    // v0.3.96（#36）正式共用冒險背包：一般遊玩（沒有開發者模式）時，「冒險背包」與跟著背包的「關卡進行中快照」直接讀寫正式鍵
+    //   （balloonV_inventory、balloonV_adventureStageGuard_v1__<playerKey>）＝和第一大陸 rpg-test/ 同一份；
+    //   V幣、V幣紀錄、每日獎勵、成就、挑戰紀錄、RPG 已讀、小V之家等其他資料照舊存在 __c2（不共用、不寫 Firebase）
+    //   開發者模式（?devtools=1）：照舊全部用 __c2／__c2dev 測試存檔 → 測試裝備、測試小狗、開發工具永遠不會寫進正式背包
+    //   舊的 __c2 測試背包原封保留（不刪除、不合併、不覆蓋正式資料）
+    st.dev = dev;
+    const isShared = k => !!WS && !dev && typeof k === 'string' && (k === 'balloonV_inventory' || /^balloonV_adventureStageGuard_v1__[^_]/.test(k)) && notMapped(k);
+    st.isShared = isShared;
+    const map = k => isShared(k) ? k : isAdv(k) ? k + (st.on ? ADV_DEVTEST_SUFFIX : WS) : (isOwn(k) ? k + WS : k);
     st.map = map; st.isAdv = isAdv; st.isOwn = isOwn;
     P.getItem = function (k) {
       if (this !== localStorage) return st.rawGet.call(this, k);
@@ -97,12 +105,16 @@ var ADV_DEVTEST = (function () {
     };
     P.setItem = function (k, v) { if (this === localStorage && (isAdv(k) || isOwn(k))) { if (st.suspend && isAdv(k)) return; k = map(k); } return st.rawSet.call(this, k, v); };
     P.removeItem = function (k) { if (this === localStorage && (isAdv(k) || isOwn(k))) { if (st.suspend && isAdv(k)) return; k = map(k); } return st.rawRemove.call(this, k); };
+    if (WS) console.log(dev ? '[Workspace] 開發者模式：冒險背包使用 __c2 測試存檔（不讀寫正式背包）' : '[Workspace] 一般遊玩：冒險背包＝正式共用背包（balloonV_inventory，和第一大陸同一份）');
     if (WS) console.log('[Workspace] 第二大陸開發工作區：存檔使用獨立位置（' + WS + '），不讀寫正式玩家的冒險進度');
     if (st.on) console.log('[DevTest] 開發者測試：全新冒險（使用獨立測試存檔，正式玩家資料不會被讀寫）');
   } catch (e) {}
   return st;
 })();
 function advDevTestActive() { return !!(ADV_DEVTEST && ADV_DEVTEST.on); }
+function advDevMode() { return !!(ADV_DEVTEST && ADV_DEVTEST.dev); }   // v0.3.96：?devtools=1（或手動開發旗標）＝開發者模式
+function advSharedBag() { return !!(ADV_WORKSPACE && !advDevMode()); } // v0.3.96：一般遊玩＝正式共用冒險背包
+var v396DevDog = false;   // v0.3.96：這一次進關是開發測試入口的「測試用小狗」（只有開發者模式的測試按鈕會設為 true）
 function advWorkspaceActive() { return !!ADV_WORKSPACE; }
 
 // ── Canvas setup ──────────────────────────────
@@ -2084,6 +2096,8 @@ function normalizeActiveWeaponSlot() {
 //   同一個測試關卡重試時由 restart() 依這個旗標重新套用；回到正常流程時關閉（HUD 會標示「🧪 測試裝備」）
 function applyAdventureTestLoadout() {
   if (!ADVENTURE_TEST_TOOLS_ENABLED) return;
+  // v0.3.96（#37）：999 測試裝備只在開發者模式（?devtools=1）的開發測試入口使用；一般遊玩一律用背包裡的正式武器與耐久
+  if (!advDevMode()) { adventureTestLoadoutActive = false; console.log('[AdventureTest] 一般遊玩：不配發 999 測試裝備'); return; }
   adventureTestLoadoutActive = true;
   equippedSword.id         = 'basicSword';
   equippedSword.name       = '基礎氣球劍（測試）';
@@ -5780,7 +5794,8 @@ function updatePlayer(dt) {
   let moving = false;
   // v0.3.95：翼靴＝地面跑速 ×倍率（只有裝備中的玩家、只有生效的那一關）。空中維持原本速度 → 跳躍水平距離不變，
   //   不會讓「一般跳不過」的尖刺坑（例如 3-2 S2 寬 200、助跑跳約 182）變成跳得過，唯一正解型解謎不受影響
-  const _spd = PLAYER_SPEED * ((player.onGround && typeof v395SpeedMul === 'function') ? v395SpeedMul() : 1);
+  // v0.3.96（#27）翼靴＝跑速、跳躍高度、跳躍水平距離各 +25%：地面 ×1.25；空中 ×√1.25（起跳初速也 ×√1.25 → 滯空時間 ×√1.25 → 水平距離 ×1.25）
+  const _spd = PLAYER_SPEED * ((typeof v396BootsMoveMul === 'function') ? v396BootsMoveMul() : 1);
   if (inp('left'))  { player.vx = -_spd; player.facingRight = false; moving = true; }
   if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
   if (!moving) player.vx *= 0.75; // friction
@@ -5791,7 +5806,7 @@ function updatePlayer(dt) {
 
   // Jump（v0.3.80：在風口裡低空飄浮時也可以起跳 → windCanJump；沒有風口的關卡永遠是 false）
   if (inp('jump') && (player.onGround || (typeof windCanJump === 'function' && windCanJump()))) {
-    player.vy = -JUMP_FORCE * ((typeof c2UmbWindJumpMul === 'function') ? c2UmbWindJumpMul() : 1);   // v0.3.84：撐雨傘在風口裡起跳 → 第二大陸工作區的起跳加成（其他情況一律 ×1）
+    player.vy = -JUMP_FORCE * ((typeof c2UmbWindJumpMul === 'function') ? c2UmbWindJumpMul() : 1) * ((typeof v396BootsJumpMul === 'function') ? v396BootsJumpMul() : 1);   // v0.3.96：翼靴起跳 ×√1.25（跳躍高度 +25%）   // v0.3.84：撐雨傘在風口裡起跳 → 第二大陸工作區的起跳加成（其他情況一律 ×1）
     player.onGround = false;
     try { sfxPlay('jump'); } catch (e) {} // v0.3.64：真的起跳才播一次
   }
@@ -15408,7 +15423,7 @@ function drawVersionInfo() {
       ctx.textAlign = 'right';
       ctx.fillText(
         // v0.3.75：F8 只在開發者模式有作用 → 一般玩家不再顯示「F8 畫面暫停」
-        '[TEST MODE]' + ((typeof advDevHotkeysOn === 'function' && advDevHotkeysOn()) ? ' F8 畫面暫停' : '') + '｜runtime hammer: ' + (HAMMER_ATTACK_VISUAL_TEST_LOADOUT ? 'ON' : 'OFF'),
+        '[TEST MODE]' + ((typeof advDevHotkeysOn === 'function' && advDevHotkeysOn()) ? ' F8 畫面暫停' : '') + '｜runtime hammer: ' + ((HAMMER_ATTACK_VISUAL_TEST_LOADOUT && advDevMode() && adventureTestLoadoutActive) ? 'ON' : 'OFF'),   // v0.3.96：只有開發者模式真的套用測試裝備時才是 ON（一般遊玩用正式武器）
         CANVAS_W - 14,
         32
       );
@@ -25293,6 +25308,8 @@ function c2Start31() {
   try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
   // ⑭ v0.3.81：3-1 一定有小狗同行 — 測試用小狗（只在記憶體：不改背包裡的小狗、不扣陪伴次數、不寫存檔）
+  //   v0.3.96：這是開發者面板的測試入口（需要 ?devtools=1）→ 標記為測試用小狗；正式路線請見 c2Enter31Main
+  v396DevDog = true;
   bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
     advMarkTestEntry('c2-prototype-3-1');          // 測試紀錄（test_only）：不進正式挑戰、成績、解鎖
@@ -25394,7 +25411,7 @@ function c2ResetEvents31() {
     if (c2IsWindStage()) {
       c2ResetRun(); c2SetupScorpions();
       // ⑭ 3-1 一定有小狗同行（死亡重試也一樣；測試用，不寫存檔）
-      if (c2LevelSpec().forceDog && ADVENTURE_TEST_TOOLS_ENABLED) {
+      if (c2LevelSpec().forceDog && ADVENTURE_TEST_TOOLS_ENABLED && v396DevDog) {   // v0.3.96（#38）：只有開發測試入口的測試用小狗；正式路線照玩家自己的帶狗安排
         bringBalloonDog = true; levelStartBringDog = true;
         if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = true;
       }
@@ -25767,12 +25784,12 @@ function c2Complete31() {
   //   ・同行的是測試用小狗：結算時暫時當作「家裡沒有狗」→ 不回血、不扣背包小狗的陪伴次數；結算後原樣放回
   const dogSave = JSON.stringify(playerInventory.balloonDog || {});
   c2ClearGuard = true;
-  try { playerInventory.balloonDog = { present: false, turnsLeft: 0 }; triggerClear(); }
-  finally { c2ClearGuard = false; try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} try { saveInventory(); } catch (e) {} }
+  try { if (v396DevDog) playerInventory.balloonDog = { present: false, turnsLeft: 0 }; triggerClear(); }   // v0.3.96：開發測試用小狗才暫時遮住；正式帶狗照一般通關規則（療癒、扣陪伴次數）
+  finally { c2ClearGuard = false; if (v396DevDog) { try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} } try { saveInventory(); } catch (e) {} }
   try {
     if (H2.pendingSummary) {
       const rows = H2.pendingSummary.rows;
-      rows.push({ icon: null, emoji: '🎒', text: '本次取得 金幣 ' + got.coins + '・260 ×' + got.b260 + '（已加入測試背包' + (first ? '' : '；第二大陸測試版重玩也會取得') + '）', val: '' });
+      rows.push({ icon: null, emoji: '🎒', text: '本次取得 金幣 ' + got.coins + '・260 ×' + got.b260 + '（' + v396BagLabel() + (first ? '' : '；重玩也會取得') + '）', val: '' });   // v0.3.96（#36）：寫明實際放進哪一個背包
       rows.push({ icon: null, emoji: '⏱️', text: '通關時間 ' + c2FmtSec(sec) + '（只記錄，不計 V幣與正式成績）', val: '' });
       H2.pendingSummary.title = '3-1 風之峽谷 通關！';
     }
@@ -27162,24 +27179,31 @@ function c2Is32() { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.sta
 function c2Is32Clear() { return c2Is32() && gameState === 'clear' && homeEntryMode !== 'failed'; }
 function c2UmbrellaEverOwned() { const f = c2Flow(); return !!(f.umbrellaFirstCraft || f.umbrellaRescue) || c2UmbrellaCount() > 0; }
 // 從小V的家進入 3-2（一般流程：不需要 ?devtools=1）
-function c2Start32() {
+//   v0.3.96：mode 'dev'（開發者面板「測試 3-2」按鈕，且在開發者模式）才用測試用小狗＋999 測試裝備；
+//            一般流程（小V的家「出發」）：背包裡的正式武器與耐久、玩家自己的「帶狗出發」安排（#37／#38）
+function c2Start32(mode) {
   if (!ADV_WORKSPACE) return;
+  const dev = mode === 'dev' && advDevMode();
+  const dog = dev ? true : nextBringDog === true;
+  v396DevDog = dev;
   if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
   const idx = getLevelIndexByStageId('3-2'); if (idx < 0) return;
   c2HideDone();
   try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
   try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
-  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;   // 和 3-1 一樣：測試用小狗同行（只在記憶體，不改背包裡的小狗）
+  bringBalloonDog = dog; levelStartBringDog = dog; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '雨傘試煉準備中...', () => {
-    advMarkTestEntry('c2-stage-3-2');            // 測試紀錄（test_only）：不進正式挑戰、成績、排行
+    advMarkTestEntry('c2-stage-3-2');            // 第二大陸既有規則（test_only）：不進第一大陸正式挑戰、成績、排行
     currentLevelIndex = idx;
-    bringBalloonDog = true; levelStartBringDog = true;
+    bringBalloonDog = dog; levelStartBringDog = dog;
+    if (!dev) adventureTestLoadoutActive = false;
     loadLevel(idx);
     initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();
-    applyAdventureTestLoadout();                  // 和 3-1 一樣：測試用氣球劍＋氣球槌（只在記憶體，不寫背包）→ 一定有槌子可以敲樹
-    restart({ keepHp: false, preserveBringDog: false });
-    applyAdventureTestLoadout();
+    if (dev) applyAdventureTestLoadout();         // 開發測試入口才配發測試用氣球劍＋氣球槌（只在記憶體）
+    restart({ keepHp: false, preserveBringDog: true });
+    if (dev) applyAdventureTestLoadout();
+    bringBalloonDog = dog; levelStartBringDog = dog; if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = dog;
     try { initEquippedUmbrella(); } catch (e) {}  // 雨傘＝背包裡真正的雨傘（耐久會真的扣）
     if (equippedUmbrella.id) { activeSlot = 'umbrella'; c2Tool.last = 'umbrella'; }   // 一開始就拿著雨傘（隨時可以按 1／2 換武器）
     c2Proto.done = false; c2Proto.startedAt = Date.now();
@@ -27204,12 +27228,12 @@ function c2Complete32() {
   flow.stage32BestSec = flow.stage32BestSec ? Math.min(flow.stage32BestSec, sec) : sec;
   const dogSave = JSON.stringify(playerInventory.balloonDog || {});
   c2ClearGuard = true;
-  try { playerInventory.balloonDog = { present: false, turnsLeft: 0 }; triggerClear(); }
-  finally { c2ClearGuard = false; try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} try { saveInventory(); } catch (e) {} }
+  try { if (v396DevDog) playerInventory.balloonDog = { present: false, turnsLeft: 0 }; triggerClear(); }   // v0.3.96：開發測試用小狗才暫時遮住；正式帶狗照一般通關規則（療癒、扣陪伴次數）
+  finally { c2ClearGuard = false; if (v396DevDog) { try { playerInventory.balloonDog = JSON.parse(dogSave); } catch (e) {} } try { saveInventory(); } catch (e) {} }
   try {
     if (H2.pendingSummary) {
       const rows = H2.pendingSummary.rows;
-      rows.push({ icon: null, emoji: '🎒', text: '本次取得 金幣 ' + got.coins + '・260 ×' + got.b260 + '（已加入測試背包' + (first ? '' : '；第二大陸測試版重玩也會取得') + '）', val: '' });
+      rows.push({ icon: null, emoji: '🎒', text: '本次取得 金幣 ' + got.coins + '・260 ×' + got.b260 + '（' + v396BagLabel() + (first ? '' : '；重玩也會取得') + '）', val: '' });   // v0.3.96（#36）：寫明實際放進哪一個背包
       rows.push({ icon: null, emoji: '⏱️', text: '通關時間 ' + c2FmtSec(sec) + '（只記錄，不計 V幣與正式成績）', val: '' });
       H2.pendingSummary.title = '3-2 雨傘試煉 通關！';
     }
@@ -27924,7 +27948,7 @@ function vbEnsureNav() {
     if (box && ADVENTURE_TEST_TOOLS_ENABLED && H2_DEVTOOLS && !document.getElementById('btn-pause-test-vb-22')) {
       const mk = (id, txt, fn, cls) => { const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'h2-pill ' + (cls || 'h2-pill--yellow') + ' h2-pill--sm'; b.textContent = txt; b.addEventListener('click', e => { e.preventDefault(); fn(b); }); return b; };
       const b1 = mk('btn-pause-test-vb-22', '🏐 測試 2-2（帶小狗・排球秘笈）', () => vbDevStart22());
-      const b2 = mk('btn-pause-test-vb-32', '🏐 測試 3-2（帶小狗・排球秘笈）', () => c2Start32());
+      const b2 = mk('btn-pause-test-vb-32', '🏐 測試 3-2（帶小狗・排球秘笈）', () => c2Start32('dev'));
       const b3 = mk('btn-pause-reset-vb', '🔄 重設排球秘笈測試（只清排球資料）', b => { vbDevReset(); b.textContent = '✅ 已重設排球秘笈測試'; setTimeout(() => { b.textContent = '🔄 重設排球秘笈測試（只清排球資料）'; }, 2500); }, 'h2-pill--blue');
       box.insertBefore(b3, box.firstChild); box.insertBefore(b2, box.firstChild); box.insertBefore(b1, box.firstChild);
     }
@@ -28016,6 +28040,10 @@ function c2At24Clear() { const lv = LEVELS[currentLevelIndex]; return !!(lv && l
 function c2ToC2Here() { return c2At24Clear() && c2Continent1Done(); }
 function c2HasHammer() { return ((playerInventory.craftedItems || {}).basicHammer || 0) > 0; }
 function c2ToC2State() {
+  // v0.3.96（#38）：3-1 出發前一定要有合法的小狗同行安排（沿用小V的家既有的「帶狗出發」；不替玩家自動帶狗）
+  const dog = playerInventory.balloonDog || {};
+  if (!(dog.present && (dog.turnsLeft || 0) > 0)) return { kind: 'blocked', c2toC2: true, sub: '請先製作氣球小狗', msg: '3-1 需要氣球小狗一起尋寶，但家裡沒有可以同行的小狗。', detail: '打開氣球秘笈做一隻氣球小狗，再按「帶狗出發」。', fix: { card: 'recipes', focus: 'balloonDog', label: '打開氣球秘笈' } };
+  if (!nextBringDog) return { kind: 'blocked', c2toC2: true, sub: '請先安排小狗同行', msg: '3-1 要和氣球小狗一起尋寶，請先按「帶狗出發」。', detail: '在右邊的氣球小狗卡片按「帶狗出發」（用 260 ×1 做狗繩）。', fix: { card: 'dog', label: '帶狗出發' } };
   if (!c2HasHammer()) return { kind: 'blocked', c2toC2: true, sub: '請先製作氣球槌', msg: '前往第二大陸前，需要先準備氣球槌。', detail: '第二大陸要用氣球槌敲倒大樹搭橋。打開氣球秘笈，先製作一把氣球槌吧！', fix: { card: 'recipes', focus: 'basicHammer', label: '打開氣球秘笈' } };
   return { kind: 'go', c2toC2: true, sub: '🌊 前往第二大陸' };
 }
@@ -28063,16 +28091,18 @@ function c2Enter31Main() {
   try { advHideFinalResults(); } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
   advPlayMode = 'official'; advHomeCtx = null;
-  bringBalloonDog = true; levelStartBringDog = true; nextBringDog = false;   // 3-1 既有規則：小狗同行（只在記憶體；不扣陪伴次數）
+  // v0.3.96（#38）：正式路線 → 只用玩家在小V的家「帶狗出發」的正式安排（出發檢查已確認），不再自動帶測試用小狗
+  const legalDog = nextBringDog === true; v396DevDog = false;
+  bringBalloonDog = legalDog; levelStartBringDog = legalDog; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
     advMarkTestEntry('c2-main-3-1');              // 第二大陸既有規則：test_only（不寫第一大陸正式成績、不重複總結算、不發 V幣）
     currentLevelIndex = idx;
-    bringBalloonDog = true; levelStartBringDog = true;
+    bringBalloonDog = legalDog; levelStartBringDog = legalDog;
     adventureTestLoadoutActive = false;
     loadLevel(idx);
     initEquippedSword(); initEquippedHammer(); normalizeActiveWeaponSlot();   // 背包裡真正的氣球劍／氣球槌
-    restart({ keepHp: false, preserveBringDog: false });
-    bringBalloonDog = true; levelStartBringDog = true;
+    restart({ keepHp: false, preserveBringDog: true });
+    bringBalloonDog = legalDog; levelStartBringDog = legalDog; if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = legalDog;
     try { initEquippedUmbrella(); } catch (e) {}
     c2Proto.done = false; c2Proto.startedAt = Date.now();
     gameState = 'playing'; lastTime = 0; fixedStepAccumulator = 0;
@@ -28847,9 +28877,9 @@ function v390HeldHtml(id, style) {
       const lv = LEVELS[idx]; if (!lv) return o.apply(this, arguments);
       const extra = (lv.extraHiddenTreasures || []).some(t => typeof vbExtraAvailable === 'function' && vbExtraAvailable(lv, t));
       if (!extra) return o.apply(this, arguments);                        // 沒有額外寶物 → 完全照原本判斷（主要寶物）
-      const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0) || !!lv.forceDog;   // 3-2 一定有小狗同行
+      const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0);   // v0.3.96：正式流程只看玩家自己的小狗（不再當作 3-2 一定有測試用小狗）
       if (!hasDog) return { dog: false, text: '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！' };
-      if (nextBringDog || lv.forceDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
+      if (nextBringDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪汪！一起去找隱藏寶物！' };
       return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
     } catch (e) { return o.apply(this, arguments); }
   });
@@ -30066,4 +30096,307 @@ function v395CapHtml() {
   window.debugItems395 = () => { const inv = v395Inv(); return { bagLevel: inv.bagLevel, caps: Object.fromEntries(Object.keys(V395_BAG.caps).map(k => [k, { have: v395Count(k), cap: v395Cap(k) }])), over: v395Over(), equip: JSON.parse(JSON.stringify(inv.equip)),
     star: Object.assign({}, v395Star, { active: v395StarActive(), sec: Math.ceil(v395Star.left / 60) }), bootsLevel: v395BootsLevel, speedMul: v395SpeedMul(), bootsMulSetting: V395_BOOTS.mul, coins: inv.coins, b260: inv.balloon260, round: inv.roundBalloon,
     drops: JSON.parse(JSON.stringify(v395Drops)), log: v395Log.slice(-60) }; };
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.96 第一優先：正式冒險流程（adventure-flow-items-fix）
+//  #35 暫停／失敗 →「🏠 回家整備」（不再用「重試本關」取代）
+//      ・有上一關的整備節點 → 沿用 returnToPrep（回到上一關過關後的小V之家）
+//      ・沒有整備節點（3-1／3-2、開發者跳關、重新整理後）→ 本關暫時成果照既有失敗規則回滾到進關前，
+//        小V的家用「未完成」模式打開（可以購物、製作、補血、安排小狗）；按「出發」從同一關的起點重新挑戰
+//        不偽造通關紀錄、不重發獎勵、不回到 3-1、不重新要求已解鎖的秘笈
+//  #36 正式共用冒險背包：見檔案開頭 ADV_DEVTEST（一般遊玩＝balloonV_inventory；開發者模式＝__c2 測試背包）
+//  #37 999 測試裝備只在開發者模式的測試入口（applyAdventureTestLoadout 開頭判斷）
+//  #38 3-1 出發要有合法帶狗安排（c2ToC2State）；3-1／3-2 正式路線不再自動帶測試用小狗
+//  #39 有秘笈解鎖紀錄才能製作（craftItem 統一檢查 unlockKey）；星靈補材料仍要先有雨傘秘笈（c2UmbrellaPrep 原本規則）
+// ════════════════════════════════════════════════════════════════════
+function v396BagLabel() { return advSharedBag() ? '已加入冒險背包' : '已加入開發測試背包（?devtools=1）'; }
+var v396HomeLog = [];
+function v396ReturnHome(source) {
+  const now = Date.now(); if (now - (v396ReturnHome._at || 0) < 500) return false; v396ReturnHome._at = now;
+  if (!['playing', 'paused', 'failed', 'gameover'].includes(gameState)) return false;
+  const lv = LEVELS[currentLevelIndex] || {};
+  const log = { source, stageId: lv.stageId, gs: gameState, hp: player.hp, coins: playerInventory.coins, t: now };
+  if (source === 'pause') { try { advEndLiveAttempt('manualRetry'); } catch (e) {} }   // 和原本暫停選單相同：主動離開＝主動重試 +1
+  if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) {
+    log.how = 'prepCheckpoint'; v396HomeLog.push(log);
+    returnToPrep(source, { toHome: true }); return true;
+  }
+  // 沒有整備節點：既有的失敗回滾（已回滾過就不再回滾 → 保留失敗畫面上的合法交易）
+  if (!levelRolledBackForRetry && typeof restoreLevelStartSnapshot === 'function') { restoreLevelStartSnapshot(); }
+  levelRolledBackForRetry = true;
+  if (!(player.hp > 0)) player.hp = levelStartHp > 0 ? levelStartHp : player.maxHp;
+  bringBalloonDog = levelStartBringDog === true;   // 已付費的帶狗安排跟著這一關保留（重新出發不再扣 260）
+  try { advGuardClear('returnHome'); } catch (e) {}
+  try { if (typeof closePauseBag === 'function') closePauseBag(); } catch (e) {}
+  try { guidebookFromPause = false; const g = document.getElementById('guidebook-overlay'); if (g) g.style.display = 'none'; } catch (e) {}
+  ['pause-overlay', 'failed-overlay'].forEach(id => { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.classList.remove('active'); } });
+  try { if (typeof v395StarEnd === 'function') v395StarEnd('home'); } catch (e) {}
+  gameState = 'failed';                            // 小V的家「未完成」模式：出發＝重新挑戰這一關
+  try { saveInventory(); } catch (e) {}
+  if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn();
+  log.how = 'failedHome'; log.hpAfter = player.hp; log.coinsAfter = playerInventory.coins; v396HomeLog.push(log);
+  console.log('[v0.3.96] 回家整備（沒有整備節點）', log);
+  openHomeScreen('failed');
+  return true;
+}
+(function v396AInstall() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v396a) { if (typeof o !== 'function') console.warn('[v0.3.96] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v396a = true; globalThis[name] = w; };
+  // #35：暫停選單與失敗畫面的按鈕 → 回家整備（小V的家「出發」的重新挑戰 'home-failed' 照原本流程）
+  wrapFn('retryOrReturnToPrep', o => function (source) { if (source === 'pause' || source === 'failed') return v396ReturnHome(source); return o.apply(this, arguments); });
+  const relabel = () => {
+    const a = document.getElementById('btn-pause-restart');
+    if (a) { a.innerHTML = '🏠 回家整備<small>回小V的家購物、製作、補血，再從這一關重新出發</small>'; a.classList.add('h2-pill--blue'); a.classList.remove('h2-pill--yellow'); }
+    const r = document.getElementById('btn-retry'); if (r) r.style.display = 'none';
+    const h = document.getElementById('btn-go-home-failed');
+    if (h) { h.textContent = '🏠 回家整備'; h.classList.add('failed-btn--primary'); h.classList.remove('failed-btn--secondary'); }
+  };
+  wrapFn('p2RelabelPrep', o => function () { const r = o.apply(this, arguments); relabel(); return r; });
+  wrapFn('updatePrepReturnButtons', o => function () { const r = o.apply(this, arguments); relabel(); return r; });
+  wrapFn('showFailedOverlay', o => function () { const r = o.apply(this, arguments); relabel(); return r; });
+  try { relabel(); } catch (e) {}
+  // 失敗畫面的「回家整備」：沒有整備節點時，原本直接 openHomeScreen('failed') → 改走同一個回家整備（關掉畫面、清快照、記錄）
+  const fh = document.getElementById('btn-go-home-failed');
+  if (fh) ['click', 'touchstart'].forEach(ev => fh.addEventListener(ev, e => { if (gameState !== 'failed' && gameState !== 'gameover') return; if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) return; e.stopImmediatePropagation(); e.preventDefault(); v396ReturnHome('failed'); }, true));
+  // #39：有 unlockKey 的配方（氣球槌、棒棒糖、氣球雨傘…）一定要有解鎖紀錄才能製作（原本只靠畫面不顯示）
+  wrapFn('craftItem', o => function (recipeId) {
+    const r = RECIPES.find(x => x.id === recipeId);
+    if (r && r.unlockKey && !((playerInventory.unlockedRecipes || {})[r.unlockKey])) { showHint('📖 還沒有「' + r.name + '」的秘笈，不能製作', 170); console.warn('[v0.3.96] 沒有秘笈不能製作：' + recipeId); return false; }
+    return o.apply(this, arguments);
+  });
+  window.debugFlow396 = () => ({ dev: advDevMode(), shared: advSharedBag(), bagKey: (ADV_DEVTEST.map ? ADV_DEVTEST.map('balloonV_inventory') : '?'), gs: gameState, stage: (LEVELS[currentLevelIndex] || {}).stageId,
+    bring: bringBalloonDog, levelStartBringDog, nextBringDog, devDog: v396DevDog, testLoadout: adventureTestLoadoutActive,
+    sword: { id: equippedSword.id, dur: equippedSword.currentDur, max: equippedSword.maxDur }, hammer: { id: equippedHammer.id, dur: equippedHammer.currentDur, max: equippedHammer.maxDur },
+    umbrellaRecipe: !!((playerInventory.unlockedRecipes || {}).balloonUmbrella), umbrellas: (playerInventory.craftedItems || {}).balloonUmbrella || 0, prep: (typeof hasValidPrepCheckpoint === 'function') ? hasValidPrepCheckpoint() : null,
+    homeLog: v396HomeLog.slice(-10) });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.96 第二、三優先：道具平衡與介面
+//  #27 翼靴：地面跑速、跳躍高度、跳躍水平距離各 +25%（正式值 ×1.25；開發測試工具的 1.10／1.12／1.15 只是校準用，不寫存檔）
+//  #29 背包 LV1 → LV2：80 冒險金幣（永久、只能成功買一次）；正式購物記錄在 playerInventory.shopLog（開發測試升級不算）
+//  #31 無敵星星：20 秒；小V本體彩色循環染色＋外緣光＋少量星光；碰到一般敵人（蠍子類）直接擊殺並擊飛（沿用槌子擊飛與 Double Kill）
+//  #32 橘子王：無敵只免傷，星星本身對橘子王完全沒有作用（不在 enemies 名單，不碰 Boss 的任何狀態）
+//  #34 啟動音效 assets/audio/sfx/item/invincible_star_activate.mp3、無敵音樂 assets/audio/bgm/invincible_star_theme.mp3；關卡 BGM 暫時壓低
+//  #28 商店（所有面板）的冒險金幣列固定在清單上方；#33 商品說明精簡；#30 冒險中暫停背包 2.0（同一份背包資料、同一套木框介面）
+// ════════════════════════════════════════════════════════════════════
+V395_BOOTS.mul = 1.25;                                   // #27 正式定案
+if (!V395_BOOTS.candidates.includes(1.25)) V395_BOOTS.candidates.push(1.25);
+V395_BAG.upgradePrice = 80;                              // #29 正式定案
+V395_STAR.seconds = 20;                                  // #31 正式定案
+function v396BootsMoveMul() { const m = (typeof v395SpeedMul === 'function') ? v395SpeedMul() : 1; if (!(m > 1)) return 1; return player.onGround ? m : Math.sqrt(m); }
+function v396BootsJumpMul() { const m = (typeof v395SpeedMul === 'function') ? v395SpeedMul() : 1; return m > 1 ? Math.sqrt(m) : 1; }
+// ── #33 商店文案（使用者指定）──
+SHOP_ITEMS.invincibleStar.description = '放進背包的補給品，使用後20秒內不會受到傷害。';
+(function () {
+  const T = { vShield: '穿戴裝備，限帶一面，可幫你抵擋一次傷害。', wingedBoots: '下一關跑得更快，跳得更高。使用一回合即消失。', bagUpgrade: '提升背包容量。',
+    b260Bundle: '260 長條氣球 ×3。', roundBundle: '圓氣球 ×4。' };
+  V395_SHOP.forEach(it => { if (T[it.id]) it.desc = T[it.id]; });
+})();
+// 商店列：只留名稱、售價、說明、持有／上限、裝備／滿級狀態、購買按鈕
+v395ShopRowsHtml = function () {
+  return V395_SHOP.map(it => {
+    const st = v395ShopState(it), owned = v395Owned(it), price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+    const line = it.kind === 'equip' ? (owned ? '已裝備' : '未裝備（不占背包）') : it.kind === 'bundle' ? '目前持有 ' + owned : '目前背包 ' + owned + (v395BagLevel() >= V395_BAG.maxLevel ? '（已滿級）' : '');
+    const dev = (it.id === 'bagUpgrade' && H2_DEVTOOLS) ? '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="dev395" data-key="' + (v395BagLevel() >= 2 ? 'bagLv1' : 'bagLv2') + '">🛠 ' + (v395BagLevel() >= 2 ? '測試回 LV1' : '測試 LV2（免費）') + '</button>' : '';
+    return h2RowHtml({ iconHtml: h2Icon(it.icon), badge: it.kind === 'equip' ? (owned ? '<span class="h2-count">✓</span>' : '') : it.id === 'bagUpgrade' ? '<span class="h2-count">' + owned + '</span>' : '', name: it.name,
+      full: !!st.off && !/金幣不足/.test(st.state || ''), attr: ' data-shop-row="' + it.id + '" data-v395="1"', price: price != null ? price : null, state: st.state || '',
+      desc: h2Esc(it.desc) + '<br>' + h2Esc(line),
+      side: dev + '<button type="button" class="h2-pill h2-pill--green" data-h2-act="buy395" data-key="' + it.id + '"' + (st.off ? ' disabled' : '') + '>' + h2Esc(st.btn) + '</button>' });
+  }).join('');
+};
+// ── #29 正式購物紀錄（給之後的「超勤儉冒險家」判定；開發測試升級不算）──
+function v396ShopLog(id, spent) {
+  const inv = playerInventory; if (!inv.shopLog || typeof inv.shopLog !== 'object') inv.shopLog = { purchases: 0, spent: 0, items: {} };
+  inv.shopLog.purchases = (inv.shopLog.purchases || 0) + 1; inv.shopLog.spent = (inv.shopLog.spent || 0) + spent;
+  inv.shopLog.items = inv.shopLog.items || {}; inv.shopLog.items[id] = (inv.shopLog.items[id] || 0) + 1; inv.shopLog.lastAt = Date.now();
+}
+// ── #31／#34 無敵星星：音訊 ──
+Object.assign(SFX_DEFS, { starActivate: { path: 'item/invincible_star_activate.mp3', vol: 0.9, minGapMs: 300, maxVoices: 1 } });
+const V396_STAR_THEME = { path: 'assets/audio/bgm/invincible_star_theme.mp3', vol: 0.3, fadeOutMs: 600, duck: 0.15 };
+var v396Theme = { el: null, status: 'idle', restart: true, fadeAt: 0, starts: 0, stops: 0, ducked: false, log: [] };
+function v396ThemeEl() {
+  if (v396Theme.el || typeof Audio === 'undefined') return v396Theme.el;
+  try { const a = new Audio(); a.loop = true; a.preload = 'auto'; a.volume = V396_STAR_THEME.vol; v396Theme.status = 'loading';
+    a.addEventListener('canplaythrough', () => { if (v396Theme.status === 'loading') v396Theme.status = 'ok'; });
+    a.addEventListener('error', () => { v396Theme.status = 'error'; console.warn('[Star] 無敵音樂載入失敗：' + V396_STAR_THEME.path); });
+    a.src = resolveAdventureAssetSrc(V396_STAR_THEME.path) + '?v=' + encodeURIComponent(GAME_VERSION); v396Theme.el = a;
+  } catch (e) { v396Theme.status = 'error'; }
+  return v396Theme.el;
+}
+function v396ThemeStop(why) { const a = v396Theme.el; if (!a) return; try { if (!a.paused) { a.pause(); v396Theme.stops++; v396Theme.log.push({ ev: 'stop', why, t: Math.round(performance.now()) }); } a.currentTime = 0; a.volume = V396_STAR_THEME.vol; } catch (e) {} v396Theme.fadeAt = 0; v396Theme.restart = true; }
+function v396ThemeFrame() {
+  const star = v395StarActive(), hidden = (typeof document !== 'undefined' && document.hidden);
+  const a = star ? v396ThemeEl() : v396Theme.el; if (!a || v396Theme.status === 'error') return;
+  if (star) {
+    v396Theme.fadeAt = 0;
+    if (gameState === 'playing' && !hidden) {
+      if (a.paused) { try { if (v396Theme.restart) { a.currentTime = 0; v396Theme.restart = false; } a.volume = V396_STAR_THEME.vol * (SFX.muted ? 0 : 1); const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); v396Theme.starts++; v396Theme.log.push({ ev: 'play', t: Math.round(performance.now()) }); } catch (e) {} }
+    } else if (!a.paused) { try { a.pause(); v396Theme.log.push({ ev: 'pause', gs: gameState, t: Math.round(performance.now()) }); } catch (e) {} }   // 暫停：音樂跟著停（倒數也停），繼續時接著播
+    return;
+  }
+  if (a.paused) return;
+  if (gameState !== 'playing' && gameState !== 'paused') { v396ThemeStop('leave'); return; }   // 回家、結算、失敗：立刻停
+  if (!v396Theme.fadeAt) v396Theme.fadeAt = performance.now();
+  const k = 1 - (performance.now() - v396Theme.fadeAt) / V396_STAR_THEME.fadeOutMs;           // 無敵結束：淡出
+  if (k <= 0) v396ThemeStop('end'); else { try { a.volume = V396_STAR_THEME.vol * k * (SFX.muted ? 0 : 1); } catch (e) {} }
+}
+function v396DuckBgm(a) {
+  if (!a) return;
+  const want = !!(v396Theme.el && !v396Theme.el.paused);
+  try {
+    if (want) { if (a._v396base == null) a._v396base = a.volume; a.volume = a._v396base * V396_STAR_THEME.duck; v396Theme.ducked = true; }
+    else if (a._v396base != null) { a.volume = a._v396base; a._v396base = null; }
+  } catch (e) {}
+}
+// ── #31 無敵外觀：小V本體彩色循環染色（canvas filter）＋外緣光＋少量星光；最後 3 秒溫和減弱（不閃爍）──
+var v396FilterOk = null;
+function v396CanFilter() { if (v396FilterOk != null) return v396FilterOk; try { const c = document.createElement('canvas').getContext('2d'); c.filter = 'hue-rotate(10deg)'; v396FilterOk = (c.filter === 'hue-rotate(10deg)'); } catch (e) { v396FilterOk = false; } return v396FilterOk; }
+function v396StarFilter() {
+  const t = typeof frameCount === 'number' ? frameCount : 0, h = (t * 2) % 360;
+  let k = 1; if (v395Star.left < 180) k = 0.55 + 0.45 * (0.5 + 0.5 * Math.cos((180 - v395Star.left) / 60 * Math.PI * 2));   // 最後 3 秒：每秒一次慢慢變淡再變回（溫和提示）
+  // 只用顏色矩陣類濾鏡（實測幾乎不花效能）；drop-shadow／shadowBlur 會讓遊戲從每秒 60 步掉到 12～27 步 → 外緣光改成角色背後的彩色光暈（v395DrawStarFx）
+  return 'sepia(' + (0.55 * k).toFixed(2) + ') saturate(' + (1 + 1.8 * k).toFixed(2) + ') hue-rotate(' + h.toFixed(0) + 'deg) brightness(' + (1 + 0.1 * k).toFixed(2) + ')';
+}
+const v395DrawStarFxOld = v395DrawStarFx;
+v395DrawStarFx = function (cx, front) {
+  if (!v395StarActive()) return;
+  if (!v396CanFilter()) return v395DrawStarFxOld(cx, front);       // 不支援 canvas 濾鏡的瀏覽器：沿用 v0.3.95 的光環＋星光
+  const t = typeof frameCount === 'number' ? frameCount : 0, x = player.x + player.w / 2 - cx, y = player.y + player.h / 2;
+  let k = 1; if (v395Star.left < 180) k = 0.55 + 0.45 * (0.5 + 0.5 * Math.cos((180 - v395Star.left) / 60 * Math.PI * 2));   // 最後 3 秒：溫和地變淡再變回
+  if (!front) {   // 外緣光：緊貼角色輪廓後面的彩色光暈（顏色和本體一起循環）
+    const h = (t * 2 + 120) % 360;
+    ctx.save(); ctx.translate(x, y + 4); ctx.scale(0.62, 1);
+    const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 58);
+    g.addColorStop(0, 'hsla(' + h + ',100%,80%,' + (0.85 * k).toFixed(2) + ')'); g.addColorStop(0.55, 'hsla(' + ((h + 60) % 360) + ',100%,65%,' + (0.55 * k).toFixed(2) + ')'); g.addColorStop(1, 'hsla(' + ((h + 120) % 360) + ',100%,60%,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    return;
+  }
+  ctx.save();
+  for (let i = 0; i < 5; i++) {                                      // 少量星光（慢慢繞、慢慢閃，不刺眼）
+    const a = t * 0.045 + i * Math.PI * 2 / 5, rr = 44 + 5 * Math.sin(t * 0.07 + i), sx = x + Math.cos(a) * rr * 0.85, sy = y + Math.sin(a) * rr, s = 4.5 + 1.8 * Math.sin(t * 0.09 + i * 1.7);
+    ctx.fillStyle = 'hsla(' + ((t * 2 + i * 72) % 360) + ',100%,78%,' + (0.9 * k) + ')'; ctx.strokeStyle = 'rgba(255,255,255,' + (0.9 * k) + ')'; ctx.lineWidth = 1;
+    ctx.beginPath(); for (let q = 0; q < 10; q++) { const ang = q * Math.PI / 5 - Math.PI / 2, l = (q % 2) ? s * 0.42 : s; q ? ctx.lineTo(sx + Math.cos(ang) * l, sy + Math.sin(ang) * l) : ctx.moveTo(sx + Math.cos(ang) * l, sy + Math.sin(ang) * l); } ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+};
+// ── #31 碰到一般敵人：直接擊殺＋擊飛（沿用 damageScorpionEnemy、槌子擊飛的 spinningEnemies、Double Kill）──
+var v396StarKills = [];
+function v396StarContactStep() {
+  if (!v395StarActive() || gameState !== 'playing') return;
+  const px = player.x - 4, py = player.y - 4, pw = player.w + 8, ph = player.h + 8;
+  enemies.forEach(e => {
+    if (!e || !e.active || e.c2DemoInvuln || e.isBoss) return;
+    if (!rectsOverlap(px, py, pw, ph, e.x, e.y, e.w, e.h)) return;
+    const dir = (e.x + e.w / 2) >= (player.x + player.w / 2) ? 1 : -1;
+    const res = damageScorpionEnemy(e, Math.max(1, e.hp != null ? e.hp : (e.maxHp || 99)), 'star', killed => {
+      const variantCfg = getEnemyVariantConfig(killed), tierCfg = getEnemyTierConfig(killed);
+      try { sfxPlay('scorpionKnockback'); } catch (er) {}
+      spinningEnemies.push({ x: killed.x, y: killed.y, w: killed.w, h: killed.h, vx: dir * CONFIG.HAMMER_SPIN_SPEED, life: CONFIG.HAMMER_SPIN_LIFE, angle: 0,
+        skinKey: (variantCfg && variantCfg.skinKey) || 'scorpion_normal', drawScaleMultiplier: ((variantCfg && variantCfg.drawScaleMultiplier) || 1) * ((tierCfg && tierCfg.drawScaleMultiplier) || 1),
+        spinDamage: killed.variant === 'heavyBody' ? 2 : 1, hitTargetIds: new Set(), sourceId: killed.runtimeId, sourceAdvId: killed.advId, byStar: true });
+    });
+    if (res === 'killed') { v396StarKills.push({ id: e.runtimeId, variant: e.variant || 'normal', x: Math.round(e.x), frame: frameCount }); v395L({ ev: 'starKill', variant: e.variant, x: Math.round(e.x) }); }
+  });
+}
+// ── #30 冒險中暫停背包 2.0（同一份 playerInventory；同一套木框／分頁／列樣式；使用按鈕沿用原本的使用函式）──
+var v396Bag = { tab: 'supply' };
+function v396BagRows() {
+  const inv = v395Inv(), it = inv.items || {}, ci = inv.craftedItems || {}, full = (Number(player.hp) || 0) >= (player.maxHp || 3);
+  const use = (fn, label, off) => '<button type="button" class="h2-pill h2-pill--green h2-pill--sm" onclick="' + fn + '"' + (off ? ' disabled' : '') + '>' + h2Esc(label) + '</button>';
+  if (v396Bag.tab === 'supply') {
+    const rows = [];
+    [['bandage', '繃帶', '回復 0.5 顆心'], ['firstAidKit', '急救包', '生命補滿']].forEach(([id, name, eff]) => { const n = it[id] || 0;
+      rows.push(h2RowHtml({ iconHtml: h2Icon(id), badge: '<span class="h2-count' + (n <= 0 ? ' is-zero' : '') + '">' + n + '</span>', name, zero: n <= 0, desc: eff + '　持有 ' + n + ' / 上限 ' + v395Cap(id),
+        side: use("useHealingItem('" + id + "')", n <= 0 ? '沒有' : full ? '生命已滿' : '使用', n <= 0 || full) })); });
+    const sn = it.invincibleStar || 0, on = v395StarActive();
+    rows.push(h2RowHtml({ iconHtml: h2Icon('invincibleStar'), badge: '<span class="h2-count' + (sn <= 0 ? ' is-zero' : '') + '">' + sn + '</span>', name: '無敵星星', zero: sn <= 0,
+      desc: (on ? '⭐ 無敵中：剩 ' + Math.ceil(v395Star.left / 60) + ' 秒　' : '使用後 ' + V395_STAR.seconds + ' 秒內不會受到傷害　') + '持有 ' + sn + ' / 上限 ' + v395Cap('invincibleStar'),
+      side: use("useHealingItem('invincibleStar')", sn <= 0 ? '沒有' : on ? '無敵中' : '使用', sn <= 0 || on) }));
+    const lol = (typeof getLollipopCount === 'function') ? getLollipopCount() : 0;
+    if (lol > 0) rows.push(h2RowHtml({ iconHtml: h2Icon('balloonLollipop'), badge: '<span class="h2-count">' + lol + '</span>', name: '棒棒糖（舊庫存）', desc: '回復 ' + LOLLIPOP_HEAL + ' 顆心', side: use('useBalloonLollipop()', full ? '生命已滿' : '使用', full) }));
+    return rows.join('');
+  }
+  if (v396Bag.tab === 'weapon') {
+    const w = (id, name, eq) => { const n = ci[id] || 0; return h2RowHtml({ iconHtml: h2Icon(id), badge: '<span class="h2-count' + (n <= 0 ? ' is-zero' : '') + '">' + n + '</span>', name, zero: n <= 0,
+      desc: '持有 ' + n + (isFinite(v395Cap(id)) ? ' / 上限 ' + v395Cap(id) : '') + (eq && eq.id ? '　｜　使用中耐久 ' + (eq.currentDur || 0) + ' / ' + (eq.maxDur || 0) : '') }); };
+    let h = w('basicSword', '氣球劍', equippedSword) + w('basicHammer', '氣球槌', equippedHammer);
+    if ((ci.balloonUmbrella || 0) > 0 || (typeof equippedUmbrella !== 'undefined' && equippedUmbrella.id)) h += w('balloonUmbrella', '氣球雨傘', equippedUmbrella);
+    const b = inv.equip.boots;
+    h += h2RowHtml({ iconHtml: h2Icon('vShield'), name: '盾牌（穿戴）', desc: inv.equip.shield ? '已裝備：下一次受傷時抵擋' : '沒有裝備' });
+    h += h2RowHtml({ iconHtml: h2Icon('wingedBoots'), name: '翼靴（穿戴）', desc: b ? (b.state === 'active' ? '本關生效中：跑得更快、跳得更高' : '已裝備：下一關生效') : '沒有裝備' });
+    return h;
+  }
+  if (v396Bag.tab === 'mat') {
+    return h2RowHtml({ iconHtml: h2Icon('coins'), badge: '<span class="h2-count">' + (inv.coins || 0) + '</span>', name: '冒險金幣', desc: '不限量' })
+      + h2RowHtml({ iconHtml: h2Icon('balloon260'), badge: '<span class="h2-count">' + (inv.balloon260 || 0) + '</span>', name: '260 長條氣球', desc: '不限量' })
+      + h2RowHtml({ iconHtml: h2Icon('roundBalloon'), badge: '<span class="h2-count">' + (inv.roundBalloon || 0) + '</span>', name: '圓氣球', desc: '不限量' });
+  }
+  const ks = Object.values(inv.keyItems || {}).filter(k => k && k.id);
+  const note = (typeof buildPauseBagNoteHtml === 'function') ? buildPauseBagNoteHtml() : '';
+  return (ks.length ? ks.map(k => h2RowHtml({ iconHtml: h2Icon('bossNote'), name: (typeof keyItemDisplayName === 'function' ? keyItemDisplayName(k) : (k.name || '重要物品')), desc: h2Esc(k.title || '') })).join('') : '<div class="h2-empty">還沒有重要物品</div>') + (note ? '<div class="pb2-note">' + note + '</div>' : '');
+}
+function v396RenderPauseBag() {
+  const panel = document.getElementById('pause-bag-panel'); if (!panel) return;
+  try { h2PreloadCore(); } catch (e) {}
+  const inv = v395Inv(), dog = (typeof getDogStatusText === 'function') ? getDogStatusText() : { status: '', turns: '' };
+  const tabs = [['supply', '補給品'], ['weapon', '武器・裝備'], ['mat', '材料'], ['key', '重要物品']];
+  const st = v395EquipHtml();
+  panel.classList.add('pb2-on');
+  panel.innerHTML = '<div class="h2-skin pb2"><section class="h2-card h2-panel pb2-panel" role="dialog" aria-modal="true">'
+    + '<div class="h2-head"><span class="h2-plank h2-plank--static">🎒 冒險背包 LV' + inv.bagLevel + '</span><button type="button" class="h2-pill h2-pill--red h2-pill--sm h2-close" onclick="closePauseBag()">✕ 關閉</button></div>'
+    + '<div class="h2-tabs">' + tabs.map(([id, label]) => '<button type="button" class="h2-pill h2-pill--yellow h2-tab' + (v396Bag.tab === id ? ' is-on' : '') + '" onclick="v396Bag.tab=\'' + id + '\';v396RenderPauseBag()">' + label + '</button>').join('') + '</div>'
+    + '<div class="h2-panel-body pb2-body">'
+    + '<div class="h2-coinbar pb2-status"><span class="h2-hearts">' + buildHpHeartsHtml() + '</span><span>' + formatHpText() + '</span><span>' + h2Icon('coins', 'h2-coin-ico') + ' ' + (inv.coins || 0) + '</span>'
+    + '<span>' + h2Icon('balloon260', 'h2-coin-ico') + ' ' + (inv.balloon260 || 0) + '</span><span>' + h2Icon('roundBalloon', 'h2-coin-ico') + ' ' + (inv.roundBalloon || 0) + '</span></div>'
+    + '<div class="h2-sub pb2-equip">' + st.map(h2Esc).join('　') + (dog.status ? '　' + h2Esc(dog.status) + (dog.turns ? '（' + h2Esc(dog.turns) + '）' : '') : '') + '</div>'
+    + '<div class="h2-list">' + v396BagRows() + '</div>'
+    + '<div class="h2-sub" style="margin-top:0.6em">⏸ 遊戲暫停中・關閉背包回到暫停選單</div></div></section></div>';
+  panel.style.display = 'flex';
+}
+(function v396BInstall() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v396b) { if (typeof o !== 'function') console.warn('[v0.3.96] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v396b = true; globalThis[name] = w; };
+  // 星星：啟動音效（取代 v0.3.95 暫時借用的 ringGet）＋重新開始無敵音樂
+  wrapFn('v395UseStar', o => function () {
+    const _sp = sfxPlay; let ok = false;
+    try { sfxPlay = function (k) { if (k === 'ringGet') return false; return _sp.apply(this, arguments); }; ok = o.apply(this, arguments); } finally { sfxPlay = _sp; }
+    if (ok) { try { sfxPlay('starActivate'); } catch (e) {} v396Theme.restart = true; try { v396ThemeEl(); } catch (e) {} }
+    return ok;
+  });
+  // 背包升級正式購買（80）＋正式購物紀錄
+  wrapFn('v395Buy', o => function (id) { const r = o.apply(this, arguments); if (r && r.ok) { v396ShopLog(id, r.price); try { saveInventory(); } catch (e) {} } return r; });
+  wrapFn('buyShopItem', o => function (id) { const c0 = playerInventory.coins || 0, n0 = (playerInventory.items || {})[id] || 0; const r = o.apply(this, arguments); const spent = c0 - (playerInventory.coins || 0); if (spent > 0 && ((playerInventory.items || {})[id] || 0) > n0) { v396ShopLog(id, spent); try { saveInventory(); } catch (e) {} } return r; });
+  // 每一步：星星碰撞擊殺
+  wrapFn('update', o => function () { const r = o.apply(this, arguments); try { v396StarContactStep(); } catch (e) { console.warn('[v0.3.96] star', e); } return r; });
+  // 小V本體染色：畫小V時套上 canvas 濾鏡（只影響小V這一張圖；狗、敵人、場景不受影響）
+  wrapFn('drawPlayer', o => function () {
+    if (!v395StarActive() || !v396CanFilter()) return o.apply(this, arguments);
+    ctx.save(); try { ctx.filter = v396StarFilter(); return o.apply(this, arguments); } finally { ctx.restore(); }
+  });
+  // 音樂：每一幀（暫停中也會跑）同步無敵音樂；四首關卡 BGM 同步後再壓低音量
+  wrapFn('sfxSyncFrame', o => function () { const r = o.apply(this, arguments); try { v396ThemeFrame(); } catch (e) {} return r; });
+  [['syncChapter1Bgm', () => (typeof chapter1Bgm !== 'undefined' ? chapter1Bgm : null)], ['syncChapter2Bgm', () => (typeof chapter2Bgm !== 'undefined' ? chapter2Bgm : null)],
+   ['syncChapter3Bgm', () => (typeof chapter3Bgm !== 'undefined' ? chapter3Bgm : null)], ['syncOrangeKingBgm', () => (typeof orangeKingBgm !== 'undefined' ? orangeKingBgm : null)]].forEach(([fn, get]) => {
+    wrapFn(fn, o => function () { const r = o.apply(this, arguments); try { v396DuckBgm(get()); } catch (e) {} return r; });
+  });
+  wrapFn('loadLevel', o => function () { try { v396ThemeStop('loadLevel'); } catch (e) {} return o.apply(this, arguments); });
+  // 暫停背包 2.0
+  wrapFn('openPauseBag', o => function () {
+    if (gameState === 'playing') pauseGame();
+    if (!document.getElementById('pause-bag-panel')) return o.apply(this, arguments);
+    v396RenderPauseBag();
+  });
+  // 小V的家「未完成」模式的出發文字
+  wrapFn('h2DepartCheck', o => function () { const g = o.apply(this, arguments); try { if (g && g.sub === '重試本關') g.sub = '🔁 再次出發：' + getChapterDisplayTitle(currentLevelIndex); } catch (e) {} return g; });
+  // 開發測試工具：翼靴 ×1.25 選項（校準用，只在記憶體）
+  const addDev = () => { const d = document.getElementById('v395-dev'); if (!d) return false; if (document.getElementById('v396-boots125')) return true;
+    const b = document.createElement('button'); b.id = 'v396-boots125'; b.type = 'button'; b.className = 'h2-pill h2-pill--purple h2-pill--sm'; b.textContent = '🪽 翼靴 ×1.25（正式）';
+    b.addEventListener('click', e => { e.preventDefault(); V395_BOOTS.mul = 1.25; showHint('🛠 翼靴倍率 ×1.25（正式值）', 120); }); d.appendChild(b); return true; };
+  if (typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) { if (!addDev()) { let n = 0; const t = setInterval(() => { if (addDev() || ++n > 80) clearInterval(t); }, 500); } }
+  window.debugStar396 = () => ({ active: v395StarActive(), left: v395Star.left, sec: Math.ceil(v395Star.left / 60), seconds: V395_STAR.seconds, filter: v396CanFilter(), filterNow: v395StarActive() ? v396StarFilter() : null, kills: v396StarKills.slice(-20),
+    theme: { status: v396Theme.status, playing: !!(v396Theme.el && !v396Theme.el.paused), vol: v396Theme.el ? +v396Theme.el.volume.toFixed(3) : null, t: v396Theme.el ? +v396Theme.el.currentTime.toFixed(2) : null, starts: v396Theme.starts, stops: v396Theme.stops, log: v396Theme.log.slice(-12), src: v396Theme.el ? v396Theme.el.src.replace(/^.*balloon-v-rush\//, '').replace(/\?.*$/, '') : null },
+    bgm: [['chapter1Bgm', typeof chapter1Bgm !== 'undefined' ? chapter1Bgm : null], ['chapter2Bgm', typeof chapter2Bgm !== 'undefined' ? chapter2Bgm : null], ['chapter3Bgm', typeof chapter3Bgm !== 'undefined' ? chapter3Bgm : null], ['orangeKingBgm', typeof orangeKingBgm !== 'undefined' ? orangeKingBgm : null]].map(([n, a]) => a ? { n, playing: !a.paused, vol: +a.volume.toFixed(3), base: a._v396base } : { n, none: true }),
+    activateSfx: { status: SFX.status.starActivate, url: (SFX.urls.starActivate || '').replace(/^.*balloon-v-rush\//, '').replace(/\?.*$/, '') }, shopLog: playerInventory.shopLog || null, bootsMul: V395_BOOTS.mul, bagPrice: V395_BAG.upgradePrice });
 })();
