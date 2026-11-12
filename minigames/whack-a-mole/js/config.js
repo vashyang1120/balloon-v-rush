@@ -10,7 +10,7 @@
   'use strict';
 
   var CONFIG = {
-    VERSION: 'whack-a-mole-v0.1.1-test-1',
+    VERSION: 'whack-a-mole-v0.1.2-test-1',
     BASELINE: '打地鼠 PM v0.29',
 
     /* ---------- 已確認規則（不可擅改） ---------- */
@@ -101,7 +101,7 @@
       scorpion:     { path: 'assets/enemies/scorpion/scorpion_walk_01.png',              bbox: [69, 107, 444, 410] },
       scorpionHit:  { path: 'assets/enemies/scorpion/scorpion_hurt_01.png',              bbox: [65, 73, 446, 399] },
       orange:       { path: 'assets/enemies/orange/orange_idle_01.png',                  bbox: [55, 60, 495, 479] },
-      spike:        { path: 'assets/adventure/hazards/chapter1/chapter1_spike.png',      bbox: [70, 233, 1211, 1039] },
+      spike:        { path: 'assets/adventure/hazards/chapter1/chapter1_spike.png',      bbox: [70, 233, 1211, 1039], cacheW: 700 },
       boss:         { path: 'assets/bosses/orange-king/orange_king_idle_01.png',         bbox: [31, 7, 493, 466] },
       ring:         { path: 'assets/bosses/orange-king/orange_king_golden_oil_ring.png', bbox: [61, 35, 455, 453] },
       // 氣球槌：head = 槌頭中心、grip = 握把末端（像素座標，已實測）
@@ -109,8 +109,25 @@
       bgFar:        { path: 'assets/adventure/backgrounds/chapter1/chapter1_bg_far.png' },
       bgMid:        { path: 'assets/adventure/backgrounds/chapter1/chapter1_bg_mid.png' },
       spiritNormal: { path: 'assets/adventure/rpg/portraits/star-spirit/star_spirit_normal.png' },
-      spiritAngry:  { path: 'assets/adventure/rpg/portraits/star-spirit/star_spirit_angry.png' }
+      spiritAngry:  { path: 'assets/adventure/rpg/portraits/star-spirit/star_spirit_angry.png' },
+
+      /* ---- v0.1.2：Vash 提供的打地鼠專用素材（放在本資料夾 assets/，不動共用素材） ----
+       * bodyW / anchorX：受擊圖與一般圖的角色本體寬度、中心對齊，換圖時大小不跳動 */
+      orangeHit:    { path: 'minigames/whack-a-mole/assets/characters/orange_hurt_01.png', bbox: [161, 242, 1063, 995], bodyW: 895, anchorX: 667, cacheW: 640 },
+      bossHit:      { path: 'assets/bosses/orange-king/orange_king_cooldown_01.png',     bbox: [15, 25, 493, 485], bodyW: 462 },
+      ground:       { path: 'minigames/whack-a-mole/assets/stage/whack_ground.png',      bbox: [73, 15, 1375, 1038], cacheW: 1600 },
+      // 洞口前後兩張同畫布疊合；opening = 洞口中心與半寬（像素，已實測，高寬比 0.33 與原型相同）
+      holeBack:     { path: 'minigames/whack-a-mole/assets/stage/whack_hole_back.png',   opening: [866, 521, 452], cacheW: 900 },
+      holeFront:    { path: 'minigames/whack-a-mole/assets/stage/whack_hole_front.png',  opening: [866, 521, 452], cacheW: 900 },
+      hammerGold:   { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_gold.png',      head: [500, 381], grip: [1092, 1215], cacheW: 700 },
+      hammerCracked:{ path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_cracked.png',   head: [464, 395], grip: [1065, 1179], cacheW: 700 },
+      hammerBurst:  { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_burst.png',     head: [464, 395], grip: [1065, 1179], cacheW: 700 },
+      hammerShards: { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_fragments.png', head: [464, 395], grip: [1065, 1179], cacheW: 700 }
     },
+    // 爆槌畫面節奏（秒，遊戲時鐘；純畫面，1.5 秒修復規則不變）：
+    // 裂開 → 爆開 → 碎片飄散 → 最後 0.25 秒重新充氣
+    BREAK_FX: { cracked: 0.12, burst: 0.55, shards: 1.25, reinflate: 0.25 },
+    // cacheW：大圖載入後先縮成一份顯示用副本（原檔不變），手機每幀繪製更輕
     // 角色顯示寬度（× 格子寬，再乘上該排透視比例）；等比例縮放，不拉伸
     SPRITE_WIDTH: { scorpion: 0.68, orange: 0.56, spike: 0.66, ring: 0.5, boss: 1.32 },
 

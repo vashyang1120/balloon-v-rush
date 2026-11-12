@@ -25,24 +25,45 @@
 
   /* ---------- v0.1.1：正式素材繪製輔助 ---------- */
   function asset(key) { return WAM.Assets ? WAM.Assets.get(key) : null; }
+  function blit(ctx, e, sx, sy, sw, sh, dx, dy, dw, dh) { WAM.Assets.blit(ctx, e, sx, sy, sw, sh, dx, dy, dw, dh); }
   function spriteFor(type, hit) {
     if (type === 'scorpion' && hit) return asset('scorpionHit') || asset('scorpion');
+    if (type === 'orange' && hit) return asset('orangeHit') || asset('orange'); // v0.1.2：金槌敲中橘子怪
     return asset(type);
   }
   // 以 bbox 底部中央為原點、指定寬度等比例繪製（只裁掉透明邊，不拉伸），回傳繪製高度
   function drawSprite(ctx, e, w, flash) {
-    var b = e.def.bbox, bw = b[2] - b[0], bh = b[3] - b[1], s = w / bw;
-    ctx.drawImage(e.img, b[0], b[1], bw, bh, -w / 2, -bh * s, w, bh * s);
+    var d = e.def, b = d.bbox, bw = b[2] - b[0], bh = b[3] - b[1];
+    var s = w / (d.bodyW || bw);
+    var ax = d.anchorX !== undefined ? d.anchorX : (b[0] + b[2]) / 2;
+    var dx = (b[0] - ax) * s;
+    blit(ctx, e, b[0], b[1], bw, bh, dx, -bh * s, bw * s, bh * s);
     if (flash > 0) { // 受擊閃光：疊一層同圖亮化，不修改原圖
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = Math.min(1, flash) * 0.65;
-      ctx.drawImage(e.img, b[0], b[1], bw, bh, -w / 2, -bh * s, w, bh * s);
+      blit(ctx, e, b[0], b[1], bw, bh, dx, -bh * s, bw * s, bh * s);
       ctx.restore();
     }
     return bh * s;
   }
-  function spriteHeight(e, w) { var b = e.def.bbox; return (b[3] - b[1]) * w / (b[2] - b[0]); }
+  function spriteHeight(e, w) { var d = e.def, b = d.bbox; return (b[3] - b[1]) * w / (d.bodyW || (b[2] - b[0])); }
+  // 以「打擊姿勢」畫一張槌子類圖片：head 對準 (tx,ty)，與遊戲中揮擊的角度一致
+  function drawHammerImageAt(ctx, e, tx, ty, L, angle, scaleMul) {
+    var hd = e.def, ax = hd.head[0] - hd.grip[0], ay = hd.head[1] - hd.grip[1];
+    var sc = L / Math.sqrt(ax * ax + ay * ay) * (scaleMul || 1);
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle - Math.atan2(ay, ax));
+    ctx.scale(sc, sc);
+    blit(ctx, e, 0, 0, e.img.naturalWidth, e.img.naturalHeight, -hd.head[0], -hd.head[1], e.img.naturalWidth, e.img.naturalHeight);
+    ctx.restore();
+  }
+  // 洞口圖（前後兩張同畫布）：opening 中心對準 (cx,cy)，半寬 = rx
+  function drawHoleArt(ctx, e, cx, cy, rx) {
+    var o = e.def.opening, k = rx / o[2];
+    blit(ctx, e, 0, 0, e.img.naturalWidth, e.img.naturalHeight, cx - o[0] * k, cy - o[1] * k, e.img.naturalWidth * k, e.img.naturalHeight * k);
+  }
 
   function Renderer(canvas, grid, game) {
     this.canvas = canvas;
@@ -141,6 +162,15 @@
 
   Renderer.prototype.drawField = function (ctx) {
     var gr = this.grid.grid;
+    var ground = asset('ground');
+    if (ground) { // v0.1.2：草地平台圖，等比例縮放（高度蓋滿九宮格，兩側邊緣藏在資訊欄後）
+      var b = ground.def.bbox, bw = b[2] - b[0], bh = b[3] - b[1];
+      var s = (gr.h + 70) / bh;
+      var bottom = gr.y + gr.h + 22;
+      var cxm = gr.x + gr.w / 2;
+      blit(ctx, ground, b[0], b[1], bw, bh, cxm - bw * s / 2, bottom - bh * s, bw * s, bh * s);
+      return;
+    }
     var inset = gr.w * 0.06;
     ctx.save();
     ctx.beginPath();
@@ -163,7 +193,11 @@
   /* =================== 洞口＋普通目標 =================== */
   Renderer.prototype.drawHole = function (ctx, cell, t, bossPhase) {
     var g = this.game;
+    var hb = asset('holeBack'), hf = asset('holeFront');
+    var art = !!(hb && hf);
     // 洞口後方（暗色）
+    if (art) drawHoleArt(ctx, hb, cell.cx, cell.cy, cell.rx);
+    else {
     ctx.save();
     ctx.fillStyle = '#5a3a22';
     ctx.beginPath(); ctx.ellipse(cell.cx, cell.cy + cell.ry * 0.25, cell.rx * 1.08, cell.ry * 1.25, 0, 0, Math.PI * 2); ctx.fill();
@@ -173,6 +207,7 @@
     ctx.fillStyle = holeGrad;
     ctx.beginPath(); ctx.ellipse(cell.cx, cell.cy, cell.rx, cell.ry, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+    }
 
     // 角色：裁切成「洞口中線以上 ∪ 洞口內部」，前緣再蓋上去
     if (g.state === 'playing' || g.state === 'ended') {
@@ -184,6 +219,8 @@
     }
 
     // 洞口前緣（遮住角色下半身）
+    if (art) drawHoleArt(ctx, hf, cell.cx, cell.cy, cell.rx);
+    else {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#7b5130';
@@ -193,6 +230,7 @@
     ctx.lineWidth = cell.ry * 0.2;
     ctx.beginPath(); ctx.ellipse(cell.cx, cell.cy - cell.ry * 0.05, cell.rx * 0.98, cell.ry * 0.95, 0, 0.15, Math.PI - 0.15); ctx.stroke();
     ctx.restore();
+    }
 
     // 鍵盤提示
     if (!this.grid.compact && !(bossPhase && cell.index === 4)) {
@@ -234,7 +272,9 @@
       var upB = cell.cy + cell.ry * 0.45;
       var downB = cell.cy + cell.ry + sh + 4;
       var by = downB + (upB - downB) * h;
-      var flash = tg.hitAt !== null ? 1 - clamp01((t - tg.hitAt) / 0.18) : 0;
+      // 有專用受擊圖（蠍子怪、橘子怪）就不再疊白光，保留原圖配色
+      var hasHitArt = tg.hitAt !== null && ((tg.type === 'scorpion' && asset('scorpionHit')) || (tg.type === 'orange' && asset('orangeHit')));
+      var flash = tg.hitAt !== null && !hasHitArt ? 1 - clamp01((t - tg.hitAt) / 0.18) : 0;
       ctx.save();
       this.clipHole(ctx, cell.cx, cell.cy, cell.rx, cell.ry, R);
       ctx.translate(cell.cx, by);
@@ -437,12 +477,16 @@
     }
     // 大型洞口
     var holeOpen = easeOut(p * 2.5);
+    var hb = asset('holeBack'), hf = asset('holeFront');
+    if (hb && hf) { if (holeOpen > 0.01) drawHoleArt(ctx, hb, b.cx, b.cy, b.rx * holeOpen); }
+    else {
     ctx.save();
     ctx.fillStyle = '#4a2c18';
     ctx.beginPath(); ctx.ellipse(b.cx, b.cy + b.ry * 0.25, b.rx * 1.1 * holeOpen, b.ry * 1.3 * holeOpen, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#0d0703';
     ctx.beginPath(); ctx.ellipse(b.cx, b.cy, b.rx * holeOpen, b.ry * holeOpen, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+    }
 
     // 本體（升起）
     var h = easeOutBack(p);
@@ -450,16 +494,19 @@
     var y = downY + (upY - downY) * h;
     var react = boss.reactAmount(t);
     var bs = asset('boss');
+    // v0.1.2：受擊時換成 orange_king_cooldown_01（同像素比例、腳底對齊；純畫面，不影響判定）
+    if (bs && react > 0 && asset('bossHit')) bs = asset('bossHit');
     if (bs) { // v0.1.1：冒險主線橘子王（等比例放大，明顯大於普通目標）
       var bw = C.SPRITE_WIDTH.boss * this.grid.cellW;
       var bh = spriteHeight(bs, bw);
-      var upB = b.cy + b.ry * 0.5, downB = b.cy + b.ry + bh + 4;
+      var bhIdle = asset('boss') ? spriteHeight(asset('boss'), bw) : bh; // 升起位置以一般圖為準
+      var upB = b.cy + b.ry * 0.5, downB = b.cy + b.ry + Math.max(bh, bhIdle) + 4;
       var byy = downB + (upB - downB) * h;
       ctx.save();
       this.clipHole(ctx, b.cx, b.cy, b.rx, b.ry, bh / 4 + 10);
       ctx.translate(b.cx + (react ? Math.sin(t * 160) * 8 * react : 0), byy + react * 8);
       ctx.scale(1 + react * 0.05, 1 - react * 0.06);
-      drawSprite(ctx, bs, bw, react);
+      drawSprite(ctx, bs, bw, react * 0.5);
       ctx.restore();
     } else {
     ctx.save();
@@ -493,11 +540,14 @@
     }
 
     // 前緣
+    if (hb && hf) { if (holeOpen > 0.01) drawHoleArt(ctx, hf, b.cx, b.cy, b.rx * holeOpen); }
+    else {
     ctx.save();
     ctx.strokeStyle = '#6d4426';
     ctx.lineWidth = b.ry * 0.5 * holeOpen + 1;
     ctx.beginPath(); ctx.ellipse(b.cx, b.cy, b.rx * holeOpen, b.ry * holeOpen, 0, 0.02, Math.PI - 0.02); ctx.stroke();
     ctx.restore();
+    }
 
     // 名稱標籤
     ctx.save();
@@ -551,6 +601,32 @@
         ctx.strokeText(f.text, p.x + (f.big ? (Math.random() - 0.5) * 0 : 0), yy);
         ctx.fillStyle = f.big ? '#ffd23f' : (f.goldText ? '#ffe36b' : '#ffffff');
         ctx.fillText(f.text, p.x, yy);
+      } else if (f.type === 'burst' && asset('hammerCracked') && asset('hammerBurst') && asset('hammerShards') && k < C.BREAK_FX.shards) {
+        // v0.1.2：正式爆槌圖：裂開 → 爆開 → 碎片飄散（在敲擊的位置、敲擊的角度）
+        var BF = C.BREAK_FX, L2 = self.hammerLength();
+        var hp = p;
+        self.game.fx.forEach(function (sw) { if (sw.type === 'swing' && sw.t0 === f.t0 && sw.x !== null && sw.x !== undefined) hp = { x: sw.x, y: sw.y }; });
+        if (k < BF.cracked) {
+          var sh = Math.sin(k * 140) * 5;
+          drawHammerImageAt(ctx, asset('hammerCracked'), hp.x + sh, hp.y, L2, ANG_STRIKE, 1);
+        } else if (k < BF.burst) {
+          var kb = (k - BF.cracked) / (BF.burst - BF.cracked);
+          ctx.globalAlpha = 1 - kb * 0.25;
+          drawHammerImageAt(ctx, asset('hammerBurst'), hp.x, hp.y, L2, ANG_STRIKE, 1 + easeOut(kb) * 0.18);
+        } else {
+          var ks = (k - BF.burst) / (BF.shards - BF.burst);
+          ctx.globalAlpha = 1 - ks;
+          drawHammerImageAt(ctx, asset('hammerShards'), hp.x, hp.y + ks * 50, L2, ANG_STRIKE, 1.18 + ks * 0.12);
+        }
+        ctx.globalAlpha = Math.max(0, 1 - k / 1.0);
+        if (k < 1.0) {
+          ctx.font = '900 64px ' + FONT;
+          ctx.textAlign = 'center';
+          ctx.lineWidth = 9; ctx.strokeStyle = '#5c0b0b';
+          ctx.strokeText('啪！爆槌', p.x, p.y - 70 - k * 30);
+          ctx.fillStyle = '#ff5050';
+          ctx.fillText('啪！爆槌', p.x, p.y - 70 - k * 30);
+        }
       } else if (f.type === 'burst' && k < 1.0) {
         var a2 = 1 - k / 1.0;
         ctx.globalAlpha = a2;
@@ -632,6 +708,21 @@
       var sc = L / Math.sqrt(ax * ax + ay * ay);
       ctx.rotate(-Math.atan2(ay, ax));
       ctx.scale(sc, sc);
+      var gimg = asset('hammerGold');
+      if (mode === 'gold' && gimg) { // v0.1.2：正式金色氣球槌圖片
+        ctx.restore();
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,215,60,0.9)';
+        ctx.shadowBlur = 30;
+        var hx = px + L * Math.cos(angle), hy = py + L * Math.sin(angle);
+        drawHammerImageAt(ctx, gimg, hx, hy, L, angle);
+        ctx.restore();
+        for (var gs2 = 0; gs2 < 3; gs2++) {
+          var ga2 = t * 5 + gs2 * 2.1;
+          star(ctx, hx + Math.cos(ga2) * L * 0.45, hy + Math.sin(ga2) * L * 0.38, L * 0.07, '#fffbe0');
+        }
+        return;
+      }
       if (mode === 'gold') {
         ctx.shadowColor = 'rgba(255,215,60,0.95)';
         ctx.shadowBlur = 40;
@@ -742,7 +833,23 @@
     if (this.mouse.inside) {
       var k = lastMouseSwing ? t - lastMouseSwing.t0 : 99;
       var ang = mode === 'broken' ? ANG_RAISED + 0.5 : swingAngle(k);
-      this.drawHammerAt(ctx, this.mouse.x, this.mouse.y, ang, mode, t);
+      var breakArt = asset('hammerCracked') && asset('hammerBurst') && asset('hammerShards') && asset('hammer');
+      if (mode === 'broken' && breakArt) {
+        // v0.1.2：爆開與碎片在敲擊位置播放；最後 0.25 秒槌子重新充氣長回來
+        var kb2 = t - g.hammer.brokenAt, BF2 = C.BREAK_FX;
+        var since = kb2 - (C.BREAK_DURATION - BF2.reinflate);
+        if (since > 0) {
+          var gr = easeOutBack(since / BF2.reinflate);
+          ctx.save();
+          ctx.globalAlpha = clamp01(since / BF2.reinflate * 1.5);
+          var Lr = this.hammerLength();
+          var pxr = this.mouse.x - Lr * Math.cos(ANG_STRIKE), pyr = this.mouse.y - Lr * Math.sin(ANG_STRIKE);
+          drawHammerImageAt(ctx, asset('hammer'), pxr + Lr * Math.cos(ANG_RAISED), pyr + Lr * Math.sin(ANG_RAISED), Lr, ANG_RAISED, 0.45 + 0.55 * gr);
+          ctx.restore();
+        }
+      } else {
+        this.drawHammerAt(ctx, this.mouse.x, this.mouse.y, ang, mode, t);
+      }
       if (mode === 'broken') this.drawRepairBadge(ctx, this.mouse.x + 50, this.mouse.y + 50, t);
     }
   };
