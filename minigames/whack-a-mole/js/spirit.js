@@ -1,5 +1,5 @@
 /* =========================================================
- * spirit.js — 星靈對話框（原型用簡單圖示＋對話框模擬）
+ * spirit.js — 星靈對話框（v0.1.2-test-2：外觀比照冒險主線 RPG 對話介面）
  * 正式版改接冒險主線的星靈 RPG 對話系統。
  * 暫停規則在 game.js（openSpirit / closeSpirit）。
  * ========================================================= */
@@ -19,7 +19,7 @@
     this.btn.addEventListener('click', function (e) { e.preventDefault(); self.close(); });
     // 點對話框任何地方也能關閉（避免手機玩家找不到按鈕）
     root.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    root.querySelector('.spirit-box').addEventListener('click', function (e) {
+    root.addEventListener('click', function (e) { // 比照冒險主線：點畫面任何地方繼續
       if (e.target !== self.btn) self.close();
     });
     W.addEventListener('keydown', function (e) {

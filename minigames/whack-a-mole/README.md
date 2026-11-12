@@ -1,4 +1,4 @@
-# 打地鼠（暫名）— whack-a-mole-v0.1.2-test-1
+# 打地鼠（暫名）— whack-a-mole-v0.1.2-test-2
 
 《氣球小V：派對島大作戰》附屬小遊戲的**獨立可玩幾何原型**（基準：打地鼠 PM v0.29）。
 與 `minigames/volleyball/` 同層，完全獨立：不讀寫冒險存檔、不使用 Firebase / V幣 / 排行榜，
@@ -19,9 +19,14 @@ v0.1.1：換上冒險主線／氣球排球的既有正式素材（直接引用�
 | 星靈 | assets/adventure/rpg/portraits/star-spirit/star_spirit_normal.png、star_spirit_angry.png |
 | 音效 | assets/audio/sfx/（player_hammer_hit、player_hammer_swing、scorpion_hurt、giant_scorpion_hurt、sfx_balloon_pop、balloon_crafting、golden_pipe_ring_get、boss_taunt_crouch、ui_dialog_open、ui_button_click、ui_level_clear） |
 | 橘子王受擊（v0.1.2） | assets/bosses/orange-king/orange_king_cooldown_01.png |
-| 橘子怪受擊（v0.1.2） | minigames/whack-a-mole/assets/characters/orange_hurt_01.png |
-| 草地平台、洞口後方／前緣（v0.1.2） | minigames/whack-a-mole/assets/stage/whack_ground.png、whack_hole_back.png、whack_hole_front.png |
-| 金色氣球槌、爆槌三段（v0.1.2） | minigames/whack-a-mole/assets/hammer/balloon_hammer_gold.png、balloon_hammer_cracked.png、balloon_hammer_burst.png、balloon_hammer_fragments.png |
+| 橘子怪受擊 | minigames/whack-a-mole/assets/whack_orange_hurt.png |
+| 森林九宮格平台 | minigames/whack-a-mole/assets/whack_platform.png |
+| 洞口底層 | minigames/whack-a-mole/assets/whack_hole_back.png |
+| 洞口前緣 | minigames/whack-a-mole/assets/whack_hole_front.png（由洞口底層同一張圖遮罩取出，與底層像素完全對齊） |
+| 原始洞口前緣（備份，不載入） | minigames/whack-a-mole/assets/whack_hole_front_original.png |
+| 金藍雷神無敵槌 | minigames/whack-a-mole/assets/whack_hammer_gold.png |
+| 爆槌三階段 | minigames/whack-a-mole/assets/whack_hammer_pop_01.png → 02 → 03 |
+| 無敵槌倒數提示音 | Web Audio 即時合成（js/audio.js 的 tone()），不用音檔 |
 | BGM（同氣球排球） | minigames/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3 |
 
 ## 啟動

@@ -10,7 +10,7 @@
   'use strict';
 
   var CONFIG = {
-    VERSION: 'whack-a-mole-v0.1.2-test-1',
+    VERSION: 'whack-a-mole-v0.1.2-test-2',
     BASELINE: '打地鼠 PM v0.29',
 
     /* ---------- 已確認規則（不可擅改） ---------- */
@@ -69,7 +69,7 @@
 
     /* ---------- 星靈對話 ---------- */
     SPIRIT_TEXT: {
-      opening: '你應該知道什麼可以用氣球槌敲，什麼不能用氣球槌敲吧？',
+      opening: '你應該知道什麼能用氣球槌子敲，什麼不能吧？',
       orange: '你不知道氣球槌不能拿來敲橘子怪嗎？',
       spike: '你不知道氣球槌不能拿來敲尖刺嗎？',
       boss: '你不知道氣球槌不能拿來敲橘子王嗎？'
@@ -113,20 +113,29 @@
 
       /* ---- v0.1.2：Vash 提供的打地鼠專用素材（放在本資料夾 assets/，不動共用素材） ----
        * bodyW / anchorX：受擊圖與一般圖的角色本體寬度、中心對齊，換圖時大小不跳動 */
-      orangeHit:    { path: 'minigames/whack-a-mole/assets/characters/orange_hurt_01.png', bbox: [161, 242, 1063, 995], bodyW: 895, anchorX: 667, cacheW: 640 },
+      orangeHit:    { path: 'minigames/whack-a-mole/assets/whack_orange_hurt.png', bbox: [161, 242, 1063, 995], bodyW: 895, anchorX: 667, cacheW: 640 },
       bossHit:      { path: 'assets/bosses/orange-king/orange_king_cooldown_01.png',     bbox: [15, 25, 493, 485], bodyW: 462 },
-      ground:       { path: 'minigames/whack-a-mole/assets/stage/whack_ground.png',      bbox: [73, 15, 1375, 1038], cacheW: 1600 },
-      // 洞口前後兩張同畫布疊合；opening = 洞口中心與半寬（像素，已實測，高寬比 0.33 與原型相同）
-      holeBack:     { path: 'minigames/whack-a-mole/assets/stage/whack_hole_back.png',   opening: [866, 521, 452], cacheW: 900 },
-      holeFront:    { path: 'minigames/whack-a-mole/assets/stage/whack_hole_front.png',  opening: [866, 521, 452], cacheW: 900 },
-      hammerGold:   { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_gold.png',      head: [500, 381], grip: [1092, 1215], cacheW: 700 },
-      hammerCracked:{ path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_cracked.png',   head: [464, 395], grip: [1065, 1179], cacheW: 700 },
-      hammerBurst:  { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_burst.png',     head: [464, 395], grip: [1065, 1179], cacheW: 700 },
-      hammerShards: { path: 'minigames/whack-a-mole/assets/hammer/balloon_hammer_fragments.png', head: [464, 395], grip: [1065, 1179], cacheW: 700 }
+      // edge = 草地平台實測：[圖片 y, 該列草地半寬]（中心 x=719；y≥960 是前側土壤）
+      ground:       { path: 'minigames/whack-a-mole/assets/whack_platform.png',      bbox: [73, 15, 1375, 1038], cacheW: 1600,
+                      centerX: 719, grassBottom: 960,
+                      edge: [[40, 424], [80, 458], [150, 470], [300, 496], [500, 544], [700, 593], [900, 645]] },
+      // 洞口：whack_hole_front.png 是從 whack_hole_back.png 同一張圖遮罩取出的近側邊緣（v0.1.2-test-2），
+      // 兩張像素完全對齊。原始前緣 whack_hole_front_original.png 因與底層錯位，只保留備份、不載入。
+      // opening = 洞口中心與半寬（像素，已實測，高寬比 0.33 與原型相同）
+      holeBack:     { path: 'minigames/whack-a-mole/assets/whack_hole_back.png',   opening: [866, 521, 452], cacheW: 900 },
+      holeFront:    { path: 'minigames/whack-a-mole/assets/whack_hole_front.png',  opening: [866, 521, 452], cacheW: 900 },
+      hammerGold:   { path: 'minigames/whack-a-mole/assets/whack_hammer_gold.png',      head: [500, 381], grip: [1092, 1215], cacheW: 700 },
+      hammerCracked:{ path: 'minigames/whack-a-mole/assets/whack_hammer_pop_01.png',   head: [464, 395], grip: [1065, 1179], cacheW: 700 },
+      hammerBurst:  { path: 'minigames/whack-a-mole/assets/whack_hammer_pop_02.png',     head: [464, 395], grip: [1065, 1179], cacheW: 700 },
+      hammerShards: { path: 'minigames/whack-a-mole/assets/whack_hammer_pop_03.png', head: [464, 395], grip: [1065, 1179], cacheW: 700 }
     },
     // 爆槌畫面節奏（秒，遊戲時鐘；純畫面，1.5 秒修復規則不變）：
     // 裂開 → 爆開 → 碎片飄散 → 最後 0.25 秒重新充氣
     BREAK_FX: { cracked: 0.12, burst: 0.55, shards: 1.25, reinflate: 0.25 },
+    // 角色完全升起時，圖片底部位於洞口近側邊緣下方多少（× 洞口半高）：下半身被邊緣擋住、臉完整露出
+    HOLE_SINK: 1.12,
+    // 無敵槌倒數提示：金槌結束前 3、2、1 秒＋結束瞬間（Web Audio 即時合成，跟遊戲時鐘走）
+    GOLD_COUNTDOWN: [3, 2, 1],
     // cacheW：大圖載入後先縮成一份顯示用副本（原檔不變），手機每幀繪製更輕
     // 角色顯示寬度（× 格子寬，再乘上該排透視比例）；等比例縮放，不拉伸
     SPRITE_WIDTH: { scorpion: 0.68, orange: 0.56, spike: 0.66, ring: 0.5, boss: 1.32 },
