@@ -10,7 +10,7 @@
   'use strict';
 
   var CONFIG = {
-    VERSION: 'whack-a-mole-v0.1.3-test-1',
+    VERSION: 'whack-a-mole-v0.1.4-test-1',
     BASELINE: '打地鼠 PM v0.31.1',
     TITLE: '氣球槌打地鼠',
 
@@ -24,10 +24,11 @@
     BOSS_START: 27,             // Boss 戰開始秒數
     SPIRIT_MAX_REMINDERS: 1,    // 星靈每局最多提醒一次
 
-    // 金環時間窗：出現 → 有效至；金槌也一律在 to 結束
+    // 金環時間窗：出現 → 有效至；金槌也一律在 to 結束（固定時段，不從取得時重算）
+    // v0.1.4 正式定案：每次固定 8 秒（9→17、22→30）
     GOLD_WINDOWS: [
-      { id: 1, from: 12, to: 17 },
-      { id: 2, from: 25, to: 30 }
+      { id: 1, from: 9,  to: 17 },
+      { id: 2, from: 22, to: 30 }
     ],
     CORNER_HOLES: [0, 2, 6, 8],   // 九宮格四個角落（0=左上 … 8=右下）
 
@@ -139,6 +140,8 @@
     HOLE_SINK: 1.12,
     // 無敵槌倒數提示：金槌結束前 3、2、1 秒＋結束瞬間（Web Audio 即時合成，跟遊戲時鐘走）
     GOLD_COUNTDOWN: [3, 2, 1],
+    // v0.1.4：畫面中上方無敵槌倒數（純畫面；剩 3/2/1 秒顏色）
+    GOLD_HUD_COLORS: { normal: '#ffd23f', 3: '#ffb020', 2: '#ff7a1a', 1: '#ff4a1a' },
     // cacheW：大圖載入後先縮成一份顯示用副本（原檔不變），手機每幀繪製更輕
     // 角色顯示寬度（× 格子寬，再乘上該排透視比例）；等比例縮放，不拉伸
     SPRITE_WIDTH: { scorpion: 0.68, orange: 0.56, spike: 0.66, ring: 0.5, boss: 1.32 },
