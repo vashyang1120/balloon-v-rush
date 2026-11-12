@@ -10,7 +10,9 @@
   var WAM = W.WAM;
   var C = WAM.CONFIG;
 
-  function Input(canvas, game, renderer) {
+  // onResult：敲擊結果回呼（v0.1.1 用來播音效；不影響判定）
+  function Input(canvas, game, renderer, onResult) {
+    var report = function (res) { if (onResult) { try { onResult(res); } catch (e) {} } };
     this.canvas = canvas;
     this.game = game;
     this.renderer = renderer;
@@ -32,7 +34,7 @@
         renderer.mouse.x = p.x; renderer.mouse.y = p.y; renderer.mouse.inside = true;
       }
       var source = e.pointerType === 'mouse' ? 'mouse' : (e.pointerType === 'pen' ? 'touch' : 'touch');
-      game.requestHit({ kind: 'point', x: p.x, y: p.y }, source, performance.now());
+      report(game.requestHit({ kind: 'point', x: p.x, y: p.y }, source, performance.now()));
     }, { passive: false });
 
     canvas.addEventListener('pointermove', function (e) {
@@ -52,7 +54,7 @@
       if (!(e.code in C.KEY_MAP)) return;
       e.preventDefault();
       if (e.repeat) return; // 按住不放不連打
-      game.requestHit({ kind: 'key', index: C.KEY_MAP[e.code] }, 'key', performance.now());
+      report(game.requestHit({ kind: 'key', index: C.KEY_MAP[e.code] }, 'key', performance.now()));
     });
   }
 

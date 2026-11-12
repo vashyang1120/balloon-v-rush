@@ -12,6 +12,10 @@
   var canvas = $('board');
   var grid = new WAM.HoleGrid();
   var spirit = new WAM.SpiritView($('spirit'));
+  var AU = WAM.Audio;
+  WAM.Assets.loadAll();
+  AU.preload();
+  AU.bindUnlock();
   var game, renderer;
 
   function isCompact() {
@@ -21,21 +25,42 @@
 
   game = new WAM.Game(grid, {
     onSpirit: function (key, text) {
-      spirit.open(text, '知道了 ▶', function (realMs) { game.closeSpirit(realMs); });
+      AU.play('dialogOpen');
+      spirit.open(text, '知道了 ▶', function (realMs) { game.closeSpirit(realMs); }, 'spiritAngry');
     },
-    onEnd: function (result) { showResult(result); }
+    onEnd: function (result) {
+      AU.bgmFadeOut();
+      AU.play('result');
+      showResult(result);
+    }
   });
   renderer = new WAM.Renderer(canvas, grid, game);
   renderer.debug = params.get('debug') !== '0';
-  new WAM.Input(canvas, game, renderer);
+  // 敲擊音效（只依結果播放，不影響任何判定與間隔）
+  new WAM.Input(canvas, game, renderer, function (res) {
+    if (!res.ok) return;
+    switch (res.outcome) {
+      case 'scorpion': AU.play('hammerHit'); AU.play('scorpionHurt'); break;
+      case 'gold-orange': case 'gold-spike': AU.play('hammerHit'); break;
+      case 'bossHit': AU.play('hammerHit'); AU.play('bossHurt'); break;
+      case 'ring': AU.play('ringGet'); break;
+      case 'break': AU.play('balloonPop'); break;
+      case 'empty': AU.play('hammerSwing'); break;
+    }
+  });
 
   /* ---------- 開局 ---------- */
   function newRound(seed) {
     $('result').classList.add('hidden');
+    AU.bgmStop();
+    prevBroken = false; prevBoss = false;
     game.reset(seed);
     updateSeedUrl(seed);
     // 開場星靈對話：關閉後 30 秒才開始
-    spirit.open(C.SPIRIT_TEXT.opening, '開始！ ▶', function (realMs) { game.start(realMs); });
+    spirit.open(C.SPIRIT_TEXT.opening, '開始！ ▶', function (realMs) {
+      game.start(realMs);
+      AU.bgmStart(); // 在玩家點擊中啟動，手機瀏覽器才允許播放
+    }, 'spiritNormal');
   }
   function updateSeedUrl(seed) {
     try {
@@ -62,6 +87,9 @@
     $('result').classList.remove('hidden');
   }
 
+  ['btnSameSeed', 'btnNewSeed', 'dbgSame', 'dbgNew', 'dbgToggle'].forEach(function (id) {
+    $(id).addEventListener('pointerdown', function () { AU.play('uiClick'); });
+  });
   $('btnSameSeed').addEventListener('click', function () { newRound(game.seed); });
   $('btnNewSeed').addEventListener('click', function () { newRound(WAM.newSeed()); });
   $('dbgSame').addEventListener('click', function () { newRound(game.seed); });
@@ -90,13 +118,27 @@
   W.addEventListener('orientationchange', function () { setTimeout(layout, 200); });
   document.addEventListener('visibilitychange', function () {
     game.setPause('hidden', document.hidden, performance.now());
+    AU.setSuspended(document.hidden);
   });
 
   /* ---------- 主迴圈 ---------- */
+  var prevBroken = false, prevBoss = false;
   function frame() {
     var now = performance.now();
     game.update(now);
+    // 音訊跟著遊戲時鐘（只讀狀態，不改判定）
+    if (game.state === 'playing') {
+      var t = game.clock.t;
+      AU.bgmSetPaused(game.clock.isPaused());
+      var broken = game.hammer.isBroken(t);
+      if (prevBroken && !broken) AU.play('reinflate'); // 1.5 秒修復完成
+      prevBroken = broken;
+      var boss = game.boss.isActive(t);
+      if (boss && !prevBoss) AU.play('bossIntro');
+      prevBoss = boss;
+    }
     renderer.draw(now);
+    if (spirit.isOpen() && !spirit.icon.classList.contains('has-img')) spirit.refreshFace();
     requestAnimationFrame(frame);
   }
 

@@ -1,8 +1,24 @@
-# 打地鼠（暫名）— whack-a-mole-v0.1.0-test-1
+# 打地鼠（暫名）— whack-a-mole-v0.1.1-test-1
 
-《氣球小V：派對島大作戰》附屬小遊戲的**獨立可玩幾何原型**（基準：打地鼠PM企劃v0.25）。
+《氣球小V：派對島大作戰》附屬小遊戲的**獨立可玩幾何原型**（基準：打地鼠 PM v0.29）。
 與 `minigames/volleyball/` 同層，完全獨立：不讀寫冒險存檔、不使用 Firebase / V幣 / 排行榜，
 也沒有修改專案內任何既有檔案。
+
+v0.1.1：換上冒險主線／氣球排球的既有正式素材（直接引用原路徑，不複製、不修改原檔）。
+任何素材載入失敗，會自動退回 v0.1.0 的幾何圖形或靜音，遊戲照常進行。
+
+| 用途 | 來源路徑 |
+|---|---|
+| 蠍子怪 / 被敲中 | assets/enemies/scorpion/scorpion_walk_01.png / scorpion_hurt_01.png |
+| 橘子怪 | assets/enemies/orange/orange_idle_01.png |
+| 尖刺 | assets/adventure/hazards/chapter1/chapter1_spike.png |
+| 橘子王 | assets/bosses/orange-king/orange_king_idle_01.png |
+| 金環 | assets/bosses/orange-king/orange_king_golden_oil_ring.png |
+| 氣球槌（金槌＝程式金色濾鏡） | assets/adventure/ui/items/item_balloon_hammer.png |
+| 背景 | assets/adventure/backgrounds/chapter1/chapter1_bg_far.png、chapter1_bg_mid.png |
+| 星靈 | assets/adventure/rpg/portraits/star-spirit/star_spirit_normal.png、star_spirit_angry.png |
+| 音效 | assets/audio/sfx/（player_hammer_hit、player_hammer_swing、scorpion_hurt、giant_scorpion_hurt、sfx_balloon_pop、balloon_crafting、golden_pipe_ring_get、boss_taunt_crouch、ui_dialog_open、ui_button_click、ui_level_clear） |
+| BGM（同氣球排球） | minigames/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3 |
 
 ## 啟動
 - 直接用瀏覽器開 `minigames/whack-a-mole/index.html`（雙擊即可，不需安裝任何東西）
@@ -28,6 +44,8 @@
 | js/boss.js | 橘子王 |
 | js/scoring.js | 計分與模擬獎勵 |
 | js/game.js | 遊戲狀態、敲擊判定、星靈暫停規則 |
+| js/assets.js | 圖片素材載入與備援（v0.1.1） |
+| js/audio.js | 音效與 BGM（v0.1.1） |
 | js/spirit.js | 星靈對話框 |
 | js/input.js | 滑鼠／鍵盤／觸控 |
 | js/render.js | 畫面繪製與動畫、測試資訊 |
