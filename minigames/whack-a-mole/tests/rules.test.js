@@ -284,5 +284,41 @@ g.setPause('hidden', false, g.real);
 g.wait(100);
 ok(Math.abs(g.clock.t - 5.1) < 1e-6, '恢復後從5秒繼續');
 
+/* ---------- 9. v0.1.3 受擊停留與暫停 ---------- */
+section('v0.1.3：受擊停留 0.55 秒只是畫面，不能再得分、不影響生成');
+g = makeGame(7001);
+sc = g.firstOf('scorpion');
+g.runTo(sc.s + 0.05);
+g.key(sc.hole);
+var s1 = g.scoring.score, hitT = g.clock.t;
+g.runTo(hitT + 0.3);
+ok(g.active.some(function (a) { return a.id === sc.id; }), '命中後 0.3 秒仍在畫面（受擊停留）');
+ok(g.key(sc.hole).outcome !== 'scorpion' && g.scoring.score === s1, '受擊停留期間再敲不得分');
+g.runTo(hitT + 0.56);
+ok(!g.active.some(function (a) { return a.id === sc.id; }), '約 0.55 秒後退場');
+var gH = makeGame(7002), kk = 0;
+while (gH.state === 'playing') {
+  gH.wait(1000 / 60);
+  if (gH.spiritOpen) gH.closeSpirit(gH.real);
+  var t0 = gH.clock.t;
+  gH.active.forEach(function (a) { if (a.hitAt === null && a.type === 'scorpion' && a.s <= t0) gH.key(a.hole); });
+}
+var gI = makeGame(7002); gI.runTo(30);
+ok(JSON.stringify(gH.spawned) === JSON.stringify(gI.spawned), '每隻蠍子都敲中 vs 都不敲：各時段生成數完全相同');
+
+section('v0.1.3：玩家主動暫停與其他暫停原因互不干擾');
+g = makeGame(7003);
+g.runTo(5);
+g.setPause('user', true, g.real);
+g.setPause('hidden', true, g.real);
+g.wait(3000);
+g.setPause('hidden', false, g.real);
+g.wait(1000);
+ok(Math.abs(g.clock.t - 5) < 1e-9 && g.clock.isPaused(), '主動暫停後切分頁再回來：仍保持暫停、時間不動');
+ok(!g.key(4).ok, '暫停中不能敲擊');
+g.setPause('user', false, g.real);
+g.wait(100);
+ok(Math.abs(g.clock.t - 5.1) < 1e-6, '按繼續後從 5 秒接著跑，不補跑暫停期間');
+
 console.log('\n結果：' + pass + ' 通過，' + fail + ' 失敗');
 process.exit(fail ? 1 : 0);

@@ -1,4 +1,4 @@
-# 打地鼠（暫名）— whack-a-mole-v0.1.2-test-2
+# 氣球槌打地鼠 — whack-a-mole-v0.1.3-test-1
 
 《氣球小V：派對島大作戰》附屬小遊戲的**獨立可玩幾何原型**（基準：打地鼠 PM v0.29）。
 與 `minigames/volleyball/` 同層，完全獨立：不讀寫冒險存檔、不使用 Firebase / V幣 / 排行榜，
@@ -26,13 +26,15 @@ v0.1.1：換上冒險主線／氣球排球的既有正式素材（直接引用�
 | 原始洞口前緣（備份，不載入） | minigames/whack-a-mole/assets/whack_hole_front_original.png |
 | 金藍雷神無敵槌 | minigames/whack-a-mole/assets/whack_hammer_gold.png |
 | 爆槌三階段 | minigames/whack-a-mole/assets/whack_hammer_pop_01.png → 02 → 03 |
-| 無敵槌倒數提示音 | Web Audio 即時合成（js/audio.js 的 tone()），不用音檔 |
+| 無敵槌倒數提示音 | Web Audio 即時合成（js/audio.js 的 tone()），音量在 config.js 的 AUDIO.COUNTDOWN |
+| 金槌結束／遊戲結束哨音 | minigames/volleyball/assets/audio/serve_whistle.mp3（共用原檔） |
 | BGM（同氣球排球） | minigames/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3 |
 
 ## 啟動
 - 直接用瀏覽器開 `minigames/whack-a-mole/index.html`（雙擊即可，不需安裝任何東西）
 - 上傳到 GitHub Pages 後：`https://vashyang1120.github.io/balloon-v-rush/minigames/whack-a-mole/`
-- 網址參數：`?seed=123456` 指定種子；`?debug=0` 隱藏測試資訊（遊戲中按 `` ` `` 鍵也可切換）
+- 網址參數：`?seed=123456` 指定種子；測試資訊預設隱藏，`?debug=1` 顯示（遊戲中按 `` ` `` 鍵也可切換）
+- 暫停：右上角「暫停」按鈕，或鍵盤 P
 
 ## 操作
 - 滑鼠：點洞口（游標就是氣球槌）

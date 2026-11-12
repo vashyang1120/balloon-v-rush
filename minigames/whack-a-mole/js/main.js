@@ -30,14 +30,16 @@
     },
     onEnd: function (result) {
       AU.bgmFadeOut();
-      // 第 30 秒若第二把金槌仍有效，會同時響「金槌結束音」→ 結算音延後 0.55 秒，兩者不互相干擾
-      var goldAtEnd = game.hammer.goldFrom >= 0 && Math.abs(game.hammer.goldUntil - C.GAME_DURATION) < 1e-6;
-      AU.play('result', goldAtEnd ? 0.55 : 0);
+      // v0.1.3：第 30 秒一律只響一次「遊戲結束哨音」（第二把金槌的結束也由這一聲代表，不重複）
+      AU.play('whistle');
+      AU.play('result', C.AUDIO.RESULT_DELAY_AFTER_WHISTLE);
+      setUserPause(false);
       showResult(result);
     }
   });
   renderer = new WAM.Renderer(canvas, grid, game);
-  renderer.debug = params.get('debug') !== '0';
+  // v0.1.3：測試資訊預設隱藏；?debug=1 顯示、?debug=0 或沒有參數隱藏；` 鍵切換
+  renderer.debug = params.get('debug') === '1';
   // 敲擊音效（只依結果播放，不影響任何判定與間隔）
   new WAM.Input(canvas, game, renderer, function (res) {
     if (!res.ok) return;
@@ -56,6 +58,7 @@
     $('result').classList.add('hidden');
     AU.bgmStop();
     prevBroken = false; prevBoss = false; cueT = 0;
+    setUserPause(false);
     game.reset(seed);
     updateSeedUrl(seed);
     // 開場星靈對話：關閉後 30 秒才開始
@@ -99,9 +102,30 @@
   $('dbgToggle').addEventListener('click', function () { setDebug(!renderer.debug); });
   function setDebug(on) {
     renderer.debug = on;
-    $('debugBar').classList.toggle('collapsed', !on);
-    $('dbgToggle').textContent = on ? '隱藏測試資訊' : '測試';
+    // 隱藏時整列測試按鈕都不顯示（一般玩家、手機不會看到）
+    $('debugBar').classList.toggle('hidden', !on);
+    $('dbgToggle').textContent = '隱藏測試資訊';
   }
+
+  /* ---------- v0.1.3：玩家主動暫停 ----------
+   * 共用遊戲時鐘的暫停原因機制：'user' 與星靈 'spirit'、直拿 'orient'、切分頁 'hidden' 各自獨立，
+   * 解除其中一個不會解除其他（例如主動暫停後切分頁再回來，仍保持暫停，不會自動繼續）。 */
+  function setUserPause(on) {
+    if (on && game.state !== 'playing') return;
+    game.setPause('user', !!on, performance.now());
+    $('pauseOverlay').classList.toggle('hidden', !on);
+  }
+  function isUserPaused() { return !!game.clock.pauses.user; }
+  $('btnPause').addEventListener('click', function (e) { e.preventDefault(); setUserPause(true); });
+  $('btnResume').addEventListener('click', function (e) { e.preventDefault(); setUserPause(false); });
+  ['btnPause', 'btnResume'].forEach(function (id) {
+    $(id).addEventListener('pointerdown', function (e) { e.stopPropagation(); AU.play('uiClick'); });
+  });
+  W.addEventListener('keydown', function (e) {
+    if (e.code !== 'KeyP' || e.repeat) return;
+    if (spirit.isOpen() || game.state !== 'playing') return;
+    setUserPause(!isUserPaused());
+  });
   W.addEventListener('keydown', function (e) {
     if (e.code === 'Backquote' && !e.repeat) setDebug(!renderer.debug);
   });
@@ -137,15 +161,18 @@
       var nodes = C.GOLD_COUNTDOWN.map(function (sec, i, a) {
         return { at: U - sec, kind: i === a.length - 1 ? 'tickHigh' : 'tick' };
       });
-      nodes.push({ at: U, kind: 'goldEnd' });
+      // 剩 0 秒：氣球排球哨音。第 30 秒與遊戲結束同時 → 由 onEnd 的結束哨音代表，這裡不重複
+      if (U < C.GAME_DURATION - 1e-6) nodes.push({ at: U, kind: 'whistle' });
       nodes.forEach(function (n) {
-        if (n.at > cueT + 1e-6 && n.at <= t + 1e-6 && n.at > h.goldFrom + 1e-6) AU.tone(n.kind);
+        if (n.at > cueT + 1e-6 && n.at <= t + 1e-6 && n.at > h.goldFrom + 1e-6) {
+          if (n.kind === 'whistle') AU.play('whistle'); else AU.tone(n.kind);
+        }
       });
     }
     cueT = t;
   }
 
-  var prevBroken = false, prevBoss = false;
+  var prevBroken = false, prevBoss = false, pauseBtnShown = null;
   function frame() {
     var now = performance.now();
     game.update(now);
@@ -163,6 +190,9 @@
     }
     renderer.draw(now);
     if (spirit.isOpen() && !spirit.icon.classList.contains('has-img')) spirit.refreshFace();
+    // 暫停按鈕：只有遊戲進行中、沒有對話、沒有主動暫停時顯示；結束後隱藏
+    var showPauseBtn = game.state === 'playing' && !spirit.isOpen() && !isUserPaused();
+    if (pauseBtnShown !== showPauseBtn) { pauseBtnShown = showPauseBtn; $('btnPause').classList.toggle('hidden', !showPauseBtn); }
     requestAnimationFrame(frame);
   }
 

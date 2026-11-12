@@ -14,7 +14,7 @@
   var A = C.AUDIO;
   var IS_FILE = location.protocol === 'file:';
 
-  var ctx = null, master = null;
+  var ctx = null, master = null, sfxBus = null; // sfxBus：一般音效走這裡，倒數提示時可暫時降低
   var raw = {}, buffers = {}, html = {}, status = {};
   var lastPlay = {}, voices = {}, totalVoices = 0;
   var bgm = { el: null, gain: null, node: null, src: null, wanted: false, fadeToken: 0, status: 'idle' };
@@ -96,6 +96,9 @@
       master = ctx.createGain();
       master.gain.value = 1;
       master.connect(ctx.destination);
+      sfxBus = ctx.createGain();
+      sfxBus.gain.value = 1;
+      sfxBus.connect(master);
       // 手機 Safari：播一個無聲 buffer 完成解鎖
       var b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
       s.buffer = b; s.connect(master); s.start(0);
@@ -128,7 +131,7 @@
         src.buffer = buffers[key];
         var g = ctx.createGain();
         g.gain.value = def.vol;
-        src.connect(g); g.connect(master);
+        src.connect(g); g.connect(def.noDuck ? master : sfxBus);
         var off = def.offset || 0;
         var when = ctx.currentTime + (delaySec || 0);
         if (def.duration) {
@@ -159,21 +162,34 @@
     } catch (e) { /* 音效失敗不影響遊戲 */ }
   }
 
-  /* ---------- 無敵槌倒數提示音（v0.1.2-test-2：Web Audio 即時合成，不用音檔） ----------
-   * 'tick'    ：剩 3、2 秒，短促可愛的「嗶」
-   * 'tickHigh'：剩 1 秒，較高音
-   * 'goldEnd' ：金槌結束，三個音快速往下（像氣球洩氣的「嘟嘟嘟」）
-   * 何時播放由 main.js 依遊戲時鐘判斷；這裡只負責發聲，播放不會阻塞遊戲。 */
-  var TONE_VOL = 0.22;
-  function blip(freq, at, dur, vol, type) {
-    var o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type || 'triangle';
-    o.frequency.setValueAtTime(freq, at);
+  /* ---------- 無敵槌倒數提示音（v0.1.3 強化版：Web Audio 即時合成，不用音檔） ----------
+   * 'tick'    ：剩 3、2 秒——清楚短促的電子「嗶」（方波＋柔化濾波，亮但不刺耳）
+   * 'tickHigh'：剩 1 秒——音高提高、連響兩聲「嗶嗶」
+   * 剩 0 秒改用氣球排球哨音（main.js 播放 whistle）
+   * 提示音直接接總輸出、不被降低；同時把一般音效暫時降低（duck），BGM 不受影響。
+   * 何時播放由 main.js 依「遊戲時鐘」判斷；這裡只負責發聲，不阻塞遊戲。 */
+  var CD = A.COUNTDOWN;
+  function beep(freq, at, dur, vol) {
+    var o = ctx.createOscillator(), o2 = ctx.createOscillator();
+    var f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'square'; o.frequency.setValueAtTime(freq, at);
+    o2.type = 'triangle'; o2.frequency.setValueAtTime(freq * 2, at);
+    f.type = 'lowpass'; f.frequency.setValueAtTime(Math.min(6000, freq * 4), at); f.Q.value = 0.7;
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.006);
+    g.gain.setValueAtTime(vol, at + dur * 0.55);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    o.connect(g); g.connect(master);
-    o.start(at); o.stop(at + dur + 0.02);
+    o.connect(f); o2.connect(f); f.connect(g); g.connect(master);
+    o.start(at); o2.start(at); o.stop(at + dur + 0.02); o2.stop(at + dur + 0.02);
+  }
+  function duck() {
+    if (!sfxBus) return;
+    var t = ctx.currentTime, g = sfxBus.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(CD.duckTo, t + 0.02);
+    g.setValueAtTime(CD.duckTo, t + CD.duckSec);
+    g.linearRampToValueAtTime(1, t + CD.duckSec + 0.12);
   }
   function tone(kind) {
     if (!ctx || !master) return;
@@ -181,16 +197,12 @@
       if (ctx.state === 'suspended') ctx.resume();
       var t = ctx.currentTime + 0.005;
       if (kind === 'tick') {
-        blip(1046.5, t, 0.11, TONE_VOL);                 // C6
-        blip(2093, t, 0.06, TONE_VOL * 0.25, 'sine');    // 一點泛音，聽起來更清脆
+        duck();
+        beep(1318.5, t, 0.16, CD.vol);                   // E6
       } else if (kind === 'tickHigh') {
-        blip(1568, t, 0.15, TONE_VOL * 1.1);             // G6
-        blip(3136, t, 0.07, TONE_VOL * 0.25, 'sine');
-      } else if (kind === 'goldEnd') {
-        blip(1568, t, 0.09, TONE_VOL);                   // G6
-        blip(1318.5, t + 0.08, 0.09, TONE_VOL);          // E6
-        blip(1046.5, t + 0.16, 0.09, TONE_VOL);          // C6
-        blip(523.25, t + 0.24, 0.22, TONE_VOL * 0.9, 'sine'); // C5 收尾
+        duck();
+        beep(1760, t, 0.11, CD.highVol);                 // A6
+        beep(1760, t + 0.15, 0.13, CD.highVol);          // 連響兩聲
       }
     } catch (e) { /* 提示音失敗不影響遊戲 */ }
   }
@@ -251,6 +263,7 @@
       ctx: ctx ? ctx.state : 'locked',
       bgm: bgm.status + (bgm.el && !bgm.el.paused ? '・播放中' : ''),
       bgmSrc: bgm.src,
+      bgmTime: bgm.el ? +bgm.el.currentTime.toFixed(2) : null,
       voices: totalVoices,
       sfx: status
     };

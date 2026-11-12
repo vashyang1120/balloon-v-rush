@@ -10,8 +10,9 @@
   'use strict';
 
   var CONFIG = {
-    VERSION: 'whack-a-mole-v0.1.2-test-2',
-    BASELINE: '打地鼠 PM v0.29',
+    VERSION: 'whack-a-mole-v0.1.3-test-1',
+    BASELINE: '打地鼠 PM v0.31.1',
+    TITLE: '氣球槌打地鼠',
 
     /* ---------- 已確認規則（不可擅改） ---------- */
     GAME_DURATION: 30,          // 秒
@@ -52,7 +53,9 @@
     SAME_HOLE_GAP: 0.15,        // 同一洞口前後兩個目標之間至少空出的秒數
     RISE_TIME: 0.12,            // 升起動畫（停留時間內，全程可敲）
     FALL_TIME: 0.12,            // 下降動畫（停留時間內，全程可敲）
-    HIT_LEAVE_TIME: 0.28,       // 被敲中後縮回洞裡的動畫
+    // v0.1.3：受擊演出（純畫面；命中當下就已計分、不能再被敲）
+    HURT_HOLD: 0.35,            // 受擊圖清楚停留（秒）
+    HIT_LEAVE_TIME: 0.55,       // 受擊停留＋退洞完成（秒）；之後才從場上移除
     BOSS_INTRO_TIME: 0.6,       // 橘子王升起動畫（一開始就可敲）
     BOSS_DIM_TIME: 0.5,         // 場景變暗時間
     BOSS_DIM_ALPHA: 0.55,
@@ -99,7 +102,7 @@
     ASSET_BASES: ['../../', './'],
     IMAGES: {
       scorpion:     { path: 'assets/enemies/scorpion/scorpion_walk_01.png',              bbox: [69, 107, 444, 410] },
-      scorpionHit:  { path: 'assets/enemies/scorpion/scorpion_hurt_01.png',              bbox: [65, 73, 446, 399] },
+      scorpionHit:  { path: 'assets/enemies/scorpion/scorpion_hurt_01.png',              bbox: [65, 73, 446, 399], bodyW: 375 }, // 與一般圖同像素比例
       orange:       { path: 'assets/enemies/orange/orange_idle_01.png',                  bbox: [55, 60, 495, 479] },
       spike:        { path: 'assets/adventure/hazards/chapter1/chapter1_spike.png',      bbox: [70, 233, 1211, 1039], cacheW: 700 },
       boss:         { path: 'assets/bosses/orange-king/orange_king_idle_01.png',         bbox: [31, 7, 493, 466] },
@@ -139,6 +142,10 @@
     // cacheW：大圖載入後先縮成一份顯示用副本（原檔不變），手機每幀繪製更輕
     // 角色顯示寬度（× 格子寬，再乘上該排透視比例）；等比例縮放，不拉伸
     SPRITE_WIDTH: { scorpion: 0.68, orange: 0.56, spike: 0.66, ring: 0.5, boss: 1.32 },
+    // v0.1.3：普通目標可見寬度 = 洞口圖可見寬度 × 比例（以圖片實際 Alpha 範圍計算，不拉伸）
+    // HOLE_VISIBLE_W = whack_hole_back.png 實際可見寬度（像素，含洞口草邊）
+    SPRITE_HOLE_RATIO: { scorpion: 0.90, orange: 0.90, spike: 0.85 },
+    HOLE_VISIBLE_W: 1148,
 
     AUDIO: {
       SFX_MAX_VOICES: 8,   // 全部音效同時上限（只限制聲音，不影響得分）
@@ -153,10 +160,20 @@
         bossIntro:  { path: 'assets/audio/sfx/boss/boss_taunt_crouch.mp3',     vol: 0.9,  minGapMs: 500, maxVoices: 1 },
         dialogOpen: { path: 'assets/audio/sfx/ui/ui_dialog_open.mp3',          vol: 0.55, minGapMs: 200, maxVoices: 1 },
         uiClick:    { path: 'assets/audio/sfx/ui/ui_button_click.mp3',         vol: 0.5,  minGapMs: 90,  maxVoices: 2 },
-        result:     { path: 'assets/audio/sfx/ui/ui_level_clear.mp3',          vol: 0.8,  minGapMs: 1000, maxVoices: 1 }
+        result:     { path: 'assets/audio/sfx/ui/ui_level_clear.mp3',          vol: 0.8,  minGapMs: 1000, maxVoices: 1 },
+        // v0.1.3：氣球排球的發球哨音（共用原檔，不修改）——第17秒金槌結束、第30秒遊戲結束
+        whistle:    { path: 'minigames/volleyball/assets/audio/serve_whistle.mp3', vol: 0.8, minGapMs: 500, maxVoices: 1, noDuck: true }
       },
       // 已定案：沿用氣球排球比賽中的 BGM（同一個檔案，不複製、不修改）
-      BGM: { path: 'minigames/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3', vol: 0.3, fadeOut: 0.8 }
+      BGM: { path: 'minigames/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3', vol: 0.3, fadeOut: 0.8 },
+      // v0.1.3：無敵槌倒數提示音（Web Audio 合成）——音量可獨立調整
+      COUNTDOWN: {
+        vol: 0.55,        // 剩 3、2 秒提示音音量
+        highVol: 0.65,    // 剩 1 秒（較高音、連響兩聲）音量
+        duckTo: 0.35,     // 提示音響起時，其他音效暫時降到原本的 35%（BGM 不受影響）
+        duckSec: 0.4      // 降低持續秒數
+      },
+      RESULT_DELAY_AFTER_WHISTLE: 0.85  // 第30秒哨音後，結算音延後播放（秒），避免重疊
     }
   };
 
