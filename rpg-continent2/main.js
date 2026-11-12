@@ -5778,8 +5778,11 @@ function updatePlayer(dt) {
   try { sfxOnPlayerFrameStart(); } catch (e) {} // v0.3.64
   // Horizontal movement
   let moving = false;
-  if (inp('left'))  { player.vx = -PLAYER_SPEED; player.facingRight = false; moving = true; }
-  if (inp('right')) { player.vx =  PLAYER_SPEED; player.facingRight = true;  moving = true; }
+  // v0.3.95：翼靴＝地面跑速 ×倍率（只有裝備中的玩家、只有生效的那一關）。空中維持原本速度 → 跳躍水平距離不變，
+  //   不會讓「一般跳不過」的尖刺坑（例如 3-2 S2 寬 200、助跑跳約 182）變成跳得過，唯一正解型解謎不受影響
+  const _spd = PLAYER_SPEED * ((player.onGround && typeof v395SpeedMul === 'function') ? v395SpeedMul() : 1);
+  if (inp('left'))  { player.vx = -_spd; player.facingRight = false; moving = true; }
+  if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
   if (!moving) player.vx *= 0.75; // friction
 
   // Right edge: can't go past FINISH_X + some buffer
@@ -13250,6 +13253,7 @@ function drawWorldInner() {
     const sx = c.x - cx;
     if (sx < -20 || sx > CANVAS_W + 20) return;
     const sy = c.y + Math.sin(bobT + c.bobOffset) * 5;
+    if (c.v395Kind && typeof v395DrawPickup === 'function' && v395DrawPickup(c, sx, sy)) return;   // v0.3.95：金幣袋（沿用金幣的位置與拾取）
     if (chapter2BgDrawn || chapter1BgDrawn) drawChapter2ItemGlow(sx, sy, 15, true); // v0.3.48：金幣淡白外光（v0.3.52-fix-1：第一章也套用）
     drawCoin(sx, sy);
   });
@@ -13260,6 +13264,7 @@ function drawWorldInner() {
     const sx = b.x - cx;
     if (sx < -20 || sx > CANVAS_W + 20) return;
     const sy = b.y + Math.sin(bobT * 0.7 + b.bobOffset) * 6;
+    if (b.v395Kind && typeof v395DrawPickup === 'function' && v395DrawPickup(b, sx, sy)) return;   // v0.3.95：260 組合／圓氣球組合（沿用 260 的位置與拾取）
     if (chapter2BgDrawn || chapter1BgDrawn) drawChapter2ItemGlow(sx, sy, 20, false); // v0.3.48：道具輕微外光（v0.3.52-fix-1：第一章也套用）
     drawBalloon260(sx, sy);
   });
@@ -17820,7 +17825,7 @@ function openPauseBag() {
   Object.values(SHOP_ITEMS).forEach(item => {
     const have = invItems[item.id] || 0;
     if (have <= 0) return;
-    const effect = item.healFull ? '補滿生命' : ('回復 ' + (item.healAmount || 0) + ' 心');
+    const effect = item.type === 'invincible' ? ('使用後 ' + V395_STAR.seconds + ' 秒無敵（免疫一般傷害）') : item.healFull ? '補滿生命' : ('回復 ' + (item.healAmount || 0) + ' 心');   // v0.3.95：無敵星星
     healHtml += '<div class="pause-bag-heal-item" style="display:flex;align-items:center;gap:8px;margin:6px 0;padding:7px 10px;background:rgba(255,255,255,0.06);border-radius:8px">'
       + '<span style="font-size:1.3em">' + item.icon + '</span>'
       + '<span style="flex:1">'
@@ -17843,7 +17848,7 @@ function openPauseBag() {
 
   // v0.3.57：暫停背包最上方顯示目前生命（和其他畫面同一套愛心），可直接使用補血道具
   const hpHtml = '<div class="pause-bag-hp" id="pause-bag-hp">' + buildHpHeartsHtml() + '<b>' + formatHpText() + '</b></div>';
-  if (!healHtml) healHtml = '<div style="color:#aaa;font-size:0.85em;padding:4px 2px">目前沒有補血道具（可以在小V的家商店購買繃帶、急救包）</div>';
+  if (!healHtml) healHtml = '<div style="color:#aaa;font-size:0.85em;padding:4px 2px">目前沒有補給品（可以在小V的家商店購買繃帶、急救包、無敵星星）</div>';
   const body = document.getElementById('pause-bag-body');
   body.innerHTML = hpHtml + (items.length
     ? '<div class="inv-grid">' + items.map(i =>
@@ -17855,7 +17860,7 @@ function openPauseBag() {
         + '</div>'
       ).join('') + '</div>'
     : '<div class="inv-empty">背包空空如也 🎈</div>')
-    + (healHtml ? '<div style="margin-top:8px"><div style="color:#ffe080;font-size:0.85em;margin-bottom:4px">🩹 補血道具</div>' + healHtml + '</div>' : '')
+    + (healHtml ? '<div style="margin-top:8px"><div style="color:#ffe080;font-size:0.85em;margin-bottom:4px">🩹 補給品</div>' + healHtml + '</div>' : '')
     + dogHtml
     + buildPauseBagNoteHtml();
   panel.style.display = 'flex';
@@ -22099,6 +22104,7 @@ function h2ShopTiles() {
     const have = playerInventory.items[item.id] || 0, room = Math.max(0, item.maxCarry - have);
     return { key: item.id, name: item.name, label: item.name, price: item.priceCoins, sub: room <= 0 ? '已達上限' : null, icon: item.id, count: have + '/' + item.maxCarry, off: room <= 0 };
   });
+  if (typeof v395ShopTiles === 'function') v395ShopTiles().forEach(t => list.push(t));   // v0.3.95：盾牌、翼靴、組合包、背包升級
   list.push({ key: 'styleSoon', name: '造型商品', label: '造型商品', sub: '即將推出', icon: 'star', off: true, soon: true });
   return list;
 }
@@ -22400,6 +22406,7 @@ function h2RecipeState(r) {
   if (r.maxOne && owned >= 1) reason = '已在小V的家';
   if (r.eatOnCraft && enough && player.hp >= (player.maxHp || 3)) reason = '生命已滿';
   if (r.comingSoon) reason = '即將開放';
+  if (!reason && typeof v395Cap === 'function' && isFinite(v395Cap(r.id)) && owned >= v395Cap(r.id)) reason = '背包已滿（上限 ' + v395Cap(r.id) + '）';   // v0.3.95：背包等級容量
   return { owned, mats, enough, reason };
 }
 function h2Craft(recipeId, rowEl) {
@@ -22661,7 +22668,7 @@ function h2PanelBody(kind, tab) {
         price: item.priceCoins, state: room <= 0 ? '已達攜帶上限' : poor ? '金幣不足' : '',
         desc: h2Esc(item.description) + '<br>持有 ' + have + ' / 攜帶上限 ' + item.maxCarry,
         side: qtyHtml + '<span class="h2-price">合計 $' + (room <= 0 ? 0 : total) + '</span>' + btn });
-    }).join('') + '</div><div class="h2-sub" style="margin-top:0.7em">最多只能買到攜帶上限；冒險金幣只能用冒險中撿到的金幣，沒有儲值。</div>';
+    }).join('') + ((typeof v395ShopRowsHtml === 'function') ? v395ShopRowsHtml() : '') + '</div><div class="h2-sub" style="margin-top:0.7em">最多只能買到攜帶上限；冒險金幣只能用冒險中撿到的金幣，沒有儲值。</div>';
   }
   if (kind === 'challenge') {
     const pr = h2OfficialProgress(); let summary = '';
@@ -22791,6 +22798,8 @@ function h2BindOnce() {
     if (act === 'tab') { if (H2.panel) { H2.panel.tab = key; H2.panel.focus = null; h2RenderPanel(true); } return; }
     if (act === 'qty') { const room = h2ShopRoom(key); H2.shopQty[key] = Math.max(1, Math.min(room, (H2.shopQty[key] || 1) + (+a.dataset.d))); h2RenderPanel(); return; }
     if (act === 'buy') { h2BuyQty(key); return; }
+    if (act === 'buy395') { v395ShopBuy(key, a.closest('.h2-row') || a); return; }        // v0.3.95：盾牌／翼靴／組合包
+    if (act === 'dev395') { v395DevAction(key); return; }                                  // v0.3.95：開發測試用（只有 ?devtools=1 會出現按鈕）
     if (act === 'readKey') { const k = (playerInventory.keyItems || {})[key]; if (k) openDiscoveryItemModal(k, { mode: 'read' }); return; }
     if (act === 'notes') { rpgOpenNotes(); return; }
     if (act === 'openPanel') { h2OpenPanel(key, { tab: a.dataset.tab }); return; }
@@ -29690,4 +29699,371 @@ function wdFlowAudioFrame(playing, dtSec) {
     dist: wdFlow.dist, push: wdFlow.push, carry: wdFlow.carry, target: wdFlow.target, est: +wdFlow.est.toFixed(4), gain: SFX.loops[WD_FLOW_AUDIO.key] ? +(SFX.loops[WD_FLOW_AUDIO.key].g.gain.value).toFixed(4) : 0,
     defVol: sfxVol(WD_FLOW_AUDIO.key), status: SFX.status.wsFlying, url: (SFX.urls.wsFlying || '').replace(/\?.*$/, ''), active: wdActive(), wd32On, layoutOff: wdLayoutOff,
     wsFlying: { playing: !!SFX.loops.wsFlying }, log: wdFlow.log.slice(-40), pitRecovers: wd.pitRecovers || 0, pitHurtSfx: wd.pitHurtSfx || 0, cfg: Object.assign({}, WD_FLOW_AUDIO) });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.95 階段 B～D：冒險道具系統擴充（沿用既有背包、商店、暫停背包、拾取物；不另做新 UI）
+//  B 背包等級：playerInventory.bagLevel（1 或 2；舊存檔沒有 → 1）。各類道具「各自」的上限（不是共用 5 格）：
+//      氣球劍 2／4、氣球槌 2／4、繃帶 5／10、急救包 1／2、無敵星星 1／2；金幣、260、圓氣球、其他材料不限量；盾牌、翼靴是穿戴裝備，不占容量
+//      上限只擋「再取得」（商店購買、秘笈製作）：舊存檔超過上限的道具一個都不刪，只是滿了不能再買／再做
+//      LV1 → LV2 售價：使用者尚未決定 → 商店顯示「價格待定」不能購買；只有開發者模式有「測試用升級」按鈕（不扣金幣）
+//  C 盾牌（15）：買了自動裝備、最多一面；受到一般傷害（damagePlayer）時優先消耗盾牌 → HP 不變、盾牌消失；HUD 愛心旁顯示盾牌
+//    翼靴（30）：買了自動裝備；下一次進入關卡時開始生效、整關「地面」跑速 ×V395_BOOTS.mul（空中速度不變 → 跳躍距離、重力、雨傘、風力都不變）；那一關過關後消耗
+//    無敵星星（50）：放進背包的補給品（不是買了就用、不是進關自動用）；冒險中 暫停 → 背包 → 使用 才開始 30 秒；暫停時倒數停止；過關結束
+//  D 金幣袋（拾取 +10）、260 組合（×3，商店 6）、圓氣球組合（×4，商店 10）：都轉成原本的金幣／260／圓氣球數量（沒有新的貨幣或材料）
+//  未定事項（報告列出，這裡不自行定案）：背包升級價格、翼靴最終倍率、盾牌／翼靴在失敗重試與跨關的最終規則、特殊拾取物的正式位置
+// ════════════════════════════════════════════════════════════════════
+const V395_BAG = {
+  maxLevel: 2,
+  caps: { basicSword: 2, basicHammer: 2, bandage: 5, firstAidKit: 1, invincibleStar: 1 },   // LV1；LV2 ＝ ×2
+  upgradePrice: null,   // 待使用者決定（null ＝ 商店不開放購買）
+};
+const V395_SHIELD = { price: 15 };
+const V395_BOOTS = { price: 30, mul: 1.12, candidates: [1.10, 1.12, 1.15] };   // 1.12 是測試候選值，不是正式定案
+const V395_STAR = { price: 50, seconds: 30 };
+const V395_BUNDLE = { coinBag: 10, b260Bundle: 3, roundBundle: 4, b260Price: 6, roundPrice: 10 };
+const V395_ICONS = {
+  vShield: 'assets/adventure/ui/items/item_v_shield.png', wingedBoots: 'assets/adventure/ui/items/item_winged_boots.png',
+  invincibleStar: 'assets/adventure/ui/items/item_star.png', backpack: 'assets/adventure/ui/items/item_backpack.png',
+  coinBag: 'assets/adventure/ui/items/item_coin_bag.png', b260Bundle: 'assets/adventure/ui/items/item_balloon260_bundle.png',
+  roundBundle: 'assets/adventure/ui/items/item_round_balloon_bundle.png',
+};
+Object.assign(H2_ICON, {
+  vShield: { path: V395_ICONS.vShield, emoji: '🛡️' }, wingedBoots: { path: V395_ICONS.wingedBoots, emoji: '🪽' },
+  invincibleStar: { path: V395_ICONS.invincibleStar, emoji: '⭐' }, b260Bundle: { path: V395_ICONS.b260Bundle, emoji: '🎈' },
+  roundBundle: { path: V395_ICONS.roundBundle, emoji: '🔴' }, bagUpgrade: { path: V395_ICONS.backpack, emoji: '🎒' },
+});
+var v395Log = [];
+function v395L(o) { try { o.t = Math.round(performance.now()); o.frame = typeof frameCount === 'number' ? frameCount : 0; v395Log.push(o); if (v395Log.length > 200) v395Log.shift(); } catch (e) {} }
+// ── 存檔欄位（安全預設；舊存檔缺少 → 補上，不改其他欄位）──
+function v395Inv() {
+  const inv = playerInventory;
+  const lv = Math.floor(Number(inv.bagLevel));
+  if (!(lv >= 1 && lv <= V395_BAG.maxLevel)) inv.bagLevel = 1;
+  if (!inv.equip || typeof inv.equip !== 'object') inv.equip = {};
+  if (typeof inv.equip.shield !== 'boolean') inv.equip.shield = !!inv.equip.shield;
+  if (inv.equip.boots && !(inv.equip.boots.state === 'ready' || inv.equip.boots.state === 'active')) inv.equip.boots = null;
+  if (!inv.items || typeof inv.items !== 'object') inv.items = Object.assign({}, INVENTORY_DEFAULTS.items);
+  if (!(Number(inv.items.invincibleStar) >= 0)) inv.items.invincibleStar = 0;
+  return inv;
+}
+function v395BagLevel() { return v395Inv().bagLevel; }
+function v395Cap(id) { const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
+function v395Count(id) { const inv = v395Inv(); if (id === 'basicSword' || id === 'basicHammer') return Math.max(0, Math.floor(Number((inv.craftedItems || {})[id]) || 0)); return Math.max(0, Math.floor(Number(inv.items[id]) || 0)); }
+function v395Over() { return Object.keys(V395_BAG.caps).filter(id => v395Count(id) > v395Cap(id)).map(id => ({ id, have: v395Count(id), cap: v395Cap(id) })); }
+// 繃帶、急救包的攜帶上限改由背包等級決定（LV1 和原本一樣 5／1）；商店、暫停背包等所有讀 maxCarry 的地方自動跟著
+['bandage', 'firstAidKit'].forEach(id => { if (SHOP_ITEMS[id]) Object.defineProperty(SHOP_ITEMS[id], 'maxCarry', { configurable: true, enumerable: true, get() { return v395Cap(id); } }); });
+// 無敵星星：沿用既有「補給品」商品結構（商店數量／購買／扣款／上限都走 buyShopItem）
+SHOP_ITEMS.invincibleStar = { id: 'invincibleStar', name: '無敵星星', icon: '⭐', priceCoins: V395_STAR.price, type: 'invincible',
+  description: '放進背包的補給品。冒險中按暫停 → 背包 → 使用，' + V395_STAR.seconds + ' 秒內不會受到一般傷害（暫停時倒數停止，過關就結束）。' };
+Object.defineProperty(SHOP_ITEMS.invincibleStar, 'maxCarry', { configurable: true, enumerable: true, get() { return v395Cap('invincibleStar'); } });
+// ── 翼靴、盾牌、無敵星星：執行期狀態 ──
+var v395Star = { left: 0, total: 0, startedAt: 0, uses: 0 };
+var v395BootsLevel = null;   // 這一次進關翼靴是否生效（stageId）
+function v395StarActive() { return v395Star.left > 0; }
+function v395Shield() { return !!v395Inv().equip.shield; }
+function v395BootsState() { const b = v395Inv().equip.boots; return b ? b.state : null; }
+function v395SpeedMul() {
+  if (!v395BootsLevel || gameState !== 'playing') return 1;
+  const b = v395Inv().equip.boots; if (!b || b.state !== 'active') return 1;
+  return V395_BOOTS.mul;
+}
+function v395InLevel() { return (gameState === 'playing' || gameState === 'paused') && !(typeof h2IsOpen === 'function' && h2IsOpen()); }
+function v395StarEnd(why) { if (!v395Star.left) return; v395L({ ev: 'starEnd', why, left: v395Star.left }); v395Star.left = 0; }
+function v395UseStar() {
+  const inv = v395Inv(), have = v395Count('invincibleStar');
+  if (!v395InLevel()) { showHint('⭐ 無敵星星要在冒險中使用（暫停 → 背包 → 使用）', 160); return false; }
+  if (have <= 0) { showHint('背包裡沒有無敵星星', 140); return false; }
+  if (v395StarActive()) { showHint('⭐ 無敵中！等這次結束再使用下一顆', 150); return false; }
+  inv.items.invincibleStar = have - 1;
+  v395Star.left = v395Star.total = V395_STAR.seconds * 60; v395Star.startedAt = Date.now(); v395Star.uses++;
+  saveInventory();
+  v395L({ ev: 'starUse', haveBefore: have, haveAfter: inv.items.invincibleStar, gs: gameState });
+  try { sfxPlay('ringGet'); } catch (e) {}
+  showHint('⭐ 無敵星星！' + V395_STAR.seconds + ' 秒內不會受到一般傷害', 200);
+  try { if (document.getElementById('pause-bag-panel') && document.getElementById('pause-bag-panel').style.display !== 'none') openPauseBag(); } catch (e) {}
+  return true;
+}
+// ── 商店（盾牌、翼靴、組合包、背包升級）──
+const V395_SHOP = [
+  { id: 'vShield',     name: '盾牌',     icon: 'vShield',     price: V395_SHIELD.price, kind: 'equip',
+    desc: '穿戴裝備：受到一次一般傷害時優先消耗盾牌，HP 不會減少。購買後自動裝備，同時最多一面；不占背包。' },
+  { id: 'wingedBoots', name: '翼靴',     icon: 'wingedBoots', price: V395_BOOTS.price,  kind: 'equip',
+    desc: '穿戴裝備：下一關整關在地面上跑得更快（測試值 +' + Math.round((V395_BOOTS.mul - 1) * 100) + '%；跳躍高度、跳躍距離、重力、雨傘都不變），那一關過關後消耗。不占背包。' },
+  { id: 'b260Bundle',  name: '260 氣球組合', icon: 'b260Bundle', price: V395_BUNDLE.b260Price, kind: 'bundle', mat: 'balloon260', n: V395_BUNDLE.b260Bundle,
+    desc: '260 長條氣球 ×' + V395_BUNDLE.b260Bundle + '（直接加進背包的 260 氣球，材料不限量）' },
+  { id: 'roundBundle', name: '圓氣球組合', icon: 'roundBundle', price: V395_BUNDLE.roundPrice, kind: 'bundle', mat: 'roundBalloon', n: V395_BUNDLE.roundBundle,
+    desc: '圓氣球 ×' + V395_BUNDLE.roundBundle + '（直接加進背包的圓氣球，可以照常製作氣球槌）' },
+  { id: 'bagUpgrade',  name: '背包升級', icon: 'bagUpgrade', price: null, kind: 'upgrade',
+    desc: '背包 LV1 → LV2：氣球劍、氣球槌、繃帶、急救包、無敵星星的攜帶上限加倍（只能升級一次）。' },
+];
+function v395ShopState(it) {
+  const inv = v395Inv(), coins = inv.coins || 0;
+  if (it.id === 'vShield') return inv.equip.shield ? { off: true, state: '已裝備', btn: '已裝備' } : coins < it.price ? { off: true, state: '金幣不足', btn: '金幣不足' } : { btn: '購買' };
+  if (it.id === 'wingedBoots') { const b = inv.equip.boots; if (b) return { off: true, state: b.state === 'active' ? '已裝備（本關生效中）' : '已裝備（下一關生效）', btn: '已裝備' }; return coins < it.price ? { off: true, state: '金幣不足', btn: '金幣不足' } : { btn: '購買' }; }
+  if (it.kind === 'bundle') return coins < it.price ? { off: true, state: '金幣不足', btn: '金幣不足' } : { btn: '購買' };
+  if (it.id === 'bagUpgrade') { if (inv.bagLevel >= V395_BAG.maxLevel) return { off: true, state: '已滿級（LV' + inv.bagLevel + '）', btn: '已滿級' }; if (V395_BAG.upgradePrice == null) return { off: true, state: '價格待定', btn: '價格待定', pending: true }; return coins < V395_BAG.upgradePrice ? { off: true, state: '金幣不足', btn: '金幣不足' } : { btn: '升級' }; }
+  return { off: true, btn: '—' };
+}
+function v395Owned(it) { const inv = v395Inv(); if (it.id === 'vShield') return inv.equip.shield ? 1 : 0; if (it.id === 'wingedBoots') return inv.equip.boots ? 1 : 0; if (it.kind === 'bundle') return inv[it.mat] || 0; if (it.id === 'bagUpgrade') return 'LV' + inv.bagLevel; return 0; }
+function v395ShopRowsHtml() {
+  return V395_SHOP.map(it => {
+    const st = v395ShopState(it), owned = v395Owned(it), price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+    const ownTxt = it.kind === 'equip' ? (owned ? '已裝備' : '未裝備') : it.kind === 'bundle' ? '目前' + (it.mat === 'balloon260' ? ' 260 氣球 ' : '圓氣球 ') + owned : '目前背包 ' + owned;
+    const dev = (it.id === 'bagUpgrade' && H2_DEVTOOLS) ? '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="dev395" data-key="' + (v395BagLevel() >= 2 ? 'bagLv1' : 'bagLv2') + '">🛠 ' + (v395BagLevel() >= 2 ? '測試：回到 LV1' : '測試：升到 LV2（不扣金幣）') + '</button>' : '';
+    return h2RowHtml({ iconHtml: h2Icon(it.icon), badge: it.kind === 'equip' ? (owned ? '<span class="h2-count">✓</span>' : '') : it.id === 'bagUpgrade' ? '<span class="h2-count">' + owned + '</span>' : '', name: it.name,
+      full: !!st.off && !/金幣不足/.test(st.state || ''), attr: ' data-shop-row="' + it.id + '" data-v395="1"', price: price != null ? price : null, state: st.state || '',
+      desc: h2Esc(it.desc) + '<br>' + h2Esc(ownTxt) + (it.id === 'bagUpgrade' && st.pending ? '<br>升級價格尚未決定，目前還不能購買' : ''),
+      side: dev + '<button type="button" class="h2-pill h2-pill--green" data-h2-act="buy395" data-key="' + it.id + '"' + (st.off ? ' disabled' : '') + '>' + h2Esc(st.btn) + '</button>' });
+  }).join('');
+}
+function v395ShopTiles() {
+  return V395_SHOP.map(it => { const st = v395ShopState(it); const price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+    return { key: it.id, name: it.name, label: it.name, price: price != null ? price : undefined, sub: st.off ? st.btn : null, icon: it.icon, count: it.kind === 'equip' ? (v395Owned(it) ? '✓' : '') : it.id === 'bagUpgrade' ? v395Owned(it) : '', off: !!st.off }; });
+}
+// 購買：成功才扣一次；失敗不扣（金幣不足、已裝備、已滿級、價格待定）；同一次點擊／連點只處理一次
+function v395Buy(id) {
+  const it = V395_SHOP.find(x => x.id === id); if (!it) return { ok: false, why: 'unknown' };
+  const now = Date.now(); v395Buy._at = v395Buy._at || {}; if (now - (v395Buy._at[id] || 0) < 350) return { ok: false, why: 'debounce' }; v395Buy._at[id] = now;   // 同一個商品連點只算一次（不同商品各自計算）
+  const inv = v395Inv(), st = v395ShopState(it), c0 = inv.coins || 0;
+  if (st.off) { v395L({ ev: 'buyRefused', id, why: st.state, coins: c0 }); return { ok: false, why: st.state }; }
+  const price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+  if (!(price > 0) || c0 < price) { v395L({ ev: 'buyRefused', id, why: '金幣不足', coins: c0 }); return { ok: false, why: '金幣不足' }; }
+  inv.coins = c0 - price;
+  if (id === 'vShield') inv.equip.shield = true;
+  else if (id === 'wingedBoots') inv.equip.boots = { state: 'ready', boughtAt: Date.now() };
+  else if (it.kind === 'bundle') inv[it.mat] = (inv[it.mat] || 0) + it.n;
+  else if (id === 'bagUpgrade') inv.bagLevel = Math.min(V395_BAG.maxLevel, inv.bagLevel + 1);
+  saveInventory();
+  v395L({ ev: 'buy', id, price, coinsBefore: c0, coinsAfter: inv.coins });
+  return { ok: true, id, price, coinsBefore: c0, coinsAfter: inv.coins };
+}
+function v395ShopBuy(id, anchor) {
+  if (typeof h2Busy === 'function' && h2Busy(450, 'buy395:' + id)) return;
+  const it = V395_SHOP.find(x => x.id === id);
+  const r = v395Buy(id);
+  if (!r.ok) { if (r.why !== 'debounce') h2Toast(r.why === '金幣不足' ? '金幣不夠，先去冒險收集更多金幣吧！' : r.why === '價格待定' ? '背包升級的價格還沒決定，目前不能購買' : (it ? it.name : '') + '：' + r.why); h2RenderAll(); return; }
+  h2RenderAll(); try { if (H2.panel) h2RenderPanel(); } catch (e) {}
+  const row = document.querySelector('#h2-panel-body [data-shop-row="' + id + '"]') || anchor;
+  const got = it.kind === 'bundle' ? [(it.mat === 'balloon260' ? '260 氣球' : '圓氣球') + ' +' + it.n] : id === 'bagUpgrade' ? ['背包 LV' + v395BagLevel()] : [it.name + ' 已裝備'];
+  try { h2Shake(row); h2FloatDeltas(got, ['🪙 冒險金幣 −' + r.price], row); playCraftSuccessFx(row || null, { name: it.name, emoji: '', shopBuy: true }); } catch (e) {}
+  try { sfxPlay('uiClick'); } catch (e) {}
+}
+// 開發測試用（只有 ?devtools=1 會出現按鈕；不扣金幣）
+function v395DevAction(key) {
+  const inv = v395Inv();
+  if (key === 'bagLv2') { inv.bagLevel = 2; saveInventory(); h2Toast('🛠 測試：背包升到 LV2（沒有扣金幣）'); }
+  else if (key === 'bagLv1') { inv.bagLevel = 1; saveInventory(); h2Toast('🛠 測試：背包回到 LV1（超過上限的道具不會被刪除）'); }
+  else if (/^boots/.test(key)) { const m = +key.slice(5); if (V395_BOOTS.candidates.includes(m)) { V395_BOOTS.mul = m; h2Toast('🛠 測試：翼靴倍率 ×' + m.toFixed(2)); } }
+  v395L({ ev: 'dev', key, bagLevel: inv.bagLevel, bootsMul: V395_BOOTS.mul });
+  try { h2RenderAll(); if (H2.panel) h2RenderPanel(); } catch (e) {}
+}
+// ── 特殊拾取物：金幣袋（取代金幣）、260 組合／圓氣球組合（取代 260）──
+//   提案配置（待使用者確認）：第二章起每章合計 2～3 個；只取代一般金幣／260，不新增額外獎勵；不碰劇情道具、秘笈、寶箱、隱藏秘密
+//   每個項目用「原本那一個拾取物的座標」找到它 → 只改顯示與數量（位置、拾取判定、去重、失敗重試回滾都沿用原本的金幣／260）
+const V395_DROPS = {
+  // 第二章（3 個）：2-4 是 Boss 房（沒有拾取物）→ 不放
+  '2-1': [{ from: 'coin', x: 1480, y: 145, kind: 'coinBag' }],        // 三枚一排的空中金幣中間那枚（金幣 +1 → +10）
+  '2-2': [{ from: 'b260', x: 4240, y: 200, kind: 'b260Bundle' }],     // 高處的 260（260 +1 → +3）
+  '2-3': [{ from: 'b260', x: 3420, y: 205, kind: 'roundBundle' }],    // 高處的 260（260 +1 → 圓氣球 +4）
+  // 第三章（3 個）：3-1 的 260 是第一把雨傘的材料 → 3-1 只換金幣，不動 260
+  '3-1': [{ from: 'coin', x: 3800, y: 270, kind: 'coinBag' }],        // 後段高台上的金幣
+  '3-2': [{ from: 'b260', x: 1130, y: 260, kind: 'b260Bundle' },      // B1 獎勵高台的 260（排球秘笈在同一個高台右端 x 1225，不動）
+          { from: 'b260', x: 3960, y: 350, kind: 'roundBundle' }],    // E 區最高平台的 260
+};
+var v395ImgCache = {};
+function v395Img(key) {
+  const p = V395_ICONS[key]; if (!p) return null;
+  let im = v395ImgCache[key];
+  if (!im) { im = new Image(); im.decoding = 'async'; im.onerror = () => { im._bad = true; }; im.src = (typeof resolveAdventureAssetSrc === 'function') ? resolveAdventureAssetSrc(p) : p; v395ImgCache[key] = im; }
+  return (im.complete && im.naturalWidth > 0) ? im : null;
+}
+const V395_PICKUP_DRAW = { coinBag: 46, b260Bundle: 54, roundBundle: 50 };   // 畫面大小（遊戲 px；比一般金幣、260 大一些，看得出是一整袋／一整組）
+function v395DrawPickup(o, sx, sy) {
+  const k = o.v395Kind, im = v395Img(k), S = V395_PICKUP_DRAW[k] || 44;
+  const t = typeof frameCount === 'number' ? frameCount : 0;
+  ctx.save();
+  const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, S * 0.75); gr.addColorStop(0, 'rgba(255,245,180,' + (0.55 + 0.15 * Math.sin(t * 0.12)) + ')'); gr.addColorStop(1, 'rgba(255,230,120,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sx, sy, S * 0.75, 0, Math.PI * 2); ctx.fill();
+  if (im) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; const r = im.naturalWidth / im.naturalHeight, w = r >= 1 ? S : S * r, h = r >= 1 ? S / r : S; ctx.drawImage(im, sx - w / 2, sy - h / 2, w, h); }
+  else { ctx.font = (S * 0.7) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(k === 'coinBag' ? '💰' : k === 'b260Bundle' ? '🎈' : '🔴', sx, sy); }
+  ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.fillStyle = '#fff6c0';
+  const lab = k === 'coinBag' ? '+' + V395_BUNDLE.coinBag : '×' + (k === 'b260Bundle' ? V395_BUNDLE.b260Bundle : V395_BUNDLE.roundBundle);
+  ctx.strokeText(lab, sx + S * 0.38, sy + S * 0.38); ctx.fillText(lab, sx + S * 0.38, sy + S * 0.38);
+  ctx.restore();
+  return true;
+}
+function v395ApplyDrops(lv) {
+  const list = (lv && V395_DROPS[lv.stageId]) || []; const applied = [];
+  list.forEach(d => {
+    const arr = d.from === 'coin' ? coins : balloons260;
+    const o = arr.find(c => Math.abs(c.x - d.x) < 1 && (d.y == null || Math.abs((GROUND_Y - c.y) - d.y) < 1));   // 重複套用（進關＋重新開始）也只會標記同一個
+    if (o) { o.v395Kind = d.kind; applied.push({ kind: d.kind, from: d.from, x: o.x, yOff: Math.round(GROUND_Y - o.y) }); }
+    else console.warn('[v0.3.95] 特殊拾取物：找不到原本的拾取物', lv.stageId, d);
+  });
+  v395Drops.applied = applied; v395Drops.stageId = lv && lv.stageId;
+  return applied;
+}
+var v395Drops = { applied: [], stageId: null, got: [] };
+function v395PickupStep() {
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+  const take = (o, kind) => {
+    o.collected = true;
+    const inv = playerInventory;
+    if (kind === 'coinBag') { const n = V395_BUNDLE.coinBag; currentRunStats.coins += n; player.coinsCollected += n; inv.coins = (inv.coins || 0) + n; try { advNoteCollect('coin', o); } catch (e) {} try { sfxPlay('coinPickup'); } catch (e) {} showHint('💰 金幣袋！冒險金幣 +' + n, 110); }
+    else if (kind === 'b260Bundle') { const n = V395_BUNDLE.b260Bundle; currentRunStats.balloon260 += n; player.balloonsCollected += n; inv.balloon260 = (inv.balloon260 || 0) + n; try { advNoteCollect('b260', o); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} showHint('🎈 260 氣球組合！260 氣球 +' + n, 110); }
+    else if (kind === 'roundBundle') { const n = V395_BUNDLE.roundBundle; currentRunStats.roundBalloon = (currentRunStats.roundBalloon || 0) + n; inv.roundBalloon = (inv.roundBalloon || 0) + n; try { advNoteCollect('b260', o); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} saveInventory(); showHint('🔴 圓氣球組合！圓氣球 +' + n, 110); }
+    v395Drops.got.push({ kind, x: o.x, stageId: v395Drops.stageId, frame: frameCount });
+    v395L({ ev: 'pickup', kind, x: o.x, coins: inv.coins, b260: inv.balloon260, round: inv.roundBalloon });
+  };
+  coins.forEach(c => { if (c.collected || !c.v395Kind) return; if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R * 2, CONFIG.COIN_R * 2)) take(c, c.v395Kind); });
+  balloons260.forEach(b => { if (b.collected || !b.v395Kind) return; if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W / 2, b.y - CONFIG.BALLOON_H / 2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) take(b, b.v395Kind); });
+}
+// ── HUD：盾牌圖示（愛心旁）、無敵星星圖示＋剩餘秒數 ──
+function v395DrawHud() {
+  if (!(gameState === 'playing' || gameState === 'paused')) return;
+  const shield = v395Shield(), star = v395StarActive(), boots = !!(v395SpeedMul() > 1 || (v395BootsLevel && v395BootsState() === 'active'));
+  if (!shield && !star && !boots) return;
+  const pad = 10, heartSize = 22, n = getHeartKinds(Math.max(0, Math.min(player.maxHp, Number(player.hp) || 0)), player.maxHp).length;
+  ctx.save(); ctx.font = 'bold 13px sans-serif';
+  let x = pad + n * (heartSize + 5) + 6 + ctx.measureText((Number(player.hp) || 0) + ' / ' + player.maxHp).width + 12;
+  const y = 22, S = 26;
+  const icon = (k, emoji) => { const im = v395Img(k); if (im) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, x, y - S / 2, S, S); } else { ctx.font = '20px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(emoji, x, y); } x += S + 4; };
+  if (shield) icon('vShield', '🛡️');
+  if (star) {
+    const t = typeof frameCount === 'number' ? frameCount : 0;
+    ctx.save(); ctx.shadowColor = 'rgba(255,230,90,0.95)'; ctx.shadowBlur = 8 + 4 * Math.sin(t * 0.2); icon('invincibleStar', '⭐'); ctx.restore();
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.fillStyle = '#ffe66d';
+    const s = Math.ceil(v395Star.left / 60) + ' 秒'; ctx.strokeText(s, x, y); ctx.fillText(s, x, y); x += ctx.measureText(s).width + 8;
+  }
+  if (boots) { ctx.globalAlpha = 0.95; icon('wingedBoots', '🪽'); ctx.globalAlpha = 1; }
+  ctx.restore();
+}
+// 無敵中：角色後面的光暈＋周圍星光（程式繪製；不改角色動作圖）
+function v395DrawStarFx(cx, front) {
+  if (!v395StarActive()) return;
+  const t = typeof frameCount === 'number' ? frameCount : 0, x = player.x + player.w / 2 - cx, y = player.y + player.h / 2;
+  const end = v395Star.left < 180 && (t % 12 < 6);   // 最後 3 秒閃爍提醒
+  const k = end ? 0.35 : 1;
+  ctx.save();
+  if (!front) {
+    // 金色光暈＋外圈光環（亮背景上也看得出來）
+    const r = 62 + 5 * Math.sin(t * 0.18);
+    const g = ctx.createRadialGradient(x, y, 8, x, y, r); g.addColorStop(0, 'rgba(255,248,190,' + 0.75 * k + ')'); g.addColorStop(0.55, 'rgba(255,205,40,' + 0.45 * k + ')'); g.addColorStop(1, 'rgba(255,170,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r * 0.85, r, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = 'rgba(255,200,0,' + k + ')'; ctx.shadowBlur = 14; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,222,60,' + 0.9 * k + ')';
+    ctx.beginPath(); ctx.ellipse(x, y, 42 + 3 * Math.sin(t * 0.25), 54 + 3 * Math.sin(t * 0.25), 0, 0, Math.PI * 2); ctx.stroke();
+  } else {
+    for (let i = 0; i < 8; i++) {
+      const a = t * 0.07 + i * Math.PI / 4, rr = 46 + 7 * Math.sin(t * 0.13 + i), sx = x + Math.cos(a) * rr * 0.9, sy = y + Math.sin(a) * rr, s = 7 + 3 * Math.sin(t * 0.3 + i * 1.7);
+      ctx.fillStyle = (i % 2) ? 'rgba(255,225,60,' + k + ')' : 'rgba(255,255,255,' + k + ')';
+      ctx.strokeStyle = 'rgba(150,80,0,' + 0.85 * k + ')'; ctx.lineWidth = 1.3;
+      ctx.beginPath(); for (let q = 0; q < 10; q++) { const ang = q * Math.PI / 5 - Math.PI / 2, l = (q % 2) ? s * 0.42 : s; q ? ctx.lineTo(sx + Math.cos(ang) * l, sy + Math.sin(ang) * l) : ctx.moveTo(sx + Math.cos(ang) * l, sy + Math.sin(ang) * l); } ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+function v395EquipHtml() {
+  const inv = v395Inv(), b = inv.equip.boots, parts = [];
+  parts.push('🛡️ 盾牌：' + (inv.equip.shield ? '已裝備（下一次受傷時抵擋）' : '沒有'));
+  parts.push('🪽 翼靴：' + (b ? (b.state === 'active' ? (v395BootsLevel ? '本關生效中' : '已生效（直到過關）') : '已裝備，下一關生效') : '沒有'));
+  if (v395StarActive()) parts.push('⭐ 無敵中：剩 ' + Math.ceil(v395Star.left / 60) + ' 秒');
+  return parts;
+}
+function v395CapHtml() {
+  const L = v395BagLevel(), name = { basicSword: '氣球劍', basicHammer: '氣球槌', bandage: '繃帶', firstAidKit: '急救包', invincibleStar: '無敵星星' };
+  return '<div class="h2-sub" data-v395-cap="1">🎒 背包 LV' + L + '　' + Object.keys(V395_BAG.caps).map(id => name[id] + ' ' + v395Count(id) + '/' + v395Cap(id) + (v395Count(id) > v395Cap(id) ? '（舊存檔超過上限，保留）' : '')).join('・')
+    + '<br>金幣、260 氣球、圓氣球不限量；' + v395EquipHtml().join('　') + '</div>';
+}
+(function v395BInstall() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v395b) { if (typeof o !== 'function') console.warn('[v0.3.95] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v395b = true; globalThis[name] = w; };
+  try { v395Inv(); } catch (e) {}
+  // ── 傷害：無敵星星 → 不受傷；盾牌 → 消耗盾牌、HP 不變；都沒有 → 原本規則 ──
+  wrapFn('damagePlayer', o => function () {
+    if (v395StarActive()) { v395Star.blocks = (v395Star.blocks || 0) + 1; if (!v395Star.lastBlockLog || frameCount - v395Star.lastBlockLog > 30) { v395Star.lastBlockLog = frameCount; v395L({ ev: 'starBlock', hp: player.hp }); } return; }
+    const inv = v395Inv();
+    if (inv.equip.shield) {
+      inv.equip.shield = false; saveInventory();
+      player.invincible = 90;   // 和一般受傷相同的短暫保護時間（同一次碰撞不會接著扣血）
+      try { sfxPlay('bossSwordBlock'); } catch (e) {}
+      try { currentRunStats.shieldBlocks = (currentRunStats.shieldBlocks || 0) + 1; } catch (e) {}
+      v395L({ ev: 'shieldBlock', hp: player.hp });
+      showHint('🛡️ 盾牌擋下了這次傷害！（HP 不變）', 150);
+      return;
+    }
+    return o.apply(this, arguments);
+  });
+  // ── 秘笈製作：氣球劍、氣球槌的背包上限 ──
+  wrapFn('craftItem', o => function (recipeId) {
+    const cap = v395Cap(recipeId);
+    if (isFinite(cap) && v395Count(recipeId) >= cap) { showHint('🎒 背包 LV' + v395BagLevel() + '：' + (recipeId === 'basicSword' ? '氣球劍' : '氣球槌') + '最多 ' + cap + ' 把', 170); v395L({ ev: 'craftRefused', id: recipeId, have: v395Count(recipeId), cap }); return false; }
+    return o.apply(this, arguments);
+  });
+  // ── 無敵星星：沿用暫停背包的「使用」按鈕（useHealingItem）──
+  wrapFn('useHealingItem', o => function (itemId) { if (itemId === 'invincibleStar') return v395UseStar(); return o.apply(this, arguments); });
+  wrapFn('useHealingItemOutOfAdventure', o => function (itemId) { if (itemId === 'invincibleStar') { showHint('⭐ 無敵星星要在冒險中使用（暫停 → 背包 → 使用）', 170); return false; } return o.apply(this, arguments); });
+  wrapFn('h2SupplyItems', o => function () {
+    const list = o.apply(this, arguments); const n = v395Count('invincibleStar');
+    list.push({ key: 'invincibleStar', name: '無敵星星', icon: 'invincibleStar', count: n, zero: n <= 0, desc: SHOP_ITEMS.invincibleStar.description + '（持有上限 ' + v395Cap('invincibleStar') + '）',
+      act: n <= 0 ? '去商店' : '冒險中使用', off: n > 0, goShop: n <= 0 });
+    return list;
+  });
+  // 完整背包（小V的家）：最上面顯示背包等級、各類上限、穿戴裝備
+  wrapFn('h2PanelBody', o => function (kind, tab) { const r = o.apply(this, arguments); if (kind === 'bag') return v395CapHtml() + r; return r; });
+  // 暫停背包：補上穿戴裝備狀態
+  wrapFn('openPauseBag', o => function () {
+    const r = o.apply(this, arguments);
+    try { const body = document.getElementById('pause-bag-body'); if (body) { const d = document.createElement('div'); d.className = 'v395-equip'; d.style.cssText = 'margin-top:8px;color:#dfe;font-size:0.85em;line-height:1.5'; d.innerHTML = '🎒 背包 LV' + v395BagLevel() + '<br>' + v395EquipHtml().map(h2Esc).join('<br>'); body.appendChild(d); } } catch (e) {}
+    return r;
+  });
+  // 小V的家：左邊「挑戰資源」→「背包 LV1／LV2」
+  wrapFn('h2RenderAll', o => function () { const r = o.apply(this, arguments); try { const el = document.getElementById('h2-res-title'); if (el) el.textContent = '背包 LV' + v395BagLevel(); } catch (e) {} return r; });
+  // ── 進關／過關／重試：翼靴、無敵星星的生命週期 ──
+  wrapFn('loadLevel', o => function (idx) {
+    v395StarEnd('loadLevel');
+    const lv = LEVELS[idx], inv = v395Inv();
+    const r = o.apply(this, arguments);
+    v395BootsLevel = null;
+    if (lv && !lv.devUmbrellaField && inv.equip.boots) {
+      if (inv.equip.boots.state === 'ready') { inv.equip.boots = { state: 'active', since: Date.now(), stageId: lv.stageId || String(idx) }; saveInventory(); v395L({ ev: 'bootsActivate', stageId: lv.stageId }); }
+      v395BootsLevel = lv.stageId || String(idx);
+    }
+    try { v395ApplyDrops(lv); } catch (e) { console.warn('[v0.3.95] drops', e); }
+    return r;
+  });
+  wrapFn('restart', o => function () { v395StarEnd('restart'); const r = o.apply(this, arguments); try { v395ApplyDrops(LEVELS[currentLevelIndex]); } catch (e) {} return r; });
+  wrapFn('triggerClear', o => function () {
+    v395StarEnd('clear');
+    const inv = v395Inv(), b = inv.equip.boots;
+    if (b && b.state === 'active' && v395BootsLevel) { inv.equip.boots = null; saveInventory(); v395L({ ev: 'bootsConsumed', stageId: v395BootsLevel }); v395BootsLevel = null; }
+    return o.apply(this, arguments);
+  });
+  wrapFn('triggerFailed', o => function () { v395StarEnd('failed'); return o.apply(this, arguments); });
+  // ── 每一步：無敵倒數（只在遊戲進行中；暫停時 update 不推進 → 倒數停止）、特殊拾取物 ──
+  wrapFn('update', o => function () {
+    const r = o.apply(this, arguments);
+    if (gameState === 'playing') { if (v395Star.left > 0) { v395Star.left--; if (!v395Star.left) { v395L({ ev: 'starEnd', why: 'timeUp' }); showHint('⭐ 無敵時間結束', 120); } } }
+    return r;
+  });
+  wrapFn('checkCollectibles', o => function () { try { v395PickupStep(); } catch (e) { console.warn('[v0.3.95] pickup', e); } return o.apply(this, arguments); });
+  wrapFn('drawPlayer', o => function (cx) { try { v395DrawStarFx(cx, false); } catch (e) {} const r = o.apply(this, arguments); try { v395DrawStarFx(cx, true); } catch (e) {} return r; });
+  wrapFn('drawHUD', o => function () { const r = o.apply(this, arguments); try { v395DrawHud(); } catch (e) {} return r; });
+  // 圖示預先載入（只有 7 張小圖）
+  try { Object.keys(V395_ICONS).forEach(k => v395Img(k)); } catch (e) {}
+  // 開發者面板（暫停 → 開發測試工具）：背包等級、翼靴倍率候選
+  const addDev = () => {
+    const box = document.getElementById('p2-dev-body'); if (!box) return false;
+    if (document.getElementById('v395-dev')) return true;
+    const d = document.createElement('div'); d.id = 'v395-dev'; d.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px';
+    const mk = (txt, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'h2-pill h2-pill--purple h2-pill--sm'; b.textContent = txt; b.addEventListener('click', e => { e.preventDefault(); fn(); }); d.appendChild(b); return b; };
+    mk('🎒 背包 LV2（測試）', () => { v395Inv().bagLevel = 2; saveInventory(); showHint('🛠 背包 LV2（測試，沒有扣金幣）', 120); });
+    mk('🎒 背包 LV1（測試）', () => { v395Inv().bagLevel = 1; saveInventory(); showHint('🛠 背包 LV1（測試）', 120); });
+    V395_BOOTS.candidates.forEach(m => mk('🪽 翼靴 ×' + m.toFixed(2), () => { V395_BOOTS.mul = m; showHint('🛠 翼靴倍率 ×' + m.toFixed(2) + '（測試候選）', 120); }));
+    box.appendChild(d); return true;
+  };
+  if (typeof H2_DEVTOOLS !== 'undefined' && H2_DEVTOOLS) { if (!addDev()) { let n = 0; const t = setInterval(() => { if (addDev() || ++n > 60) clearInterval(t); }, 500); } }
+  window.debugItems395 = () => { const inv = v395Inv(); return { bagLevel: inv.bagLevel, caps: Object.fromEntries(Object.keys(V395_BAG.caps).map(k => [k, { have: v395Count(k), cap: v395Cap(k) }])), over: v395Over(), equip: JSON.parse(JSON.stringify(inv.equip)),
+    star: Object.assign({}, v395Star, { active: v395StarActive(), sec: Math.ceil(v395Star.left / 60) }), bootsLevel: v395BootsLevel, speedMul: v395SpeedMul(), bootsMulSetting: V395_BOOTS.mul, coins: inv.coins, b260: inv.balloon260, round: inv.roundBalloon,
+    drops: JSON.parse(JSON.stringify(v395Drops)), log: v395Log.slice(-60) }; };
 })();
