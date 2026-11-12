@@ -101,6 +101,8 @@
     if (shake) ctx.translate(Math.sin(t * 90) * shake, Math.cos(t * 77) * shake * 0.6);
 
     this.drawField(ctx);
+    // v0.1.4：27 秒前倒數畫在洞口與怪物下方 → 中上格怪物冒出時不會被倒數擋住
+    if (t < C.BOSS_START) this.drawGoldCountdown(ctx, t);
     var bossPhase = g.state !== 'intro' && g.boss.isActive(t);
     // 洞口與普通目標（上排先畫）
     for (var i = 0; i < 9; i++) this.drawHole(ctx, grid.cells[i], t, bossPhase);
@@ -123,6 +125,8 @@
 
     this.drawHudLeft(ctx, t, vt);
     this.drawRightPanel(ctx, t);
+    // Boss 戰（27 秒起）中上格不再出怪 → 倒數畫在最上層，不受場景變暗影響
+    if (t >= C.BOSS_START) this.drawGoldCountdown(ctx, t);
     this.drawHammers(ctx, t);
   };
 
@@ -944,6 +948,54 @@
       if (mode === 'broken') this.drawRepairBadge(ctx, this.mouse.x + 50, this.mouse.y + 50, t);
       if (mode === 'gold' && g.hammer.goldLeft(t) <= 3) this.drawGoldBadge(ctx, this.mouse.x + 52, this.mouse.y + 52, t);
     }
+  };
+
+  /* =================== v0.1.4：畫面中上方無敵槌倒數 ===================
+   * 只在「真的取得金槌、且還在有效時間內」顯示；沒取得就完全不畫。
+   * remaining = 固定結束時間（17 / 30）− 遊戲時間；顯示 Math.ceil(remaining)。
+   * 與倒數提示音用同一個遊戲時鐘：剩 3、2、1 秒的跳動和提示音同一刻發生，暫停時一起凍結。 */
+  Renderer.prototype.drawGoldCountdown = function (ctx, t) {
+    var g = this.game, h = g.hammer;
+    if (g.state !== 'playing' || !h.isGold(t)) return;
+    var rem = h.goldUntil - t;
+    if (rem <= 1e-6) return;
+    var n = Math.ceil(rem - 1e-6);
+    var cols = C.GOLD_HUD_COLORS;
+    var col = n <= 3 ? cols[n] : cols.normal;
+    var fr = rem - Math.floor(rem - 1e-6);                       // 剛跨過整數秒時接近 1
+    var beat = n <= 3 ? easeOut(clamp01((fr - 0.75) / 0.25)) : 0;
+    var compact = this.grid.compact;
+    var cx = this.grid.grid.x + this.grid.grid.w / 2;
+    var bw = compact ? 300 : 264, bh = compact ? 98 : 92, y0 = compact ? 3 : 6;
+    ctx.save();
+    // 半透明深色底＋柔和金色外光
+    ctx.shadowColor = 'rgba(255,205,60,0.55)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = 'rgba(28,14,64,0.62)';
+    roundRect(ctx, cx - bw / 2, y0, bw, bh, 18); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = n <= 3 ? col : 'rgba(255,210,63,0.8)';
+    roundRect(ctx, cx - bw / 2, y0, bw, bh, 18); ctx.stroke();
+    // 上方小字
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '800 ' + (compact ? 20 : 17) + 'px ' + FONT;
+    ctx.fillStyle = '#ffe9a8';
+    ctx.fillText('無敵槌剩餘時間', cx, y0 + (compact ? 23 : 21));
+    // 大型數字（最後 3 秒每秒輕微放大再恢復）
+    var fs = compact ? 64 : 56;
+    var baseY = y0 + bh - (compact ? 7 : 8);
+    ctx.translate(cx, baseY - fs * 0.35);
+    var sc = 1 + 0.2 * beat;
+    ctx.scale(sc, sc);
+    ctx.font = '900 ' + fs + 'px ' + FONT;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 9; ctx.strokeStyle = '#2a0e4a';
+    ctx.strokeText(String(n), 0, fs * 0.35);
+    ctx.shadowColor = col; ctx.shadowBlur = 16;
+    ctx.fillStyle = col;
+    ctx.fillText(String(n), 0, fs * 0.35);
+    ctx.restore();
   };
 
   /* =================== 左側 HUD =================== */

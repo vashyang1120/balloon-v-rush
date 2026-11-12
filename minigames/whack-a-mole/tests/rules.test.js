@@ -141,13 +141,13 @@ r = g.key(0);
 ok(r.outcome === 'empty' && g.scoring.score === 0 && !g.hammer.isBroken(g.clock.t), '空敲');
 
 /* ---------- 3. 金環 ---------- */
-section('金環：12秒出現、主動敲中才取得、17秒結束');
+section('金環：9秒出現、主動敲中才取得、17秒結束（v0.1.4 固定 8 秒）');
 g = makeGame(2001);
 var ring1 = g.rings.rings[0];
-g.runTo(11.95);
-ok(!g.rings.activeAt(g.clock.t), '12秒前沒有金環');
-g.runTo(12.0);
-ok(g.rings.activeAt(g.clock.t) && g.rings.activeAt(g.clock.t).hole === ring1.hole, '12秒出現在角落');
+g.runTo(8.95);
+ok(!g.rings.activeAt(g.clock.t), '9秒前沒有金環');
+g.runTo(9.0);
+ok(g.rings.activeAt(g.clock.t) && g.rings.activeAt(g.clock.t).hole === ring1.hole, '9秒出現在角落');
 g.runTo(14.9);
 ok(!g.hammer.isGold(g.clock.t), '沒敲不會自動取得');
 ok(!g.targetAtHole(ring1.hole, g.clock.t), '金環洞口沒有普通目標');
@@ -319,6 +319,68 @@ ok(!g.key(4).ok, '暫停中不能敲擊');
 g.setPause('user', false, g.real);
 g.wait(100);
 ok(Math.abs(g.clock.t - 5.1) < 1e-6, '按繼續後從 5 秒接著跑，不補跑暫停期間');
+
+/* ---------- 10. v0.1.4 固定 8 秒無敵時段與邊界 ---------- */
+section('v0.1.4：金環 9 / 22 秒出現，固定在 17 / 30 秒結束');
+ok(C.GOLD_WINDOWS[0].from === 9 && C.GOLD_WINDOWS[0].to === 17 && C.GOLD_WINDOWS[1].from === 22 && C.GOLD_WINDOWS[1].to === 30, '設定：9→17、22→30');
+function takeAt(seed, idx, T) {
+  var gg = makeGame(seed);
+  gg.runTo(T);
+  var res = gg.key(gg.rings.rings[idx].hole);
+  return { g: gg, res: res };
+}
+var A9 = takeAt(8001, 0, 9.0);
+ok(A9.res.outcome === 'ring' && Math.abs(A9.g.hammer.goldLeft(A9.g.clock.t) - 8) < 0.02, '9 秒立即取得：剩 8 秒');
+var A11 = takeAt(8001, 0, 11.0);
+ok(Math.abs(A11.g.hammer.goldLeft(A11.g.clock.t) - 6) < 0.02, '11 秒取得：剩 6 秒（不重置成 8）');
+var A15 = takeAt(8001, 0, 15.0);
+ok(Math.abs(A15.g.hammer.goldLeft(A15.g.clock.t) - 2) < 0.02, '15 秒取得：剩 2 秒');
+A15.g.runTo(17.0);
+ok(!A15.g.hammer.isGold(A15.g.clock.t), '一律 17 秒結束');
+
+section('邊界 A：沒取得第一次金環 → 不啟動無敵');
+g = makeGame(8002); g.runTo(17.5);
+ok(g.hammer.goldFrom < 0 && !g.hammer.isGold(g.clock.t), '沒有金槌');
+
+section('邊界 C：17 秒邊界敲金環 → 不得取得已過期的無敵');
+g = makeGame(8003); g.runTo(16.99);
+ok(!!g.rings.activeAt(g.clock.t), '16.99 秒金環仍在');
+g.runTo(17.0);
+r = g.key(g.rings.rings[0].hole);
+ok(r.outcome !== 'ring' && !g.hammer.isGold(g.clock.t), '17 秒敲金環位置：沒有取得');
+
+section('邊界 D / E：22 秒取得第二次 → 最多 8 秒，橘子王可連打');
+var D = takeAt(8004, 1, 22.0);
+ok(D.res.outcome === 'ring' && Math.abs(D.g.hammer.goldLeft(D.g.clock.t) - 8) < 0.02, '22 秒取得：剩 8 秒');
+D.g.runTo(27.0);
+var bh = 0;
+for (var bi = 0; bi < 10; bi++) { if (D.g.tapBoss().outcome === 'bossHit') bh++; D.g.wait(100); }
+ok(bh === 10 && D.g.boss.hits === 10, '27 秒後金槌連打橘子王 10 下全中');
+
+section('邊界 F：29 秒才取得第二次 → 只剩 1 秒、30 秒正常結束');
+var F = takeAt(8005, 1, 29.0);
+ok(F.res.outcome === 'ring' && Math.abs(F.g.hammer.goldLeft(F.g.clock.t) - 1) < 0.02, '29 秒取得：剩 1 秒');
+F.g.runTo(30);
+ok(F.g.state === 'ended' && F.g.ev.end, '30 秒正常結算');
+
+section('邊界 G：金槌剩 1 秒時暫停 → 凍結，恢復後才繼續');
+var G = takeAt(8006, 1, 23.0);
+G.g.runTo(29.0);
+G.g.setPause('user', true, G.g.real);
+G.g.wait(5000);
+ok(Math.abs(G.g.hammer.goldLeft(G.g.clock.t) - 1) < 0.02 && G.g.hammer.isGold(G.g.clock.t), '暫停 5 秒後仍剩 1 秒');
+G.g.setPause('hidden', true, G.g.real); G.g.setPause('hidden', false, G.g.real); G.g.wait(500);
+ok(Math.abs(G.g.hammer.goldLeft(G.g.clock.t) - 1) < 0.02, '暫停中切分頁再回來：不偷跑');
+G.g.setPause('user', false, G.g.real);
+G.g.runTo(29.5);
+ok(Math.abs(G.g.hammer.goldLeft(G.g.clock.t) - 0.5) < 0.02, '繼續後從 1 秒接著倒數');
+
+section('v0.1.4：排程配額不變（50 個、各時段相同）');
+var Q = makeGame(8007); Q.runTo(30);
+C.PERIODS.forEach(function (p) { ok(JSON.stringify(Q.spawned[p.id]) === JSON.stringify(p.quota), p.label + ' 配額不變'); });
+ok(Q.pending.every(function (tg) {
+  return Q.rings.rings.every(function (rr) { return rr.hole !== tg.hole || tg.e + C.SAME_HOLE_GAP <= rr.from + 1e-6 || tg.s >= rr.to - 1e-6; });
+}), '9～17、22～30 金環洞口沒有普通目標');
 
 console.log('\n結果：' + pass + ' 通過，' + fail + ' 失敗');
 process.exit(fail ? 1 : 0);
