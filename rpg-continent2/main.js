@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.96-adventure-flow-items-fix-test-1';
-const BUILD_TIME   = '2026-11-12 19:00';
+const GAME_VERSION = 'adventure-v0.3.97-adventure-progress-integrity-test-1';
+const BUILD_TIME   = '2026-11-12 21:30';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -72,6 +72,7 @@ const BUILD_TIME   = '2026-11-12 19:00';
 var ADV_WORKSPACE = 'continent2';
 var ADV_WS_SUFFIX = ADV_WORKSPACE ? '__c2' : '';
 var ADV_DEVTEST_FLAG_KEY = 'balloonV_devFreshTest_v1' + ADV_WS_SUFFIX;
+var ADV_DEVPLAY_SUFFIX = '__c2devplay';   // v0.3.97：開發者模式（一般開發測試）的冒險進度副本
 var ADV_DEVTEST_SUFFIX = ADV_WORKSPACE ? '__c2dev' : '__devtest';   // 不用 __devtest 結尾 → rpg-test/ 的「重新開始測試」不會清到這裡的測試存檔
 var ADV_DEVTEST_PATTERNS = [/^balloonV_inventory$/, /^balloonV_adventureChallenge_v1test__/, /^balloonV_adventureStageGuard_v1__/, /^balloonV_adventureRpg_v1__/,
   /^balloonVAdventureHome__/, /^balloonVAdventureWallet__/, /^balloonVAdventureVCoinLogs__/, /^balloonVAdventureDailyRewards__/, /^balloonVAdventureAchievements__/];
@@ -83,7 +84,7 @@ var ADV_DEVTEST = (function () {
     const dev = /[?&]devtools=1\b/.test(location.search) || st.rawGet.call(localStorage, 'balloonV_devTools') === '1';
     st.on = dev && st.rawGet.call(localStorage, ADV_DEVTEST_FLAG_KEY) === '1';
     const WS = ADV_WS_SUFFIX;
-    const notMapped = k => !k.endsWith(ADV_DEVTEST_SUFFIX) && !(WS && k.endsWith(WS));
+    const notMapped = k => !k.endsWith(ADV_DEVTEST_SUFFIX) && !(WS && k.endsWith(WS)) && !k.endsWith(ADV_DEVPLAY_SUFFIX);
     const isAdv = k => typeof k === 'string' && notMapped(k) && ADV_DEVTEST_PATTERNS.some(re => re.test(k));
     // v0.3.80：工作區模式下，其餘 balloonV… 鍵（身份、設定、校正）也改存到 __c2（開發者模式旗標本身除外）
     const isOwn = k => !!WS && typeof k === 'string' && /^balloonV/.test(k) && k !== 'balloonV_devTools' && !k.startsWith('balloonV_devFreshTest_v1') && notMapped(k);
@@ -95,11 +96,18 @@ var ADV_DEVTEST = (function () {
     st.dev = dev;
     const isShared = k => !!WS && !dev && typeof k === 'string' && (k === 'balloonV_inventory' || /^balloonV_adventureStageGuard_v1__[^_]/.test(k)) && notMapped(k);
     st.isShared = isShared;
-    const map = k => isShared(k) ? k : isAdv(k) ? k + (st.on ? ADV_DEVTEST_SUFFIX : WS) : (isOwn(k) ? k + WS : k);
+    // v0.3.97（進度隔離）：開發者模式（沒有按「重新開始測試」）時，冒險進度類存檔（冒險挑戰／永久解鎖／重新整理位置、RPG 已讀、小V之家、
+    //   V幣、V幣紀錄、每日獎勵、成就）改寫到「原本的鍵＋__c2devplay」；背包與關卡快照照 v0.3.96 用 __c2 測試背包
+    //   ・開發者的副本還沒建立時「只讀」一般遊玩的進度（方便開發者從玩家目前的位置測試）；第一次寫入起就只寫開發者副本
+    //   ・結果：開發者跳關、測試入口、測試通關都不會改到一般遊玩的進度、位置、成績與 V幣
+    const isDevPlay = k => !!WS && dev && !st.on && isAdv(k) && k !== 'balloonV_inventory' && !/^balloonV_adventureStageGuard_v1__/.test(k);
+    st.isDevPlay = isDevPlay;
+    const map = k => isShared(k) ? k : isDevPlay(k) ? k + ADV_DEVPLAY_SUFFIX : isAdv(k) ? k + (st.on ? ADV_DEVTEST_SUFFIX : WS) : (isOwn(k) ? k + WS : k);
     st.map = map; st.isAdv = isAdv; st.isOwn = isOwn;
     P.getItem = function (k) {
       if (this !== localStorage) return st.rawGet.call(this, k);
       const m = map(k); let v = st.rawGet.call(this, m);
+      if (v === null && isDevPlay(k)) v = st.rawGet.call(this, k + WS);             // v0.3.97：開發者副本還沒有 → 只讀一般遊玩的進度
       if (v === null && m !== k && WS && !isAdv(k)) v = st.rawGet.call(this, k);   // 身份／設定：工作區沒有副本 → 只讀正式資料
       return v;
     };
@@ -107,6 +115,7 @@ var ADV_DEVTEST = (function () {
     P.removeItem = function (k) { if (this === localStorage && (isAdv(k) || isOwn(k))) { if (st.suspend && isAdv(k)) return; k = map(k); } return st.rawRemove.call(this, k); };
     if (WS) console.log(dev ? '[Workspace] 開發者模式：冒險背包使用 __c2 測試存檔（不讀寫正式背包）' : '[Workspace] 一般遊玩：冒險背包＝正式共用背包（balloonV_inventory，和第一大陸同一份）');
     if (WS) console.log('[Workspace] 第二大陸開發工作區：存檔使用獨立位置（' + WS + '），不讀寫正式玩家的冒險進度');
+    if (WS && dev && !st.on) console.log('[Workspace] 開發者模式：冒險進度寫在 ' + ADV_DEVPLAY_SUFFIX + ' 副本（一般遊玩的進度只讀、不會被改到）');
     if (st.on) console.log('[DevTest] 開發者測試：全新冒險（使用獨立測試存檔，正式玩家資料不會被讀寫）');
   } catch (e) {}
   return st;
@@ -30399,4 +30408,71 @@ function v396RenderPauseBag() {
     theme: { status: v396Theme.status, playing: !!(v396Theme.el && !v396Theme.el.paused), vol: v396Theme.el ? +v396Theme.el.volume.toFixed(3) : null, t: v396Theme.el ? +v396Theme.el.currentTime.toFixed(2) : null, starts: v396Theme.starts, stops: v396Theme.stops, log: v396Theme.log.slice(-12), src: v396Theme.el ? v396Theme.el.src.replace(/^.*balloon-v-rush\//, '').replace(/\?.*$/, '') : null },
     bgm: [['chapter1Bgm', typeof chapter1Bgm !== 'undefined' ? chapter1Bgm : null], ['chapter2Bgm', typeof chapter2Bgm !== 'undefined' ? chapter2Bgm : null], ['chapter3Bgm', typeof chapter3Bgm !== 'undefined' ? chapter3Bgm : null], ['orangeKingBgm', typeof orangeKingBgm !== 'undefined' ? orangeKingBgm : null]].map(([n, a]) => a ? { n, playing: !a.paused, vol: +a.volume.toFixed(3), base: a._v396base } : { n, none: true }),
     activateSfx: { status: SFX.status.starActivate, url: (SFX.urls.starActivate || '').replace(/^.*balloon-v-rush\//, '').replace(/\?.*$/, '') }, shopLog: playerInventory.shopLog || null, bootsMul: V395_BOOTS.mul, bagPrice: V395_BAG.upgradePrice });
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.3.97：無敵星星撞到「一般橘子怪」→ 和蠍子一樣撞飛、旋轉、同一個撞飛音效、飛出畫面後消失（使用者定案）
+//  ・一般橘子怪＝orangeNemeses（type balloonNemesis）。沿用既有機制，不另做一套：
+//      拿掉橘子怪＝v0.3.86「擊飛的蠍子撞倒橘子怪」同一套（c2DkHold：同一關重試時放回原位、換關清空）
+//      撞飛＋旋轉＝槌子擊飛用的 spinningEnemies（同一個速度、旋轉、存活時間）；音效＝scorpionKnockback（蠍子被擊飛同一個）
+//      飛出去撞到其他蠍子／橘子怪＝原本的連鎖規則（chainImpactResult：DOUBLE KILL +50；同一組只算一次）
+//  ・畫面：旋轉時直接用橘子怪原本的圖（orange_idle_01.png），不新增美術、不改外觀
+//  ・橘子王不在 orangeNemeses 裡 → 完全不受影響；煙囪／雙噴嘴／油幕／油彈橘子怪：無敵照常免傷，不撞飛（這次只定案一般橘子怪）
+//  ・倒下的橘子怪和 v0.3.86 一樣不算進「擊敗蠍子數」（原本的計分分母不變）；這裡另外記一筆星星擊倒紀錄（每隻只記一次）
+// ════════════════════════════════════════════════════════════════════
+var v397StarOrangeLog = [];
+var V397_C2_ORDER = ['2-4', '3-1', '3-2'];   // 第二大陸路線：前一站（2-4＝第一大陸終點，從這裡前往第二大陸）
+function v397C2Cleared(sid) {
+  if (sid === '2-4') return true;
+  const f = (typeof c2Flow === 'function') ? c2Flow() : {};
+  if (sid === '3-1') return (f.stage31Clears || 0) > 0 || !!f.stage31;
+  if (sid === '3-2') return (f.stage32Clears || 0) > 0 || !!f.stage32;
+  return false;
+}
+function v397BootC2Ctx(p) {
+  if (!p || !p.ctx) return null;
+  const d = advLoad(), s = d && d.session;
+  if (!s || s.where !== 'stage' || (s.mode || 'official') !== 'official' || s.homeCtx) return null;
+  const i = V397_C2_ORDER.indexOf(s.stageId); if (i <= 0) return null;
+  for (let j = i - 1; j >= 0; j--) if (v397C2Cleared(V397_C2_ORDER[j])) return j === 0 ? null : { stageId: V397_C2_ORDER[j], from: s.stageId };
+  return null;
+}
+function v397StarOrangeStep() {
+  if (!(typeof v395StarActive === 'function' && v395StarActive()) || gameState !== 'playing') return;
+  if (!Array.isArray(orangeNemeses) || !orangeNemeses.length) return;
+  const px = player.x - 4, py = player.y - 4, pw = player.w + 8, ph = player.h + 8;
+  for (let i = orangeNemeses.length - 1; i >= 0; i--) {
+    const o = orangeNemeses[i];
+    if (!o || o.active === false || o.isBoss || (o.type && o.type !== 'balloonNemesis')) continue;
+    if (!rectsOverlap(px, py, pw, ph, o.x + 4, o.y + 4, o.w - 8, o.h - 8)) continue;   // 和小V碰到會受傷的是同一個本體框
+    const t = c2DkTypes()[0], id = c2DkOrangeId(t, o);
+    const dir = (o.x + o.w / 2) >= (player.x + player.w / 2) ? 1 : -1;               // 依碰撞方向
+    try { if (o._sfxVoice) { sfxStopVoice(o._sfxVoice, 60); o._sfxVoice = null; } } catch (e) {}
+    o.sprayActive = false;
+    orangeNemeses.splice(i, 1);
+    c2DkHold.push({ arr: orangeNemeses, obj: o, idx: i });
+    try { sfxPlay('scorpionKnockback'); } catch (e) {}
+    spinningEnemies.push({ x: o.x, y: o.y, w: o.w, h: o.h, vx: dir * CONFIG.HAMMER_SPIN_SPEED, life: CONFIG.HAMMER_SPIN_LIFE, angle: 0,
+      skinKey: 'v397_orange', drawScaleMultiplier: ORANGE_BODY_DRAW_SCALE / SCORPION_DRAW_SCALE, spinDamage: 1, hitTargetIds: new Set(),
+      sourceId: id, sourceAdvId: id, byStar: true, isOrange: true });
+    v397StarOrangeLog.push({ id, x: Math.round(o.x), dir, frame: frameCount, stage: (LEVELS[currentLevelIndex] || {}).stageId });
+    if (v397StarOrangeLog.length > 50) v397StarOrangeLog.shift();
+    try { v395L({ ev: 'starOrange', id, x: Math.round(o.x) }); } catch (e) {}
+  }
+}
+(function v397Install() {
+  if (typeof globalThis === 'undefined') return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v397) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v397 = true; globalThis[name] = w; };
+  // ── 進度連續性：第二大陸關卡中途重新整理／關閉網頁 → 回到「這一關出發前」的小V之家位置 ──
+  //   v0.3.96 以前：關卡中（where＝stage）沒有記小V之家位置 → 開機一律退回 2-4 的小V之家 → 3-2 中途重新整理後，被要求再帶狗、再打一次 3-1
+  //   現在：3-2 中途 → 回到 3-1 已通關的小V之家（出發＝前往 3-2）；3-1 中途 → 照舊回到 2-4（出發＝前往第二大陸 3-1）
+  //   背包仍由既有的關卡快照回到這一關開始前（不能刷資源）；不建立任何通關紀錄
+  wrapFn('advBootOpenHome', o => function (p) {
+    try { const ctx = v397BootC2Ctx(p); if (ctx) { console.log('[Boot] 第二大陸 ' + ctx.from + ' 中途離開 → 回到 ' + ctx.stageId + ' 的小V之家'); p = Object.assign({}, p, { ctx: { levelIndex: 0, stageId: ctx.stageId, gameState: 'clear', entry: 'normal', mode: 'official' } }); } } catch (e) {}
+    return o.call(this, p);
+  });
+  wrapFn('v396StarContactStep', o => function () { const r = o.apply(this, arguments); try { v397StarOrangeStep(); } catch (e) { console.warn('[v0.3.97] star orange', e); } return r; });
+  // 旋轉飛出的橘子怪：用橘子怪原本的圖畫（槌子擊飛的繪圖迴圈會用 skinKey 取圖）
+  wrapFn('getScorpionHurtImgForSkin', o => function (k) { if (k === 'v397_orange') return getOrangeEnemyImg('idle') || o.call(this, 'scorpion_normal'); return o.apply(this, arguments); });
+  if (typeof window !== 'undefined') window.debugStarOrange397 = () => ({ star: v395StarActive(), oranges: orangeNemeses.length, held: c2DkHold.map(h => h.obj._dkId), spinning: spinningEnemies.map(s => ({ orange: !!s.isOrange, x: Math.round(s.x), life: s.life, ang: +s.angle.toFixed(2) })), log: v397StarOrangeLog.slice(), doubleKills: currentRunStats.doubleKills || 0, chainBonus: currentRunStats.chainBonusScore || 0 });
 })();
