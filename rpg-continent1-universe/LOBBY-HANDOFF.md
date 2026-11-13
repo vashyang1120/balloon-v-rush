@@ -1,6 +1,6 @@
 # 遊戲宇宙大廳串接交接文件（第一大陸 × 遊戲宇宙版）
 
-版本：`adventure-v0.4.0-continent1-universe-test-2`
+版本：`adventure-v0.4.1-continent1-universe-test-1`
 資料夾：`balloon-v-rush/rpg-continent1-universe/`
 
 > **目前狀態：新冒險版本可以串接；遊戲宇宙大廳還沒有正式串接。**
@@ -54,7 +54,7 @@
   "submissionId": "<challengeId>",
   "playerId": "p_…",
   "gameId": "adventure",
-  "gameVersion": "adventure-v0.4.0-continent1-universe-test-2",
+  "gameVersion": "adventure-v0.4.1-continent1-universe-test-1",
   "mode": "production | sandbox",
   "startedAt": 0,
   "finishedAt": 0,
@@ -85,6 +85,17 @@
 | `adventure_kind_adventurer` | 善良冒險家 | 沒有擊倒任何怪物（直接或間接；橘子王決戰不計） |
 | `adventure_peace_ambassador` | 和平大使 | 沒有對任何怪物造成傷害（橘子王決戰不計）；同時獲得善良冒險家 |
 | `adventure_super_thrifty` | 超勤儉冒險家 | 沒有在商店成功購買任何東西（打地鼠入場費不算） |
+| `adventure_volleyball_rookie` | 排球新星 | 氣球排球 7：0 完封蠍子怪（比賽結算時取得） |
+| `adventure_volleyball_expert` | 排球高手 | 氣球排球 7：0 完封橘子怪 |
+| `adventure_volleyball_king` | 排球王者 | 氣球排球 7：0 完封橘子王 |
+| `adventure_whack_legend` | 傳奇槌王 | 打地鼠分數達到 660 分（遊戲結算時取得） |
+| `adventure_treasure_hunter` | 寶藏獵人 | 第一大陸完整結算時「收集」滿分 |
+| `adventure_secret_explorer` | 秘境探險家 | 第一大陸完整結算時「探索」滿分 |
+| `adventure_battle_master` | 戰鬥大師 | 第一大陸完整結算時「戰鬥」滿分 |
+| `adventure_unyielding_hero` | 不屈勇者 | 第一大陸完整結算時「生存」滿分 |
+| `adventure_swift_adventurer` | 神速冒險家 | 第一大陸完整結算時「效率」滿分 |
+
+以上 12 個稱號都只在一般遊玩取得；開發者模式、訪客不會取得。
 
 每筆稱號的格式：
 

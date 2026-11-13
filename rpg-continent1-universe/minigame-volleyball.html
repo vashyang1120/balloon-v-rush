@@ -7,12 +7,14 @@
 // v0.4.0：氣球排球轉接頁（不修改 minigames/volleyball/ 任何檔案）
 //   ・讀取原本的 ../minigames/volleyball/index.html，原樣寫進這一頁（網址參數 ?embed=adventure&session=…&opponent=… 保持不變）
 //   ・<base> 指回原本的資料夾 → 原本的 main.js、style.css、角色與音效全部照舊載入
-//   ・唯一的差別：遠景背景圖 assets/court/volleyball_arena_bg.png 改用冒險端提供的大陸窗景（同樣 1672×941）
+//   ・唯一的差別：遠景背景圖 assets/court/volleyball_arena_bg.png 改用冒險端提供的大陸窗景（同樣 1672×941；v0.4.1 起為淡化＋輕微模糊版）
 (function () {
   var BASE = '../minigames/volleyball/';
   var bg = '';
   try { bg = String(window.parent && window.parent !== window && window.parent.c1uWindowUrl ? window.parent.c1uWindowUrl() : ''); } catch (e) { bg = ''; }
-  try { var u = new URL(bg, location.href); if (u.origin !== location.origin || !/\/assets\/adventure\/ui\/home\/window_continent_\d+\.png$/.test(u.pathname)) bg = ''; else bg = u.href; } catch (e) { bg = ''; }
+  try { bg = String(window.parent && window.parent !== window && window.parent.c1uMinigameBg ? window.parent.c1uMinigameBg().url : bg); } catch (e) {}
+  // 只接受同網站的窗景圖，或冒險端在本機做好的淡化版（blob:，同網站）
+  try { if (bg.indexOf('blob:' + location.origin + '/') === 0) { /* ok */ } else { var u = new URL(bg, location.href); if (u.origin !== location.origin || !/\/assets\/adventure\/ui\/home\/window_continent_\d+\.png$/.test(u.pathname)) bg = ''; else bg = u.href; } } catch (e) { bg = ''; }
   var xhr = new XMLHttpRequest();
   xhr.open('GET', BASE + 'index.html', false);
   xhr.send();
