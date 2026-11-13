@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.3.99-dual-continent-integration-test-1';
-const BUILD_TIME   = '2026-11-13 15:30';
+const GAME_VERSION = 'adventure-v0.4.00-chapter3-combat-integration-test-1';
+const BUILD_TIME   = '2026-11-14 06:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -32167,3 +32167,800 @@ function c1dDevJump(what) {
   console.log('[v0.3.99] 雙大陸整合（第一大陸 v0.4.1 ＋ 第二大陸 v0.3.98）與第三章修正已載入');
 })();
 var C1D_33_PLATFORMS;   // 3-3 平台配置（上面的安裝程式填入；這裡只宣告，不重設）
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.4.00 第三章戰鬥系統整合（adventure-v0.4.00-chapter3-combat-integration-test-1）
+//  ・疾風蠍子怪／磐甲風刃蠍：頭頂 HP（沿用重甲蠍子的格狀血條）、後方腳尖接地、Hurt／Defeat 顯示時間
+//  ・磐甲：正面擋劍專用音效＋首次 RPG、破甲演出、破甲後第二階段、新招 Slam（單螯重擊）、Wind Slash（大型橫向風刃）
+//  ・大型風刃：去程只打小V（穿過其他敵人與樹木）；雨傘成功格擋 → 水平反向飛回，只打回程路線上的第一個目標
+//  ・可倒樹木：一般路邊樹（3-1／3-2／3-3）、倒樹壓傷敵人、反彈風刃可以打倒樹；坑邊三棵樹改用崖邊樹素材（使用者已同意）
+//  ・疾風蠍子：準星 搜尋 → 收斂 → 鎖定 → 衝刺，配合瞄準音效
+//  ・F8 凍結：開發者網址 ?devtools=1，或瀏覽器有舊的開發者開關 balloonV_devTools=1（只開放 F8；不會變成開發者存檔）
+//  所有數值集中在 C4（測試值，尚未經使用者試玩驗收）
+// ════════════════════════════════════════════════════════════════════
+var C4 = {
+  ground: { swift: 7, armored: 7 },          // 後方腳尖畫在「碰撞框底部 + N px」（和小V鞋底同一條草地線；只有畫面）
+  hurt: { swift: 26, armored: 26 },          // Hurt 圖顯示時間（幀，60＝1 秒）：約 0.43 秒
+  stagger: { swift: 24, armored: 22 },       // 受擊硬直（不能移動／出招；和受擊保護 bodyHitCd、無敵完全分開）
+  defeat: { flash: 8, hold: 40, fade: 22 },  // 擊倒：Hurt 白閃 8 幀 → Defeat 停留 40 幀 → 淡出 22 幀（共 70 幀 ≈ 1.17 秒；獎勵只在擊倒當下結算一次）
+  spinHurt: 20,                              // 槌子擊飛：前 20 幀 Hurt，之後 Defeat
+  hpUi: { cellW: 11, cellH: 6, gap: 2, groupGap: 7, iconW: 9 },
+  armored: {
+    attackGap: 70,               // 任何招式收招後，至少隔 1.17 秒才會開始下一招（Recover 一定先做完）
+    guardBeforeAttack: 36,       // 舉盾至少 0.6 秒才可以改出招（Guard 不會永久卡住）
+    brokenGuard: 60,             // 破甲後的 Guard 比較短（1 秒）
+    slam: { reach: 70, vRange: 70, charge: 42, swing: 8, impact: 18, active: 5, recover: 54, cd: 170,
+            zoneBack: 14, zoneFwd: 50, zoneH: 52, damage: 0.5, push: 10 },
+    wslash: { rangeMin: 150, rangeMax: 560, vUp: 120, charge: 30, gather: 36, release: 18, fireAt: 3, recover: 42, cd: 270,
+              speed: 4.6, maxDist: 900, damage: 1, drawW: 150, launchFwd: 40, launchH: 30 },
+    breakStun: 54,               // 破甲硬直 0.9 秒
+    breakHitStop: 6,             // 命中停頓（邏輯暫停 6 步）
+    breakText: 80,               // 「破甲！」顯示 1.3 秒
+  },
+  reflect: { speedMul: 1.1, damage: 1 },     // 反彈風刃：對一般敵人 1 點；磐甲（盔甲完整＋正面）→ 盔甲 −1；其他 → 本體 −1（待試玩驗收）
+  tree: { crushDamage: 1, crushPad: 6 },     // 倒樹壓傷：1 點；磐甲 → 盔甲完整時盔甲 −1，破甲後本體 −1（待試玩驗收）
+  swift: { search: 36, converge: 24, hold: 16, amp0: 70, amp1: 34, oscSpeed: 0.34 },   // 準星：搜尋 0.6 秒、收斂 0.4 秒、鎖定 0.27 秒
+};
+var c4Log = [], c4Fx = [], c4Defeats = [];
+function c4L(o) { try { o.frame = frameCount; c4Log.push(o); if (c4Log.length > 300) c4Log.shift(); } catch (e) {} }
+
+// ── 新素材（9 張使用者提供的原圖；程式只縮小快取，不改圖檔）──
+const C4_DIR = 'assets/enemies/armored_scorpion/';
+const C4_FILES = {
+  slamCharge: 'rockwind_scorpion_slam_charge.png', slamSwing: 'rockwind_scorpion_slam_swing.png', slamImpact: 'rockwind_scorpion_slam_impact.png', slamRecover: 'rockwind_scorpion_slam_recover.png',
+  wsCharge: 'rockwind_scorpion_wind_slash_charge.png', wsGather: 'rockwind_scorpion_wind_slash_gather.png', wsRelease: 'rockwind_scorpion_wind_slash_release.png', wsRecover: 'rockwind_scorpion_wind_slash_recover.png',
+  projectile: 'rockwind_scorpion_wind_slash_projectile.png',
+};
+const C4_BBOX = {   // [圖寬, 圖高, 左, 上, 右, 下]（透明度 > 24；離線量測）
+  slamCharge: [1254, 1254, 40, 101, 1218, 1154], slamSwing: [1254, 1254, 37, 76, 1196, 1216], slamImpact: [1254, 1254, 35, 102, 1215, 1181], slamRecover: [1254, 1254, 38, 101, 1207, 1109],
+  wsCharge: [1254, 1254, 12, 85, 1243, 1133], wsGather: [1254, 1254, 79, 56, 1179, 1134], wsRelease: [1254, 1254, 15, 97, 1233, 1071], wsRecover: [1254, 1254, 33, 99, 1207, 1111],
+};
+// 後方腳尖（原圖 y）：角色朝左 → 最右側（最後方）那幾隻腳的腳尖最下緣；風流特效（淡青色）不算。每一個動作各自量測，換動作時不會浮起或陷進地面
+const C4_TOE = {
+  armored: { base: 1061, walk: 1075, guard: 1085, guardLow: 1039, hurt: 1112, break: 1070, exposed: 1077, defeat: 1015,
+    slamCharge: 1091, slamSwing: 1060, slamImpact: 1057, slamRecover: 1070, wsCharge: 1052, wsGather: 1131, wsRelease: 1017, wsRecover: 1088 },
+  swift: { base: 1002, walk1: 924, walk2: 916, walk3: 900, dash: 875, hurt: 1037, stun: 1042, recover: 960 },
+};
+var c4Imgs = {}, c4Ready = false, c4Missing = [];
+function c4BuildCanvases() {
+  const K = C3S_TUNING.armored.drawK, Q = 1.6;
+  Object.keys(C4_BBOX).forEach(k => {
+    const im = c4Imgs[k], B = C4_BBOX[k]; if (!im) return;
+    const bw = B[4] - B[2], bh = B[5] - B[3];
+    const c = document.createElement('canvas'); c.width = Math.ceil(bw * K * Q); c.height = Math.ceil(bh * K * Q);
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(im, B[2], B[3], bw, bh, 0, 0, c.width, c.height);
+    c3sCanv.armored[k] = c; C3S_BBOX.armored[k] = B;
+  });
+}
+function c4MovesReady() { return c4Ready && Object.keys(C4_BBOX).every(k => c3sCanv.armored[k]) && !!c4Imgs.projectile; }
+
+// ── 畫面：後方腳尖接地 ──
+function c4Anchor(T, pose) { const B = C3S_BBOX[T][pose]; return B ? B[0] / 2 : 627; }
+function c4Toe(T, pose) { const v = (C4_TOE[T] || {})[pose]; if (v != null) return v; const B = C3S_BBOX[T][pose]; return B ? B[5] : 0; }
+function c4Ground(e, T) { return e.y + e.h + (C4.ground[T] || 0); }
+// 以「後方腳尖」為接地點畫一張動作圖（cxs＝碰撞框中心的畫面 x；groundY＝接地線）
+function c4Blit(T, pose, cxs, groundY, face, alpha, glow) {
+  const c = c3sCanv[T][pose]; if (!c) return false;
+  const B = C3S_BBOX[T][pose], K = C3S_TUNING[T].drawK, w = (B[4] - B[2]) * K, h = (B[5] - B[3]) * K;
+  const lx = (B[2] - c4Anchor(T, pose)) * K, ly = (B[3] - c4Toe(T, pose)) * K;
+  ctx.save(); if (alpha != null) ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 12; }
+  ctx.translate(cxs, groundY); if (face > 0) ctx.scale(-1, 1);
+  ctx.drawImage(c, lx, ly, w, h); ctx.restore(); return true;
+}
+// 頭頂 HP 的高度：用 Idle（base）姿勢的頭頂（固定，不會跟著動作上下跳）
+function c4TopY(e, T) { const B = C3S_BBOX[T].base; return c4Ground(e, T) - (c4Toe(T, 'base') - B[3]) * C3S_TUNING[T].drawK; }
+
+// ── 頭頂 HP（沿用重甲蠍子的格狀血條：黑底、綠／橘／紅；盔甲格是金色）──
+function c4DrawHpUi(e, T, cxs) {
+  const U = C4.hpUi, s = e.c3s || {};
+  const armor = T === 'armored' && !s.broken ? Math.max(0, s.armor | 0) : 0, armorMax = T === 'armored' && !s.broken ? C3S_TUNING.armored.armorMax : 0;
+  const hp = Math.max(0, Math.ceil(e.hp || 0)), hpMax = e.maxHp || 1;
+  const wA = armorMax ? U.iconW + 2 + armorMax * U.cellW + (armorMax - 1) * U.gap + U.groupGap : 0;
+  const wH = U.iconW + 2 + hpMax * U.cellW + (hpMax - 1) * U.gap;
+  const total = wA + wH, x0 = Math.round(cxs - total / 2), y = Math.round(c4TopY(e, T) - 12);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.beginPath(); ctx.roundRect(x0 - 3, y - 3, total + 6, U.cellH + 6, 3); ctx.fill();
+  let x = x0;
+  const icon = (kind, cx, cy) => {
+    if (kind === 'shield') { ctx.fillStyle = '#ffcf4a'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - 4, cy - 4); ctx.lineTo(cx + 4, cy - 4); ctx.lineTo(cx + 4, cy + 1); ctx.quadraticCurveTo(cx, cy + 5, cx, cy + 5); ctx.quadraticCurveTo(cx, cy + 5, cx - 4, cy + 1); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else { ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.moveTo(cx, cy + 4); ctx.bezierCurveTo(cx - 6, cy - 1, cx - 3, cy - 6, cx, cy - 2); ctx.bezierCurveTo(cx + 3, cy - 6, cx + 6, cy - 1, cx, cy + 4); ctx.fill(); }
+  };
+  if (armorMax) {
+    icon('shield', x + U.iconW / 2, y + U.cellH / 2); x += U.iconW + 2;
+    for (let i = 0; i < armorMax; i++) { ctx.fillStyle = i < armor ? '#ffcf4a' : 'rgba(80,80,80,0.7)'; ctx.fillRect(x, y, U.cellW, U.cellH); x += U.cellW + U.gap; }
+    x += U.groupGap - U.gap;
+  }
+  icon('heart', x + U.iconW / 2, y + U.cellH / 2); x += U.iconW + 2;
+  for (let i = 0; i < hpMax; i++) {
+    ctx.fillStyle = i < hp ? (hp / hpMax > 0.67 ? '#55ee44' : hp / hpMax > 0.34 ? '#ff9900' : '#ff3333') : 'rgba(80,80,80,0.7)';   // 和重甲蠍子相同：滿＝綠、一半＝橘、最後一格＝紅
+    ctx.fillRect(x, y, U.cellW, U.cellH); x += U.cellW + U.gap;
+  }
+  ctx.restore();
+}
+
+// ── 姿勢 ──
+function c4Pose(e) {
+  const T = c3sType(e), s = c3sState(e);
+  if (T === 'swift') {
+    if (s.st === 'hurt' || (s.hurtShow > 0) || e.hitFlash > 0) return 'hurt';
+    if (s.st === 'lock') return 'base';
+    if (s.st === 'dash') return 'dash';
+    if (s.st === 'stun') return 'stun';
+    if (s.st === 'recover') return 'recover';
+    if (gameState !== 'playing') return 'base';
+    return ['walk1', 'walk2', 'walk3'][Math.floor(s.walkT / C3S_TUNING.swift.walkStep) % 3];
+  }
+  if (s.st === 'break') return 'break';
+  if (s.st === 'hurt' || s.hurtShow > 0) return 'hurt';
+  const moves = c4MovesReady();
+  if (s.st === 'slam' && moves) return { charge: 'slamCharge', swing: 'slamSwing', impact: 'slamImpact', recover: 'slamRecover' }[s.ph] || 'base';
+  if (s.st === 'wslash' && moves) return { charge: 'wsCharge', gather: 'wsGather', release: 'wsRelease', recover: 'wsRecover' }[s.ph] || 'base';
+  if (s.st === 'guard') return s.low ? 'guardLow' : 'guard';
+  if (s.broken) return 'exposed';
+  if (s.st === 'turn' || gameState !== 'playing') return 'base';
+  return Math.floor(s.walkT / C3S_TUNING.armored.walkStep) % 2 ? 'walk' : 'base';
+}
+
+// ── 疾風蠍子：準星 搜尋 → 收斂 → 鎖定 → 衝刺（實際停點只在鎖定完成後的位置；左右移動只是畫面）──
+function c4SwiftLockTotal() { const S = C4.swift; return S.search + S.converge + S.hold; }
+function c4SwiftReticle(e, s) {   // 回傳 { x, phase, amp }（世界座標；x＝準星中心）
+  const S = C4.swift, t = s.t, base = s.stopX + e.w / 2;
+  let amp = 0, phase = 'lock';
+  if (t < S.search) { phase = 'search'; amp = S.amp0 + (S.amp1 - S.amp0) * (t / S.search); }
+  else if (t < S.search + S.converge) { phase = 'converge'; const k = (t - S.search) / S.converge; amp = S.amp1 * (1 - k) * (1 - k); }
+  const off = amp * Math.sin(t * S.oscSpeed + (s.oscSeed || 0));
+  return { x: base + off, phase, amp };
+}
+function c4SwiftLockStep(e, s) {
+  const T = C3S_TUNING.swift, S = C4.swift, pc = c3sPC(), ex = e.x + e.w / 2;
+  if (s.t < S.search) { const want = pc.x >= ex ? 1 : -1; if (want === s.face) s.tx = pc.x; s.stopX = c3sSwiftStopX(e, s); }   // 搜尋中：目標水平跟著小V（高度永遠是蠍子所在的地面／平台）
+  if (s.t === S.search) c4L({ ev: 'swiftConverge', id: e.c2Id, stopX: Math.round(s.stopX) });
+  if (s.t === S.search + S.converge) { s.lockedX = s.stopX; c4L({ ev: 'swiftLocked', id: e.c2Id, stopX: Math.round(s.stopX) }); }
+  if (s.t >= c4SwiftLockTotal()) {
+    s.st = 'dash'; s.t = 0; s.from = e.x; s.trail = []; s.dashes++;
+    c3sLogPush({ ev: 'dash', id: e.c2Id, from: Math.round(e.x), tx: Math.round(s.tx), stopX: Math.round(s.stopX), why: s.stopWhy });
+    c4L({ ev: 'swiftDash', id: e.c2Id, from: Math.round(e.x), stopX: Math.round(s.stopX), lockedX: Math.round(s.lockedX != null ? s.lockedX : s.stopX) });
+    try { sfxPlay('wsFire'); } catch (er) {}
+  }
+}
+
+// ── 磐甲風刃蠍：狀態機（WALK／TURN／GUARD／SLAM／WSLASH／HURT／BREAK）──
+function c4ArmoredStep(e) {
+  const T = C3S_TUNING.armored, A = C4.armored, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
+  s.t++;
+  ['hurtShow', 'armorCd', 'bodyCd', 'blockCd', 'slamCd', 'wsCd', 'gap'].forEach(k => { if (s[k] > 0) s[k]--; });
+  if (s.hurtT > 0) s.hurtT--;
+  const dx = pc.x - ex, side = dx >= 0 ? 1 : -1, adx = Math.abs(dx);
+  const alive = gameState === 'playing' && player.hp > 0 && c3sOnScreen(e);
+  const near = alive && adx < T.guardRangeX && pc.y > e.y - T.guardUp && pc.y < e.y + e.h + 60;
+  const pickAttack = () => {
+    if (!alive || s.gap > 0 || side !== s.face || !c4MovesReady()) return null;
+    const feetDy = pc.feet - (e.y + e.h);
+    if (adx <= e.w / 2 + A.slam.reach && Math.abs(feetDy) <= A.slam.vRange && !(s.slamCd > 0)) return 'slam';
+    if (adx >= A.wslash.rangeMin && adx <= A.wslash.rangeMax && pc.y > e.y - A.wslash.vUp && pc.y < e.y + e.h + 80 && !(s.wsCd > 0)) return 'wslash';
+    return null;
+  };
+  const startAttack = k => { s.st = k; s.ph = 'charge'; s.t = 0; s.pt = 0; s.hitDone = false; s.fired = false; s.slamContact = false; c4L({ ev: k + 'Start', id: e.c2Id, broken: !!s.broken, dx: Math.round(dx) }); };
+  const toWalk = why => { s.st = 'walk'; s.t = 0; s.ph = null; if (why) c4L({ ev: 'armoredWalk', id: e.c2Id, why }); };
+  if (s.st === 'break') { if (s.t >= A.breakStun) { toWalk('breakEnd'); s.gap = 30; } return; }
+  if (s.st === 'hurt') { if (s.t >= C4.stagger.armored) toWalk('hurtEnd'); return; }
+  if (s.st === 'slam') { c4SlamStep(e, s); return; }
+  if (s.st === 'wslash') { c4WslashStep(e, s); return; }
+  if (s.st === 'walk') {
+    s.walkT++; s.face = (e.vx || 0) < 0 ? -1 : 1;
+    const atk = pickAttack(); if (atk) { startAttack(atk); return; }
+    if (near) {
+      if (side === s.face) { s.st = 'guard'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'guard', id: e.c2Id }); }
+      else { s.st = 'turn'; s.t = 0; s.want = side; }
+    }
+  } else if (s.st === 'turn') {
+    if (s.t >= T.turnFrames) { s.face = s.want; e.vx = s.face * Math.abs(e.vx || CONFIG.ENEMY_SPEED); s.st = near ? 'guard' : 'walk'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'turned', id: e.c2Id, face: s.face }); }
+  } else if (s.st === 'guard') {
+    s.low = pc.y < e.y - 30;
+    if (near && side !== s.face) { s.st = 'turn'; s.t = 0; s.want = side; return; }
+    if (s.t >= A.guardBeforeAttack) { const atk = pickAttack(); if (atk) { startAttack(atk); return; } }
+    if (s.broken && s.t >= A.brokenGuard) { toWalk('brokenGuardEnd'); s.gap = Math.max(s.gap, 20); return; }
+    if (!near) { if (++s.lost > T.guardLostFrames && s.t >= T.guardMinFrames) { toWalk('guardDown'); c3sLogPush({ ev: 'guardDown', id: e.c2Id }); } } else s.lost = 0;
+  }
+}
+// Slam：Charge（單螯舉高、預警）→ Swing → Impact（只有落地瞬間的前幾幀有判定）→ Recover（反擊空檔）
+function c4SlamZone(e, s) {
+  const A = C4.armored.slam, cx = e.x + e.w / 2, f = s.face, g = e.y + e.h;
+  const a = cx + f * (e.w / 2 - A.zoneBack), b = cx + f * (e.w / 2 + A.zoneFwd);
+  return { x: Math.min(a, b), y: g - A.zoneH, w: Math.abs(b - a), h: A.zoneH, cx: (a + b) / 2, gy: g };
+}
+function c4SlamStep(e, s) {
+  const A = C4.armored, S = A.slam; s.pt = (s.pt || 0) + 1;
+  const next = (ph) => { s.ph = ph; s.pt = 0; };
+  if (s.ph === 'charge') { if (s.pt >= S.charge) next('swing'); return; }
+  if (s.ph === 'swing') { if (s.pt >= S.swing) { next('impact'); c4OnSlamImpact(e, s); } return; }
+  if (s.ph === 'impact') {
+    if (s.pt <= S.active && !s.hitDone) c4SlamHitCheck(e, s);
+    if (s.pt >= S.impact) next('recover');
+    return;
+  }
+  if (s.ph === 'recover') { if (s.pt >= S.recover) { s.st = 'walk'; s.t = 0; s.ph = null; s.slamCd = S.cd; s.gap = A.attackGap; c4L({ ev: 'slamEnd', id: e.c2Id }); } }
+}
+function c4OnSlamImpact(e, s) {
+  const z = c4SlamZone(e, s);
+  try { sfxPlay('bossWallImpact'); } catch (er) {}
+  c4Fx.push({ k: 'shock', x: z.cx, y: z.gy, t: 0, life: 26, dir: s.face });
+  for (let i = 0; i < 7; i++) c4Fx.push({ k: 'dust', x: z.cx + (Math.random() - 0.5) * z.w, y: z.gy - 2, vx: s.face * (0.6 + Math.random() * 2.2) + (Math.random() - 0.5), vy: -1.2 - Math.random() * 2, t: 0, life: 26 + (Math.random() * 10 | 0), r: 3 + Math.random() * 4 });
+  s.shake = 10;
+  c4L({ ev: 'slamImpact', id: e.c2Id, zone: { x: Math.round(z.x), w: Math.round(z.w) } });
+}
+function c4SlamHitCheck(e, s) {
+  const z = c4SlamZone(e, s), S = C4.armored.slam;
+  const pr = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };
+  const holding = !!(player.c2Block && umbEquipped());
+  const bx = holding ? c2BlockBox() : null;
+  const facing = holding && ((bx.dir > 0) === (e.x + e.w / 2 >= player.x + player.w / 2));
+  const inZone = rectsOverlap(z.x, z.y, z.w, z.h, pr.x, pr.y, pr.w, pr.h) || (holding && rectsOverlap(z.x, z.y, z.w, z.h, bx.x, bx.y, bx.w, bx.h));
+  if (!inZone) return;
+  s.hitDone = true;   // 同一次 Slam 只結算一次
+  if (holding && facing) {
+    // 雨傘主動格擋：不受傷、雨傘耐久 −1（既有規則），小V被震退一點；磐甲不會被當成風刃彈飛
+    if (e._c2BlockTouch || s.slamContact) { c4L({ ev: 'slamBlocked', id: e.c2Id, contact: true, dur: equippedUmbrella.currentDur }); return; }   // 這一次 Slam 已經被雨傘頂住（接觸格擋時已經扣過耐久）→ 同一招不再重複扣
+    try { sfxPlay('c2UmbrellaBlock'); } catch (er) {}
+    try { c2BlockFxStart({}, bx); } catch (er) {}
+    const durBefore = equippedUmbrella.currentDur; c2UmbConsume('block');
+    player.x -= bx.dir * S.push;
+    c4L({ ev: 'slamBlocked', id: e.c2Id, durBefore, durAfter: equippedUmbrella.currentDur });
+    return;
+  }
+  if (player.invincible > 0) { c4L({ ev: 'slamInvincible', id: e.c2Id }); return; }
+  const hp0 = player.hp; c4DamagePlayer(S.damage);
+  c4L({ ev: 'slamHit', id: e.c2Id, hpBefore: hp0, hpAfter: player.hp });
+}
+// 小V受傷 N 格（支援 0.5；沿用 damagePlayer：無敵星星、盾牌、無敵時間、戰敗都照原本規則）
+var c4HalfDmg = false;
+function c4DamagePlayer(n) {
+  if (n >= 1) { damagePlayer(); return; }
+  const before = player.hp;
+  player.hp += (1 - n);            // damagePlayer 固定扣 1 → 先補回差額（例如 0.5 → 先 +0.5 再 −1）
+  c4HalfDmg = true;
+  try { damagePlayer(); } finally { c4HalfDmg = false; }
+  if (player.hp > before) player.hp = before;   // 被盾牌／無敵星星擋下 → 把剛剛補的差額拿掉（HP 不變）
+}
+// Wind Slash：Charge（雙螯張開）→ Gather（聚風）→ Release（在正確影格放出獨立風刃）→ Recover（風刃繼續飛）
+function c4WslashStep(e, s) {
+  const A = C4.armored, W = A.wslash; s.pt = (s.pt || 0) + 1;
+  const next = (ph) => { s.ph = ph; s.pt = 0; };
+  if (s.ph === 'charge') { if (s.pt >= W.charge) next('gather'); return; }
+  if (s.ph === 'gather') { if (s.pt >= W.gather) next('release'); return; }
+  if (s.ph === 'release') { if (!s.fired && s.pt >= W.fireAt) { s.fired = true; c4FireSlash(e, s); } if (s.pt >= W.release) next('recover'); return; }
+  if (s.ph === 'recover') { if (s.pt >= W.recover) { s.st = 'walk'; s.t = 0; s.ph = null; s.wsCd = W.cd; s.gap = A.attackGap; c4L({ ev: 'wslashEnd', id: e.c2Id }); } }
+}
+// 大型風刃（獨立物件；放在 wsBlades 陣列裡，沿用風刃飛行音效：飛行中＝fly、反彈後＝reflect）
+function c4SlashGeom(b) {   // 可見主要風刃（不是整張透明 PNG）：前端尖端往後 85px、上下 28px
+  const im = c4Imgs.projectile, W = C4.armored.wslash.drawW, k = W / 1774;
+  const front = b.x + b.dir * (887 - 94) * k, back = b.x - b.dir * (1100 - 887) * k;
+  return { x: Math.min(front, back), y: b.y - (443 - 300) * k * 0.98, w: Math.abs(front - back), h: (640 - 300) * k, front };
+}
+function c4FireSlash(e, s) {
+  const W = C4.armored.wslash, f = s.face, k = W.drawW / 1774;
+  const fx = e.x + e.w / 2 + f * (e.w / 2 + W.launchFwd);
+  const b = { big: true, x: fx, y: e.y + e.h - W.launchH, dir: f, vx: f * W.speed, vy: 0, ang: f > 0 ? 0 : Math.PI,
+    dist: 0, st: 'fly', t: 0, owner: e, ownerId: e.runtimeId, side: 'enemy', id: (e.c2Id || 'R') + '#S' + (++s.slashes || (s.slashes = 1)), blocked: 0, passed: [] };
+  wsBlades.push(b);
+  try { sfxPlay('wsFire'); } catch (er) {}
+  c4L({ ev: 'slashFire', id: b.id, x: Math.round(b.x), y: Math.round(b.y), dir: f });
+  return b;
+}
+function c4ReflectTargets(b) {   // 回程：這一步碰到的有效目標（敵人、還站著的可倒樹）
+  const g = c4SlashGeom(b), out = [];
+  enemies.forEach(e => { if (!e.active) return; if (rectsOverlap(g.x, g.y, g.w, g.h, e.x + 2, e.y, e.w - 4, e.h)) out.push({ kind: 'enemy', obj: e, near: b.dir > 0 ? e.x : e.x + e.w }); });
+  breakableTrees.forEach(t => { if (t.state !== 'standing' || !t.c3Art) return; const tx = t.x, tw = Math.max(t.trunkW || 34, 60), ty = GROUND_Y - t.h; if (rectsOverlap(g.x, g.y, g.w, g.h, tx, ty, tw, t.h)) out.push({ kind: 'tree', obj: t, near: b.dir > 0 ? tx : tx + tw }); });
+  // 第一個碰到的＝最靠近風刃出發方向的那一個
+  out.sort((p, q) => b.dir > 0 ? p.near - q.near : q.near - p.near);
+  return out;
+}
+function c4UpdateSlashes(list) {
+  const W = C4.armored.wslash;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const b = list[i]; b.t++;
+    if (b.st === 'fly' || b.st === 'reflect') {
+      b.x += b.vx; b.dist += Math.abs(b.vx);
+      if (b.st === 'fly' && (!b.owner || !b.owner.active)) { b.st = 'fade'; b.t = 0; c4L({ ev: 'slashEnd', id: b.id, why: '磐甲被擊倒（去程風刃消失）' }); continue; }
+      if (b.st === 'fly') {   // 去程：只看小V（其他敵人、樹木全部穿過，記錄下來給測試看）
+        const g = c4SlashGeom(b);
+        enemies.forEach(e => { if (e.active && e !== b.owner && rectsOverlap(g.x, g.y, g.w, g.h, e.x, e.y, e.w, e.h) && !b.passed.includes('E:' + (e.c2Id || e.runtimeId))) b.passed.push('E:' + (e.c2Id || e.runtimeId)); });
+        breakableTrees.forEach((t, ti) => { if (t.state === 'standing' && t.c3Art && rectsOverlap(g.x, g.y, g.w, g.h, t.x, GROUND_Y - t.h, Math.max(t.trunkW || 34, 60), t.h) && !b.passed.includes('T:' + ti)) b.passed.push('T:' + ti); });
+      } else {
+        const hits = c4ReflectTargets(b);
+        if (hits.length) { c4ReflectHit(b, hits[0]); b.st = 'fade'; b.t = 0; continue; }
+      }
+      if (b.dist > W.maxDist * (b.st === 'reflect' ? 1.4 : 1) || b.x < cameraX - 260 || b.x > cameraX + CANVAS_W + 260) { c4L({ ev: 'slashEnd', id: b.id, why: '飛出範圍', st: b.st, passed: b.passed.slice() }); list.splice(i, 1); continue; }
+    } else if (b.st === 'fade') { if (b.t >= 14) { list.splice(i, 1); continue; } }
+  }
+}
+function c4ReflectHit(b, h) {
+  const R = C4.reflect;
+  if (h.kind === 'tree') {
+    const t = h.obj;
+    if (!c4TreeIsPit(t)) t.fallDir = b.dir > 0 ? 1 : -1;      // 一般樹：往風刃前進的方向倒；坑邊樹：維持往坑倒（解謎不變）
+    t.state = 'falling'; t.fallTimer = 0; t._c4By = 'reflect';
+    c4L({ ev: 'reflectHitTree', id: b.id, tree: Math.round(t.x), fallDir: t.fallDir || 1, passed: b.passed.slice() });
+    return;
+  }
+  const e = h.obj, isOwner = e === b.owner;
+  c4HitDir = b.dir;
+  const id = e.c2Id || e.runtimeId;
+  const res = damageScorpionEnemy(e, R.damage, 'reflect', killed => c4SpinAway(killed, b.dir));
+  c4HitDir = 0;
+  if (res && !c3sType(e)) { try { sfxPlay('scorpionHurt'); } catch (er) {} }
+  c4L({ ev: 'reflectHitEnemy', id: b.id, target: id, owner: isOwner, result: res, hp: e.hp, armor: e.c3s ? e.c3s.armor : null, passed: b.passed.slice() });
+}
+var c4HitDir = 0;
+function c4SpinAway(e, dir) {   // 反彈風刃擊倒：沿用槌子擊飛的旋轉飛出（不會再撞傷其他敵人 → 一片風刃只結算一個目標）
+  const v = getEnemyVariantConfig(e), tier = getEnemyTierConfig(e);
+  try { sfxPlay('scorpionKnockback'); } catch (er) {}
+  spinningEnemies.push({ x: e.x, y: e.y, w: e.w, h: e.h, vx: dir * CONFIG.HAMMER_SPIN_SPEED, life: CONFIG.HAMMER_SPIN_LIFE, angle: 0,
+    skinKey: (v && v.skinKey) || 'scorpion_normal', drawScaleMultiplier: ((v && v.drawScaleMultiplier) || 1) * ((tier && tier.drawScaleMultiplier) || 1),
+    spinDamage: 0, hitTargetIds: new Set(enemies.map(q => q.runtimeId)), sourceId: e.runtimeId, sourceAdvId: e.advId, c4NoChain: true });
+}
+function c4CheckSlashes(list) {
+  if (!list.length) return;
+  const holding = !!(player.c2Block && umbEquipped()), bx = holding ? c2BlockBox() : null;
+  const pr = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };
+  for (const b of list) {
+    if (b.st !== 'fly') continue;
+    const g = c4SlashGeom(b);
+    if (holding) {
+      const pcx = player.x + player.w / 2, front = bx.dir > 0 ? g.front >= pcx - 4 : g.front <= pcx + 4, coming = Math.sign(b.vx) === -bx.dir;
+      const touch = rectsOverlap(g.x, g.y, g.w, g.h, bx.x, bx.y, bx.w, bx.h) || rectsOverlap(g.x, g.y, g.w, g.h, pr.x, pr.y, pr.w, pr.h);
+      if (touch && front && coming) {
+        const durBefore = equippedUmbrella.currentDur;
+        b.blocked++; b.st = 'reflect'; b.t = 0; b.dist = 0; b.side = 'player';
+        b.dir = -b.dir; b.vx = b.dir * Math.abs(b.vx) * C4.reflect.speedMul; b.ang = b.dir > 0 ? 0 : Math.PI;   // 水平反向（不是一般風刃的斜上 50°、不追蹤）
+        b.x = bx.dir > 0 ? Math.max(b.x, bx.front + (g.w / 2)) : Math.min(b.x, bx.front - (g.w / 2));
+        try { sfxPlay('c2UmbrellaBlock'); } catch (er) {}
+        try { c2BlockFxStart({}, bx); } catch (er) {}
+        c2UmbConsume('block');
+        c4L({ ev: 'slashBlocked', id: b.id, durBefore, durAfter: equippedUmbrella.currentDur, dir: b.dir });
+        continue;
+      }
+    }
+    if (player.invincible > 0) continue;
+    if (rectsOverlap(g.x, g.y, g.w, g.h, pr.x, pr.y, pr.w, pr.h)) {
+      const hp0 = player.hp; c4DamagePlayer(C4.armored.wslash.damage);
+      b.st = 'fade'; b.t = 0;
+      c4L({ ev: 'slashHitPlayer', id: b.id, hpBefore: hp0, hpAfter: player.hp, passed: b.passed.slice() });
+    }
+  }
+}
+function c4DrawSlashes(list, cx) {
+  const im = c4Imgs.projectile; if (!im) return;
+  const W = C4.armored.wslash.drawW, H = W * im.naturalHeight / im.naturalWidth;
+  list.forEach(b => {
+    const a = b.st === 'fade' ? Math.max(0, 1 - b.t / 14) : 1;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(b.x - cx, b.y); if (b.dir > 0) ctx.scale(-1, 1);   // 原圖朝左；往右飛 → 程式鏡像
+    if (b.st === 'fade') ctx.scale(1 + b.t / 14 * 0.3, 1 + b.t / 14 * 0.3);
+    if (b.st === 'reflect') { ctx.shadowColor = 'rgba(255,240,140,0.95)'; ctx.shadowBlur = 14; }   // 反彈後：金色外光（現在是小V的攻擊）
+    ctx.drawImage(im, -W / 2, -H / 2, W, H);
+    ctx.restore();
+  });
+}
+
+// ── 擊中規則（劍／槌／擊飛的蠍子／無敵星星／反彈風刃／倒樹）──
+function c4OnHit(o, e, amount, source, onKill, rest) {
+  const T = c3sType(e), s = c3sState(e);
+  if (source === 'star') return o.call(this, e, Math.max(amount, e.hp), source, onKill, ...rest);
+  const extraSfx = () => { if (source === 'reflect' || source === 'tree') { try { sfxPlay('scorpionHurt'); } catch (er) {} } };
+  if (T === 'swift') {
+    if (source === 'reflect' || source === 'tree') e.hurtCooldown = 0;
+    const r = o.call(this, e, amount, source, onKill, ...rest);
+    if (r) { extraSfx(); c3sLogPush({ ev: 'swiftHit', id: e.c2Id, source, st: s.st, hp: e.hp }); c4L({ ev: 'swiftHit', id: e.c2Id, source, hp: e.hp, st: s.st, result: r }); }
+    if (r === true) {
+      s.hurtShow = C4.hurt.swift;
+      if (s.st === 'walk' || s.st === 'lock') { const was = s.st; s.st = 'hurt'; s.t = 0; if (was === 'lock') c3sLogPush({ ev: 'lockCancelled', id: e.c2Id }); }
+    }
+    return r;
+  }
+  const A = C3S_TUNING.armored, A4 = C4.armored;
+  const pcx = player.x + player.w / 2;
+  let front;
+  if (source === 'spinning' || source === 'tree') front = true;
+  else if (source === 'reflect') front = (c4HitDir || 0) === -s.face;
+  else front = (pcx >= e.x + e.w / 2 ? 1 : -1) === s.face;
+  const heavy = source === 'hammer' || source === 'spinning' || source === 'reflect' || source === 'tree';
+  if (!s.broken && front) {
+    if (heavy) {
+      if (s.armorCd > 0) return false;
+      s.armorCd = A.armorHitCd; s.armor = Math.max(0, s.armor - 1); s.blocks++;
+      try { sfxPlay('c2UmbrellaBlock'); if (source === 'hammer') sfxPlay('hammerHit'); } catch (er) {}
+      if (source === 'hammer') { const away = pcx >= e.x + e.w / 2 ? 1 : -1; player.x += away * A.blockPush; }
+      if (s.armor <= 0) c4ArmorBreak(e, s, source);
+      else { s.hurtShow = C4.hurt.armored; c3sLogPush({ ev: 'armorHit', id: e.c2Id, source, armor: s.armor, hp: e.hp }); c4L({ ev: 'armorHit', id: e.c2Id, source, armor: s.armor, hp: e.hp }); }
+      return true;
+    }
+    // 正面的劍：盔甲擋下 → 不扣盔甲、不扣本體；播放 boss_sword_block.mp3；劍的耐久照扣（揮劍那一邊已經扣過，同一次揮劍只扣一次）
+    if (s.blockCd > 0) return false;
+    s.blockCd = A.blockCd; s.guardBlocks = (s.guardBlocks || 0) + 1;
+    try { sfxPlay('bossSwordBlock'); } catch (er) {}
+    if (source === 'sword') { const away = pcx >= e.x + e.w / 2 ? 1 : -1; player.x += away * A.blockPush; }
+    c4Fx.push({ k: 'block', x: e.x + e.w / 2 + s.face * (e.w / 2 + 2), y: e.y + e.h * 0.35, t: 0, life: 18, dir: s.face });
+    c3sLogPush({ ev: 'guardBlock', id: e.c2Id, source, armor: s.armor, hp: e.hp });
+    c4L({ ev: 'swordBlocked', id: e.c2Id, armor: s.armor, hp: e.hp, swordDur: equippedSword.currentDur });
+    if (source === 'sword') c4RequestBlockRpg();
+    return false;
+  }
+  if (s.bodyCd > 0) return false;
+  s.bodyCd = A.bodyHitCd; e.hurtCooldown = 0;
+  const r = o.call(this, e, 1, source, onKill, ...rest);
+  if (r) {
+    extraSfx();
+    c3sLogPush({ ev: front ? 'hitBodyFront' : 'hitBack', id: e.c2Id, source, hp: e.hp, armor: s.armor, broken: !!s.broken });
+    c4L({ ev: front ? 'hitBodyFront' : 'hitBack', id: e.c2Id, source, hp: e.hp, broken: !!s.broken, st: s.st, result: r });
+  }
+  if (r === true) {
+    s.hurtShow = C4.hurt.armored;
+    // 受擊硬直：巡邏／舉盾／轉身／招式預備（Charge、Gather）中被打到 → 中斷；已經出手（Swing／Impact／Release）不中斷
+    const interruptible = ['walk', 'guard', 'turn'].includes(s.st) || ((s.st === 'slam' || s.st === 'wslash') && (s.ph === 'charge' || s.ph === 'gather'));
+    if (interruptible) { if (s.st === 'slam') s.slamCd = Math.max(s.slamCd || 0, 60); if (s.st === 'wslash') s.wsCd = Math.max(s.wsCd || 0, 90); s.st = 'hurt'; s.t = 0; s.gap = Math.max(s.gap || 0, 30); }
+  }
+  return r;
+}
+function c4ArmorBreak(e, s, source) {
+  const A4 = C4.armored;
+  s.broken = true; s.st = 'break'; s.t = 0; s.breaks++; s.hurtT = 0; s.hurtShow = 0; s.breakAt = frameCount;
+  try { c2BlockFx.stop = Math.max(c2BlockFx.stop || 0, A4.breakHitStop); } catch (er) {}   // 命中停頓
+  try { sfxPlay('scorpionHurt'); sfxPlay('bossWallImpact'); } catch (er) {}
+  const cx = e.x + e.w / 2, top = c4TopY(e, 'armored');
+  for (let i = 0; i < 9; i++) { const a = -Math.PI * (0.15 + 0.7 * Math.random()); c4Fx.push({ k: 'chip', x: cx + (Math.random() - 0.5) * 40, y: e.y + 6 + Math.random() * 20, vx: Math.cos(a) * (1.5 + Math.random() * 3) * (Math.random() < 0.5 ? -1 : 1), vy: Math.sin(a) * (2.5 + Math.random() * 2.5), rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, t: 0, life: 40 + (Math.random() * 16 | 0), s: 4 + Math.random() * 5, gold: Math.random() < 0.35 }); }
+  for (let i = 0; i < 2; i++) c4Fx.push({ k: 'shieldShard', x: cx - 8 + i * 16, y: top - 9, vx: (i ? 1 : -1) * (1.2 + Math.random()), vy: -2.2, rot: 0, vr: (i ? 1 : -1) * 0.18, t: 0, life: 34 });
+  c4Fx.push({ k: 'text', txt: '破甲！', x: cx, y: top - 26, t: 0, life: A4.breakText, e });
+  c3sLogPush({ ev: 'armorBreak', id: e.c2Id, source, hp: e.hp }); c4L({ ev: 'armorBreak', id: e.c2Id, source, hp: e.hp });
+}
+// 第一次用氣球劍正面打在完整的盔甲上 → 小V三句 RPG（同一位玩家只播一次；對話期間遊戲暫停）
+const C4_RPG_BLOCK = 'c4_armored_sword_block';
+function c4RequestBlockRpg() { try { if (!rpgIsSeen(C4_RPG_BLOCK)) rpgRequest(C4_RPG_BLOCK, () => gameState === 'playing' && player.hp > 0); } catch (er) {} }
+
+// ── 畫面：疾風／磐甲（取代 v0.3.98 的 c3sDraw）──
+function c4Draw(sx, e) {
+  const T = c3sType(e), s = c3sState(e), pose = c4Pose(e), face = c3sFace(e);
+  if (!c3sCanv[T][pose]) return false;
+  const cxs = sx + e.w / 2, g = c4Ground(e, T), t = frameCount;
+  if (T === 'swift') {
+    if (s.st === 'dash' || (s.st === 'stun' && s.trailFade > 0)) {
+      const fade = s.st === 'dash' ? 1 : s.trailFade / 12;
+      s.trail.forEach((x, i) => c4Blit(T, 'dash', x - cameraX + e.w / 2, g, face, (0.08 + 0.07 * i) * fade));
+      ctx.save(); ctx.strokeStyle = 'rgba(200,250,255,' + (0.75 * fade) + ')'; ctx.lineCap = 'round';
+      for (let i = 0; i < 4; i++) { const yy = g - 12 - i * 11, len = 34 + 18 * ((i * 7 + t) % 3), x0 = cxs - face * (24 + i * 6); ctx.lineWidth = 3 - i * 0.5; ctx.beginPath(); ctx.moveTo(x0, yy); ctx.quadraticCurveTo(x0 - face * len * 0.5, yy - 5, x0 - face * len, yy + 2); ctx.stroke(); }
+      ctx.restore();
+    }
+    if (s.st === 'lock') { const k = Math.min(1, s.t / c4SwiftLockTotal()); c4Blit(T, pose, cxs + Math.sin(t * 1.3) * 1.5 * k, g + 2 * k, face); }
+    else c4Blit(T, pose, cxs, g, face);
+    if (s.st === 'lock') c4DrawReticle(e, s, g);
+    if (s.st === 'stun') { ctx.save(); ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#a06a00'; ctx.lineWidth = 1; const ty = c4TopY(e, T) - 22; for (let i = 0; i < 3; i++) { const a = t * 0.12 + i * Math.PI * 2 / 3; c3sStar(cxs + Math.cos(a) * 20, ty + Math.sin(a) * 6, 6); } ctx.restore(); }
+    c4DrawHpUi(e, T, cxs);
+    return true;
+  }
+  let dx = 0, dy = 0;
+  if (s.hurtShow > 0 || s.st === 'hurt') dx = Math.sin(t * 2.2) * 2;
+  if (s.st === 'slam' && s.ph === 'charge') dx = Math.sin(t * 1.7) * 1.2 * Math.min(1, s.pt / C4.armored.slam.charge);   // 預警：舉螯時微微發抖
+  if (s.shake > 0) { dy = (s.shake % 2 ? 1 : -1) * Math.min(2, s.shake * 0.3); s.shake--; }
+  const glow = (s.st === 'slam' && s.ph === 'charge' && s.pt > C4.armored.slam.charge * 0.55) ? 'rgba(255,90,40,' + (0.5 + 0.4 * Math.sin(t * 0.8)) + ')' : (s.st === 'wslash' && s.ph === 'gather') ? 'rgba(140,240,255,0.85)' : null;
+  c4Blit(T, pose, cxs + dx, g + dy, face, null, glow);
+  if (s.st === 'slam' && s.ph === 'charge') {   // 預警：頭上紅色「!」
+    ctx.save(); ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff3b3b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; const y = c4TopY(e, T) - 24; ctx.strokeText('!', cxs, y); ctx.fillText('!', cxs, y); ctx.restore();
+  }
+  if (!s.broken && s.st === 'guard') {   // 舉盾：正前方金色弧光（只有盔甲完整時）
+    ctx.save(); ctx.strokeStyle = 'rgba(255,214,90,' + (0.55 + 0.25 * Math.sin(t * 0.25)) + ')'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    const fx = cxs + face * (e.w / 2 + 14), fy = g - 30;
+    ctx.beginPath(); ctx.arc(fx - face * 18, fy, 30, face > 0 ? -1.0 : Math.PI - 1.0, face > 0 ? 1.0 : Math.PI + 1.0); ctx.stroke(); ctx.restore();
+  }
+  c4DrawHpUi(e, T, cxs);
+  return true;
+}
+function c4DrawReticle(e, s, g) {
+  const r0 = c4SwiftReticle(e, s), x = r0.x - cameraX, y = g - 26, t = frameCount, locked = r0.phase === 'lock';
+  const rad = locked ? 22 : r0.phase === 'converge' ? 26 : 30;
+  ctx.save();
+  ctx.globalAlpha = locked ? (0.7 + 0.3 * Math.sin(t * 0.9)) : 0.55 + 0.25 * Math.sin(t * 0.5);
+  ctx.strokeStyle = locked ? '#ff1a1a' : '#ff5a5a'; ctx.lineWidth = locked ? 3.5 : 2.5; ctx.shadowColor = 'rgba(255,0,0,0.7)'; ctx.shadowBlur = locked ? 9 : 5;
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+  [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([a, b]) => { ctx.beginPath(); ctx.moveTo(x + a * (rad - 7), y + b * (rad - 7)); ctx.lineTo(x + a * (rad + 9), y + b * (rad + 9)); ctx.stroke(); });
+  if (locked) { const k = Math.min(1, (s.t - C4.swift.search - C4.swift.converge) / 6); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, rad + 14 - 8 * k, 0, Math.PI * 2); ctx.stroke(); }   // 鎖定：外圈收進來
+  ctx.restore();
+  ctx.save(); ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff3b3b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+  const cxs = e.x + e.w / 2 - cameraX, ty = c4TopY(e, 'swift') - 24; ctx.strokeText('!', cxs, ty); ctx.fillText('!', cxs, ty);
+  if (locked) { ctx.font = 'bold 13px sans-serif'; ctx.lineWidth = 3; ctx.strokeText('LOCK', x, y - rad - 12); ctx.fillText('LOCK', x, y - rad - 12); }
+  ctx.restore();
+}
+// 特效（程式畫：命中火花、破甲碎片、盾牌碎片、衝擊圈、塵土、文字）
+function c4UpdateFx() {
+  for (let i = c4Fx.length - 1; i >= 0; i--) {
+    const f = c4Fx[i]; f.t++;
+    if (f.k === 'chip' || f.k === 'shieldShard') { f.x += f.vx; f.y += f.vy; f.vy += 0.22; f.rot += f.vr; if (f.y > GROUND_Y + 4) { f.y = GROUND_Y + 4; f.vy *= -0.35; f.vx *= 0.6; } }
+    if (f.k === 'dust') { f.x += f.vx; f.y += f.vy; f.vy += 0.08; f.vx *= 0.96; }
+    if (f.k === 'text' && f.e) { f.x = f.e.x + f.e.w / 2; }
+    if (f.t >= f.life) c4Fx.splice(i, 1);
+  }
+  for (let i = c4Defeats.length - 1; i >= 0; i--) { const d = c4Defeats[i]; d.t++; if (d.t >= C4.defeat.flash + C4.defeat.hold + C4.defeat.fade) c4Defeats.splice(i, 1); }
+}
+function c4DrawFx(cx) {
+  c4Defeats.forEach(d => {
+    const D = C4.defeat, inFlash = d.t < D.flash, pose = inFlash ? 'hurt' : (d.T === 'swift' ? 'stun' : 'defeat');
+    const a = d.t < D.flash + D.hold ? 1 : Math.max(0, 1 - (d.t - D.flash - D.hold) / D.fade);
+    const glow = inFlash ? (Math.floor(d.t / 2) % 2 ? 'rgba(255,40,40,0.85)' : 'rgba(255,255,255,0.95)') : null;
+    c4Blit(d.T, pose, d.x - cx + d.w / 2, d.g, d.face, a, glow);
+  });
+  c4Fx.forEach(f => {
+    const x = f.x - cx, k = f.t / f.life;
+    ctx.save();
+    if (f.k === 'block') { ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#fff6b0'; ctx.lineWidth = 3; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + 0.3, r0 = 6 + 14 * k, r1 = 14 + 22 * k; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r0, f.y + Math.sin(a) * r0); ctx.lineTo(x + Math.cos(a) * r1, f.y + Math.sin(a) * r1); ctx.stroke(); }
+      ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#7a4a00'; ctx.lineWidth = 3; ctx.strokeText('擋！', x, f.y - 26 - 10 * k); ctx.fillText('擋！', x, f.y - 26 - 10 * k); }
+    else if (f.k === 'chip') { ctx.globalAlpha = Math.min(1, (1 - k) * 2); ctx.translate(x, f.y); ctx.rotate(f.rot); ctx.fillStyle = f.gold ? '#e6b34a' : '#6b6f80'; ctx.strokeStyle = 'rgba(30,30,40,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-f.s, -f.s * 0.6); ctx.lineTo(f.s * 0.8, -f.s * 0.8); ctx.lineTo(f.s, f.s * 0.5); ctx.lineTo(-f.s * 0.5, f.s * 0.8); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else if (f.k === 'shieldShard') { ctx.globalAlpha = 1 - k; ctx.translate(x, f.y); ctx.rotate(f.rot); ctx.fillStyle = '#ffcf4a'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(4, -5); ctx.lineTo(-1, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else if (f.k === 'shock') { ctx.globalAlpha = 0.85 * (1 - k); ctx.strokeStyle = '#fff1c8'; ctx.lineWidth = 4 * (1 - k) + 1; ctx.beginPath(); ctx.ellipse(x, f.y - 2, 10 + 46 * k, 4 + 9 * k, 0, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = 'rgba(160,110,60,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, f.y - 2, 6 + 30 * k, 3 + 6 * k, 0, 0, Math.PI * 2); ctx.stroke(); }
+    else if (f.k === 'dust') { ctx.globalAlpha = 0.6 * (1 - k); ctx.fillStyle = '#c9a77a'; ctx.beginPath(); ctx.arc(x, f.y, f.r * (1 + k), 0, Math.PI * 2); ctx.fill(); }
+    else if (f.k === 'text') { const pop = f.t < 8 ? 0.6 + 0.6 * f.t / 8 : 1.2 - 0.2 * Math.min(1, (f.t - 8) / 8); ctx.globalAlpha = f.t > f.life - 16 ? (f.life - f.t) / 16 : 1; ctx.translate(x, f.y - 6 * k); ctx.scale(pop, pop); ctx.font = '900 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#7a2b00'; ctx.lineWidth = 5; ctx.strokeText(f.txt, 0, 0); ctx.fillText(f.txt, 0, 0); }
+    ctx.restore();
+  });
+}
+
+// ── 可倒樹木：一般路邊樹、坑邊崖邊樹、往左／往右倒、倒樹壓傷 ──
+const C4_TREE_CLIFF = { treePath: 'assets/adventure/props/tree_standing_cliff.png', rootPath: 'assets/adventure/props/tree_cliff_turf_foreground.png' };
+var c4CliffImgs = {};
+function c4CliffImg(k) { const im = c4CliffImgs[k]; return (im && im.complete && im.naturalWidth > 0) ? im : null; }
+function c4TreeIsPit(t) {   // 支點右邊（樹幹往右倒的範圍內）有尖刺坑 → 坑邊樹（不呼叫 c3TreeGeom，避免互相呼叫）
+  try { const px = t.x + (t.trunkW || 34) / 2; return (typeof c2Pits !== 'undefined' ? c2Pits : []).some(p => p.x > px - 40 && p.x < px + 320); } catch (e) { return false; }
+}
+function c4TreeArt(t) {   // 這棵樹用哪一組圖：坑邊樹＝崖邊樹（素材載好才用）；其他＝原本的正式樹木
+  if (t._c4Pit == null) t._c4Pit = c4TreeIsPit(t);
+  if (t._c4Pit && c4CliffImg('tree') && c4CliffImg('root')) return { tree: c4CliffImg('tree'), root: c4CliffImg('root'), cliff: true };
+  return { tree: c3TreeImg('tree'), root: c3TreeImg('root'), cliff: false };
+}
+function c4FallDir(t) { return t.fallDir === -1 ? -1 : 1; }
+// 倒下的樹幹線段（世界座標）：支點 → 分岔處；倒下角度 0（直立）～ 90°（平躺），往 fallDir 那一側
+function c4TrunkSeg(t) {
+  const G = c3TreeGeom(t), a = Math.abs(c3TreeAngle(t)), d = c4FallDir(t);
+  return { x0: G.px, y0: G.py, x1: G.px + d * Math.sin(a) * G.len, y1: G.py - Math.cos(a) * G.len, r: G.half + C4.tree.crushPad, a };
+}
+function c4SegRect(sg, x, y, w, h) {   // 線段（加粗 r）和矩形是否重疊：取樣檢查
+  for (let i = 0; i <= 16; i++) { const k = i / 16, px = sg.x0 + (sg.x1 - sg.x0) * k, py = sg.y0 + (sg.y1 - sg.y0) * k; const nx = Math.max(x, Math.min(px, x + w)), ny = Math.max(y, Math.min(py, y + h)); if ((px - nx) * (px - nx) + (py - ny) * (py - ny) <= sg.r * sg.r) return true; }
+  return false;
+}
+function c4TreeCrushStep() {
+  breakableTrees.forEach(t => {
+    if (!t.c3Art || t.state === 'standing') return;
+    if (t.state === 'fallen' && t._c4CrushDone) return;
+    const sg = c4TrunkSeg(t);
+    if (sg.a < 0.35) return;   // 剛開始傾倒（約 20° 以內）還碰不到地面上的敵人
+    t._c4Crushed = t._c4Crushed || new Set();
+    enemies.forEach(e => {
+      if (!e.active || t._c4Crushed.has(e.runtimeId)) return;
+      if (!c4SegRect(sg, e.x + 4, e.y + 4, e.w - 8, e.h - 4)) return;
+      t._c4Crushed.add(e.runtimeId);   // 同一次倒樹對同一隻敵人最多結算一次
+      const res = damageScorpionEnemy(e, C4.tree.crushDamage, 'tree', killed => spawnScorpionDefeatEffect(killed));
+      if (res && !c3sType(e)) { try { sfxPlay('scorpionHurt'); } catch (er) {} }
+      c4L({ ev: 'treeCrush', tree: Math.round(t.x), target: e.c2Id || e.runtimeId, variant: e.variant, result: res, hp: e.hp, armor: e.c3s ? e.c3s.armor : null, deg: Math.round(sg.a * 180 / Math.PI) });
+    });
+    if (t.state === 'fallen') t._c4CrushDone = true;
+  });
+}
+// 倒下的一般樹：地面上的蠍子走到樹幹時轉身（不會穿過倒下的樹幹）
+function c4LogBlockEnemies() {
+  const logs = (platforms || []).filter(p => p.treeLog && p.c4Road);
+  if (!logs.length) return;
+  logs.forEach(p => { if (p._c4Born == null) p._c4Born = frameCount; });
+  const ov = (e, p) => e.x + e.w > p.x && e.x < p.x + p.w;
+  enemies.forEach(e => {
+    if (!e.active || e.c1dPlat || e.type !== 'scorpion') return;
+    const busy = e.c3s && e.c3s.st && e.c3s.st !== 'walk';
+    const p = logs.find(q => ov(e, q));
+    if (p && frameCount - p._c4Born < 2) { e._c4Out = false; return; }        // 樹剛倒在牠身上 → 不瞬移，讓牠自己走出來
+    if (p && e._c4Out !== false && !busy) {                                   // 剛走到倒下的樹幹邊 → 停在邊緣並轉身
+      const fromLeft = (e.x + e.w / 2 - (e.vx || 0)) < p.x + p.w / 2;
+      e.x = fromLeft ? p.x - e.w - 1 : p.x + p.w + 1; e.vx = (fromLeft ? -1 : 1) * Math.abs(e.vx || CONFIG.ENEMY_SPEED);
+    }
+    e._c4Out = !logs.some(q => ov(e, q));
+  });
+}
+// 3-1／3-2／3-3 新增的一般可倒樹（只是環境互動：倒下成為可以踩的樹幹；不放寶物、不擋主線）
+const C4_ROAD_TREES = {
+  '3-1': [1180, 4120],    // 起點區（蠍子 S2 巡邏 1260～1440 旁）、終點前平地
+  '3-2': [4560],          // 飄下來之後、導風機關之前的平地（蠍子 E2 巡邏 4180～4420 旁）
+  '3-3': [1760, 4520],    // B 段磐甲前方（反彈風刃可以打倒、樹往右倒會壓到磐甲）、D 段前的平地
+};
+function c4RoadTree(x) { return { x, y: 0, h: 358, trunkW: 34, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 253, walkable: true, pivotRight: true, c3Art: true, c4Road: true }; }
+
+(function c4Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._c4w) { if (typeof o !== 'function') console.warn('[v0.4.00] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._c4w = true; globalThis[name] = w; };
+
+  // ── 素材群組 ──
+  const G = 'ch3RockwindMoves', GT = 'ch3CliffTree';
+  const addGroups = M => {
+    if (!M) return M;
+    if (!M[G]) M[G] = Object.keys(C4_FILES).map(k => ({ path: C4_DIR + C4_FILES[k], type: 'image', critical: false, label: 'c4:' + k, altPaths: [],
+      apply: im => { c4Imgs[k] = im; if (Object.keys(C4_FILES).every(q => c4Imgs[q])) { try { c4BuildCanvases(); c4Ready = true; console.log('[v0.4.00] 磐甲新招式素材 9/9 載入完成'); } catch (er) { console.error('[v0.4.00] 建立畫面快取失敗', er); } } },
+      fail: () => { c4Missing.push(C4_FILES[k]); console.error('[v0.4.00] ❌ 素材載入失敗：' + C4_FILES[k] + '（磐甲不會使用需要這張圖的招式）'); } }));
+    if (!M[GT]) M[GT] = [['tree', C4_TREE_CLIFF.treePath], ['root', C4_TREE_CLIFF.rootPath]].map(([k, p]) => ({ path: p, type: 'image', critical: false, label: 'c4cliff:' + k, altPaths: [],
+      apply: im => { c4CliffImgs[k] = im; }, fail: () => { console.warn('[v0.4.00] 崖邊樹素材載入失敗（改用原本的樹）：' + p); } }));
+    return M;
+  };
+  if (typeof ASSET_MANIFEST !== 'undefined' && ASSET_MANIFEST) addGroups(ASSET_MANIFEST);
+  wrapFn('buildAssetManifest', o => function () { return addGroups(o.apply(this, arguments)); });
+  wrapFn('getAssetGroupsForLevelBase', o => function (idx) {
+    const r = o.apply(this, arguments), lv = LEVELS[idx]; let out = r;
+    if (lv && lv.stageId === '3-3' && !out.includes(G)) out = out.concat([G]);
+    if (lv && lv.chapterId === 3 && !out.includes(GT)) out = out.concat([GT]);
+    return out;
+  });
+  Object.assign(SFX_DEFS, { swiftTarget: { path: 'chapter3/swift_scorpion_targeting.mp3', vol: 0.5, loop: true } });   // 使用者提供的原音檔（只改檔名），程式控制音量與循環
+  try { wsAud.starts.swiftTarget = 0; wsAud.stops.swiftTarget = 0; } catch (e) {}
+
+  // ── 一般可倒樹：加進 3-1／3-2／3-3 ──
+  LEVELS.forEach(lv => {
+    if (!lv || !C4_ROAD_TREES[lv.stageId] || lv._c4Trees || typeof lv.buildTrees !== 'function') return;
+    const base = lv.buildTrees; lv._c4Trees = true;
+    lv.buildTrees = function () { return base.apply(this, arguments).concat(C4_ROAD_TREES[lv.stageId].map(c4RoadTree)); };
+  });
+
+  // ── 狀態機 ──
+  wrapFn('c3sSwiftStep', o => function (e) {
+    const s = c3sState(e);
+    if (s.st === 'hurt') { s.t++; if (s.hurtShow > 0) s.hurtShow--; if (s.t >= C4.stagger.swift) { s.st = 'walk'; s.t = 0; s.cd = Math.max(s.cd || 0, 40); } return; }
+    if (s.hurtShow > 0) s.hurtShow--;
+    if (s.st === 'lock') { s.t++; c4SwiftLockStep(e, s); return; }
+    const was = s.st;
+    const r = o.apply(this, arguments);
+    if (was === 'walk' && s.st === 'lock') { s.oscSeed = Math.random() * 6; s.lockedX = null; c4L({ ev: 'swiftSearch', id: e.c2Id, stopX: Math.round(s.stopX) }); }
+    return r;
+  });
+  globalThis.c3sArmoredStep = c4ArmoredStep;
+  globalThis.c3sOnHit = c4OnHit;
+  globalThis.c3sPose = c4Pose;
+  globalThis.c3sDraw = c4Draw;
+  // 破甲：破甲演出期間碰到不會受傷（沿用 v0.3.98）；疾風受擊硬直中碰到仍會受傷（照原本規則）
+  wrapFn('restart', o => function () { c4Fx = []; c4Defeats = []; const r = o.apply(this, arguments); try { breakableTrees.forEach(t => { t.fallDir = null; t._c4Crushed = null; t._c4CrushDone = false; t._c4Pit = null; t._c4By = null; }); } catch (er) {} return r; });
+  wrapFn('loadLevel', o => function () { c4Fx = []; c4Defeats = []; const r = o.apply(this, arguments); try { breakableTrees.forEach(t => { t.fallDir = null; t._c4Crushed = null; t._c4CrushDone = false; t._c4Pit = null; }); } catch (er) {} return r; });
+
+  // ── 擊倒：疾風／磐甲的 Defeat 顯示（獨立計時；獎勵、擊倒紀錄在擊倒當下已經結算一次）──
+  wrapFn('spawnScorpionDefeatEffect', o => function (e) {
+    const T = c3sType(e);
+    if (T && c3sReady) { c4Defeats.push({ T, x: e.x, w: e.w, g: c4Ground(e, T) - ((e.c1dPlat && c3PlatformArtReady()) ? C1D_PLAT.enemyLift : 0), face: c3sFace(e), t: 0, id: e.c2Id }); c4L({ ev: 'defeatFx', id: e.c2Id, T }); return; }
+    return o.apply(this, arguments);
+  });
+  wrapFn('updateScorpionDefeatEffects', o => function () { const r = o.apply(this, arguments); try { c4UpdateFx(); } catch (er) {} return r; });
+  wrapFn('updateSpinningEnemies', o => function () {
+    const r = o.apply(this, arguments);
+    spinningEnemies.forEach(s => { const m = /^c3s_(swift|armored)/.exec(s.skinKey || ''); if (m && s._c3sT != null) { s.skinKey = 'c3s_' + m[1] + (s._c3sT <= C4.spinHurt ? '_hurt' : '_defeat'); } });
+    return r;
+  });
+  wrapFn('drawScorpionDefeatEffects', o => function (cx) {
+    const big = wsBlades.filter(b => b.big); wsBlades = wsBlades.filter(b => !b.big);
+    let r; try { r = o.apply(this, arguments); } finally { wsBlades = wsBlades.concat(big); }
+    try { c4DrawSlashes(big, cx); c4DrawFx(cx); } catch (er) { console.warn('[v0.4.00] draw fx', er); }
+    return r;
+  });
+  // ── 大型風刃：和一般風刃分開處理（一般風刃完全照原本規則）──
+  wrapFn('wsUpdateBlades', o => function () {
+    const big = wsBlades.filter(b => b.big); wsBlades = wsBlades.filter(b => !b.big);
+    try { o.apply(this, arguments); } finally { try { c4UpdateSlashes(big); } catch (er) { console.error('[v0.4.00] slash update', er); } wsBlades = wsBlades.concat(big); }
+  });
+  wrapFn('wsCheckBlades', o => function () {
+    const big = wsBlades.filter(b => b.big); wsBlades = wsBlades.filter(b => !b.big);
+    try { o.apply(this, arguments); } finally { try { c4CheckSlashes(big); } catch (er) { console.error('[v0.4.00] slash check', er); } wsBlades = wsBlades.concat(big); }
+  });
+
+  // Slam 出招中被雨傘頂住（既有的接觸格擋）→ 記下來：同一招的衝擊不再另外扣雨傘耐久
+  wrapFn('c2BlockStep', o => function () {
+    const r = o.apply(this, arguments);
+    try { (r || []).forEach(e => { if (c3sType(e) === 'armored' && e.c3s && e.c3s.st === 'slam' && e._c2FxT === C2_BLOCK_FX.frames) e.c3s.slamContact = true; }); } catch (er) {}
+    return r;
+  });
+  // ── 0.5 格傷害：生存紀錄也只記 0.5 ──
+  wrapFn('advNoteDamage', o => function (n) { if (c4HalfDmg && n >= 1) n = n - 0.5; return o.call(this, n); });
+
+  // ── 樹木 ──
+  wrapFn('c3TreeGeom', o => function (t) {
+    const G = o.apply(this, arguments);
+    try { const art = c4TreeArt(t); if (art.cliff && art.tree) { G.w = art.tree.naturalWidth * G.s; G.h = art.tree.naturalHeight * G.s; } } catch (er) {}
+    return G;
+  });
+  wrapFn('c3TreeBridge', o => function (t) {
+    const b = o.apply(this, arguments);
+    if (c4FallDir(t) < 0) { const G = c3TreeGeom(t), x0 = G.px - G.len, x1 = G.px + C3_TREE_ART.bridgeBackPx; b.x = Math.round(x0); b.w = Math.round(x1 - x0); }
+    return b;
+  });
+  wrapFn('c3TreeAngle', o => function (t) { return o.apply(this, arguments) * c4FallDir(t); });
+  globalThis.drawC3TreeArt = function (sx, t) {
+    const art = c4TreeArt(t), img = art.tree; if (!img) return false;
+    const A = C3_TREE_ART, G = c3TreeGeom(t), cx = cameraX, now = (typeof frameCount === 'number' ? frameCount : 0);
+    if (t.state === 'fallen' && t._c3LandF == null) t._c3LandF = now;
+    if (t.state !== 'fallen') t._c3LandF = null;
+    let shake = 0;
+    if (t._c3LandF != null) { const k = now - t._c3LandF; if (k >= 0 && k < A.landShakeFrames) shake = Math.sin(k * 1.9) * A.landShakePx * (1 - k / A.landShakeFrames); }
+    const ang = c3TreeAngle(t), p = Math.abs(ang) / (Math.PI / 2);
+    const pit = c3TreePitSide(t);
+    // 原本的樹：站著時坑那一側樹根淡出（v0.3.84）；崖邊樹：樹根本來就畫成抓住崖邊往下垂 → 不用遮罩
+    const imPit = (pit && !art.cliff) ? c3TreeMasked('pit') : null;
+    const sink = (A.sinkPx || 0) * (1 - p);
+    ctx.save();
+    c3TreeClip(cx);
+    ctx.translate(G.px - cx, G.py + shake + sink);
+    ctx.rotate(ang);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    if (t.state !== 'standing') ctx.drawImage(img, G.imgX, G.imgY, G.w, G.h);
+    else ctx.drawImage(imPit || img, G.imgX, G.imgY, G.w, G.h);
+    ctx.restore();
+    return true;
+  };
+  globalThis.drawC3TreeRootFg = function (cx) {
+    breakableTrees.forEach(t => {
+      if (!t.c3Art) return;
+      const art = c4TreeArt(t), img = art.root; if (!img) return;
+      const G = c3TreeGeom(t), sx = G.px - cx;
+      if (sx + G.w < -20 || sx - G.w > CANVAS_W + 20) return;
+      const pit = (typeof c2Pits !== 'undefined' ? c2Pits : []).find(p => p.x > G.px - 40 && p.x < G.px + G.w);
+      ctx.save();
+      if (pit) { ctx.beginPath(); ctx.rect(-10, -10, pit.x - cx + 10, CANVAS_H + 20); ctx.clip(); }   // 坑口上方不畫（崖邊樹的草皮剛好停在崖邊）
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      const fg = (pit && !art.cliff) ? c3TreeRootFgFaded(t, pit) : null;
+      if (fg) ctx.drawImage(fg.c, Math.round(sx + G.imgX), Math.round(G.py + G.imgY));
+      else ctx.drawImage(img, Math.round(sx + G.imgX), Math.round(G.py + G.imgY), G.w, G.h);
+      ctx.restore();
+    });
+  };
+  wrapFn('updateBreakableTrees', o => function () {
+    // 一般樹被氣球槌敲到 → 往遠離小V的方向倒（坑邊樹固定往坑倒）
+    try { breakableTrees.forEach(t => { if (t.c3Art && t.state === 'falling' && t._c4Seen !== 'falling') { if (t.fallDir == null) t.fallDir = (t.c4Road && !c4TreeIsPit(t)) ? ((player.x + player.w / 2) <= c3TreeGeom(t).px ? 1 : -1) : 1; c4L({ ev: 'treeFall', x: Math.round(t.x), dir: t.fallDir, by: t._c4By || 'hammer' }); } t._c4Seen = t.state; }); } catch (er) {}
+    const r = o.apply(this, arguments);
+    try { breakableTrees.forEach(t => { if (t._logPlat && t.c4Road) t._logPlat.c4Road = true; }); c4TreeCrushStep(); } catch (er) { console.warn('[v0.4.00] tree', er); }
+    return r;
+  });
+  wrapFn('updateEnemies', o => function () { const r = o.apply(this, arguments); try { c4LogBlockEnemies(); } catch (er) {} return r; });
+
+  // ── RPG：第一次正面擋劍 ──
+  wrapFn('rpgBuildScene', o => function (id) {
+    if (id === C4_RPG_BLOCK) return { id, title: '劍砍不下去', policy: 'oncePerPlayer', saveHistory: true, left: 'balloonv_surprised', right: null, pages: [
+      { sp: 'balloonv', face: 'balloonv_surprised', text: '被防住了!氣球劍砍不下去!' },
+      { sp: 'balloonv', face: 'balloonv_thinking', text: '還是我換個武器試試...?' },
+      { sp: 'balloonv', face: 'balloonv_surprised', text: '又或者我繞背試試...?!' } ] };
+    return o.apply(this, arguments);
+  });
+
+  // ── 疾風瞄準音效：畫面裡有疾風蠍子在搜尋／收斂／鎖定 → 一個循環聲源（多隻也不疊加）；衝刺、被打斷、擊倒、暫停、換關 → 停止 ──
+  wrapFn('sfxSyncFrame', o => function () {
+    const r = o.apply(this, arguments);
+    try {
+      const hidden = (typeof document !== 'undefined' && document.hidden);
+      const playing = !hidden && gameState === 'playing' && !(typeof rpgActive !== 'undefined' && rpgActive && !rpgActive.ui)
+        && !(typeof assetGateActive !== 'undefined' && assetGateActive) && !(typeof screenFreezeForTest !== 'undefined' && screenFreezeForTest);
+      const want = playing && enemies.some(e => e.active && c3sType(e) === 'swift' && e.c3s && e.c3s.st === 'lock' && sfxOnScreen(e.x, e.w, 40));
+      if (want && !SFX.loops.swiftTarget) wsLoopStart('swiftTarget', sfxVol('swiftTarget'), 'search');
+      else if (!want && SFX.loops.swiftTarget) wsLoopStop('swiftTarget', !playing ? 'notPlaying' : 'noLock');
+    } catch (e) {}
+    return r;
+  });
+  const stopTarget = why => { try { wsLoopStop('swiftTarget', why); } catch (e) {} };
+  wrapFn('loadLevel', o => function () { stopTarget('loadLevel'); return o.apply(this, arguments); });
+  wrapFn('restart', o => function () { stopTarget('restart'); return o.apply(this, arguments); });
+
+  // ── F8 凍結：?devtools=1，或這台瀏覽器有舊的開發者開關（balloonV_devTools=1）→ 只開放 F8（不會變成開發者存檔、不開其他工具）──
+  const devSwitch = () => { try { return localStorage.getItem('balloonV_devTools') === '1'; } catch (e) { return false; } };
+  wrapFn('advDevHotkeysOn', o => function () { if (o.apply(this, arguments)) return true; try { const ev = typeof window !== 'undefined' ? window.event : null; return !!(ev && ev.type === 'keydown' && ev.code === 'F8' && devSwitch()); } catch (e) { return false; } });
+  if (typeof window !== 'undefined') window.addEventListener('keydown', e => {
+    if (e.code !== 'F8' || ADVENTURE_TEST_TOOLS_ENABLED || !devSwitch()) return;   // 開發者網址時由原本的 F8 處理
+    screenFreezeForTest = !screenFreezeForTest;
+    console.log('[TestTools] screenFreezeForTest:', screenFreezeForTest, '（開發者開關 balloonV_devTools）');
+    try { showHint(screenFreezeForTest ? '畫面暫停：ON（F8 恢復）' : '畫面暫停：OFF', 120); } catch (er) {}
+    e.preventDefault();
+  });
+
+  if (typeof window !== 'undefined') Object.assign(window, {
+    debugC4: () => ({ version: GAME_VERSION, ready: { moves: c4MovesReady(), missing: c4Missing.slice(), cliff: !!(c4CliffImg('tree') && c4CliffImg('root')) },
+      enemies: enemies.filter(e => c3sType(e)).map(e => ({ id: e.c2Id, T: c3sType(e), active: e.active, x: Math.round(e.x), hp: e.hp, st: e.c3s && e.c3s.st, ph: e.c3s && e.c3s.ph, t: e.c3s && e.c3s.t, armor: e.c3s && e.c3s.armor, broken: !!(e.c3s && e.c3s.broken), pose: e.active ? c4Pose(e) : null, face: c3sFace(e), slamCd: e.c3s && e.c3s.slamCd, wsCd: e.c3s && e.c3s.wsCd, gap: e.c3s && e.c3s.gap })),
+      slashes: wsBlades.filter(b => b.big).map(b => ({ id: b.id, st: b.st, x: Math.round(b.x), y: Math.round(b.y), dir: b.dir, passed: b.passed.slice() })),
+      trees: breakableTrees.map(t => ({ x: t.x, st: t.state, road: !!t.c4Road, pit: !!t._c4Pit, dir: t.fallDir || null, log: t._logPlat ? { x: t._logPlat.x, w: t._logPlat.w, y: t._logPlat.y } : null })),
+      target: { playing: !!SFX.loops.swiftTarget, starts: wsAud.starts.swiftTarget, stops: wsAud.stops.swiftTarget, instances: wsAudInstances('swiftTarget'), status: SFX.status.swiftTarget },
+      freeze: screenFreezeForTest, log: c4Log.slice(-80), tuning: JSON.parse(JSON.stringify(C4)) }),
+  });
+  console.log('[v0.4.00] 第三章戰鬥系統整合已載入');
+})();
