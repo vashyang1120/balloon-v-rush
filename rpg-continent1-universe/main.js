@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.0-continent1-universe-test-2';
-const BUILD_TIME   = '2026-11-13 09:00';
+const GAME_VERSION = 'adventure-v0.4.1-continent1-universe-test-1';
+const BUILD_TIME   = '2026-11-13 10:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -27917,7 +27917,7 @@ function vbPanelHtml() {
       + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>勝利獎勵：260 ×' + R.win[o.id].balloon260 + '<br>圓氣球 ×' + R.win[o.id].roundBalloon + '・金幣 ' + R.win[o.id].coins + '</small>'
       + '<button type="button" class="h2-pill ' + (left > 0 && t > 0 ? 'h2-pill--green' : 'h2-pill--yellow') + ' h2-pill--sm" data-vb-act="play" data-op="' + o.id + '">' + (left <= 0 ? '休息中' : t > 0 ? '開始比賽' : '先製作排球') + '</button></div>';
   });
-  h += '</div><div class="vb-note">先得 7 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），首次完成新的冒險關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
+  h += '</div><div class="vb-note">先得 7 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
   return h;
 }
 function vbEnsureNav() {
@@ -31020,6 +31020,17 @@ const C1U_TITLES = [
   { titleKey: 'adventure_kind_adventurer',  name: '善良冒險家',   gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有擊倒任何怪物（直接或間接都不行；橘子王決戰不計）' },
   { titleKey: 'adventure_peace_ambassador', name: '和平大使',     gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有對任何怪物造成傷害（橘子王決戰不計）；同時獲得「善良冒險家」' },
   { titleKey: 'adventure_super_thrifty',    name: '超勤儉冒險家', gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有在商店成功購買任何東西（打地鼠入場費不算）' },
+  // v0.4.1：小遊戲稱號（比賽／遊戲結算時取得）
+  { titleKey: 'adventure_volleyball_rookie', name: '排球新星',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'scorpion',    desc: '氣球排球 7：0 完封蠍子怪' },
+  { titleKey: 'adventure_volleyball_expert', name: '排球高手',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange',      desc: '氣球排球 7：0 完封橘子怪' },
+  { titleKey: 'adventure_volleyball_king',   name: '排球王者',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange_king', desc: '氣球排球 7：0 完封橘子王' },
+  { titleKey: 'adventure_whack_legend',      name: '傳奇槌王',   gameId: 'adventure', category: 'adventure', group: 'minigame', whackScore: 660,           desc: '氣球槌打地鼠分數達到 660 分' },
+  // v0.4.1：成績稱號（2-4 完整結算時，該分項拿到滿分）
+  { titleKey: 'adventure_treasure_hunter',   name: '寶藏獵人',   gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'collect',    desc: '第一大陸完整結算時「收集」滿分' },
+  { titleKey: 'adventure_secret_explorer',   name: '秘境探險家', gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'explore',    desc: '第一大陸完整結算時「探索」滿分' },
+  { titleKey: 'adventure_battle_master',     name: '戰鬥大師',   gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'combat',     desc: '第一大陸完整結算時「戰鬥」滿分' },
+  { titleKey: 'adventure_unyielding_hero',   name: '不屈勇者',   gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'survival',   desc: '第一大陸完整結算時「生存」滿分' },
+  { titleKey: 'adventure_swift_adventurer',  name: '神速冒險家', gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'efficiency', desc: '第一大陸完整結算時「效率」滿分' },
 ];
 const C1U_WHACK = { fee: 20, maxPlays: 1, frameUrl: '../minigames/whack-a-mole/index.html', loadTimeoutMs: 20000 };
 const C1U_HAMMER_SCENE = 'c1u_hammer_first_craft';
@@ -31158,10 +31169,11 @@ function whBlockReason() {
   if ((playerInventory.coins || 0) < C1U_WHACK.fee) return 'noCoins';
   return '';
 }
-const WH_BLOCK_TEXT = { locked: '第一次做出氣球槌之後就能玩打地鼠！', noPlays: '今天的打地鼠次數用完了，完成新的冒險關卡後回家就能再玩一次。', noCoins: '冒險金幣不夠喔！打地鼠入場需要 20 金幣。' };
+const WH_BLOCK_TEXT = { locked: '第一次做出氣球槌之後就能玩打地鼠！', noPlays: '完成下一個新的冒險關卡後回到小V的家，就能玩一次打地鼠。', noPlaysNew: '打地鼠剛解鎖！完成下一個新的冒險關卡後回到小V的家，就能玩第一次。', noCoins: '冒險金幣不夠喔！打地鼠入場需要 20 金幣。' };
+function whNoPlaysText() { const w = whData(); return w.history.some(h => h.t === 'game' || h.t === 'enter') ? WH_BLOCK_TEXT.noPlays : WH_BLOCK_TEXT.noPlaysNew; }
 function whStart() {
   const why = whBlockReason();
-  if (why) { h2Toast(WH_BLOCK_TEXT[why]); console.log('[Whack] 不能進入：' + why + '（沒有扣金幣、沒有扣次數）'); return false; }
+  if (why) { h2Toast(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]); console.log('[Whack] 不能進入：' + why + '（沒有扣金幣、沒有扣次數）'); return false; }
   if (typeof gameState !== 'undefined' && (gameState === 'playing' || gameState === 'paused')) return false;
   if (whFrame.el && whFrame.el.classList.contains('is-open')) return false;
   const w = whData();
@@ -31218,14 +31230,15 @@ function whAdapt() {
     const W = win.__wam;
     if (!W || !W.game || !W.renderer || !win.WAM) { if (++n < 200) setTimeout(tryHook, 50); return; }
     // 1) 背景：九宮格後方只換成第一大陸窗景（等比例填滿＋原本的 12% 白色薄霧）；洞口、平台、怪物、資訊欄照舊
-    const img = new win.Image(); img.src = c1uWindowUrl();
+    const bgInfo = c1uMinigameBg();                                   // v0.4.1：淡化＋輕微模糊過的窗景（讓前景更清楚）
+    const img = new win.Image(); img.src = bgInfo.url;
     const orig = win.WAM.Renderer.prototype.drawBackground;
     W.renderer.drawBackground = function (ctx, t) {
       if (!(img.complete && img.naturalWidth)) return orig.call(this, ctx, t);
       const VW = win.WAM.VIEW_W, VH = win.WAM.VIEW_H;
       const s = Math.max(VW / img.naturalWidth, VH / img.naturalHeight), w = img.naturalWidth * s, h = img.naturalHeight * s;
       ctx.drawImage(img, (VW - w) / 2, (VH - h) / 2, w, h);
-      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, VW, VH);
+      if (!bgInfo.processed) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, VW, VH); }
     };
     W.renderer._c1uBg = true;
     // 2) 結算：原本的結算畫面照常顯示，之後冒險端發一次獎勵
@@ -31322,10 +31335,10 @@ function whPanelHtml() {
     + (pend ? '繼續上一局（免費）' : why === 'locked' ? '尚未解鎖' : why === 'noPlays' ? '次數用完' : why === 'noCoins' ? '金幣不足' : '開始（付 ' + C1U_WHACK.fee + ' 金幣）') + '</button></div>';
   if (un) {
     h += '<div class="vb-box vb-stat"><span>剩餘次數：' + (w.playsLeft > 0 ? '🔨' : '⚪') + '　<b>' + w.playsLeft + '／' + C1U_WHACK.maxPlays + '</b></span><span>入場費：<b>' + C1U_WHACK.fee + '</b> 冒險金幣（目前 ' + coins + '）</span></div>';
-    if (why && why !== 'locked') h += '<div class="vb-box vb-tired">' + h2Esc(WH_BLOCK_TEXT[why]) + '</div>';
+    if (why && why !== 'locked') h += '<div class="vb-box vb-tired">' + h2Esc(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]) + '</div>';
     if (pend) h += '<div class="vb-box">上一局還沒完成，這次進入<b>不會再扣金幣、不扣次數</b>。</div>';
   }
-  h += '<div class="vb-note">每次「首次完成新的主線關卡」回到小V的家，打地鼠次數補到 1（不會累積）。入場費用冒險金幣支付（不是 V幣），不算商店購買。分數越高，獎勵越多（金幣、260 長條氣球、圓氣球），結算後直接放進冒險背包。打地鼠是額外活動，不影響主線通關。</div></div>';
+  h += '<div class="vb-note">每一趟冒險中，每完成一個這一趟還沒完成過的主線關卡，回到小V的家，打地鼠次數補到 1（不會累積）；開始新的冒險後會重新計算。入場費用冒險金幣支付（不是 V幣），不算商店購買。分數越高，獎勵越多（金幣、260 長條氣球、圓氣球），結算後直接放進冒險背包。打地鼠是額外活動，不影響主線通關。</div></div>';
   return h;
 }
 function whEnsureNav() {
@@ -31434,24 +31447,24 @@ function c1uFinalSectionsHtml(snap) {
     + OFFICIAL_ADVENTURE_STAGES.map(s => { const e = effs.find(x => x.label === s.label || x.stageId === s.stageId); const ok = !!(snap.stageResults && snap.stageResults[s.stageId]);
       return '<div class="c1u-stage"><b>' + (ok ? '✅ ' : '⬜ ') + esc(s.label) + ' ' + esc(s.name) + '</b>' + (e ? '通關時間 ' + advSecFmt(e.sec) : '') + '</div>'; }).join('')
     + '</div></div>';
-  const rs = (typeof currentRunStats !== 'undefined' && currentRunStats) || {};
-  h += '<div class="c1u-final-sec"><div class="adv-section-title">2-4 橘子王決戰收穫</div><div class="c1u-rewards">'
-    + '<span>' + h2Icon('coins') + ' 金幣 +' + (rs.coins || 0) + '</span><span>' + h2Icon('balloon260') + ' 260 長條氣球 +' + (rs.balloon260 || 0) + '</span><span>' + h2Icon('roundBalloon') + ' 圓氣球 +' + (rs.roundBalloon || 0) + '</span>'
-    + '<span style="flex-basis:100%;font-size:13px;color:#7a5a30">原本的通關獎勵照舊放進冒險背包；總結算不會再發一次。</span></div></div>';
+  // v0.4.1：收穫改成「第一大陸七關合計」（2-4 是決戰關，本身沒有可撿的東西，原本那一格永遠是 +0）
+  const rw = snap.raw || {}, gt = x => (x && typeof x.got === 'number') ? x.got : 0, tt = x => (x && typeof x.total === 'number') ? x.total : 0;
+  h += '<div class="c1u-final-sec"><div class="adv-section-title">第一大陸收穫（七關合計）</div><div class="c1u-rewards">'
+    + '<span>' + h2Icon('coins') + ' 金幣 ' + gt(rw.coins) + '／' + tt(rw.coins) + '</span><span>' + h2Icon('balloon260') + ' 260 長條氣球 ' + gt(rw.b260) + '／' + tt(rw.b260) + '</span><span>' + h2Icon('roundBalloon') + ' 圓氣球 ' + Math.min(gt(rw.round), tt(rw.round)) + '／' + tt(rw.round) + '</span>'
+    + '<span style="flex-basis:100%;font-size:13px;color:#7a5a30">每一關撿到的東西都已經照原本規則放進冒險背包；總結算不會再發一次。</span></div></div>';
+  // v0.4.1：本趟稱號只列出「這一趟取得的」；一個都沒有就不顯示這一區
   const ctx = (c1uFinalCtx && c1uFinalCtx.challengeId === snap.challengeId) ? c1uFinalCtx : null;
   const d = achLoad();
-  const reasonText = { testOnly: '這一趟使用過測試捷徑或沒有依序完成七關，不能取得稱號。', dev: '開發者模式的冒險不會取得正式稱號。', guest: '訪客模式不能取得稱號；從遊戲宇宙大廳進入就能保存稱號。', notFound: '找不到遊戲宇宙玩家，這次不能取得稱號。', noRun: '' };
+  const gotKeys = ctx ? ctx.got.slice() : C1U_TITLES.filter(def => def.group !== 'minigame' && d.titles[def.titleKey] && d.titles[def.titleKey].challengeId === snap.challengeId).map(def => def.titleKey);
+  if (!gotKeys.length) return h;
   h += '<div class="c1u-final-sec"><div class="adv-section-title">本趟稱號</div><div class="c1u-titles">';
   C1U_TITLES.forEach(def => {
-    const got = ctx ? ctx.got.includes(def.titleKey) : !!(d.titles[def.titleKey] && d.titles[def.titleKey].challengeId === snap.challengeId);
+    if (!gotKeys.includes(def.titleKey)) return;
     const isNew = ctx ? ctx.newly.includes(def.titleKey) : false;
-    const owned = !!d.titles[def.titleKey];
-    h += '<div class="c1u-title' + (got ? ' is-got' : '') + '"><span class="c1u-tico">' + (got ? '🏅' : '▫️') + '</span><div><b>' + esc(def.name) + '</b>'
-      + (got ? (isNew ? '　🎉 新獲得！' : '　（已擁有）') : (owned ? '　（以前已取得）' : '')) + '<small>' + esc(def.desc) + '</small></div></div>';
+    h += '<div class="c1u-title is-got"><span class="c1u-tico">🏅</span><div><b>' + esc(def.name) + '</b>'
+      + (isNew ? '　🎉 新獲得！' : '　（已擁有）') + '<small>' + esc(def.desc) + '</small></div></div>';
   });
-  if (ctx && !ctx.eligible && reasonText[ctx.reason]) h += '<div class="adv-card-note">' + esc(reasonText[ctx.reason]) + '</div>';
-  else if (ctx && ctx.eligible && !ctx.got.length) h += '<div class="adv-card-note">這次沒有取得新稱號。不擊倒怪物、不傷害怪物、不在商店購買，都有機會拿到特別稱號喔！</div>';
-  if (ctx && ctx.got.length) h += '<div class="adv-card-note">稱號已記在這個遊戲宇宙玩家的冒險紀錄（尚未送到遊戲宇宙伺服器）；不會自動裝備。</div>';
+  h += '<div class="adv-card-note">稱號已記在這個遊戲宇宙玩家的冒險紀錄（尚未送到遊戲宇宙伺服器）；不會自動裝備。</div>';
   h += '</div></div>';
   return h;
 }
@@ -31493,8 +31506,7 @@ function c1uFinalSectionsHtml(snap) {
     const r = o.apply(this, arguments);
     if (id === 'basicHammer' && r && !before) {
       whUnlock('firstHammerCraft');
-      // 原本的「做出氣球槌」耐用度教學改由這段對話取代（避免同一件事播兩段）
-      try { if (!rpgIsSeen('rpg011_hammer_crafted')) rpgMarkSeen('rpg011_hammer_crafted', 'replacedByV400'); } catch (e) {}
+      // v0.4.1：原本的「做出氣球槌」耐用度教學（rpg011）照舊在進關後播放（兩段說的是不同的事）
       try { rpgRequestUi(C1U_HAMMER_SCENE, 650); } catch (e) { console.warn('[C1U] 氣球槌對話', e); }
       try { h2ScheduleRefresh(); } catch (e) {}
     }
@@ -31515,7 +31527,7 @@ function c1uFinalSectionsHtml(snap) {
     if (kind === 'whack') { try { return whPanelHtml(); } catch (e) { console.warn('[Whack] 面板', e); return ''; } }
     if (kind === 'volleyball' && !vbUnlocked()) { vbEnsureStyle();
       return '<div class="vb-panel"><div class="vb-box vb-recipe"><span class="vb-ico">' + h2Icon('balloonVolleyball', 'vb-ico-img') + '</span><div class="vb-txt"><b>氣球排球</b>（🔒 尚未解鎖）<small>在冒險中找到「氣球排球秘笈」就能製作排球（製作：260 長條氣球 ×' + VB_CONFIG.cost.balloon260 + '）。帶著氣球小狗仔細找找看吧！</small></div></div>'
-        + '<div class="vb-note">解鎖後每輪最多 ' + VB_CONFIG.maxMatches + ' 場（蠍子怪、橘子怪、橘子王共用），首次完成新的冒險關卡回到小V的家會補回。</div></div>'; }
+        + '<div class="vb-note">解鎖後每輪最多 ' + VB_CONFIG.maxMatches + ' 場（蠍子怪、橘子怪、橘子王共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡回到小V的家會補回。</div></div>'; }
     if (kind === 'volleyball') { const h = o.apply(this, arguments); return h.replace('<div class="vb-panel">', '<div class="vb-panel"><div class="vb-box" style="font-size:14px">✅ 已解鎖・本輪剩餘 <b>' + vbData().matchesLeft + '／' + VB_CONFIG.maxMatches + '</b> 場・製作一顆排球：260 ×' + VB_CONFIG.cost.balloon260 + '</div>'); }
     if (kind === 'player' && c1uIsUniversePlayer()) {
       c1uEnsureStyle();
@@ -31657,4 +31669,215 @@ function c1uFinalSectionsHtml(snap) {
       levels: LEVELS.map(l => l.stageId), whack: JSON.parse(JSON.stringify(whData())), volleyball: { unlocked: vbUnlocked(), left: vbData().matchesLeft },
       run: run && run.challengeId, track: run ? (achLoad().runs[run.challengeId] || null) : null, titles: achLoad().titles }; console.log('[C1U]', o); return o; } });
   console.log('[v0.4.0] 第一大陸 × 遊戲宇宙版已載入（打地鼠、氣球排球、稱號、身份串接）');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.4.1（adventure-v0.4.1-continent1-universe-test-1）
+//  ・小遊戲次數：每一趟新冒險重新計算（這一趟第一次完成某個主線關卡 → 回家補）
+//  ・小遊戲背景：第一大陸窗景改用「淡化＋輕微模糊」版本，前景更清楚
+//  ・九個新稱號：排球新星／排球高手／排球王者／傳奇槌王／寶藏獵人／秘境探險家／戰鬥大師／不屈勇者／神速冒險家
+//  ・無敵星星：橘子怪系列（一般、煙囪、雙噴嘴、油幕、油彈）碰到都會被撞飛
+//  ・RPG 立繪：開新對話時不再先閃出上一段對話的人像
+// ════════════════════════════════════════════════════════════════════
+var c1uBgCache = { url: '', processed: false, promise: null };
+function c1uMinigameBg() { return c1uBgCache.url ? { url: c1uBgCache.url, processed: c1uBgCache.processed } : { url: c1uWindowUrl(), processed: false }; }
+function c1uPrepareMinigameBg() {
+  if (c1uBgCache.promise) return c1uBgCache.promise;
+  c1uBgCache.promise = new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const W = img.naturalWidth, H = img.naturalHeight, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const g = cv.getContext('2d'), pad = 24;
+        g.filter = 'blur(5px) saturate(0.85)';
+        g.drawImage(img, -pad, -pad, W + pad * 2, H + pad * 2);        // 稍微放大，避免模糊後邊緣變透明
+        g.filter = 'none';
+        g.fillStyle = 'rgba(255,255,255,0.30)'; g.fillRect(0, 0, W, H);  // 淡化
+        cv.toBlob(b => { if (b) { c1uBgCache.url = URL.createObjectURL(b); c1uBgCache.processed = true; console.log('[C1U] 小遊戲背景（淡化＋模糊窗景）已準備好'); } res(c1uMinigameBg()); }, 'image/jpeg', 0.9);
+      } catch (e) { console.warn('[C1U] 小遊戲背景處理失敗 → 用原圖', e); res(c1uMinigameBg()); }
+    };
+    img.onerror = () => res(c1uMinigameBg());
+    img.src = c1uWindowUrl();
+  });
+  return c1uBgCache.promise;
+}
+function c1uRunId() { try { const r = advLoad().active; return (r && r.challengeId && r.status !== 'completed') ? r.challengeId : null; } catch (e) { return null; } }
+// 這一趟冒險第一次完成 sid？（自選練習、橘子王重戰不算）
+function c1uRunClearNew(obj, sid) {
+  const rid = c1uRunId(); if (!rid || advPlayMode !== 'official') return false;
+  if (!obj.runClears || obj.runClears.id !== rid) obj.runClears = { id: rid, stages: {} };
+  if (obj.runClears.stages[sid]) return false;
+  obj.runClears.stages[sid] = Date.now();
+  return true;
+}
+function achAwardTitle(key, via) {
+  const def = C1U_TITLES.find(t => t.titleKey === key); if (!def) return null;
+  if (advDevMode()) return { key, ok: false, reason: 'dev' };
+  if (!c1uIsUniversePlayer()) return { key, ok: false, reason: 'guest' };
+  const d = achLoad();
+  if (d.titles[key]) return { key, ok: true, isNew: false };
+  d.titles[key] = Object.assign(achTitleRecord(def, c1uRunId()), { via });
+  achSave(d); achMirrorUniverse(d);
+  console.log('[C1U] 取得稱號：' + def.name + '（' + via + '）');
+  return { key, ok: true, isNew: true };
+}
+function c1uTitleModalHtml(res) {
+  if (!res) return '';
+  const def = C1U_TITLES.find(t => t.titleKey === res.key); if (!def) return '';
+  const head = res.ok ? (res.isNew ? '🎉 獲得新稱號！' : '🏅 已經擁有的稱號') : '🏅 達成稱號條件';
+  const note = res.ok ? '' : (res.reason === 'guest' ? '（訪客不能保存稱號）' : res.reason === 'dev' ? '（開發者模式不發正式稱號）' : '');
+  return '<div class="c1u-mtitle" style="margin-top:10px;padding:8px 12px;border-radius:12px;background:#fff6cf;border:2px solid #f0b400;text-align:center">'
+    + '<div style="font-size:14px;color:#7a5a30">' + head + '</div><div style="font-size:20px;font-weight:bold">「' + h2Esc(def.name) + '」' + note + '</div>'
+    + '<div style="font-size:13px;color:#7a5a30">' + h2Esc(def.desc) + '</div></div>';
+}
+function c1uAppendModal(html) {
+  if (!html) return;
+  const card = document.querySelector('#vb-modal .vb-mcard'); if (!card) return;
+  const last = card.lastElementChild; if (last) last.insertAdjacentHTML('beforebegin', html); else card.insertAdjacentHTML('beforeend', html);
+}
+// 無敵星星撞飛：橘子怪系列（c2DkTypes 裡除了一般橘子怪以外的種類；一般橘子怪沿用 v0.3.97 原本的處理）
+const C1U_STAR_ORANGE_SKINS = { chimneyOrange: 'c1u_orange_chimney', dualNozzleOrange: 'c1u_orange_dual', fanOrange: 'c1u_orange_fan', projectileOrange: 'c1u_orange_projectile' };
+var c1uStarOrangeLog = [];
+function c1uStarOrangeSeriesStep() {
+  if (!(typeof v395StarActive === 'function' && v395StarActive()) || gameState !== 'playing') return 0;
+  const px = player.x - 4, py = player.y - 4, pw = player.w + 8, ph = player.h + 8;
+  let n = 0;
+  for (const t of c2DkTypes()) {
+    if (t.kind === 'orangeNemesis' || !Array.isArray(t.arr) || !t.arr.length) continue;
+    for (let i = t.arr.length - 1; i >= 0; i--) {
+      const o = t.arr[i];
+      if (!o || o.active === false || o.isBoss) continue;
+      const b = t.box(o); if (!b || !rectsOverlap(px, py, pw, ph, b.x, b.y, b.w, b.h)) continue;
+      const id = c2DkOrangeId(t, o);
+      const dir = (b.x + b.w / 2) >= (player.x + player.w / 2) ? 1 : -1;
+      try { if (o._sfxVoice) { sfxStopVoice(o._sfxVoice, 60); o._sfxVoice = null; } } catch (e) {}
+      o.sprayActive = false;
+      t.arr.splice(i, 1);
+      c2DkHold.push({ arr: t.arr, obj: o, idx: i });
+      try { sfxPlay('scorpionKnockback'); } catch (e) {}
+      spinningEnemies.push({ x: b.x, y: b.y, w: b.w, h: b.h, vx: dir * CONFIG.HAMMER_SPIN_SPEED, life: CONFIG.HAMMER_SPIN_LIFE, angle: 0,
+        skinKey: C1U_STAR_ORANGE_SKINS[t.kind] || 'v397_orange', drawScaleMultiplier: 2.4 / SCORPION_DRAW_SCALE, spinDamage: 1, hitTargetIds: new Set(),
+        sourceId: id, sourceAdvId: id, byStar: true, isOrange: true });
+      c1uStarOrangeLog.push({ id, kind: t.kind, x: Math.round(b.x), dir, frame: frameCount, stage: (LEVELS[currentLevelIndex] || {}).stageId });
+      if (c1uStarOrangeLog.length > 50) c1uStarOrangeLog.shift();
+      n++;
+      try { if (advPlayMode === 'official') { achNote('kills', 'star:' + t.kind); achNote('damage', 'star:' + t.kind); } } catch (e) {}
+    }
+  }
+  return n;
+}
+(function c1u41Install() {
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v401) { if (typeof o !== 'function') console.warn('[v0.4.1] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v401 = true; globalThis[name] = w; };
+
+  // 1) 小遊戲次數：每一趟新冒險重新計算
+  globalThis.whOnStageClear = function (sid) {
+    if (!whUnlocked() || !sid || !OFFICIAL_ADVENTURE_STAGE_IDS.includes(sid)) return;
+    const w = whData();
+    if (!w.clearLog[sid]) w.clearLog[sid] = { at: Date.now() };
+    if (!c1uRunClearNew(w, sid)) return;                                   // 這一趟已經完成過這一關／練習模式 → 不補
+    w.refillPending = { sid, at: Date.now(), run: w.runClears.id };
+    console.log('[Whack] 這一趟第一次完成 ' + sid + ' → 回到小V的家時補 1 次');
+  };
+  globalThis.vbOnStageClear = function (sid, newlyUnlocked) {
+    if (!vbUnlocked() || !sid || !vbMainline().includes(sid)) return;
+    const v = vbData();
+    if (!v.clearLog[sid]) v.clearLog[sid] = { at: Date.now() };
+    if (!c1uRunClearNew(v, sid)) return;
+    if (!newlyUnlocked) { v.refillPending = { sid, at: Date.now(), run: v.runClears.id }; console.log('[Volleyball] 這一趟第一次完成 ' + sid + ' → 回到小V的家時補回場次'); }
+  };
+  wrapFn('whUnlock', o => function () {
+    const r = o.apply(this, arguments);
+    try { if (r) { const w = whData(), rid = c1uRunId(); if (rid) { const run = advLoad().active; w.runClears = { id: rid, stages: {} }; Object.keys((run && run.stageResults) || {}).forEach(s => { w.runClears.stages[s] = Date.now(); }); whSave(); } } } catch (e) {}
+    return r;
+  });
+
+  // 2) 小遊戲稱號
+  wrapFn('vbSettle', o => function (d, c) {
+    const r = o.apply(this, arguments);
+    try {
+      if (r && c && c.result && c.result.playerScore === VB_CONFIG.targetScore && c.result.cpuScore === 0) {
+        const def = C1U_TITLES.find(t => t.vbOpponent === c.opponent);
+        if (def) { c.titleRes = achAwardTitle(def.titleKey, 'volleyball:' + c.opponent + ':7-0'); vbSave(); }
+      }
+    } catch (e) { console.warn('[C1U] 排球稱號', e); }
+    return r;
+  });
+  wrapFn('vbShowResult', o => function (c) { const r = o.apply(this, arguments); try { if (c && c.titleRes) c1uAppendModal(c1uTitleModalHtml(c.titleRes)); } catch (e) {} return r; });
+  wrapFn('whSettle', o => function (r0, sid) {
+    const r = o.apply(this, arguments);
+    try { const c = whData().current; const def = C1U_TITLES.find(t => t.whackScore);
+      if (r && c && c.id === sid && def && c.score >= def.whackScore) { c.titleRes = achAwardTitle(def.titleKey, 'whack:' + c.score); whSave(); } } catch (e) { console.warn('[C1U] 打地鼠稱號', e); }
+    return r;
+  });
+  wrapFn('whShowResult', o => function (c) { const r = o.apply(this, arguments); try { if (c && c.titleRes) c1uAppendModal(c1uTitleModalHtml(c.titleRes)); } catch (e) {} return r; });
+
+  // 3) 成績稱號：2-4 完整結算時，五大分項哪一項滿分就給哪一個（和三個第一大陸稱號同樣的資格：完整、正式、非開發者、非訪客）
+  wrapFn('advShowFinalResults', o => function (snap) {
+    try {
+      const ctx = c1uFinalCtx;
+      if (ctx && ctx.eligible && !ctx.scoreDone && snap && snap.challengeId === ctx.challengeId && snap.scores && snap.rules) {
+        ctx.scoreDone = true;
+        const d = ctx._d || achLoad(); ctx._d = d;
+        C1U_TITLES.filter(t => t.group === 'score').forEach(def => {
+          const got = (snap.scores[def.scorePart] || 0) >= (snap.rules.max[def.scorePart] || Infinity);
+          if (!got) return;
+          ctx.got.push(def.titleKey);
+          if (!d.titles[def.titleKey]) { d.titles[def.titleKey] = achTitleRecord(def, ctx.challengeId); ctx.newly.push(def.titleKey); }
+        });
+        console.log('[C1U] 成績稱號檢查', snap.scores, '→', ctx.got);
+      }
+    } catch (e) { console.warn('[C1U] 成績稱號', e); }
+    return o.apply(this, arguments);
+  });
+
+  // 4) 無敵星星：橘子怪系列都會被撞飛（旋轉時用各自的圖）
+  wrapFn('v397StarOrangeStep', o => function () { const r = o.apply(this, arguments); try { c1uStarOrangeSeriesStep(); } catch (e) { console.warn('[v0.4.1] star orange series', e); } return r; });
+  wrapFn('getScorpionHurtImgForSkin', o => function (k) {
+    try {
+      if (k === 'c1u_orange_chimney') return getChimneyOrangeImg('idle') || getOrangeEnemyImg('idle');
+      if (k === 'c1u_orange_dual') return getDualOrangeImg('idle_01') || getOrangeEnemyImg('idle');
+      if (k === 'c1u_orange_projectile') return getProjectileOrangeImg('idle_01') || getOrangeEnemyImg('idle');
+      if (k === 'c1u_orange_fan') return getOrangeEnemyImg('idle');
+    } catch (e) {}
+    return o.apply(this, arguments);
+  });
+
+  // 5) RPG 立繪閃出上一段對話的人像
+  //   原因：關閉對話時立繪維持「顯示中」只是把整個對話框藏起來；下一段對話打開時才移除顯示 → 上一段的人像（例如小狗）在 0.18 秒淡出中被看見；
+  //         另外換圖時直接把新網址設給另一層 img 並立刻顯示，新圖還沒解碼完成的那一瞬間，那一層還是更早之前的舊人像。
+  //   修正：打開新對話前，立刻（不淡出）清掉兩層立繪；換圖時等新圖解碼完成才淡入。
+  wrapFn('rpgOpen', o => function () {
+    try {
+      const ov = document.getElementById('rpg-overlay');
+      if (ov && !rpgActive) ov.querySelectorAll('.rpg-side .rpg-pimg').forEach(im => {
+        im.style.transition = 'none'; im.classList.remove('rpg-pimg--on'); im.removeAttribute('src'); void im.offsetWidth; im.style.transition = '';
+      });
+    } catch (e) {}
+    return o.apply(this, arguments);
+  });
+  globalThis.rpgSetSide = (function (orig) {
+    const f = function (sideEl, key, active) {
+      if (!sideEl || !key || sideEl.dataset.key === key) return orig.apply(this, arguments);
+      const useKey = rpgResolveFace(key);
+      if (rpgAssetState(useKey) !== 'loaded') return orig.apply(this, arguments);
+      // 先讓原本的流程處理大小／Boss 版型／標籤；它會把新網址設給下一層並顯示 → 這裡改成「解碼完成才顯示」
+      const imgs = sideEl.querySelectorAll('.rpg-pimg');
+      const prevOn = sideEl.querySelector('.rpg-pimg--on');
+      const r = orig.apply(this, arguments);
+      const next = sideEl.querySelector('.rpg-pimg--on');
+      if (!next) return r;
+      const tok = sideEl._c1uTok = (sideEl._c1uTok || 0) + 1;
+      if (next.complete && next.naturalWidth > 0) return r;                   // 已經可以畫 → 照原本立即淡入
+      next.classList.remove('rpg-pimg--on');
+      if (prevOn && prevOn !== next) prevOn.classList.add('rpg-pimg--on');    // 新圖好之前，先保留目前這一張（同一段對話換表情不閃空白）
+      const show = () => { if (sideEl._c1uTok !== tok) return; next.classList.add('rpg-pimg--on'); imgs.forEach(im => { if (im !== next) im.classList.remove('rpg-pimg--on'); }); };
+      try { (next.decode ? next.decode() : Promise.resolve()).then(show, show); } catch (e) { show(); }
+      return r;
+    };
+    f._v401 = true; return f;
+  })(globalThis.rpgSetSide);
+
+  try { if (document.readyState === 'complete') c1uPrepareMinigameBg(); else window.addEventListener('load', () => setTimeout(c1uPrepareMinigameBg, 300)); } catch (e) {}
+  if (typeof window !== 'undefined') Object.assign(window, { c1uMinigameBg, c1uPrepareMinigameBg, achAwardTitle, debugStarOrange401: () => ({ star: v395StarActive(), log: c1uStarOrangeLog.slice(), spinning: spinningEnemies.filter(s => s.byStar).map(s => s.skinKey) }) });
+  console.log('[v0.4.1] 每趟補次數、淡化小遊戲背景、九個新稱號、星星撞飛橘子怪系列、RPG 立繪不閃舊圖');
 })();
