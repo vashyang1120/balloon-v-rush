@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.01-chapter3-playtest-fixes-test-1';
-const BUILD_TIME   = '2026-11-14 13:10';
+const GAME_VERSION = 'adventure-v0.4.02-power-dunk-boss-polish-test-1';
+const BUILD_TIME   = '2026-11-15 02:00';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -32189,8 +32189,10 @@ var C4 = {
     attackGap: 70,               // 任何招式收招後，至少隔 1.17 秒才會開始下一招（Recover 一定先做完）
     guardBeforeAttack: 36,       // 舉盾至少 0.6 秒才可以改出招（Guard 不會永久卡住）
     brokenGuard: 60,             // 破甲後的 Guard 比較短（1 秒）
-    slam: { reach: 70, vRange: 70, charge: 42, swing: 8, impact: 18, active: 5, recover: 54, cd: 170,
-            zoneBack: 14, zoneFwd: 50, zoneH: 52, damage: 0.5, push: 10 },
+    // v0.4.02：Slam → Power Dunk（招式節奏、冷卻、傷害不變；發動距離 70 → 110、地面攻擊區往前 50 → 100，配合巨螯落點與氣爆）
+    slam: { reach: 110, vRange: 70, charge: 42, swing: 8, impact: 18, active: 5, recover: 54, cd: 170,
+            zoneBack: 14, zoneFwd: 100, zoneH: 52, damage: 0.5, push: 10,
+            pdChance: 0.6, pdRetry: 45 },   // 進入範圍時 60% 出 Power Dunk；沒出 → 0.75 秒後再判斷一次（不會每次靠近都必定出招）
     wslash: { rangeMin: 150, rangeMax: 560, vUp: 120, charge: 30, gather: 36, release: 18, fireAt: 3, recover: 42, cd: 270,
               speed: 4.6, maxDist: 900, damage: 1, drawW: 150, launchFwd: 40, launchH: 30 },
     breakStun: 54,               // 破甲硬直 0.9 秒
@@ -32210,18 +32212,25 @@ const C4_FILES = {
   slamCharge: 'rockwind_scorpion_slam_charge.png', slamSwing: 'rockwind_scorpion_slam_swing.png', slamImpact: 'rockwind_scorpion_slam_impact.png', slamRecover: 'rockwind_scorpion_slam_recover.png',
   wsCharge: 'rockwind_scorpion_wind_slash_charge.png', wsGather: 'rockwind_scorpion_wind_slash_gather.png', wsRelease: 'rockwind_scorpion_wind_slash_release.png', wsRecover: 'rockwind_scorpion_wind_slash_recover.png',
   projectile: 'rockwind_scorpion_wind_slash_projectile.png',
+  // v0.4.02：Power Dunk（取代舊 Slam 的畫面；依檔名 01→02→03→04 播放）＋地面氣爆＋破甲盾牌（使用者提供原圖，程式不改圖檔）
+  pdCharge: 'rockwind_scorpion_power_dunk_01_charge.png', pdSwing: 'rockwind_scorpion_power_dunk_02_swing.png', pdImpact: 'rockwind_scorpion_power_dunk_03_impact.png', pdRecover: 'rockwind_scorpion_power_dunk_04_recover.png',
+  groundBurst: 'rockwind_scorpion_slam_ground_burst.png', brokenIcon: 'rockwind_scorpion_armor_broken_icon.png',
 };
 const C4_BBOX = {   // [圖寬, 圖高, 左, 上, 右, 下]（透明度 > 24；離線量測）
   slamCharge: [1254, 1254, 40, 101, 1218, 1154], slamSwing: [1254, 1254, 37, 76, 1196, 1216], slamImpact: [1254, 1254, 35, 102, 1215, 1181], slamRecover: [1254, 1254, 38, 101, 1207, 1109],
   wsCharge: [1254, 1254, 12, 85, 1243, 1133], wsGather: [1254, 1254, 79, 56, 1179, 1134], wsRelease: [1254, 1254, 15, 97, 1233, 1071], wsRecover: [1254, 1254, 33, 99, 1207, 1111],
+  pdCharge: [1254, 1254, 148, 81, 1177, 1158], pdSwing: [1254, 1254, 34, 87, 1227, 1155], pdImpact: [1254, 1254, 41, 111, 1218, 1127], pdRecover: [1254, 1254, 62, 82, 1216, 1049],   // v0.4.02
 };
 // 後方腳尖（原圖 y）：角色朝左 → 最右側（最後方）那幾隻腳的腳尖最下緣；風流特效（淡青色）不算。每一個動作各自量測，換動作時不會浮起或陷進地面
 const C4_TOE = {
   armored: { base: 1061, walk: 1075, guard: 1085, guardLow: 1039, hurt: 1112, break: 1070, exposed: 1077, defeat: 1015,
-    slamCharge: 1091, slamSwing: 1060, slamImpact: 1057, slamRecover: 1070, wsCharge: 1052, wsGather: 1131, wsRelease: 1017, wsRecover: 1088 },
+    slamCharge: 1091, slamSwing: 1060, slamImpact: 1057, slamRecover: 1070, wsCharge: 1052, wsGather: 1131, wsRelease: 1017, wsRecover: 1088,
+    pdCharge: 1110, pdSwing: 1056, pdImpact: 1070, pdRecover: 1036 },   // v0.4.02：用同一個量法（最右側 20% 範圍、非風流像素的最下緣）量 Power Dunk 四張
   swift: { base: 1002, walk1: 924, walk2: 916, walk3: 900, dash: 875, hurt: 1037, stun: 1042, recover: 960 },
 };
 var c4Imgs = {}, c4Ready = false, c4Missing = [];
+// v0.4.02：角色動作一定要全部載好才使用；氣爆、破甲盾牌是獨立特效（缺圖時不影響招式，只是看不到該特效）
+const C4_REQUIRED = Object.keys(C4_FILES).filter(k => k !== 'groundBurst' && k !== 'brokenIcon');
 function c4BuildCanvases() {
   const K = C3S_TUNING.armored.drawK, Q = 1.6;
   Object.keys(C4_BBOX).forEach(k => {
@@ -32236,7 +32245,9 @@ function c4BuildCanvases() {
 function c4MovesReady() { return c4Ready && Object.keys(C4_BBOX).every(k => c3sCanv.armored[k]) && !!c4Imgs.projectile; }
 
 // ── 畫面：後方腳尖接地 ──
-function c4Anchor(T, pose) { const B = C3S_BBOX[T][pose]; return B ? B[0] / 2 : 627; }
+// v0.4.02：Power Dunk 01（高舉巨螯）整隻角色在畫布裡偏右約 60px（頭部位置和其他姿勢差最多）→ 只有畫面往左補 60（原圖 px）；其他三張和既有姿勢的頭部位置在同一範圍內，不補
+const C4_ANCHOR_DX = { armored: { pdCharge: 60 } };
+function c4Anchor(T, pose) { const B = C3S_BBOX[T][pose]; return (B ? B[0] / 2 : 627) + (((C4_ANCHOR_DX[T] || {})[pose]) || 0); }
 function c4Toe(T, pose) { const v = (C4_TOE[T] || {})[pose]; if (v != null) return v; const B = C3S_BBOX[T][pose]; return B ? B[5] : 0; }
 function c4Ground(e, T) { return e.y + e.h + (C4.ground[T] || 0); }
 // 以「後方腳尖」為接地點畫一張動作圖（cxs＝碰撞框中心的畫面 x；groundY＝接地線）
@@ -32278,6 +32289,7 @@ function c4DrawHpUi(e, T, cxs) {
     ctx.fillRect(x, y, U.cellW, U.cellH); x += U.cellW + U.gap;
   }
   ctx.restore();
+  if (T === 'armored' && s.broken) c42DrawBrokenIcon(x0 - 3, y + U.cellH / 2);   // v0.4.02：破甲後血條左邊持續顯示破裂盾牌（直接讀真實的 broken 狀態）
 }
 
 // ── 姿勢 ──
@@ -32295,7 +32307,7 @@ function c4Pose(e) {
   if (s.st === 'break') return 'break';
   if (s.st === 'hurt' || s.hurtShow > 0) return 'hurt';
   const moves = c4MovesReady();
-  if (s.st === 'slam' && moves) return { charge: 'slamCharge', swing: 'slamSwing', impact: 'slamImpact', recover: 'slamRecover' }[s.ph] || 'base';
+  if (s.st === 'slam' && moves) return { charge: 'pdCharge', swing: 'pdSwing', impact: 'pdImpact', recover: 'pdRecover' }[s.ph] || 'base';   // v0.4.02：內部狀態仍叫 slam，畫面改播 Power Dunk 01～04（舊 Slam 四張不再播放）
   if (s.st === 'wslash' && moves) return { charge: 'wsCharge', gather: 'wsGather', release: 'wsRelease', recover: 'wsRecover' }[s.ph] || 'base';
   if (s.st === 'guard') return s.low ? 'guardLow' : 'guard';
   if (s.broken) return 'exposed';
@@ -32330,7 +32342,7 @@ function c4SwiftLockStep(e, s) {
 function c4ArmoredStep(e) {
   const T = C3S_TUNING.armored, A = C4.armored, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
   s.t++;
-  ['hurtShow', 'armorCd', 'bodyCd', 'blockCd', 'slamCd', 'wsCd', 'gap', 'noGuard'].forEach(k => { if (s[k] > 0) s[k]--; });
+  ['hurtShow', 'armorCd', 'bodyCd', 'blockCd', 'slamCd', 'wsCd', 'gap', 'noGuard', 'pdWait'].forEach(k => { if (s[k] > 0) s[k]--; });
   if (s.hurtT > 0) s.hurtT--;
   const dx = pc.x - ex, side = dx >= 0 ? 1 : -1, adx = Math.abs(dx);
   const alive = gameState === 'playing' && player.hp > 0 && c3sOnScreen(e);
@@ -32338,11 +32350,15 @@ function c4ArmoredStep(e) {
   const pickAttack = () => {
     if (!alive || s.gap > 0 || side !== s.face || !c4MovesReady()) return null;
     const feetDy = pc.feet - (e.y + e.h);
-    if (adx <= e.w / 2 + A.slam.reach && Math.abs(feetDy) <= A.slam.vRange && !(s.slamCd > 0)) return 'slam';
+    if (adx <= e.w / 2 + A.slam.reach && Math.abs(feetDy) <= A.slam.vRange && !(s.slamCd > 0) && !(s.pdWait > 0)) {   // v0.4.02 Power Dunk
+      if (Math.random() < A.slam.pdChance) return 'slam';
+      s.pdWait = A.slam.pdRetry; c4L({ ev: 'pdSkip', id: e.c2Id, dx: Math.round(dx) });   // 這次不出（不會每次靠近都必定 Power Dunk）
+    }
     if (adx >= A.wslash.rangeMin && adx <= A.wslash.rangeMax && pc.y > e.y - A.wslash.vUp && pc.y < e.y + e.h + 80 && !(s.wsCd > 0)) return 'wslash';
     return null;
   };
-  const startAttack = k => { s.st = k; s.ph = 'charge'; s.t = 0; s.pt = 0; s.hitDone = false; s.fired = false; s.slamContact = false; c4L({ ev: k + 'Start', id: e.c2Id, broken: !!s.broken, dx: Math.round(dx) }); };
+  const startAttack = (k, forced) => { s.st = k; s.ph = 'charge'; s.t = 0; s.pt = 0; s.hitDone = false; s.fired = false; s.slamContact = false; s.atkId = (s.atkId || 0) + 1; c4L({ ev: k + 'Start', id: e.c2Id, broken: !!s.broken, dx: Math.round(dx), atk: s.atkId, forced: !!forced }); };   // v0.4.02：每一次出招一個編號（雨傘去重用）；forced＝開發者強制觸發
+  if (s.c42Force && s.c42Force === 'slam') { s.c42Force = null; if (['walk', 'guard', 'turn'].includes(s.st)) { s.face = side; e.vx = s.face * Math.abs(e.vx || CONFIG.ENEMY_SPEED); startAttack('slam', true); return; } }
   const toWalk = why => { s.st = 'walk'; s.t = 0; s.ph = null; e.vx = (s.face || 1) * Math.abs(e.vx || CONFIG.ENEMY_SPEED); if (why) c4L({ ev: 'armoredWalk', id: e.c2Id, why }); };
   if (s.st === 'break') { if (s.t >= A.breakStun) { toWalk('breakEnd'); s.gap = 30; } return; }
   if (s.st === 'hurt') { if (s.t >= C4.stagger.armored) toWalk('hurtEnd'); return; }
@@ -32387,10 +32403,12 @@ function c4SlamStep(e, s) {
 function c4OnSlamImpact(e, s) {
   const z = c4SlamZone(e, s);
   try { sfxPlay('bossWallImpact'); } catch (er) {}
-  c4Fx.push({ k: 'shock', x: z.cx, y: z.gy, t: 0, life: 26, dir: s.face });
+  const cp = c42ClawPoint(e, s);   // v0.4.02：地面氣爆以巨螯落點為起點，朝面向（攻擊方向）爆發
+  if (c42Fx.groundBurst) c4Fx.push({ k: 'burst', x: cp.x, y: cp.y, t: 0, life: C42.burst.life, dir: s.face, atk: s.atkId, id: e.c2Id });
+  else c4Fx.push({ k: 'shock', x: z.cx, y: z.gy, t: 0, life: 26, dir: s.face });
   for (let i = 0; i < 7; i++) c4Fx.push({ k: 'dust', x: z.cx + (Math.random() - 0.5) * z.w, y: z.gy - 2, vx: s.face * (0.6 + Math.random() * 2.2) + (Math.random() - 0.5), vy: -1.2 - Math.random() * 2, t: 0, life: 26 + (Math.random() * 10 | 0), r: 3 + Math.random() * 4 });
   s.shake = 10;
-  c4L({ ev: 'slamImpact', id: e.c2Id, zone: { x: Math.round(z.x), w: Math.round(z.w) } });
+  c4L({ ev: 'slamImpact', id: e.c2Id, atk: s.atkId, zone: { x: Math.round(z.x), w: Math.round(z.w), y: Math.round(z.y), h: Math.round(z.h) }, claw: { x: Math.round(cp.x), y: Math.round(cp.y) }, burst: !!c42Fx.groundBurst });
 }
 function c4SlamHitCheck(e, s) {
   const z = c4SlamZone(e, s), S = C4.armored.slam;
@@ -32403,17 +32421,19 @@ function c4SlamHitCheck(e, s) {
   s.hitDone = true;   // 同一次 Slam 只結算一次
   if (holding && facing) {
     // 雨傘主動格擋：不受傷、雨傘耐久 −1（既有規則），小V被震退一點；磐甲不會被當成風刃彈飛
-    if (e._c2BlockTouch || s.slamContact) { c4L({ ev: 'slamBlocked', id: e.c2Id, contact: true, dur: equippedUmbrella.currentDur }); return; }   // 這一次 Slam 已經被雨傘頂住（接觸格擋時已經扣過耐久）→ 同一招不再重複扣
+    // v0.4.02：雨傘耐久去重改用「出招編號」：同一次 Power Dunk（巨螯＋氣爆）只扣 1；下一次新的 Power Dunk 再扣 1（磐甲身體接觸不再扣，見 c42 區塊）
+    if (s.umbAtk === s.atkId) { c4L({ ev: 'slamBlocked', id: e.c2Id, atk: s.atkId, dup: true, dur: equippedUmbrella.currentDur }); return; }
+    s.umbAtk = s.atkId;
     try { sfxPlay('c2UmbrellaBlock'); } catch (er) {}
     try { c2BlockFxStart({}, bx); } catch (er) {}
     const durBefore = equippedUmbrella.currentDur; c2UmbConsume('block');
     player.x -= bx.dir * S.push;
-    c4L({ ev: 'slamBlocked', id: e.c2Id, durBefore, durAfter: equippedUmbrella.currentDur });
+    c4L({ ev: 'slamBlocked', id: e.c2Id, atk: s.atkId, durBefore, durAfter: equippedUmbrella.currentDur });
     return;
   }
   if (player.invincible > 0) { c4L({ ev: 'slamInvincible', id: e.c2Id }); return; }
   const hp0 = player.hp; c4DamagePlayer(S.damage);
-  c4L({ ev: 'slamHit', id: e.c2Id, hpBefore: hp0, hpAfter: player.hp });
+  c4L({ ev: 'slamHit', id: e.c2Id, atk: s.atkId, hpBefore: hp0, hpAfter: player.hp });
 }
 // 小V受傷 N 格（支援 0.5；沿用 damagePlayer：無敵星星、盾牌、無敵時間、戰敗都照原本規則）
 var c4HalfDmg = false;
@@ -32698,6 +32718,7 @@ function c4DrawFx(cx) {
     else if (f.k === 'chip') { ctx.globalAlpha = Math.min(1, (1 - k) * 2); ctx.translate(x, f.y); ctx.rotate(f.rot); ctx.fillStyle = f.gold ? '#e6b34a' : '#6b6f80'; ctx.strokeStyle = 'rgba(30,30,40,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-f.s, -f.s * 0.6); ctx.lineTo(f.s * 0.8, -f.s * 0.8); ctx.lineTo(f.s, f.s * 0.5); ctx.lineTo(-f.s * 0.5, f.s * 0.8); ctx.closePath(); ctx.fill(); ctx.stroke(); }
     else if (f.k === 'shieldShard') { ctx.globalAlpha = 1 - k; ctx.translate(x, f.y); ctx.rotate(f.rot); ctx.fillStyle = '#ffcf4a'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(4, -5); ctx.lineTo(-1, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); }
     else if (f.k === 'shock') { ctx.globalAlpha = 0.85 * (1 - k); ctx.strokeStyle = '#fff1c8'; ctx.lineWidth = 4 * (1 - k) + 1; ctx.beginPath(); ctx.ellipse(x, f.y - 2, 10 + 46 * k, 4 + 9 * k, 0, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = 'rgba(160,110,60,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, f.y - 2, 6 + 30 * k, 3 + 6 * k, 0, 0, Math.PI * 2); ctx.stroke(); }
+    else if (f.k === 'burst') { c42DrawBurst(f, x); }
     else if (f.k === 'dust') { ctx.globalAlpha = 0.6 * (1 - k); ctx.fillStyle = '#c9a77a'; ctx.beginPath(); ctx.arc(x, f.y, f.r * (1 + k), 0, Math.PI * 2); ctx.fill(); }
     else if (f.k === 'text') { const pop = f.t < 8 ? 0.6 + 0.6 * f.t / 8 : 1.2 - 0.2 * Math.min(1, (f.t - 8) / 8); ctx.globalAlpha = f.t > f.life - 16 ? (f.life - f.t) / 16 : 1; ctx.translate(x, f.y - 6 * k); ctx.scale(pop, pop); ctx.font = '900 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#7a2b00'; ctx.lineWidth = 5; ctx.strokeText(f.txt, 0, 0); ctx.fillText(f.txt, 0, 0); }
     ctx.restore();
@@ -32779,7 +32800,7 @@ function c4RoadTree(x) { return { x, y: 0, h: 358, trunkW: 34, crownR: 40, state
   const addGroups = M => {
     if (!M) return M;
     if (!M[G]) M[G] = Object.keys(C4_FILES).map(k => ({ path: C4_DIR + C4_FILES[k], type: 'image', critical: false, label: 'c4:' + k, altPaths: [],
-      apply: im => { c4Imgs[k] = im; if (Object.keys(C4_FILES).every(q => c4Imgs[q])) { try { c4BuildCanvases(); c4Ready = true; console.log('[v0.4.00] 磐甲新招式素材 9/9 載入完成'); } catch (er) { console.error('[v0.4.00] 建立畫面快取失敗', er); } } },
+      apply: im => { c4Imgs[k] = im; if (C4_REQUIRED.every(q => c4Imgs[q]) && !c4Ready) { try { c4BuildCanvases(); c4Ready = true; console.log('[v0.4.02] 磐甲招式素材載入完成（' + C4_REQUIRED.length + ' 張）'); } catch (er) { console.error('[v0.4.00] 建立畫面快取失敗', er); } } if (k === 'groundBurst' || k === 'brokenIcon') { try { c42BuildFxCanvas(k); } catch (er) {} } },
       fail: () => { c4Missing.push(C4_FILES[k]); console.error('[v0.4.00] ❌ 素材載入失敗：' + C4_FILES[k] + '（磐甲不會使用需要這張圖的招式）'); } }));
     if (!M[GT]) M[GT] = [['tree', C4_TREE_CLIFF.treePath], ['root', C4_TREE_CLIFF.rootPath]].map(([k, p]) => ({ path: p, type: 'image', critical: false, label: 'c4cliff:' + k, altPaths: [],
       apply: im => { c4CliffImgs[k] = im; }, fail: () => { console.warn('[v0.4.00] 崖邊樹素材載入失敗（改用原本的樹）：' + p); } }));
@@ -33273,4 +33294,93 @@ function c41SlopeStep() {
       trees: breakableTrees.map(t => ({ x: t.x, st: t.state, dir: t.fallDir || null, slopeTo: t.c41SlopeTo || null, finalDeg: t.c41Final ? Math.round(t.c41Final * 180 / Math.PI) : null, slope: t.c41Slope || null, pin: t._c41Pin ? [...t._c41Pin].map(id => (enemies.find(e => e.runtimeId === id) || {}).c2Id || id) : [], front: c41TreeInFront(t) })) }),
   });
   console.log('[v0.4.01] 第三章實玩修正已載入');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.4.02 磐甲風刃蠍 Power Dunk（adventure-v0.4.02-power-dunk-boss-polish-test-1）
+//  ・舊 Slam 的畫面正式改成 Power Dunk（內部狀態仍叫 slam；節奏、冷卻、0.5 傷害不變）
+//    圖片依檔名 01 Charge → 02 Swing → 03 Impact → 04 Recover；不交換巨螯，左右只用整隻角色水平鏡像
+//  ・地面氣爆：Impact 那一步，以巨螯落點為起點、朝攻擊方向爆發（快速放大 → 停留 → 淡出）
+//  ・發動距離 70 → 110（磐甲半寬＋110）、地面攻擊區往前 50 → 100；進入範圍 60% 出招（其他數值見 C4.armored.slam）
+//  ・破甲後：血條左邊持續顯示破裂盾牌（直接讀真實 broken 狀態）
+//  ・雨傘耐久：同一次 Power Dunk（巨螯＋氣爆）只扣 1；磐甲單純走動碰到雨傘不扣
+//  ・開發者（?devtools=1）：按 \ 鍵讓最近的磐甲強制 Power Dunk（紀錄標 forced:true，和自然出招分開）
+// ════════════════════════════════════════════════════════════════════
+var C42 = {
+  claw: { x: 250, y: 1118 },                 // 03 Impact 原圖裡巨螯砸地的落點（原圖 px；角色朝左）
+  burst: { ox: 220, oy: 1065,                // 氣爆原圖的起爆點（左下角塵土＋星芒處）
+           k: 0.119,                         // 顯示比例：起爆點往前約 115px、往上約 105px
+           life: 28, grow: 5, fade: 12, from: 0.55 },   // 0.47 秒：5 步放大 → 停留 → 最後 12 步淡出
+  icon: { h: 30, gap: 4 },                   // 破甲盾牌顯示高度（遊戲畫面 px）、和血條的間距
+};
+var c42Fx = {}, c42Log = [];
+function c42L(o) { try { o.frame = frameCount; c42Log.push(o); if (c42Log.length > 200) c42Log.shift(); } catch (e) {} }
+function c42BuildFxCanvas(k) {   // 縮小快取（不改原圖）
+  const im = c4Imgs[k]; if (!im) return;
+  const B = k === 'groundBurst' ? [65, 184, 1182, 1104] : [83, 53, 1167, 1223];
+  const sc = k === 'groundBurst' ? C42.burst.k * 2 : (C42.icon.h * 2.5) / (B[3] - B[1]);
+  const c = document.createElement('canvas'); c.width = Math.ceil((B[2] - B[0]) * sc); c.height = Math.ceil((B[3] - B[1]) * sc);
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(im, B[0], B[1], B[2] - B[0], B[3] - B[1], 0, 0, c.width, c.height);
+  c42Fx[k] = { c, B, sc };
+}
+// 巨螯落點（世界座標）：03 Impact 圖裡的落點，換算成遊戲座標；朝右時整隻鏡像
+function c42ClawPoint(e, s) {
+  const K = C3S_TUNING.armored.drawK, f = s.face || 1;
+  return { x: e.x + e.w / 2 + f * (c4Anchor('armored', 'pdImpact') - C42.claw.x) * K, y: c4Ground(e, 'armored') + (C42.claw.y - c4Toe('armored', 'pdImpact')) * K };
+}
+function c42DrawBurst(f, x) {
+  const F = c42Fx.groundBurst; if (!F) return;
+  const C = C42.burst, t = f.t;
+  const grow = t < C.grow ? C.from + (1 - C.from) * (1 - Math.pow(1 - t / C.grow, 2)) : 1;
+  const a = t > f.life - C.fade ? Math.max(0, (f.life - t) / C.fade) : 1;
+  const k = C.k * grow, w = (F.B[2] - F.B[0]) * k, h = (F.B[3] - F.B[1]) * k;
+  ctx.globalAlpha = a; ctx.imageSmoothingEnabled = true;
+  ctx.translate(x, f.y);
+  if (f.dir < 0) ctx.scale(-1, 1);   // 原圖朝右上爆發；磐甲朝左攻擊時水平鏡像
+  ctx.drawImage(F.c, (F.B[0] - C.ox) * k, (F.B[1] - C.oy) * k, w, h);
+}
+function c42DrawBrokenIcon(barLeft, cy) {
+  const F = c42Fx.brokenIcon; if (!F) return;
+  const h = C42.icon.h, w = h * (F.B[2] - F.B[0]) / (F.B[3] - F.B[1]);
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(F.c, Math.round(barLeft - C42.icon.gap - w), Math.round(cy - h / 2), w, h); ctx.restore();
+}
+
+(function c42Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._c42w) { if (typeof o !== 'function') console.warn('[v0.4.02] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._c42w = true; globalThis[name] = w; };
+
+  // ── 雨傘：磐甲單純走動（身體接觸）碰到雨傘 → 照樣擋下、推開，但不扣耐久（只有成功格擋新的有效攻擊才扣）──
+  //   既有 c2BlockStep 在扣耐久前一定先呼叫 c2BlockFxStart(敵人)；記下是哪一隻，扣耐久時如果是磐甲就不扣
+  let inBlockStep = false, fxEnemy = null;
+  wrapFn('c2BlockFxStart', o => function (e) { fxEnemy = e; return o.apply(this, arguments); });
+  wrapFn('c2UmbConsume', o => function (reason) {
+    if (inBlockStep && reason === 'block' && fxEnemy && fxEnemy.type === 'scorpion' && c3sType(fxEnemy) === 'armored') {
+      c42L({ ev: 'armoredContactNoCost', id: fxEnemy.c2Id, st: fxEnemy.c3s && fxEnemy.c3s.st, dur: equippedUmbrella.currentDur });
+      return;
+    }
+    return o.apply(this, arguments);
+  });
+  wrapFn('c2BlockStep', o => function () { inBlockStep = true; fxEnemy = null; try { return o.apply(this, arguments); } finally { inBlockStep = false; fxEnemy = null; } });
+
+  // ── 開發者強制觸發（只有 ?devtools=1）──
+  globalThis.c42ForcePD = function () {
+    if (!advDevMode()) { console.warn('[v0.4.02] 強制 Power Dunk 只在 ?devtools=1 可用'); return false; }
+    const pc = player.x + player.w / 2;
+    const list = enemies.filter(e => e.active && e.type === 'scorpion' && c3sType(e) === 'armored' && e.c3s);
+    if (!list.length) return false;
+    const e = list.sort((a, b) => Math.abs(a.x - pc) - Math.abs(b.x - pc))[0];
+    e.c3s.c42Force = 'slam'; c42L({ ev: 'forceRequest', id: e.c2Id });
+    try { showHint('🧪 開發者：強制 Power Dunk（' + (e.c2Id || '磐甲') + '）', 120); } catch (er) {}
+    return e.c2Id;
+  };
+  window.addEventListener('keydown', ev => {
+    if (ev.code !== 'Backslash' || ev.repeat) return;
+    try { if (!advDevHotkeysOn() || gameState !== 'playing' || advAnyDevModeOn()) return; } catch (er) { return; }
+    globalThis.c42ForcePD();
+  });
+
+  window.debugC42 = () => ({ version: GAME_VERSION, log: c42Log.slice(-60), pd: c4Log.filter(l => /^slam|^pd/.test(l.ev)).slice(-60), fx: Object.keys(c42Fx),
+    armored: enemies.filter(e => e.type === 'scorpion' && c3sType(e) === 'armored').map(e => { const s = e.c3s || {}; return { id: e.c2Id, active: e.active, st: s.st, ph: s.ph, atk: s.atkId, umbAtk: s.umbAtk, broken: !!s.broken, armor: s.armor, hp: e.hp, slamCd: s.slamCd, pdWait: s.pdWait }; }) });
+  console.log('[v0.4.02] Power Dunk 已載入');
 })();
