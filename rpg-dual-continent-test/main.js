@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.00-chapter3-combat-integration-test-1';
-const BUILD_TIME   = '2026-11-14 06:10';
+const GAME_VERSION = 'adventure-v0.4.01-chapter3-playtest-fixes-test-1';
+const BUILD_TIME   = '2026-11-14 13:10';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -32175,7 +32175,7 @@ var C1D_33_PLATFORMS;   // 3-3 平台配置（上面的安裝程式填入；這�
 //  ・大型風刃：去程只打小V（穿過其他敵人與樹木）；雨傘成功格擋 → 水平反向飛回，只打回程路線上的第一個目標
 //  ・可倒樹木：一般路邊樹（3-1／3-2／3-3）、倒樹壓傷敵人、反彈風刃可以打倒樹；坑邊三棵樹改用崖邊樹素材（使用者已同意）
 //  ・疾風蠍子：準星 搜尋 → 收斂 → 鎖定 → 衝刺，配合瞄準音效
-//  ・F8 凍結：開發者網址 ?devtools=1，或瀏覽器有舊的開發者開關 balloonV_devTools=1（只開放 F8；不會變成開發者存檔）
+//  ・F8 凍結：只認開發者網址 ?devtools=1（v0.4.01 起不再讀舊的 balloonV_devTools 開關）
 //  所有數值集中在 C4（測試值，尚未經使用者試玩驗收）
 // ════════════════════════════════════════════════════════════════════
 var C4 = {
@@ -32330,7 +32330,7 @@ function c4SwiftLockStep(e, s) {
 function c4ArmoredStep(e) {
   const T = C3S_TUNING.armored, A = C4.armored, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
   s.t++;
-  ['hurtShow', 'armorCd', 'bodyCd', 'blockCd', 'slamCd', 'wsCd', 'gap'].forEach(k => { if (s[k] > 0) s[k]--; });
+  ['hurtShow', 'armorCd', 'bodyCd', 'blockCd', 'slamCd', 'wsCd', 'gap', 'noGuard'].forEach(k => { if (s[k] > 0) s[k]--; });
   if (s.hurtT > 0) s.hurtT--;
   const dx = pc.x - ex, side = dx >= 0 ? 1 : -1, adx = Math.abs(dx);
   const alive = gameState === 'playing' && player.hp > 0 && c3sOnScreen(e);
@@ -32343,7 +32343,7 @@ function c4ArmoredStep(e) {
     return null;
   };
   const startAttack = k => { s.st = k; s.ph = 'charge'; s.t = 0; s.pt = 0; s.hitDone = false; s.fired = false; s.slamContact = false; c4L({ ev: k + 'Start', id: e.c2Id, broken: !!s.broken, dx: Math.round(dx) }); };
-  const toWalk = why => { s.st = 'walk'; s.t = 0; s.ph = null; if (why) c4L({ ev: 'armoredWalk', id: e.c2Id, why }); };
+  const toWalk = why => { s.st = 'walk'; s.t = 0; s.ph = null; e.vx = (s.face || 1) * Math.abs(e.vx || CONFIG.ENEMY_SPEED); if (why) c4L({ ev: 'armoredWalk', id: e.c2Id, why }); };
   if (s.st === 'break') { if (s.t >= A.breakStun) { toWalk('breakEnd'); s.gap = 30; } return; }
   if (s.st === 'hurt') { if (s.t >= C4.stagger.armored) toWalk('hurtEnd'); return; }
   if (s.st === 'slam') { c4SlamStep(e, s); return; }
@@ -32352,7 +32352,7 @@ function c4ArmoredStep(e) {
     s.walkT++; s.face = (e.vx || 0) < 0 ? -1 : 1;
     const atk = pickAttack(); if (atk) { startAttack(atk); return; }
     if (near) {
-      if (side === s.face) { s.st = 'guard'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'guard', id: e.c2Id }); }
+      if (side === s.face) { if (!(s.noGuard > 0)) { s.st = 'guard'; s.t = 0; s.lost = 0; c3sLogPush({ ev: 'guard', id: e.c2Id }); } }   // v0.4.01：破甲後 Guard 結束後先走動一段（不會 Guard→走 1 步→Guard 閃爍）
       else { s.st = 'turn'; s.t = 0; s.want = side; }
     }
   } else if (s.st === 'turn') {
@@ -32361,10 +32361,11 @@ function c4ArmoredStep(e) {
     s.low = pc.y < e.y - 30;
     if (near && side !== s.face) { s.st = 'turn'; s.t = 0; s.want = side; return; }
     if (s.t >= A.guardBeforeAttack) { const atk = pickAttack(); if (atk) { startAttack(atk); return; } }
-    if (s.broken && s.t >= A.brokenGuard) { toWalk('brokenGuardEnd'); s.gap = Math.max(s.gap, 20); return; }
+    if (s.broken && s.t >= A.brokenGuard) { toWalk('brokenGuardEnd'); s.gap = Math.max(s.gap, 20); s.noGuard = 75; return; }
     if (!near) { if (++s.lost > T.guardLostFrames && s.t >= T.guardMinFrames) { toWalk('guardDown'); c3sLogPush({ ev: 'guardDown', id: e.c2Id }); } } else s.lost = 0;
   }
 }
+// v0.4.01：攻擊／受傷／破甲結束回到走路時，移動方向對齊原本面向（雨傘頂開時 vx 被反向，不會因此突然背對小V而原地轉身）
 // Slam：Charge（單螯舉高、預警）→ Swing → Impact（只有落地瞬間的前幾幀有判定）→ Recover（反擊空檔）
 function c4SlamZone(e, s) {
   const A = C4.armored.slam, cx = e.x + e.w / 2, f = s.face, g = e.y + e.h;
@@ -32381,7 +32382,7 @@ function c4SlamStep(e, s) {
     if (s.pt >= S.impact) next('recover');
     return;
   }
-  if (s.ph === 'recover') { if (s.pt >= S.recover) { s.st = 'walk'; s.t = 0; s.ph = null; s.slamCd = S.cd; s.gap = A.attackGap; c4L({ ev: 'slamEnd', id: e.c2Id }); } }
+  if (s.ph === 'recover') { if (s.pt >= S.recover) { s.st = 'walk'; s.t = 0; s.ph = null; e.vx = (s.face || 1) * Math.abs(e.vx || CONFIG.ENEMY_SPEED); s.slamCd = S.cd; s.gap = A.attackGap; c4L({ ev: 'slamEnd', id: e.c2Id }); } }
 }
 function c4OnSlamImpact(e, s) {
   const z = c4SlamZone(e, s);
@@ -32431,7 +32432,7 @@ function c4WslashStep(e, s) {
   if (s.ph === 'charge') { if (s.pt >= W.charge) next('gather'); return; }
   if (s.ph === 'gather') { if (s.pt >= W.gather) next('release'); return; }
   if (s.ph === 'release') { if (!s.fired && s.pt >= W.fireAt) { s.fired = true; c4FireSlash(e, s); } if (s.pt >= W.release) next('recover'); return; }
-  if (s.ph === 'recover') { if (s.pt >= W.recover) { s.st = 'walk'; s.t = 0; s.ph = null; s.wsCd = W.cd; s.gap = A.attackGap; c4L({ ev: 'wslashEnd', id: e.c2Id }); } }
+  if (s.ph === 'recover') { if (s.pt >= W.recover) { s.st = 'walk'; s.t = 0; s.ph = null; e.vx = (s.face || 1) * Math.abs(e.vx || CONFIG.ENEMY_SPEED); s.wsCd = W.cd; s.gap = A.attackGap; c4L({ ev: 'wslashEnd', id: e.c2Id }); } }
 }
 // 大型風刃（獨立物件；放在 wsBlades 陣列裡，沿用風刃飛行音效：飛行中＝fly、反彈後＝reflect）
 function c4SlashGeom(b) {   // 可見主要風刃（不是整張透明 PNG）：前端尖端往後 85px、上下 28px
@@ -32943,16 +32944,7 @@ function c4RoadTree(x) { return { x, y: 0, h: 358, trunkW: 34, crownR: 40, state
   wrapFn('loadLevel', o => function () { stopTarget('loadLevel'); return o.apply(this, arguments); });
   wrapFn('restart', o => function () { stopTarget('restart'); return o.apply(this, arguments); });
 
-  // ── F8 凍結：?devtools=1，或這台瀏覽器有舊的開發者開關（balloonV_devTools=1）→ 只開放 F8（不會變成開發者存檔、不開其他工具）──
-  const devSwitch = () => { try { return localStorage.getItem('balloonV_devTools') === '1'; } catch (e) { return false; } };
-  wrapFn('advDevHotkeysOn', o => function () { if (o.apply(this, arguments)) return true; try { const ev = typeof window !== 'undefined' ? window.event : null; return !!(ev && ev.type === 'keydown' && ev.code === 'F8' && devSwitch()); } catch (e) { return false; } });
-  if (typeof window !== 'undefined') window.addEventListener('keydown', e => {
-    if (e.code !== 'F8' || ADVENTURE_TEST_TOOLS_ENABLED || !devSwitch()) return;   // 開發者網址時由原本的 F8 處理
-    screenFreezeForTest = !screenFreezeForTest;
-    console.log('[TestTools] screenFreezeForTest:', screenFreezeForTest, '（開發者開關 balloonV_devTools）');
-    try { showHint(screenFreezeForTest ? '畫面暫停：ON（F8 恢復）' : '畫面暫停：OFF', 120); } catch (er) {}
-    e.preventDefault();
-  });
+  // ── F8 凍結：v0.4.01 使用者決定 → 只認網址 ?devtools=1（原本的 F8 處理）；不再讀舊的 balloonV_devTools 開關 ──
 
   if (typeof window !== 'undefined') Object.assign(window, {
     debugC4: () => ({ version: GAME_VERSION, ready: { moves: c4MovesReady(), missing: c4Missing.slice(), cliff: !!(c4CliffImg('tree') && c4CliffImg('root')) },
@@ -32963,4 +32955,322 @@ function c4RoadTree(x) { return { x, y: 0, h: 358, trunkW: 34, crownR: 40, state
       freeze: screenFreezeForTest, log: c4Log.slice(-80), tuning: JSON.parse(JSON.stringify(C4)) }),
   });
   console.log('[v0.4.00] 第三章戰鬥系統整合已載入');
+})();
+
+// ════════════════════════════════════════════════════════════════════
+//  v0.4.01 第三章實玩修正（adventure-v0.4.01-chapter3-playtest-fixes-test-1）
+//  P1 樹木前景（石頭、草皮）畫在人物與敵人後面　P2 導風失敗 RPG　P3 倒樹碰撞（樹幹＋樹冠包絡、掃掠）＋磐甲 Guard 規則
+//  P3-C 倒樹與敵人的圖層（被壓住時樹在前面，離開後恢復）　P4 3-3 斜向上樹橋　P5 磐甲巡邏卡住／原地抖動
+//  P6 破甲後換動作的過渡　P7 失敗回家結束小狗同行　P8 一般模式結算不顯示開發說明　P9 F8 只認 ?devtools=1（在 v0.4.00 區塊移除舊開關）
+// ════════════════════════════════════════════════════════════════════
+var C41 = {
+  treeEnvR: 40,            // 樹冠包絡：每個點的半徑（原圖 px；×0.29 ≈ 11.6 遊戲 px）
+  treeEnvPad: 4,           // 再加 4px 寬容
+  sweepSteps: 4,           // 每一步把倒下角度切成 4 段檢查（倒得快也不會直接穿過）
+  crushAfterLand: 10,      // 落地後 10 步內仍可結算（剛好壓在落點上的敵人）
+  pinFxFrames: 75,         // 被壓擊倒的 Defeat 演出期間，樹畫在前面
+  slopeStepUp: 22,         // 從地面走上斜樹橋：腳底在斜面下方 22px 內會被帶上去（樹根那一端的高度）
+  slopeStick: 26,          // 已經站在斜面上：往下走時黏住斜面的範圍
+  slopeLand: 14,           // 從空中落到斜面上
+  poseFade: 6,             // 破甲後換動作：前一張圖用 6 步淡出（只是過渡，招式圖仍是完整盔甲版）
+  windFailNoUmbForB: 3,    // 第 3 次「沒撐雨傘被導風吹進坑」→ 對話 B
+  patrolFix: true,         // 巡邏邊界修正（測試時可以關掉，重現 v0.4.00 的原地抖動）
+};
+var c41Log = [];
+function c41L(o) { try { o.frame = frameCount; c41Log.push(o); if (c41Log.length > 300) c41Log.shift(); } catch (e) {} }
+// 樹冠包絡點（原圖座標，以樹幹支點為原點；從原圖透明度量出：72px 方格、覆蓋率 > 50% 的格子中心）
+const C41_ENV = {
+  std: [[-30,-1190],[42,-1190],[-102,-1118],[-30,-1118],[42,-1118],[114,-1118],[-174,-1046],[-102,-1046],[-30,-1046],[42,-1046],[114,-1046],[186,-1046],[258,-1046],[330,-1046],[-246,-974],[-174,-974],[-102,-974],[-30,-974],[42,-974],[114,-974],[186,-974],[258,-974],[-246,-902],[-174,-902],[-102,-902],[-30,-902],[42,-902],[114,-902],[186,-902],[258,-902],[330,-902],[402,-902],[-246,-830],[-174,-830],[-102,-830],[-30,-830],[42,-830],[114,-830],[186,-830],[258,-830],[330,-830],[402,-830],[474,-830],[-30,-758],[42,-758],[186,-758],[258,-758],[330,-758],[402,-758],[-30,-686],[42,-686],[114,-686],[258,-686]],
+  cliff: [[-30,-1334],[42,-1334],[-174,-1262],[-102,-1262],[-30,-1262],[42,-1262],[114,-1262],[186,-1262],[-174,-1190],[-102,-1190],[-30,-1190],[42,-1190],[114,-1190],[186,-1190],[258,-1190],[330,-1190],[-246,-1118],[-174,-1118],[-102,-1118],[-30,-1118],[42,-1118],[114,-1118],[186,-1118],[258,-1118],[330,-1118],[-318,-1046],[-246,-1046],[-174,-1046],[-102,-1046],[-30,-1046],[42,-1046],[114,-1046],[186,-1046],[258,-1046],[330,-1046],[-318,-974],[-246,-974],[-174,-974],[-102,-974],[-30,-974],[42,-974],[114,-974],[186,-974],[258,-974],[330,-974],[402,-974],[474,-974],[-174,-902],[-102,-902],[-30,-902],[42,-902],[114,-902],[186,-902],[258,-902],[330,-902],[402,-902],[474,-902],[-30,-830],[42,-830],[114,-830],[186,-830],[258,-830],[330,-830],[-30,-758],[42,-758],[114,-758],[258,-758]],
+};
+// 樹木在角度 ang 時的碰撞形狀：樹幹（加粗線段）＋樹冠包絡點（圓）→ 回傳世界座標
+function c41TreeShape(t, ang) {
+  const G = c3TreeGeom(t), s = G.s, ca = Math.cos(ang), sa = Math.sin(ang);
+  const tr = (lx, ly) => ({ x: G.px + lx * ca - ly * sa, y: G.py + lx * sa + ly * ca });
+  const pts = (c4TreeArt(t).cliff ? C41_ENV.cliff : C41_ENV.std).map(([x, y]) => tr(x * s, y * s));
+  const a = tr(0, 18), b = tr(0, -G.len);
+  return { seg: { x0: a.x, y0: a.y, x1: b.x, y1: b.y, r: G.half + C41.treeEnvPad }, pts, r: C41.treeEnvR * s + C41.treeEnvPad };
+}
+function c41ShapeHitsRect(sh, x, y, w, h) {
+  if (c4SegRect(sh.seg, x, y, w, h)) return true;
+  for (const p of sh.pts) { const nx = Math.max(x, Math.min(p.x, x + w)), ny = Math.max(y, Math.min(p.y, y + h)); if ((p.x - nx) * (p.x - nx) + (p.y - ny) * (p.y - ny) <= sh.r * sh.r) return true; }
+  return false;
+}
+function c41ERect(e) { return [e.x + 4, e.y + 4, e.w - 8, e.h - 4]; }
+// ── P3／P3-C：倒樹壓傷（掃掠＋包絡）與「壓在樹下」的圖層狀態 ──
+function c41TreeCrushStep() {
+  breakableTrees.forEach(t => {
+    if (!t.c3Art) return;
+    if (t.state === 'standing') { t._c41Prev = 0; if (t._c41Pin) t._c41Pin.clear(); return; }
+    const ang = c3TreeAngle(t), prev = t._c41Prev == null ? 0 : t._c41Prev; t._c41Prev = ang;
+    t._c41Pin = t._c41Pin || new Set(); t._c4Crushed = t._c4Crushed || new Set();
+    if (t.state === 'fallen' && t._c41LandF == null) t._c41LandF = frameCount;
+    const crushing = t.state === 'falling' || (t.state === 'fallen' && frameCount - t._c41LandF <= C41.crushAfterLand);
+    if (crushing) {
+      enemies.forEach(e => {
+        if (!e.active || t._c4Crushed.has(e.runtimeId)) return;
+        let hit = false, hitAng = 0;
+        for (let i = 1; i <= C41.sweepSteps && !hit; i++) {
+          const a = prev + (ang - prev) * i / C41.sweepSteps;
+          if (Math.abs(a) < 0.3) continue;   // 剛開始傾倒（約 17° 以內）碰不到地面上的敵人
+          if (c41ShapeHitsRect(c41TreeShape(t, a), ...c41ERect(e))) { hit = true; hitAng = a; }
+        }
+        if (!hit) return;
+        const st = e.c3s ? e.c3s.st : null, armor0 = e.c3s ? e.c3s.armor : null, hp0 = e.hp;
+        const res = damageScorpionEnemy(e, C4.tree.crushDamage, 'tree', killed => { spawnScorpionDefeatEffect(killed); t._c41PinFxUntil = frameCount + C41.pinFxFrames; });
+        if (res && !c3sType(e)) { try { sfxPlay('scorpionHurt'); } catch (er) {} }
+        if (res !== false || !e.active) t._c4Crushed.add(e.runtimeId);   // 被受擊保護擋下時下一步再試；同一次倒樹最多結算一次
+        t._c41Pin.add(e.runtimeId);
+        try { c4L({ ev: 'treeCrush', tree: Math.round(t.x), target: e.c2Id || e.runtimeId, variant: e.variant, result: res, hp: e.hp, armor: e.c3s ? e.c3s.armor : null, deg: Math.round(Math.abs(hitAng) * 180 / Math.PI), by: 'v0.4.01' }); } catch (er) {}   // 舊紀錄格式也保留一份
+        c41L({ ev: 'treeCrush', tree: Math.round(t.x), target: e.c2Id || e.runtimeId, variant: e.variant, stAtHit: st, armorBefore: armor0, armorAfter: e.c3s ? e.c3s.armor : null, hpBefore: hp0, hpAfter: e.hp, result: res, deg: Math.round(Math.abs(hitAng) * 180 / Math.PI) });
+      });
+    }
+    // 落地瞬間：樹冠下的敵人＝被壓住（樹畫在牠前面）
+    if (t.state === 'fallen' && !t._c41Landed) { t._c41Landed = true; const sh = c41TreeShape(t, ang); enemies.forEach(e => { if (e.active && c41ShapeHitsRect(sh, ...c41ERect(e))) t._c41Pin.add(e.runtimeId); }); }
+    // 每一步重新判斷：已經離開樹的範圍（或被擊倒）→ 不再壓在下面；之後再走進來＝從外面走進來 → 畫在樹前面
+    if (t._c41Pin.size) {
+      const sh = c41TreeShape(t, ang);
+      for (const id of [...t._c41Pin]) { const e = enemies.find(q => q.runtimeId === id); if (!e || !e.active || !c41ShapeHitsRect(sh, ...c41ERect(e))) { t._c41Pin.delete(id); c41L({ ev: 'unpin', tree: Math.round(t.x), target: e ? (e.c2Id || id) : id }); } }
+    }
+  });
+}
+function c41TreeInFront(t) { return t.c3Art && t.state !== 'standing' && ((t._c41Pin && t._c41Pin.size > 0) || (t._c41PinFxUntil && frameCount < t._c41PinFxUntil)); }
+
+// ── P4：斜向上樹橋（只有關卡指定、往指定方向倒、而且平台在合理距離內的樹）──
+// 支點 P、倒下角度 α（從直立往右轉）：樹幹上表面一點＝P + s·(sinα, −cosα) + half·(−cosα, −sinα)
+// 求 α 讓樹幹上表面剛好經過平台左上角往內 inset 的那一點 → 樹冠斜靠在平台上
+function c41SlopeSolve(t) {
+  const spec = t.c41SlopeTo, P = spec && typeof C1D_33_PLATFORMS !== 'undefined' ? C1D_33_PLATFORMS[spec] : null; if (!P) return null;
+  const plat = (platforms || []).find(p => !p.treeLog && p.x === P.x && p.y === P.y); if (!plat) return null;
+  const G = c3TreeGeom(t), X = plat.x - player.w / 2 + 1, Y = plat.y;   // 小V右緣一碰到平台就由平台接手 → 斜面在那一點剛好升到平台高度（不會在平台邊突然跳 10px）
+  const dx = X - G.px, dy = G.py - Y; if (dx <= 0 || dy <= 0) return null;
+  const D2 = dx * dx + dy * dy, s = Math.sqrt(Math.max(0, D2 - G.half * G.half));
+  if (s > G.len * 1.25 || s < G.len * 0.5) return null;   // 太遠（樹搆不到）或太近 → 照原本平倒
+  const ang = Math.atan2(dx, dy) + Math.atan2(G.half, s);
+  return { ang, s, X, Y, plat };
+}
+function c41BuildSlope(t) {
+  const G = c3TreeGeom(t), a = t.c41Final, ca = Math.cos(a), sa = Math.sin(a);
+  const top = s => ({ x: G.px + s * sa - G.half * ca, y: G.py - s * ca - G.half * sa });
+  const p0 = top(-C3_TREE_ART.bridgeBackPx), p1 = { x: t.c41SlopeInfo.X, y: t.c41SlopeInfo.Y };
+  const k = (p1.y - p0.y) / (p1.x - p0.x);
+  t.c41Slope = { x0: p0.x, y0: p0.y, x1: p1.x, y1: p1.y, k, deg: Math.round(a * 180 / Math.PI) };
+  c41L({ ev: 'slopeBuilt', tree: Math.round(t.x), slope: { x0: Math.round(p0.x), y0: Math.round(p0.y), x1: Math.round(p1.x), y1: Math.round(p1.y) }, deg: t.c41Slope.deg });
+}
+function c41SlopeY(sl, x) { return sl.y0 + (x - sl.x0) * sl.k; }
+var c41OnSlope = null;
+function c41SlopeStep() {
+  const slopes = breakableTrees.filter(t => t.state === 'fallen' && t.c41Slope).map(t => t.c41Slope);
+  if (!slopes.length || gameState !== 'playing') { c41OnSlope = null; return; }
+  const cx = player.x + player.w / 2, feet = player.y + player.h;
+  let snapped = null;
+  for (const sl of slopes) {
+    if (cx < sl.x0 || cx > sl.x1) continue;
+    const ly = c41SlopeY(sl, cx), d = feet - ly;   // d > 0：腳在斜面下方
+    const was = c41OnSlope === sl;
+    let tol = C41.slopeLand;
+    if (was) tol = C41.slopeStick;
+    else if (player.onGround && feet >= GROUND_Y - 1 && ly >= GROUND_Y - C41.slopeStepUp - 2) tol = C41.slopeStepUp;   // 樹根那一端：從地面走上去
+    if ((player.vy >= 0 || was) && d >= -2 && d <= tol) { player.y = ly - player.h; player.vy = 0; player.onGround = true; snapped = sl; break; }
+  }
+  c41OnSlope = snapped;
+}
+
+(function c41Install() {
+  if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
+  const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._c41w) { if (typeof o !== 'function') console.warn('[v0.4.01] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._c41w = true; globalThis[name] = w; };
+
+  // ── P5：巡邏邊界 — 超出範圍時「朝巡邏中心走回來」（原本是每一步把方向反過來 → 被推出範圍的磐甲會原地左右翻轉抖動、回不了巡邏）──
+  //   做法：在原本巡邏程式「之前」處理 — 走路中、已在範圍外的第三章蠍子，方向設成朝巡邏中心，這一步暫時不讓原本程式反轉方向。
+  //   （第一版是在原本程式之後才修正，但蠍子 AI 在中間已讀到被反轉的方向 → 攻擊結束後會先背對小V、原地轉身）
+  wrapFn('updateEnemies', o => function () {
+    const held = [];
+    try {
+      const lv = LEVELS[currentLevelIndex];
+      if (C41.patrolFix && lv && lv.chapterId === 3) enemies.forEach(e => {
+        if (!e.active || e.type !== 'scorpion' || !(e.patrolRange >= 0)) return;
+        if (e.c3s && e.c3s.st && e.c3s.st !== 'walk') return;
+        const lo = e.patrol - e.patrolRange, hi = e.patrol + e.patrolRange;
+        const back = e.x < lo ? 1 : e.x > hi ? -1 : 0;   // 朝巡邏中心的方向
+        if (!back) return;
+        if (Math.sign(e.vx || 0) !== back) { e.vx = back * Math.abs(e.vx || CONFIG.ENEMY_SPEED); e._c41Return = (e._c41Return || 0) + 1; }
+        held.push([e, e.patrolRange]); e.patrolRange = 1e9;
+      });
+    } catch (er) {}
+    try { return o.apply(this, arguments); }
+    finally { held.forEach(([e, r]) => { if (e.patrolRange === 1e9) e.patrolRange = r; }); }
+  });
+
+  // ── P3-B：磐甲被倒樹壓到 → 命中瞬間在 Guard：盔甲 −1；不在 Guard：本體 −1（不會兩個都扣）──
+  wrapFn('c3sOnHit', o => function (base, e, amount, source, onKill, rest) {
+    if (source !== 'tree' || c3sType(e) !== 'armored') return o.apply(this, arguments);
+    const A = C3S_TUNING.armored, s = c3sState(e);
+    if (s.st === 'guard' && !s.broken && s.armor > 0) {
+      if (s.armorCd > 0) return false;
+      s.armorCd = A.armorHitCd; s.armor = Math.max(0, s.armor - 1); s.blocks++;
+      try { sfxPlay('c2UmbrellaBlock'); sfxPlay('scorpionHurt'); } catch (er) {}
+      if (s.armor <= 0) c4ArmorBreak(e, s, 'tree');
+      else { s.hurtShow = C4.hurt.armored; c4L({ ev: 'armorHit', id: e.c2Id, source: 'tree', armor: s.armor, hp: e.hp }); }
+      c41L({ ev: 'treeVsArmored', id: e.c2Id, guard: true, armor: s.armor, hp: e.hp });
+      return true;
+    }
+    if (s.bodyCd > 0) return false;
+    s.bodyCd = A.bodyHitCd; e.hurtCooldown = 0;
+    const r = base.call(this, e, 1, 'tree', onKill, ...(rest || []));
+    if (r) { try { sfxPlay('scorpionHurt'); } catch (er) {} }
+    if (r === true) {
+      s.hurtShow = C4.hurt.armored;
+      const interruptible = ['walk', 'guard', 'turn'].includes(s.st) || ((s.st === 'slam' || s.st === 'wslash') && (s.ph === 'charge' || s.ph === 'gather'));
+      if (interruptible) { s.st = 'hurt'; s.t = 0; s.ph = null; s.gap = Math.max(s.gap || 0, 30); }
+    }
+    c41L({ ev: 'treeVsArmored', id: e.c2Id, guard: false, armor: s.armor, hp: e.hp, result: r });
+    return r;
+  });
+  globalThis.c4TreeCrushStep = c41TreeCrushStep;   // 取代 v0.4.00 只看樹幹線段的判定
+
+  // ── P4：斜向上樹橋 ──
+  const tagTrees = () => { try { const lv = LEVELS[currentLevelIndex]; if (lv && lv.stageId === '3-3') breakableTrees.forEach(t => { if (t.c4Road && t.x === 4520) t.c41SlopeTo = 'DL1'; }); } catch (er) {} };
+  const resetTree = t => { t._c41Prev = 0; t._c41Pin = null; t._c41Landed = false; t._c41LandF = null; t._c41PinFxUntil = 0; t.c41Final = null; t.c41SlopeInfo = null; t.c41Slope = null; };
+  wrapFn('loadLevel', o => function () { const r = o.apply(this, arguments); try { breakableTrees.forEach(resetTree); tagTrees(); } catch (er) {} c41OnSlope = null; return r; });
+  wrapFn('restart', o => function () { const r = o.apply(this, arguments); try { breakableTrees.forEach(resetTree); tagTrees(); } catch (er) {} c41OnSlope = null; return r; });
+  wrapFn('c3TreeAngle', o => function (t) { const v = o.apply(this, arguments); return t && t.c41Final ? v * (t.c41Final / (Math.PI / 2)) : v; });   // 斜靠樹：倒到 α 就停（倒下過程同一條軌跡）
+  wrapFn('c3TreeBridge', o => function (t) { if (t && t.c41SlopeInfo) return { x: -99999, y: -99999, w: 1, h: 1 }; return o.apply(this, arguments); });   // 斜靠樹不建水平樹幹橋（改用斜面）
+  wrapFn('updateBreakableTrees', o => function () {
+    try {
+      tagTrees();
+      breakableTrees.forEach(t => {
+        if (t.c41SlopeTo && t.state === 'falling' && t.c41Final == null && t.fallDir === 1) {
+          const sv = c41SlopeSolve(t); t.c41Final = sv ? sv.ang : 0; t.c41SlopeInfo = sv;
+          if (!sv) t.c41Final = null;
+          c41L({ ev: 'slopeSolve', tree: Math.round(t.x), ok: !!sv, deg: sv ? Math.round(sv.ang * 180 / Math.PI) : null });
+        }
+      });
+    } catch (er) {}
+    const r = o.apply(this, arguments);
+    try { breakableTrees.forEach(t => { if (t.state === 'fallen' && t.c41SlopeInfo && !t.c41Slope) c41BuildSlope(t); }); } catch (er) {}
+    return r;
+  });
+  wrapFn('updatePlayer', o => function () { const r = o.apply(this, arguments); try { c41SlopeStep(); } catch (er) {} return r; });
+
+  // ── P1／P3-C：樹木圖層 — 樹木與樹根前景（石頭、草皮）先畫，在敵人、小V、小狗後面；被壓住的敵人之後再把那棵樹畫在牠前面 ──
+  let preDone = false, bypass = false;
+  wrapFn('drawWorldInner', o => function () { preDone = false; return o.apply(this, arguments); });
+  const prePass = () => {
+    if (preDone) return; preDone = true;
+    const cx = cameraX;
+    bypass = true;
+    try { breakableTrees.forEach(t => { if (!t.c3Art) return; const sx = t.x - cx; if (sx > CANVAS_W + 140 || sx + (t.pivotRight ? t.h + 160 : 80) < -10) return; drawBreakableTree(sx, t); }); } finally { bypass = false; }
+    try { if (c3TreeArtReady()) c41DrawRootFg(cx); } catch (er) {}
+  };
+  const c41DrawRootFg = globalThis.drawC3TreeRootFg;   // v0.4.00 的樹根前景畫法（坑邊裁切、崖邊草皮）
+  globalThis.drawC3TreeRootFg = function (cx) { if (preDone) return; c41DrawRootFg(cx); };   // 原本在小V後面才畫 → 已經在樹木那一層畫過，不再蓋住人物
+  wrapFn('drawEnemy', o => function () { try { if (!preDone) prePass(); } catch (er) {} return o.apply(this, arguments); });
+  wrapFn('drawBreakableTree', o => function (sx, t) {
+    if (t && t.c3Art && !bypass) { if (!preDone) prePass(); return; }   // 原本在敵人後面的那一輪：已經畫過
+    return o.apply(this, arguments);
+  });
+  wrapFn('drawScorpionDefeatEffects', o => function (cx) {
+    try { if (!preDone) prePass(); } catch (er) {}
+    const r = o.apply(this, arguments);
+    try {   // 壓住敵人的倒樹：再畫一次在敵人（與被壓擊倒的演出）前面；小V、小狗仍在最前面
+      bypass = true;
+      breakableTrees.forEach(t => { if (c41TreeInFront(t)) drawBreakableTree(t.x - cx, t); });
+    } catch (er) {} finally { bypass = false; }
+    return r;
+  });
+
+  // ── P6：破甲後換動作的過渡（前一張圖淡出 6 步；招式圖本身仍是完整盔甲版 → 需要補破甲版美術）──
+  wrapFn('c3sDraw', o => function (sx, e) {
+    const T = c3sType(e), s = e.c3s;
+    if (T === 'armored' && s) {
+      const pose = c4Pose(e);
+      if (s._c41Pose !== pose) { s._c41Prev = s._c41Pose; s._c41PoseF = frameCount; s._c41Pose = pose; }
+    }
+    const r = o.apply(this, arguments);
+    try {
+      if (r && T === 'armored' && s && s.broken && s._c41Prev && c3sCanv.armored[s._c41Prev]) {
+        const k = (frameCount - s._c41PoseF) / C41.poseFade;
+        if (k >= 0 && k < 1) c4Blit('armored', s._c41Prev, sx + e.w / 2, c4Ground(e, 'armored'), c3sFace(e), (1 - k) * 0.85);
+      }
+    } catch (er) {}
+    return r;
+  });
+
+  // ── P7：小狗同行 — 失敗／暫停回家＝這一趟冒險的同行結束；再出發要重新「帶狗出發」──
+  const isC3 = () => { const lv = LEVELS[currentLevelIndex]; return !!(lv && lv.chapterId === 3); };
+  const dogState = () => ({ owned: !!((playerInventory.balloonDog || {}).present && ((playerInventory.balloonDog || {}).turnsLeft || 0) > 0), homeState: (typeof h2DogState === 'function') ? h2DogState() : null, planned: nextBringDog === true, inRun: bringBalloonDog === true, levelStart: levelStartBringDog === true, snap: levelStartSnapshot ? levelStartSnapshot.bringBalloonDog : null });
+  wrapFn('v396ReturnHome', o => function (source) {
+    const c3 = isC3(), before = dogState();
+    const r = o.apply(this, arguments);
+    if (c3) {
+      bringBalloonDog = false; levelStartBringDog = false; nextBringDog = false;
+      if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = false;
+      try { refreshDogTripUi(); } catch (er) {}
+      c41L({ ev: 'dogTripEnded', source, stage: (LEVELS[currentLevelIndex] || {}).stageId, before, after: dogState() });
+    }
+    return r;
+  });
+  wrapFn('homeGoNextLevel', o => function () {
+    if ((homeEntryMode === 'failed' || gameState === 'failed' || gameState === 'gameover') && isC3()) {
+      const dog = nextBringDog === true && dogState().owned;   // 只有玩家這次在小V的家按了「帶狗出發」才同行
+      bringBalloonDog = dog; levelStartBringDog = dog; if (levelStartSnapshot) levelStartSnapshot.bringBalloonDog = dog; nextBringDog = false;
+      c41L({ ev: 'retryDepart', stage: (LEVELS[currentLevelIndex] || {}).stageId, dog });
+    }
+    return o.apply(this, arguments);
+  });
+  wrapFn('h2DepartCheck', o => function () {
+    try {
+      const lv = LEVELS[currentLevelIndex];
+      if ((homeEntryMode === 'failed' || gameState === 'failed' || gameState === 'gameover') && lv && lv.stageId === '3-1') {   // 3-1 一定要帶狗（沿用 3-1 出發檢查的文字與引導）
+        const st = dogState();
+        if (!st.owned) return { kind: 'blocked', sub: '請先製作氣球小狗', msg: '3-1 需要氣球小狗一起尋寶，但家裡沒有可以同行的小狗。', detail: '打開氣球秘笈做一隻氣球小狗，再按「帶狗出發」。', fix: { card: 'recipes', focus: 'balloonDog', label: '打開氣球秘笈' } };
+        if (!st.planned) return { kind: 'blocked', sub: '請先安排小狗同行', msg: '3-1 要和氣球小狗一起尋寶，請先按「帶狗出發」。', detail: '在右邊的氣球小狗卡片按「帶狗出發」（用 260 ×1 做狗繩）。', fix: { card: 'dog', label: '帶狗出發' } };
+      }
+    } catch (er) {}
+    return o.apply(this, arguments);
+  });
+
+  // ── P8：一般模式（沒有 ?devtools=1）的通關摘要：拿掉「本次取得…（背包說明）」整格、拿掉「不用全部打倒也能通關」──
+  wrapFn('h2ShowSummary', o => function (s) {
+    try {
+      if (s && Array.isArray(s.rows) && !advDevMode()) {
+        const before = s.rows.length;
+        s.rows = s.rows.filter(r => r.emoji !== '🎒').map(r => (r && typeof r.text === 'string' && r.text.includes('不用全部打倒也能通關')) ? Object.assign({}, r, { text: r.text.replace('（不用全部打倒也能通關）', '') }) : r);
+        c41L({ ev: 'summaryTrim', before, after: s.rows.length });
+      }
+    } catch (er) {}
+    return o.apply(this, arguments);
+  });
+
+  // ── P2：導風失敗 RPG ──
+  const WF_KEY = 'balloonV_c41WindFail_v1';   // 依玩家／模式各自存檔（沿用本版本的存檔分流）
+  const wfLoad = () => { try { return Object.assign({ wind: 0, noUmb: 0 }, JSON.parse(localStorage.getItem(WF_KEY) || '{}')); } catch (e) { return { wind: 0, noUmb: 0 }; } };
+  const wfSave = d => { try { localStorage.setItem(WF_KEY, JSON.stringify(d)); } catch (e) {} };
+  const RPG_A = 'c41_wind_fail_first', RPG_B = 'c41_wind_fail_umbrella';
+  wrapFn('rpgBuildScene', o => function (id) {
+    if (id === RPG_A) return { id, title: '導風裝置', policy: 'oncePerPlayer', saveHistory: true, left: 'balloonv_shocked', right: null, pages: [{ sp: 'balloonv', face: 'balloonv_shocked', text: '哇!!這個裝置有風!' }] };
+    if (id === RPG_B) return { id, title: '飛不夠遠', policy: 'oncePerPlayer', saveHistory: true, left: 'balloonv_confused', right: null, pages: [{ sp: 'balloonv', face: 'balloonv_confused', text: '還是飛不夠遠...雨傘會不會有幫助?' }] };
+    return o.apply(this, arguments);
+  });
+  wrapFn('wdPitHit', o => function (pit) {
+    const A = wd.attempt;   // 有飛行紀錄＝這一次是被導風裝置的風吹起來（自己跳進坑、普通掉坑沒有紀錄）
+    const blown = !!(A && !A._c41 && (A.airborne || A.frames > 0));
+    const umb = !!(A && A.umbrella);   // 從被風吹離機關到掉坑的整段過程中有沒有撐雨傘
+    const r = o.apply(this, arguments);
+    if (blown) {
+      A._c41 = true;
+      const d = wfLoad(); d.wind++; if (!umb) d.noUmb++; wfSave(d);
+      c41L({ ev: 'windFail', wind: d.wind, noUmb: d.noUmb, umbrella: umb, ang: A.ang });
+      const ok = () => gameState === 'playing' && player.hp > 0;
+      try { if (d.wind >= 1 && !rpgIsSeen(RPG_A)) rpgRequest(RPG_A, ok); } catch (er) {}
+      try { if (!umb && d.noUmb >= C41.windFailNoUmbForB && !rpgIsSeen(RPG_B)) rpgRequest(RPG_B, ok); } catch (er) {}
+    } else c41L({ ev: 'pitNoWind' });
+    return r;
+  });
+
+  if (typeof window !== 'undefined') Object.assign(window, {
+    debugC41: () => ({ version: GAME_VERSION, log: c41Log.slice(-80), windFail: wfLoad(), dog: dogState(), onSlope: !!c41OnSlope,
+      trees: breakableTrees.map(t => ({ x: t.x, st: t.state, dir: t.fallDir || null, slopeTo: t.c41SlopeTo || null, finalDeg: t.c41Final ? Math.round(t.c41Final * 180 / Math.PI) : null, slope: t.c41Slope || null, pin: t._c41Pin ? [...t._c41Pin].map(id => (enemies.find(e => e.runtimeId === id) || {}).c2Id || id) : [], front: c41TreeInFront(t) })) }),
+  });
+  console.log('[v0.4.01] 第三章實玩修正已載入');
 })();
