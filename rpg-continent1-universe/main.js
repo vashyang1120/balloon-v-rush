@@ -683,8 +683,28 @@ function resolveAdventureAssetSrc(path) {
 
 function resolveAdventureAvatarSrc(avatarKey) {
   if (!avatarKey) return resolveAdventureAvatarSrc('boy1');
-  // 共用 vparty-rhythm-game 的頭像資源
-  return 'https://vashyang1120.github.io/balloon-v-universe/assets/avatars/base/' + avatarKey + '.png';   // v0.4.0：遊戲宇宙共用身份圖案（不各自複製）
+  // v0.3.2（遊戲宇宙）：用共用 SDK 解析頭像圖片 — 身份頭像、可解鎖展示頭像（氣球哥哥…）、管理員授權、學生專屬都走同一份共用資料
+  //   （之前所有 key 都被當成身份頭像，展示頭像的圖片不存在 → 只剩紅色氣球）
+  try {
+    if (typeof BVUniverse !== 'undefined' && BVUniverse && typeof BVUniverse.avatarImageUrl === 'function') {
+      const u = BVUniverse.avatarImageUrl(avatarKey);
+      if (u) return u;
+    }
+  } catch (e) {}
+  return 'https://vashyang1120.github.io/balloon-v-universe/assets/avatars/base/' + avatarKey + '.png';   // v0.4.0：遊戲宇宙共用身份圖案（SDK 載入失敗時的備援）
+}
+/* v0.3.2：頭像圖片載入失敗 → 先改用玩家的身份頭像，並記錄原因；身份頭像也失敗才顯示原本的🎈備援 */
+function advAvatarFallback(img) {
+  try {
+    const key = img.getAttribute('data-ava-key') || '';
+    let base = 'boy1';
+    try { const p = (typeof C1U !== 'undefined' && (C1U.profile || C1U.cachedProfile)) || (typeof playerProfile !== 'undefined' ? playerProfile : null); if (p && p.baseAvatarKey) base = p.baseAvatarKey; } catch (e) {}
+    console.warn('[派對島] 頭像圖片載入失敗：', key || '(未知)', img.src);
+    if (img.dataset.avaFellBack || key === base) return false;
+    img.dataset.avaFellBack = '1';
+    img.src = resolveAdventureAvatarSrc(base);
+    return true;
+  } catch (e) { return false; }
 }
 
 
@@ -16690,9 +16710,9 @@ function buildPassportAvatarHtml(avatarKey, size, label) {
   const url = resolveAdventureAvatarSrc(avatarKey || 'boy1'); // 使用統一 resolver
   const sz = size || 80;
   return '<div class="passport-avatar-wrap">'
-    + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(avatarKey) + '"'
+    + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(avatarKey) + '" data-ava-key="' + escapeHtml(avatarKey || 'boy1') + '"'
     + ' class="passport-avatar-img" style="width:' + sz + 'px;height:' + sz + 'px;"'
-    + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+    + ' onerror="if(!advAvatarFallback(this)){this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'}">'
     + '<div class="passport-avatar-fallback" style="width:' + sz + 'px;height:' + sz + 'px;display:none">🎈</div>'
     + (label ? '<div class="passport-avatar-label">' + escapeHtml(label) + '</div>' : '')
     + '</div>';
@@ -21195,7 +21215,7 @@ function advShowFinalResults(snap, best) {
   el.innerHTML = '<div class="adv-final-scroll"><div class="adv-final-panel">'
     + (snap.testOnly ? '<div class="adv-test-banner">🧪 測試紀錄預覽：' + (snap.complete ? '這趟冒險使用過測試捷徑' : '沒有依序完成正式七關') + '，不會更新個人最佳</div>' : '')
     + '<div class="adv-final-top">'
-    +   '<div class="adv-final-player"><div class="adv-avatar-wrap"><img class="adv-avatar" src="' + escapeHtml(avatarSrc) + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="adv-avatar-fb" style="display:none">🎈</div></div>'
+    +   '<div class="adv-final-player"><div class="adv-avatar-wrap"><img class="adv-avatar" src="' + escapeHtml(avatarSrc) + '" alt="" onerror="if(!advAvatarFallback(this)){this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'}"><div class="adv-avatar-fb" style="display:none">🎈</div></div>'
     +     '<div class="adv-player-name">' + escapeHtml(name) + '</div></div>'
     +   '<div class="adv-final-head">'
     +     '<div class="adv-final-title">派對島大冒險完成！</div>'
@@ -22087,7 +22107,7 @@ function h2RenderAll() {
 function h2Profile() { return playerProfile || loadPlayerProfile(); }
 function h2AvaHtml(key, tag) {
   return '<span class="h2-ava"><span>🎈</span>'
-    + '<img src="' + h2Esc(resolveAdventureAvatarSrc(key || 'boy1')) + '" alt="' + h2Esc(tag) + '" style="position:absolute;inset:0" onerror="this.remove()">'
+    + '<img src="' + h2Esc(resolveAdventureAvatarSrc(key || 'boy1')) + '" data-ava-key="' + h2Esc(key || 'boy1') + '" alt="' + h2Esc(tag) + '" style="position:absolute;inset:0" onerror="if(!advAvatarFallback(this))this.remove()">'
     + (tag ? '<span class="h2-ava-tag">' + h2Esc(tag) + '</span>' : '') + '</span>';
 }
 function h2RenderPlayer() {
@@ -31046,7 +31066,9 @@ function c1uWindowUrl() { return resolveAdventureAssetSrc(c1uHomeWindowFor(c1uCu
 // ── 身份確認（唯讀）：正式＝遊戲宇宙 API；sandbox＝大廳沙盒（同分頁 sessionStorage），不連網 ──
 C1U.verify = C1U.guest ? (C1U.error ? 'badLink' : 'guest') : 'checking';
 function c1uApplyProfile(p) {
-  C1U.profile = { displayId: p.displayId, baseAvatarKey: p.baseAvatarKey, displayAvatarKey: p.displayAvatarKey || p.baseAvatarKey };
+  C1U.profile = { displayId: p.displayId, baseAvatarKey: p.baseAvatarKey, displayAvatarKey: p.displayAvatarKey || p.baseAvatarKey,
+    // v0.3.2：遊戲宇宙「共用稱號」（跨遊戲裝備，只顯示；和派對島自己的冒險稱號是兩套，不寫入冒險稱號存檔）
+    sharedTitle: p.title && p.title.name ? String(p.title.name) : null };
   try { localStorage.setItem('bvUniverseAdventure_v1_' + C1U.mode + '_profile__' + C1U.playerId, JSON.stringify(Object.assign({ checkedAt: Date.now() }, C1U.profile))); } catch (e) {}
   try { playerProfile = loadPlayerProfile(); } catch (e) {}
 }
@@ -31097,7 +31119,7 @@ function c1uIdentityCardHtml(where) {
   const pr = (C1U.profile || C1U.cachedProfile || {});
   const name = pr.displayId || '遊戲宇宙玩家', av = pr.displayAvatarKey || pr.baseAvatarKey || 'boy1';
   const st = C1U.verify === 'ok' ? '已確認' : C1U.verify === 'checking' ? '確認中…' : (C1U.cachedProfile ? '暫時無法連線，使用上次確認的資料' : '暫時無法連線確認');
-  return '<div class="c1u-id"><img class="c1u-id-ava" src="' + esc(resolveAdventureAvatarSrc(av)) + '" alt="" onerror="this.style.visibility=\'hidden\'">'
+  return '<div class="c1u-id"><img class="c1u-id-ava" src="' + esc(resolveAdventureAvatarSrc(av)) + '" data-ava-key="' + esc(av) + '" alt="" onerror="if(!advAvatarFallback(this))this.style.visibility=\'hidden\'">'
     + '<div><b>' + esc(name) + '</b>' + sbx + '<small>遊戲宇宙玩家・' + esc(st) + '</small></div>'
     + (where === 'gate' ? '<div class="c1u-id-btns">' + lobbyBtn + '</div>' : '') + '</div>';
 }
@@ -31536,6 +31558,7 @@ function c1uFinalSectionsHtml(snap) {
       return '<div class="h2-profile">' + h2AvaHtml(base, '身份頭像') + h2AvaHtml(disp, '顯示頭像') + '</div>'
         + '<dl class="h2-kv"><dt>玩家名稱</dt><dd>' + h2Esc(p.name || '') + '</dd><dt>遊戲宇宙代碼</dt><dd style="font-family:monospace">' + h2Esc(C1U.playerId) + '</dd>'
         + '<dt>模式</dt><dd>' + (C1U.mode === 'sandbox' ? '測試沙盒' : '正式') + '</dd><dt>身份確認</dt><dd>' + h2Esc(C1U.verify === 'ok' ? '已確認' : C1U.verify === 'checking' ? '確認中' : '暫時無法連線') + '</dd>'
+        + '<dt>共用稱號</dt><dd>' + h2Esc((C1U.profile || C1U.cachedProfile || {}).sharedTitle || '未裝備') + '</dd>'
         + '<dt>冒險稱號</dt><dd>' + (ts.length ? ts.map(t => h2Esc(t.name)).join('、') : '還沒有') + '</dd></dl>'
         + '<div style="margin-top:.6em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-c1u-act="lobby">🎭 角色設定（在遊戲宇宙大廳）</button></div>'
         + '<div class="h2-sub" style="margin-top:0.8em">名字與頭像由遊戲宇宙大廳的「角色設定」管理；顯示頭像只改外觀，不會改變你是誰。冒險金幣只在冒險裡使用，和 V 幣不同。</div>';
