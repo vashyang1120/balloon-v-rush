@@ -29618,7 +29618,8 @@ function wdDrawArt(cx) {
     ctx.font = 'bold 13px sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText(wd.ang + '°', G.gem.x - cx, GROUND_Y + 30); ctx.fillStyle = '#fff'; ctx.fillText(wd.ang + '°', G.gem.x - cx, GROUND_Y + 30);
   }
   // 對岸目標小旗（只是標示，不是判定）
-  const fxF = T.pitX + T.pitW + 70 - cx, by = GROUND_Y;
+  const fxF = T.pitX + T.pitW + 70 - cx; let by = GROUND_Y;
+  try { if (typeof c34Is === 'function' && c34Is('3-4A')) { const m = c34Mesas().find(q => fxF + cx >= q.x && fxF + cx <= q.x + q.w); if (m) by = m.y; } } catch (e) {}   // v0.4.10：3-4A 對岸是高台 → 小旗插在高台頂面（正式美術版）
   if (fxF > -30 && fxF < CANVAS_W + 30) { ctx.globalAlpha = 1; ctx.strokeStyle = '#3a2c20'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(fxF, by); ctx.lineTo(fxF, by - 70); ctx.stroke(); ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.moveTo(fxF, by - 70); ctx.lineTo(fxF + 30, by - 61); ctx.lineTo(fxF, by - 52); ctx.closePath(); ctx.fill(); }
   ctx.restore();
 }
