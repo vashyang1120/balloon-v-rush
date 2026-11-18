@@ -27,7 +27,7 @@
 
   function hasPlayed(w) {
     return Boolean(w.current?.paidAt || Object.keys(w.settled).length ||
-      w.history.some(entry => entry.t === 'enter' || entry.t === 'game'));
+      w.history.some(entry => entry?.t === 'enter' || entry?.t === 'game'));
   }
 
   // 1-2 的舊版通關流程保證發放秘笈。永久通關紀錄可修復重開正式挑戰後的舊背包。
@@ -59,7 +59,7 @@
   }
 
   function storyHtml(game) {
-    return '<details class="vb-box" style="display:block"><summary style="cursor:pointer;font-weight:bold">遊戲背後的故事</summary>' +
+    return '<details data-entry-story="' + game + '" class="vb-box" style="display:block"><summary style="cursor:pointer;font-weight:bold">遊戲背後的故事</summary>' +
       stories[game].map(paragraph => '<p>' + paragraph + '</p>').join('') + '</details>';
   }
 

@@ -22792,7 +22792,9 @@ function h2RenderPanel(first) {
   const defs = P.kind === 'bag' ? H2_BAG_TABS : P.kind === 'shop' ? H2_SHOP_TABS : [];
   if (tabs) { tabs.style.display = defs.length ? '' : 'none'; tabs.innerHTML = defs.map(([id, label]) => '<button type="button" class="h2-pill h2-pill--yellow h2-tab' + (P.tab === id ? ' is-on' : '') + '" data-h2-act="tab" data-key="' + id + '">' + label + '</button>').join(''); }
   if (P.kind === 'challenge') { try { renderHomeChallenge(); } catch (e) {} }
+  const story = !first && body.querySelector('details[data-entry-story="' + P.kind + '"][open]');
   body.innerHTML = h2PanelBody(P.kind, P.tab);
+  if (story) body.querySelector('details[data-entry-story="' + P.kind + '"]').open = true;
   if (P.kind === 'challenge') h2Borrow('home-challenge-body', h2$('h2-borrow-challenge'));
   if (P.kind === 'next') h2Borrow('home-next-stage-body', h2$('h2-borrow-next'));
   body.scrollTop = scroll;

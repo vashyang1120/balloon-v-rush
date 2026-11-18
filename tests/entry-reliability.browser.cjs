@@ -16,22 +16,24 @@ const closeResult = page => page.evaluate(() => {
   document.getElementById('vb-modal')?.remove();
   h2OpenPanel('whack');
 });
-const homeForWhack = page => page.evaluate(() => {
-  if (gameStartGateActive) startAdventureFromGate();
-  gameState = 'clear';
-  openHomeScreen('clear');
-  h2OpenPanel('whack');
-});
+async function homeForWhack(page) {
+  await page.evaluate(() => { if (gameStartGateActive) startAdventureFromGate(); });
+  await page.evaluate(() => {
+    gameState = 'clear';
+    openHomeScreen('clear');
+    h2HideSummary();
+    h2OpenPanel('whack');
+  });
+}
 
-test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, async t => {
+test('isolated browser, real chapter and minigame assets', { timeout: 420000, concurrency: true }, async t => {
   const server = createPreview();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(async () => { await browser.close(); server.close(); });
   await mkdir(artifacts, { recursive: true });
-  for (const [index, dir] of dirs.entries()) {
-    await t.test(dir, async t => {
+  await Promise.all(dirs.map((dir, index) => t.test(dir, async t => {
       const context = await browser.newContext(index ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
         : { viewport: { width: 1280, height: 720 } });
       t.after(() => context.close());
@@ -85,13 +87,15 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, 
         const index = LEVELS.findIndex(l => l.stageId === '1-2');
         currentLevelIndex = index; loadLevel(index); restart({ keepHp: true }); gameState = 'playing';
         triggerClear();
-        openHomeScreen('clear'); h2OpenPanel('whack');
         playerInventory.coins = 50;
         saveInventory();
       });
+      await page.waitForFunction(() => !H2.enterPending && h2IsOpen());
+      await page.evaluate(() => { h2HideSummary(); h2OpenPanel('whack'); });
       const launch = page.locator('[data-wh-act="play"]');
       await launch.waitFor({ state: 'visible' });
       assert.equal(await launch.isEnabled(), true);
+      console.log(dir, '1-2 completed, first play available');
       await page.getByText('遊戲背後的故事', { exact: true }).click();
       await page.getByText('每次在氣球課教孩子們製作氣球槌時', { exact: false }).waitFor({ state: 'visible' });
 
@@ -112,6 +116,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, 
       await page.unroute(whackAsset);
       await page.locator('.adv-load-err [data-k="retry"]').click();
       await page.waitForFunction(() => whFrame.ready);
+      console.log(dir, 'slow failure, cancellation and retry completed');
       assert.equal((await balances(page)).coins, 50);
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
       await intro.click();
@@ -132,6 +137,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, 
       const done = await balances(page);
       assert.equal(done.coins, 50);
       assert.equal(done.plays, 0);
+      console.log(dir, 'paid round resumed and completed once');
       const duplicated = await page.evaluate(() => whSettle({ score: 0 }, whData().current.id, whFrame.iframe.contentWindow));
       assert.equal(duplicated, false);
       await page.frameLocator('#wam-frame').locator('#c1uResHome').click();
@@ -140,6 +146,5 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, 
       await page.evaluate(() => h2OpenPanel('volleyball'));
       await page.getByText('遊戲背後的故事', { exact: true }).click();
       await page.getByText('氣球排球的靈感', { exact: false }).waitFor({ state: 'visible' });
-    });
-  }
+  })));
 });
