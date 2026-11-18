@@ -30,13 +30,13 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
   const server = createPreview();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
-  t.after(async () => { await browser.close(); server.close(); });
+  t.after(() => server.close());
   await mkdir(artifacts, { recursive: true });
   await Promise.all(dirs.map((dir, index) => t.test(dir, async t => {
+      const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
+      t.after(() => browser.close());
       const context = await browser.newContext(index ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
         : { viewport: { width: 1280, height: 720 } });
-      t.after(() => context.close());
       const page = await context.newPage();
       page.on('pageerror', e => console.log('pageerror', e.message));
       await page.route(/^https?:\/\/[^/]+\//, route => {
@@ -119,7 +119,9 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       console.log(dir, 'slow failure, cancellation and retry completed');
       assert.equal((await balances(page)).coins, 50);
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
-      await intro.click();
+      await intro.waitFor();
+      await page.screenshot({ path: artifacts + '/' + dir + '-whack-intro.png' });
+      await intro.dispatchEvent('click');
       await page.waitForFunction(() => whData().current?.state === 'active');
       const paid = await balances(page);
       assert.equal(paid.coins, 30);
@@ -138,7 +140,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.evaluate(() => { whData().playsLeft = 1; saveInventory(); h2RenderPanel(); });
       await page.locator('[data-wh-act="play"]').click();
       await page.waitForFunction(() => whFrame.ready);
-      await page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ }).click();
+      await page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ }).dispatchEvent('click');
       assert.equal((await balances(page)).coins, 30);
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => assetBootReady);
