@@ -82,7 +82,7 @@ test('four loading stories follow the displayed integer percentage', () => {
     assert.ok(rules.storyAt(progress).startsWith(prefix));
   }
   for (const kind of ['whack', 'volleyball']) {
-    assert.match(rules.storyHtml(kind), /<details class=/);
+    assert.match(rules.storyHtml(kind), /<details[^>]*class=/);
     assert.match(rules.storyHtml(kind), /<summary[^>]*>遊戲背後的故事/);
   }
 });
