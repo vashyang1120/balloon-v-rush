@@ -152,5 +152,24 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.evaluate(() => h2OpenPanel('volleyball'));
       await page.getByText('遊戲背後的故事', { exact: true }).click();
       await page.getByText('氣球排球的靈感', { exact: false }).waitFor({ state: 'visible' });
+      await page.evaluate(() => {
+        playerInventory.unlockedRecipes[VB_CONFIG.recipeKey] = true;
+        playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
+        vbData().matchesLeft = 1;
+        h2RenderPanel();
+      });
+      await page.locator('[data-vb-act="play"][data-op="scorpion"]').click();
+      await page.waitForFunction(() => vbFrame.ready);
+      const volley = page.frameLocator('#vb-frame');
+      const volleyStart = volley.locator('#btnEmbedStart');
+      await volleyStart.waitFor();
+      await volleyStart.dispatchEvent('click');
+      await page.waitForFunction(() => vbCurrent()?.state === 'active');
+      await volley.locator('#btnPause').dispatchEvent('click');
+      await volley.locator('#btnPauseTitle').dispatchEvent('click');
+      await page.waitForFunction(() => !vbFrame.session);
+      const tickets = await page.evaluate(() => ({ tickets: vbTickets(), matches: vbData().matchesLeft }));
+      assert.deepEqual(tickets, { tickets: 1, matches: 1 });
+      console.log(dir, 'volleyball opened, started and returned home');
   })));
 });
