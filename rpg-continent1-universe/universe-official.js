@@ -40,17 +40,21 @@
 
   var pending = {};
   function ensureSession(challengeId) {
-    if (!challengeId || pending[challengeId]) return pending[challengeId] || Promise.resolve(null);
+    if (!challengeId || !eligiblePlayer()) return Promise.resolve(null);
+    var playerId = C1U.playerId;
+    var pendingKey = playerId + "/" + challengeId;
+    if (pending[pendingKey]) return pending[pendingKey];
     var m = readSessions(), cur = m[challengeId];
-    if (cur && Date.now() - cur.at < SESSION_REFRESH_MS) return Promise.resolve(cur);
-    pending[challengeId] = official.beginRun().then(function (run) {
-      delete pending[challengeId];
+    if (cur && cur.playerId === playerId && Date.now() - cur.at < SESSION_REFRESH_MS) return Promise.resolve(cur);
+    pending[pendingKey] = official.beginRun().then(function (run) {
+      delete pending[pendingKey];
       if (!run || !run.official) { console.log('[C1U-official] 不取得正式場次：', run && run.reason); return null; }
+      if (C1U.playerId !== playerId || run.playerId !== playerId) return null;
       var rec = { sessionId: run.sessionId, playerId: run.playerId, startedAt: run.startedAt, at: Date.now() };
       var mm = readSessions(); mm[challengeId] = rec; writeSessions(mm);
       return rec;
-    }, function () { delete pending[challengeId]; return null; });
-    return pending[challengeId];
+    }, function () { delete pending[pendingKey]; return null; });
+    return pending[pendingKey];
   }
 
   /* 1) 正式冒險的每次關卡嘗試開始時：確保這一趟有伺服器場次（中途接續存檔、超過 5 小時也會補取） */
@@ -68,16 +72,37 @@
     };
   }
 
+  // Initialize counters at creation, before any stage or shop action can be recorded.
+  var trackFields = ['kills', 'damage', 'purchases'];
+  function validTrack(t) {
+    return t && trackFields.every(function (k) { return Number.isSafeInteger(t[k]) && t[k] >= 0; });
+  }
+  var origNewRun = window.advNewRun;
+  if (typeof origNewRun === 'function') {
+    window.advNewRun = function () {
+      var run = origNewRun.apply(this, arguments);
+      if (run.status === 'in_progress' && eligiblePlayer()) {
+        var d = achLoad();
+        d.runs[run.challengeId] = { kills: 0, damage: 0, purchases: 0, log: [], startedAt: run.startedAt, fullTracking: true };
+        var ids = Object.keys(d.runs);
+        ids.slice(0, Math.max(0, ids.length - 12)).forEach(function (id) { delete d.runs[id]; });
+        achSave(d);
+      }
+      return run;
+    };
+  }
+
   function scoreDataFrom(snap) {
     var stageClearSec = {};
     OFFICIAL_ADVENTURE_STAGE_IDS.forEach(function (sid) { var r = snap.stageResults && snap.stageResults[sid]; if (r) stageClearSec[sid] = Number(r.clearSec) || 0; });
     var P = snap.scores || {};
-    var track = typeof c1uFinalCtx !== 'undefined' && c1uFinalCtx && c1uFinalCtx.eligible && c1uFinalCtx.challengeId === snap.challengeId ? c1uFinalCtx.track : null;
+    var ctx = typeof c1uFinalCtx !== 'undefined' && c1uFinalCtx;
+    var track = ctx && ctx.eligible && ctx.challengeId === snap.challengeId ? achLoad().runs[snap.challengeId] : null;
     var data = { continentId: 1, total: snap.total, rank: String(snap.rank || ''), scoreVersion: snap.scoreVersion,
       complete: snap.complete === true, bossDefeated: !!(snap.raw && snap.raw.combat && snap.raw.combat.bossDefeated),
       parts: { collect: P.collect, explore: P.explore, combat: P.combat, survival: P.survival, efficiency: P.efficiency },
       chainBonus: snap.chainBonus || 0, stages: OFFICIAL_ADVENTURE_STAGE_IDS.slice(), stageClearSec: stageClearSec };
-    if (track && ['kills', 'damage', 'purchases'].every(function(k) { return Number.isSafeInteger(track[k]) && track[k] >= 0; })) data.achievementTrack = { kills: track.kills, damage: track.damage, purchases: track.purchases };
+    if (track && track.fullTracking === true && validTrack(track)) data.achievementTrack = { kills: track.kills, damage: track.damage, purchases: track.purchases };
     return data;
   }
 
@@ -111,13 +136,20 @@
   }
 
   function submitSnapshot(snap) {
+    if (!eligiblePlayer()) return Promise.resolve();
+    var playerId = C1U.playerId;
+    var scoreData = scoreDataFrom(snap);
+    var finishedAt = new Date(snap.completedAt || Date.now()).toISOString();
     showLine('📮 正在把第一大陸成績送到遊戲宇宙伺服器…');
-    official.init().then(function () {
+    return official.init().then(function () {
+      if (!eligiblePlayer() || C1U.playerId !== playerId) return;
       if (!official.isEnabled()) { showLine('遊戲宇宙正式成績尚未開啟，這次成績只保存在這台裝置。'); return; }
       return ensureSession(snap.challengeId).then(function (sess) {
         if (!sess) { showLine('⚠️ 沒有取得正式場次，這次成績沒有記入正式排行榜。'); return; }
+        if (!eligiblePlayer() || C1U.playerId !== playerId || sess.playerId !== playerId) return;
         var run = { official: true, sessionId: sess.sessionId, playerId: sess.playerId, startedAt: sess.startedAt, submissionId: submissionIdFor(snap.challengeId) };
-        return official.submitRun(run, scoreDataFrom(snap), { finishedAt: new Date(snap.completedAt || Date.now()).toISOString() }).then(function (res) {
+        return official.submitRun(run, scoreData, { finishedAt: finishedAt }).then(function (res) {
+          if (C1U.playerId !== playerId) return;
           var m = readSessions(); delete m[snap.challengeId]; writeSessions(m);
           showLine(U.describeOfficialResult(res), res.status);
           console.log('[C1U-official] 伺服器判定：', res.status, res.reasons || []);
@@ -127,6 +159,159 @@
       });
     });
   }
+
+  var titleApi = U.createApiClient();
+  var starts = new Map();
+  var sending = null;
+  var retryTimer = null;
+  var retryDelay = 1500;
+
+  function titleIdentity() {
+    if (!eligiblePlayer()) return null;
+    var p = C1U.verify === 'ok' ? C1U.profile : C1U.verify === 'offline' ? C1U.cachedProfile : null;
+    if (!p || !p.displayId || !p.baseAvatarKey) return null;
+    return { playerId: C1U.playerId, displayId: p.displayId, baseAvatarKey: p.baseAvatarKey };
+  }
+  function titleEndpoint(identity, operation) {
+    return '/v1/players/' + encodeURIComponent(identity.playerId) + '/adventure-title-' + operation;
+  }
+  function startMinigame(kind, c) {
+    var identity = titleIdentity();
+    if (!identity || !c || !c.id || c.state === 'done') return;
+    var key = identity.playerId + '/' + c.id;
+    if (starts.has(key)) return;
+    var begin = titleApi._request('POST', titleEndpoint(identity, 'session'), Object.assign({ id: c.id, kind: kind }, identity))
+      .catch(function () { starts.delete(key); });
+    starts.set(key, begin);
+    if (starts.size > 32) starts.delete(starts.keys().next().value);
+  }
+  function queueKey(id) { return 'bvAdventureTitles_v1_production__' + id; }
+  function queued(id) {
+    try { return JSON.parse(localStorage.getItem(queueKey(id)) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function writeQueue(id, items) {
+    try { localStorage.setItem(queueKey(id), JSON.stringify(items)); }
+    catch (e) { console.warn('[C1U-official] 稱號補送存檔失敗', e); }
+  }
+  function flushTitles() {
+    var identity = titleIdentity();
+    if (!identity || sending) return sending;
+    var playerId = identity.playerId;
+    var waitForRetry = false;
+    sending = Promise.resolve().then(async function () {
+      for (var [id, item] of Object.entries(queued(playerId))) {
+        if (!titleIdentity() || C1U.playerId !== playerId) break;
+        var key = playerId + '/' + id;
+        await starts.get(key);
+        if (!titleIdentity() || C1U.playerId !== playerId) break;
+        try {
+          await titleApi._request('POST', titleEndpoint(identity, 'result'), Object.assign({ id: id, evidence: item }, identity));
+        } catch (err) {
+          if (err && ['validation', 'conflict', 'forbidden'].includes(err.kind)) {
+            // Retain the game’s original result for reviewed historical recovery.
+          } else {
+            waitForRetry = true;
+            break;
+          }
+        }
+        starts.delete(key);
+        var remaining = queued(playerId);
+        delete remaining[id];
+        writeQueue(playerId, remaining);
+      }
+    }).finally(function () {
+      sending = null;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      if (titleIdentity() && Object.keys(queued(C1U.playerId)).length) {
+        retryDelay = waitForRetry ? Math.min(retryDelay * 2, 60000) : 1500;
+        retryTimer = setTimeout(flushTitles, retryDelay);
+      } else retryDelay = 1500;
+    });
+    return sending;
+  }
+  function recordMinigame(id, evidence) {
+    var identity = titleIdentity();
+    if (!identity || !id) return;
+    var pendingTitles = queued(identity.playerId);
+    pendingTitles[id] = evidence;
+    writeQueue(identity.playerId, pendingTitles);
+    flushTitles();
+  }
+
+  var origVbOpen = window.vbOpenFrame;
+  window.vbOpenFrame = function (c) {
+    startMinigame('volleyball', c);
+    return origVbOpen.apply(this, arguments);
+  };
+  var origWhOpen = window.whOpenFrame;
+  window.whOpenFrame = function (c) {
+    startMinigame('whack', c);
+    return origWhOpen.apply(this, arguments);
+  };
+  var origVbSettle = window.vbSettle;
+  window.vbSettle = function (d, c) {
+    var success = origVbSettle.apply(this, arguments);
+    if (success && c && c.result && c.result.playerScore === 7 && c.result.cpuScore === 0) {
+      recordMinigame(c.id, { kind: 'volleyball', opponent: c.opponent, playerScore: 7, cpuScore: 0, winner: 'player' });
+    }
+    return success;
+  };
+  var origWhSettle = window.whSettle;
+  window.whSettle = function () {
+    var success = origWhSettle.apply(this, arguments);
+    var c = success && whData().current;
+    if (c && c.id === arguments[1] && c.score >= 660) recordMinigame(c.id, { kind: 'whack', score: c.score });
+    return success;
+  };
+
+  function historicalEvidence() {
+    var identity = titleIdentity();
+    if (!identity) return null;
+    var d = achLoad();
+    var evidence = [];
+    d.results.forEach(function (r) {
+      var t = d.runs[r.submissionId];
+      if (r.playerId === identity.playerId && r.mode === 'production' && validTrack(t) &&
+          (t.kills === 0 || t.purchases === 0)) {
+        evidence.push({ id: r.submissionId, kind: 'continent', complete: true, track: { kills: t.kills, damage: t.damage, purchases: t.purchases } });
+      }
+    });
+    vbData().history.forEach(function (r) {
+      if (r.t === 'match' && r.score === '7:0' && r.winner === 'player') {
+        evidence.push({ id: r.session, kind: 'volleyball', opponent: r.opponent, playerScore: 7, cpuScore: 0, winner: r.winner });
+      }
+    });
+    whData().history.forEach(function (r) {
+      if (r.t === 'game' && r.score >= 660) evidence.push({ id: r.session, kind: 'whack', score: r.score });
+    });
+    return { playerId: identity.playerId, evidence: evidence, localTitles: Object.values(d.titles) };
+  }
+  var origPlayerPanel = window.h2PanelBody;
+  window.h2PanelBody = function (kind) {
+    var html = origPlayerPanel.apply(this, arguments);
+    return kind === 'player' && titleIdentity() ? html +
+      '<div style="margin-top:.6em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-adventure-title-export>下載冒險稱號紀錄</button></div>' : html;
+  };
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest?.('[data-adventure-title-export]')) return;
+    var history = historicalEvidence();
+    if (!history) return;
+    var url = URL.createObjectURL(new Blob([JSON.stringify(history, null, 2)], { type: 'application/json' }));
+    var download = document.createElement('a');
+    download.href = url;
+    download.download = 'adventure-title-evidence.json';
+    download.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+  window.addEventListener('online', flushTitles);
+  var startupChecks = 0;
+  function restoreTitleQueue() {
+    if (C1U.verify === "checking" && startupChecks++ < 15) setTimeout(restoreTitleQueue, 1000);
+    else flushTitles();
+  }
+  setTimeout(restoreTitleQueue, 1500);
 
   /* 開啟時：補送上次沒送出的成績 */
   if (eligiblePlayer() || C1U.verify === 'checking') {
