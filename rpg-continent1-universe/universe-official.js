@@ -240,6 +240,120 @@
     flushTitles();
   }
 
+  var legacyBuild = 'adventure-v0.4.1-continent1-universe-test-1';
+  var currentTitleBuild = 'adventure-v0.4.2-title-sync-test-2';
+  var originalTitleRecord = window.achTitleRecord;
+  if (typeof originalTitleRecord === 'function') {
+    window.achTitleRecord = function () {
+      var record = originalTitleRecord.apply(this, arguments);
+      record.gameVersion = currentTitleBuild;
+      return record;
+    };
+  }
+
+  var migrating = null;
+  var migrationTimer = null;
+  var migrationDelay = 1500;
+  var mainLegacyTitles = new Set(['adventure_kind_adventurer', 'adventure_peace_ambassador', 'adventure_super_thrifty']);
+  var legacyVolleyball = {
+    adventure_volleyball_rookie: 'scorpion',
+    adventure_volleyball_expert: 'orange',
+    adventure_volleyball_king: 'orange_king'
+  };
+  function rawObject(key) {
+    try { return JSON.parse(ADV_DEVTEST.rawGet.call(localStorage, key) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function validLegacyId(id) { return typeof id === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(id); }
+  function legacyClaims(identity, workspace) {
+    var save = rawObject(C1U_ACH_KEY + workspace);
+    var inventory = rawObject('balloonV_inventory' + workspace);
+    var results = Array.isArray(save.results) ? save.results : [];
+    var titles = save.titles || {};
+    var seen = rawObject('bvAdventureLegacyMigrated_v1__' + identity.playerId);
+    var claims = [];
+    for (var [key, record] of Object.entries(titles)) {
+      if (seen[key] === true || !record || record.titleKey !== key || record.gameVersion !== legacyBuild ||
+          record.gameId !== 'adventure' || record.category !== 'adventure' || record.source !== 'client' ||
+          record.serverConfirmed !== false || !Number.isSafeInteger(record.unlockedAt) ||
+          record.unlockedAt <= 0 || record.unlockedAt > Date.now()) continue;
+      var evidence;
+      var runId = record.challengeId;
+      if (mainLegacyTitles.has(key)) {
+        if (record.via !== undefined || typeof runId !== 'string' || !/^adv-[a-z0-9]+-[a-z0-9]{0,6}$/.test(runId)) continue;
+        var result = results.find(function (r) {
+          return r && r.submissionId === runId && r.playerId === identity.playerId && r.mode === 'production' && r.gameId === 'adventure';
+        });
+        var track = save.runs && save.runs[runId];
+        if (result && validTrack(track)) {
+          var matches = key === 'adventure_super_thrifty' ? track.purchases === 0 :
+            track.kills === 0 && (key === 'adventure_kind_adventurer' || track.damage === 0);
+          if (!matches) continue;
+          evidence = { id: runId, kind: 'continent', complete: true, track: { kills: track.kills, damage: track.damage, purchases: track.purchases } };
+        }
+      } else if (Object.hasOwn(legacyVolleyball, key)) {
+        var opponent = legacyVolleyball[key];
+        if (record.via !== 'volleyball:' + opponent + ':7-0') continue;
+        var matches = inventory.volleyball && inventory.volleyball.history;
+        var match = Array.isArray(matches) && matches.find(function (r) {
+          return r && r.t === 'match' && r.opponent === opponent && r.score === '7:0' && r.winner === 'player' && validLegacyId(r.session);
+        });
+        if (match) evidence = { id: match.session, kind: 'volleyball', opponent: opponent, playerScore: 7, cpuScore: 0, winner: 'player' };
+      } else if (key === 'adventure_whack_legend') {
+        var via = typeof record.via === 'string' && record.via.match(/^whack:(\d{1,8})$/);
+        if (!via || Number(via[1]) < 660) continue;
+        var score = Number(via[1]);
+        var games = inventory.whack && inventory.whack.history;
+        var game = Array.isArray(games) && games.find(function (r) {
+          return r && r.t === 'game' && r.score === score && validLegacyId(r.session);
+        });
+        if (game) evidence = { id: game.session, kind: 'whack', score: score };
+      } else continue;
+      var { gameId, titleKey, category, unlockedAt, source, serverConfirmed, challengeId, gameVersion, via } = record;
+      claims.push({ record: { gameId, titleKey, category, unlockedAt, source, serverConfirmed, challengeId, gameVersion, via },
+        ...(evidence ? { evidence: evidence } : {}) });
+    }
+    return claims;
+  }
+  function migrateLegacyTitles() {
+    if (migrationTimer) clearTimeout(migrationTimer);
+    migrationTimer = null;
+    var identity = titleIdentity();
+    if (migrating || !identity || C1U.verify !== 'ok' || C1U.mode !== 'production' ||
+        C1U.storageId !== identity.playerId || C1U.ws !== '__c1u__prd__' + identity.playerId ||
+        typeof ADV_DEVTEST === 'undefined' || !ADV_DEVTEST.rawGet || !ADV_DEVTEST.rawSet) return migrating;
+    var claims = legacyClaims(identity, C1U.ws);
+    if (!claims.length) return;
+    var playerId = identity.playerId;
+    var key = 'bvAdventureLegacyMigrated_v1__' + playerId;
+    var retry = false;
+    migrating = titleApi._request('POST', titleEndpoint(identity, 'migration'),
+      Object.assign({ mode: 'production', workspace: C1U.ws, claims: claims }, identity))
+      .then(function (reply) {
+        var confirmed = new Set(reply && Array.isArray(reply.confirmed) ? reply.confirmed : []);
+        var seen = rawObject(key);
+        for (var claim of claims) {
+          if (confirmed.has(claim.record.titleKey)) seen[claim.record.titleKey] = true;
+          else retry = true;
+        }
+        ADV_DEVTEST.rawSet.call(localStorage, key, JSON.stringify(seen));
+      })
+      .catch(function (err) {
+        retry = !err || !['validation', 'forbidden', 'conflict'].includes(err.kind);
+      })
+      .finally(function () {
+        migrating = null;
+        if (retry && C1U.playerId === playerId) {
+          migrationDelay = Math.min(migrationDelay * 2, 60000);
+          migrationTimer = setTimeout(migrateLegacyTitles, migrationDelay);
+        } else {
+          migrationDelay = 1500;
+          if (C1U.playerId !== playerId) migrateLegacyTitles();
+        }
+      });
+    return migrating;
+  }
+
   var origVbOpen = window.vbOpenFrame;
   window.vbOpenFrame = function (c) {
     startMinigame('volleyball', c);
@@ -305,11 +419,18 @@
     download.click();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
-  window.addEventListener('online', flushTitles);
+  window.addEventListener('online', function () {
+    var results = flushTitles();
+    var migration = C1U.verify === 'offline' ? c1uVerifyPlayer().then(migrateLegacyTitles) : migrateLegacyTitles();
+    return Promise.all([results, migration]);
+  });
   var startupChecks = 0;
   function restoreTitleQueue() {
     if (C1U.verify === "checking" && startupChecks++ < 15) setTimeout(restoreTitleQueue, 1000);
-    else flushTitles();
+    else {
+      flushTitles();
+      migrateLegacyTitles();
+    }
   }
   setTimeout(restoreTitleQueue, 1500);
 

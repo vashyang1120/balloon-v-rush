@@ -13,6 +13,7 @@ function fixture(mode = 'production') {
   const d = { runs: {}, titles: {}, results: [] };
   let sent;
   let fail = false;
+  let failMigration = false;
   let release;
   const ready = new Promise((resolve) => { release = resolve; });
   const box = {
@@ -20,6 +21,10 @@ function fixture(mode = 'production') {
       createApiClient: () => ({ _request: async (method, url, body) => {
         calls.push({ url, body });
         if (fail && url.endsWith('/adventure-title-result')) throw { kind: 'network' };
+        if (url.endsWith("/adventure-title-migration")) {
+          if (failMigration) throw { kind: "network" };
+          return { confirmed: body.claims.map((c) => c.record.titleKey) };
+        }
         return {};
       } }),
       createOfficialClient: ({ getPlayer }) => ({
@@ -30,7 +35,7 @@ function fixture(mode = 'production') {
       describeOfficialResult: () => '',
     },
     GAME_VERSION: 'fixture', advPlayMode: 'official', OFFICIAL_ADVENTURE_STAGE_IDS: [...entries],
-    C1U: { mode, verify: 'ok', playerId: 'player-one', profile: { displayId: 'Title Test', baseAvatarKey: 'boy1' } },
+    C1U: { mode, verify: 'ok', playerId: 'player-one', storageId: 'player-one', ws: '__c1u__prd__player-one', profile: { displayId: 'Title Test', baseAvatarKey: 'boy1' } },
     c1uIsUniversePlayer: () => !box.C1U.guest,
     advDevMode: () => !!box.dev,
     advNewRun: () => ({ status: 'in_progress', challengeId: 'adv-1234567890', startedAt: 1 }),
@@ -41,11 +46,12 @@ function fixture(mode = 'production') {
     h2PanelBody: () => '', addEventListener: (event, fn) => { events[event] = fn; },
     document: { getElementById: () => null, addEventListener: () => {} },
     localStorage: { getItem: (key) => store.get(key), setItem: (key, val) => store.set(key, val) },
+    C1U_ACH_KEY: "achievement-key", ADV_DEVTEST: { rawGet: (key) => store.get(key), rawSet: (key, v) => store.set(key, v) },
     setTimeout: () => 1, clearTimeout: () => {},
   };
   box.window = box;
   vm.runInNewContext(source, box);
-  return { box, d, events, calls, store, release, sent: () => sent, fail: (value) => { fail = value; } };
+  return { box, d, events, calls, store, release, sent: () => sent, fail: (value) => { fail = value; }, failMigration: (value) => { failMigration = value; } };
 }
 
 test('only new fully tracked adventures carry counters, snapshotted before networking', async () => {
@@ -107,4 +113,36 @@ test('sandbox, guests and developer mode never start title writes', () => {
   }
   assert.equal(active.calls.length, 0);
   assert.equal(active.store.size, 0);
+});
+
+test('migration uses the verified player namespace and remembers only server-acknowledged titles', async () => {
+  const f = fixture();
+  const player = f.box.C1U;
+  const title = 'adventure_whack_legend';
+  const legacy = { gameId: 'adventure', category: 'adventure', source: 'client', serverConfirmed: false,
+    gameVersion: 'adventure-v0.4.1-continent1-universe-test-1', unlockedAt: 1234, titleKey: title, via: 'whack:660' };
+  const save = JSON.stringify({ titles: { [title]: legacy } });
+  const marker = 'bvAdventureLegacyMigrated_v1__player-one';
+  f.store.set('achievement-key' + player.ws + 'devplay', save);
+  f.store.set('achievement-key__c1u__sbx__player-one', save);
+  f.store.set('achievement-key__c1u__prd__player-two', save);
+  await f.events.online();
+  assert.equal(f.calls.length, 0);
+  f.store.set('achievement-key' + player.ws, save);
+  f.box.dev = true;
+  await f.events.online();
+  assert.equal(f.calls.length, 0);
+  f.box.dev = false;
+  f.failMigration(true);
+  await f.events.online();
+  assert.equal(f.store.has(marker), false);
+  f.failMigration(false);
+  await f.events.online();
+  assert.equal(f.calls[1].body.claims[0].record.titleKey, title);
+  assert.equal(f.calls[1].body.claims[0].evidence, undefined);
+  assert.deepEqual(JSON.parse(f.store.get(marker)), { [title]: true });
+  await f.events.online();
+  player.playerId = 'player-two';
+  await f.events.online();
+  assert.equal(f.calls.length, 2);
 });
