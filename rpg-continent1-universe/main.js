@@ -31359,7 +31359,7 @@ function whAdapt(win, W, sess) {
   } catch (e) {}
   const start = g.start;
   g.start = function () {
-    if (whFrame.session !== sid || !whFrame.ready || this.state === 'playing' || this.state === 'ended') return;
+    if (whFrame.session !== sid || !whFrame.ready || this.state !== 'intro') return;
     if (!whPay(sess)) {
       whFrameFail(sess, [], '無法儲存入場費或遊玩次數，請確認資格後再試一次');
       return;

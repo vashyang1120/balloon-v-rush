@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
       - name: Prepare isolated Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
-          "$RUNNER_TEMP/entry/node_modules/.bin/playwright" install chromium
+          command -v google-chrome
       - name: Test both entries with actual repository assets
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright

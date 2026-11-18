@@ -27,7 +27,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000 }, 
   const server = createPreview();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch({ args: ['--no-sandbox'] });
+  const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(async () => { await browser.close(); server.close(); });
   await mkdir(artifacts, { recursive: true });
   for (const [index, dir] of dirs.entries()) {
