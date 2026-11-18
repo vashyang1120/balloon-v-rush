@@ -72,10 +72,13 @@
     var stageClearSec = {};
     OFFICIAL_ADVENTURE_STAGE_IDS.forEach(function (sid) { var r = snap.stageResults && snap.stageResults[sid]; if (r) stageClearSec[sid] = Number(r.clearSec) || 0; });
     var P = snap.scores || {};
-    return { continentId: 1, total: snap.total, rank: String(snap.rank || ''), scoreVersion: snap.scoreVersion,
+    var track = typeof c1uFinalCtx !== 'undefined' && c1uFinalCtx && c1uFinalCtx.eligible && c1uFinalCtx.challengeId === snap.challengeId ? c1uFinalCtx.track : null;
+    var data = { continentId: 1, total: snap.total, rank: String(snap.rank || ''), scoreVersion: snap.scoreVersion,
       complete: snap.complete === true, bossDefeated: !!(snap.raw && snap.raw.combat && snap.raw.combat.bossDefeated),
       parts: { collect: P.collect, explore: P.explore, combat: P.combat, survival: P.survival, efficiency: P.efficiency },
       chainBonus: snap.chainBonus || 0, stages: OFFICIAL_ADVENTURE_STAGE_IDS.slice(), stageClearSec: stageClearSec };
+    if (track && ['kills', 'damage', 'purchases'].every(function(k) { return Number.isSafeInteger(track[k]) && track[k] >= 0; })) data.achievementTrack = { kills: track.kills, damage: track.damage, purchases: track.purchases };
+    return data;
   }
 
   function showLine(text, kind) {
