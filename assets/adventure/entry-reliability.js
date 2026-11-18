@@ -49,7 +49,7 @@
 
   function charge(inv, w, id, seed, fee, at) {
     const c = w.current;
-    if (c && c.state !== 'done' && c.state !== 'abandoned') {
+    if (c && c.state !== 'done') {
       return c.state === 'pending' && !c.startedAt && c.id === id && c.paidAt ? c : null;
     }
     if (!w.hammerRecipeVerified || w.playsLeft < 1 || (inv.coins || 0) < fee) return null;
@@ -63,7 +63,8 @@
   function abandonStarted(w, reason) {
     const c = w.current;
     if (!c || !c.paidAt || (c.state !== 'active' && !(c.state === 'pending' && c.startedAt))) return false;
-    c.state = 'abandoned';
+    c.state = 'done';
+    c.abortedAt = Date.now();
     c.lastStop = reason;
     return true;
   }

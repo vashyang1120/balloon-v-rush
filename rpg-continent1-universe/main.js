@@ -31345,7 +31345,11 @@ function whAdapt(win, W, sess) {
   const g = W.game, onEnd = g.hooks.onEnd;
   g.hooks.onEnd = function (r) {
     if (onEnd) onEnd.apply(this, arguments);
-    try { whSettle(r, sid, win); whPatchResult(doc, sid); } catch (e) { console.warn('[Whack] 結算', e); }
+    try {
+      const storeResult = () => whSettle(r, sid, win);
+      storeResult();
+      whPatchResult(doc, sid, storeResult);
+    } catch (e) { console.warn('[Whack] 結算', e); }
   };
   // 3) 一次入場＝一局：隱藏「同種子再玩／再玩一局」與測試按鈕；暫停畫面加「回小V的家」
   try {
@@ -31399,12 +31403,18 @@ function whSettle(r, sid, win) {
   console.log('[Whack] 結算：' + score + ' 分（' + rw.tierName + '）→ 金幣 +' + rw.coins + '、260 +' + rw.balloon260 + '、圓氣球 +' + rw.roundBalloon);
   return true;
 }
-function whPatchResult(doc, sid) {
+function whPatchResult(doc, sid, retry) {
   const c = whData().current; if (!c || c.id !== sid) return;
   const t = doc.querySelector('#result .res-reward-title');
   if (t) t.textContent = c.reward ? '本局獲得（已放進冒險背包）' : '獎勵尚未寫入';
   const cost = doc.getElementById('resCost'); if (cost) cost.textContent = '入場費 ' + c.fee + ' 冒險金幣（進場時已支付）';
   const box = doc.querySelector('#result .res-buttons');
+  if (box && !c.reward && retry && !doc.getElementById('c1uRetryReward')) {
+    const retryButton = doc.createElement('button');
+    retryButton.id = 'c1uRetryReward'; retryButton.type = 'button'; retryButton.textContent = '重新儲存獎勵';
+    retryButton.onclick = () => { if (retry()) { retryButton.remove(); whPatchResult(doc, sid); } };
+    box.appendChild(retryButton);
+  }
   if (box && !doc.getElementById('c1uResHome')) {
     const b = doc.createElement('button'); b.id = 'c1uResHome'; b.type = 'button'; b.className = 'primary'; b.textContent = '🏠 回到小V的家';
     b.addEventListener('click', e => { e.preventDefault(); whCloseFrame('done'); });

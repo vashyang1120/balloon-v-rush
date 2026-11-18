@@ -21,4 +21,4 @@ Download the `adventure-entry-preview` artifact from this PR's Actions run and e
 
 ## Rollback
 
-Before merge, close this draft or revert the entry-reliability commit on the topic branch. If a subsequent approved release needs rollback, revert the release commit and verify the Pages run and both entry URLs. Existing paid-session and settlement records retain their original fields. The additional whack eligibility markers do not require deleting or restoring player storage.
+Before merge, close this draft or revert the entry-reliability commit on the topic branch. If a subsequent approved release needs rollback, revert the release commit and verify the Pages run and both entry URLs. Completed and interrupted rounds use the prior format’s terminal state so that rolling back does not turn an interrupted round into a free retry. Existing paid-session and settlement records retain their original fields. The additional whack eligibility markers do not require deleting or restoring player storage.

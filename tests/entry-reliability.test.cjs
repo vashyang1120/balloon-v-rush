@@ -61,6 +61,8 @@ test('reload cannot replay an active paid round', () => {
   const reload = JSON.parse(JSON.stringify(w));
   assert.equal(rules.charge(inv, reload, 'round-a', 321, 20, 2), null);
   assert.equal(rules.abandonStarted(reload, 'reload'), true);
+  assert.equal(reload.current.state, 'done');
+  assert.ok(reload.current.abortedAt);
   assert.equal(rules.charge(inv, reload, 'round-b', 322, 20, 2), null);
   assert.equal(inv.coins, 30);
 });

@@ -143,7 +143,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => assetBootReady);
       await homeForWhack(page);
-      await page.waitForFunction(() => whData().current?.state === 'abandoned');
+      await page.waitForFunction(() => whData().current?.abortedAt > 0);
       assert.equal((await balances(page)).coins, 30);
       assert.equal(await page.locator('[data-wh-act="play"]').isEnabled(), false);
       console.log(dir, 'reload did not restart a paid round');
