@@ -59,8 +59,25 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       });
       assert.deepEqual(bossAssets, []);
       await page.locator('#btn-boss-victory-ok').click({ timeout: 20000 });
-      await page.evaluate(() => { openHomeScreen('clear'); advConfirmOfficialChallenge(); });
+      const required = await page.evaluate(() => {
+        openHomeScreen('clear');
+        const entry = getAssetManifest().chapter1.find(x => x.critical && x.type === 'image');
+        const record = ASSET_REGISTRY[entry.path];
+        record.status = 'failed';
+        ASSET_GROUP_STATE.chapter1.summary = summarizeAssetGroup('chapter1');
+        playerInventory.coins = 71;
+        advConfirmOfficialChallenge();
+        return entry.path;
+      });
+      const brokenAsset = url => url.origin === origin && url.pathname === '/' + required;
+      await page.route(brokenAsset, route => route.fulfill({ status: 503, body: 'QA unavailable' }));
       await page.locator('[data-oc="yes"]').click();
+      await page.locator('.adv-load-err [data-k="retry"]').waitFor();
+      assert.equal((await balances(page)).coins, 71);
+      await page.screenshot({ path: artifacts + '/' + dir + '-official-retry.png' });
+      await page.unroute(brokenAsset);
+      await page.locator('.adv-load-err [data-k="retry"]').click();
+      console.log(dir, 'official restart retried simulated HTTP 503 for', required);
       await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy);
       const chapters = await page.evaluate(async () => {
         const out = [];
@@ -113,10 +130,17 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.locator('.adv-load-err [data-k="retry"]').waitFor();
       assert.equal((await balances(page)).coins, 50);
       assert.equal((await balances(page)).plays, 1);
+      await page.locator('.adv-load-err [data-k="cont"]').click();
+      await page.evaluate(() => { C1U_WHACK.loadTimeoutMs = 100; });
+      await launch.click();
+      await page.locator('.adv-load-err [data-k="retry"]').waitFor();
+      assert.equal((await balances(page)).coins, 50);
+      assert.equal((await balances(page)).plays, 1);
       await page.unroute(whackAsset);
+      await page.evaluate(() => { C1U_WHACK.loadTimeoutMs = 20000; });
       await page.locator('.adv-load-err [data-k="retry"]').click();
       await page.waitForFunction(() => whFrame.ready);
-      console.log(dir, 'slow failure, cancellation and retry completed');
+      console.log(dir, 'slow failure, cancellation, timeout and retry completed');
       assert.equal((await balances(page)).coins, 50);
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
       await intro.waitFor();
