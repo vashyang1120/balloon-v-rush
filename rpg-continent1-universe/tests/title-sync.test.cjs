@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../universe-official.js'), 'utf8');
 const entries = new Set(['1-1', '1-2b', '1-3', '2-1', '2-2', '2-3', '2-4']);
 
-function fixture(mode = 'production') {
+function fixture(mode = 'production', hostname = 'vashyang1120.github.io') {
   const events = {};
   const calls = [];
   const store = new Map();
@@ -43,6 +43,9 @@ function fixture(mode = 'production') {
     achLoad: () => d, achSave: () => {},
     vbOpenFrame: () => {}, vbSettle: (_data, state) => { state.result = { playerScore: 7, cpuScore: 0 }; return true; },
     whOpenFrame: () => {}, whSettle: () => true, whData: () => ({ current: { id: 'whack-match', score: 660 } }),
+    location: { hostname },
+    C1U_TITLES: [{ titleKey: 'adventure_whack_legend', name: '傳奇槌王', desc: '氣球槌打地鼠達到 660 分' }],
+    h2Esc: (s) => s, c1uFinalSectionsHtml: () => '本趟稱號',
     h2PanelBody: () => '', addEventListener: (event, fn) => { events[event] = fn; },
     document: { getElementById: () => null, addEventListener: () => {} },
     localStorage: { getItem: (key) => store.get(key), setItem: (key, val) => store.set(key, val) },
@@ -70,6 +73,41 @@ test('only new fully tracked adventures carry counters, snapshotted before netwo
   f.box.c1uFinalCtx = { eligible: true, challengeId: run.challengeId };
   delete track.fullTracking;
   assert.equal(f.box.C1UOfficial.scoreDataFrom(snap).achievementTrack, undefined);
+});
+
+test('a previously unlocked whack title appears in Party Island achievements', () => {
+  const f = fixture();
+  assert.doesNotMatch(f.box.h2PanelBody('handbook'), /傳奇槌王/);
+  f.d.titles.adventure_whack_legend = {};
+  assert.match(f.box.h2PanelBody('handbook'), /派對島已解鎖成就.*傳奇槌王/);
+  assert.match(f.box.c1uFinalSectionsHtml({}), /^本趟稱號.*派對島已解鎖成就.*傳奇槌王/);
+});
+
+test('test-2 thrift records missed by score sync recover only on Staging', async () => {
+  const key = 'adventure_super_thrifty';
+  const id = 'adv-history-abc';
+  const record = { gameId: 'adventure', category: 'adventure', source: 'client', serverConfirmed: false,
+    gameVersion: 'adventure-v0.4.2-title-sync-test-2', titleKey: key, challengeId: id, unlockedAt: 1234 };
+  for (const [hostname, fullTracking, purchases, expected] of [
+    ['balloon-v-universe-staging.pages.dev', false, 0, 'permanent'],
+    ['balloon-v-universe-staging.pages.dev', true, 0, 'settlement'],
+    ['balloon-v-universe-staging.pages.dev', true, 1, 'blocked'],
+    ['vashyang1120.github.io', false, 0, 'blocked'],
+  ]) {
+    const f = fixture('production', hostname);
+    f.store.set('achievement-key' + f.box.C1U.ws, JSON.stringify({
+      titles: { [key]: record },
+      runs: { [id]: { fullTracking, kills: 1, damage: 1, purchases } },
+      results: [{ submissionId: id, playerId: f.box.C1U.playerId, gameId: 'adventure', mode: 'production' }],
+    }));
+    await f.events.online();
+    const claim = f.calls[0]?.body.claims[0];
+    if (expected === 'blocked') assert.equal(claim, undefined);
+    else {
+      assert.equal(claim.record.titleKey, key);
+      assert.equal(claim.evidence?.id, expected === 'settlement' ? id : undefined);
+    }
+  }
 });
 
 test('changing identity during an adventure submission prevents sending it as another player', async () => {

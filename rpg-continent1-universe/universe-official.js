@@ -129,7 +129,7 @@
         var ctx = typeof c1uFinalCtx !== 'undefined' ? c1uFinalCtx : null;
         var snap = typeof advLastSnapshot !== 'undefined' ? advLastSnapshot : null;
         if (advPlayMode !== 'official' || !ctx || !ctx.eligible || !snap || snap.testOnly || !snap.complete || snap.challengeId !== ctx.challengeId) return r;
-        submitSnapshot(snap);
+        submitSnapshot(snap).finally(migrateLegacyTitles);
       } catch (e) { console.warn('[C1U-official] 送出成績', e); }
       return r;
     };
@@ -242,6 +242,7 @@
 
   var legacyBuild = 'adventure-v0.4.1-continent1-universe-test-1';
   var currentTitleBuild = 'adventure-v0.4.2-title-sync-test-2';
+  var stagingSite = window.location?.hostname === 'balloon-v-universe-staging.pages.dev';
   var originalTitleRecord = window.achTitleRecord;
   if (typeof originalTitleRecord === 'function') {
     window.achTitleRecord = function () {
@@ -273,7 +274,8 @@
     var seen = rawObject('bvAdventureLegacyMigrated_v1__' + identity.playerId);
     var claims = [];
     for (var [key, record] of Object.entries(titles)) {
-      if (seen[key] === true || !record || record.titleKey !== key || record.gameVersion !== legacyBuild ||
+      if (seen[key] === true || !record || record.titleKey !== key ||
+          (record.gameVersion !== legacyBuild && !(stagingSite && record.gameVersion === currentTitleBuild && mainLegacyTitles.has(key))) ||
           record.gameId !== 'adventure' || record.category !== 'adventure' || record.source !== 'client' ||
           record.serverConfirmed !== false || !Number.isSafeInteger(record.unlockedAt) ||
           record.unlockedAt <= 0 || record.unlockedAt > Date.now()) continue;
@@ -289,7 +291,9 @@
           var matches = key === 'adventure_super_thrifty' ? track.purchases === 0 :
             track.kills === 0 && (key === 'adventure_kind_adventurer' || track.damage === 0);
           if (!matches) continue;
-          evidence = { id: runId, kind: 'continent', complete: true, track: { kills: track.kills, damage: track.damage, purchases: track.purchases } };
+          if (track.fullTracking === true || record.gameVersion === legacyBuild) {
+            evidence = { id: runId, kind: 'continent', complete: true, track: { kills: track.kills, damage: track.damage, purchases: track.purchases } };
+          }
         }
       } else if (Object.hasOwn(legacyVolleyball, key)) {
         var opponent = legacyVolleyball[key];
@@ -402,9 +406,26 @@
     });
     return { playerId: identity.playerId, evidence: evidence, localTitles: Object.values(d.titles) };
   }
+  function adventureAchievementsHtml() {
+    var titles = achLoad().titles;
+    var unlocked = C1U_TITLES.filter(function (def) { return Object.hasOwn(titles, def.titleKey); });
+    if (!unlocked.length) return '';
+    return '<div class="c1u-final-sec"><div class="adv-section-title">派對島已解鎖成就</div><div class="c1u-titles">' +
+      unlocked.map(function (def) {
+        return '<div class="c1u-title is-got"><span class="c1u-tico">🏅</span><div><b>' +
+          h2Esc(def.name) + '</b><small>' + h2Esc(def.desc) + '</small></div></div>';
+      }).join('') + '</div></div>';
+  }
+  var origFinalSections = window.c1uFinalSectionsHtml;
+  if (typeof origFinalSections === 'function') {
+    window.c1uFinalSectionsHtml = function () {
+      return origFinalSections.apply(this, arguments) + adventureAchievementsHtml();
+    };
+  }
   var origPlayerPanel = window.h2PanelBody;
   window.h2PanelBody = function (kind) {
     var html = origPlayerPanel.apply(this, arguments);
+    if (kind === 'handbook' && titleIdentity()) return html + adventureAchievementsHtml();
     return kind === 'player' && titleIdentity() ? html +
       '<div style="margin-top:.6em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-adventure-title-export>下載冒險稱號紀錄</button></div>' : html;
   };
