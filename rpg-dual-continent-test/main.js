@@ -31192,7 +31192,9 @@ function whData() {
 function whReconcile(clearedHere) {
   const inv = playerInventory, w = whData();
   const cleared = clearedHere || inv.chapter1Flow?.hammerRecipeGranted === true || advProgressGet().has('1-2');
-  return AdventureEntry.reconcile(w, inv.unlockedRecipes?.basicHammer === true, cleared, Date.now());
+  const changed = AdventureEntry.reconcile(w, inv.unlockedRecipes?.basicHammer === true, cleared, Date.now());
+  const interrupted = !whFrame?.el && AdventureEntry.abandonStarted(w, 'reload');
+  return changed || interrupted;
 }
 function whUnlocked() { return !!whData().hammerRecipeVerified; }
 function whSave() { try { return saveInventory() === true; } catch (e) { return false; } }
@@ -31213,7 +31215,7 @@ function whApplyRefill() {
   w.refillPending = null; whSave();
   return true;
 }
-function whPending() { const c = whData().current; return (c && c.paidAt && c.state !== 'done') ? c : null; }
+function whPending() { const c = whData().current; return c?.paidAt && c.state === 'pending' && !c.startedAt ? c : null; }
 function whBlockReason() {
   if (!whUnlocked()) return 'locked';
   if (whPending()) return '';
@@ -31332,8 +31334,6 @@ function whCheckFrame(frame, sess) {
 
 function whPay(sess) {
   const w = whData();
-  const existing = whPending();
-  if (existing && existing.id === sess.id && existing.seed === sess.seed) return true;
   const previous = JSON.parse(JSON.stringify(w)), coins = playerInventory.coins;
   const paid = AdventureEntry.charge(playerInventory, w, sess.id, sess.seed, C1U_WHACK.fee, Date.now());
   if (!paid) return false;
@@ -31373,7 +31373,7 @@ function whAdapt(win, W, sess) {
     const pp = doc.querySelector('#pauseOverlay .panel');
     if (pp && !doc.getElementById('c1uPauseHome')) {
       const b = doc.createElement('button'); b.id = 'c1uPauseHome'; b.type = 'button'; b.className = 'resume-btn'; b.style.marginTop = '12px';
-      b.textContent = '🏠 回小V的家（這一局保留）';
+      b.textContent = '🏠 回小V的家（結束本局）';
       b.addEventListener('click', e => { e.preventDefault(); whCloseFrame('exit'); });
       pp.appendChild(b);
     }
@@ -31412,7 +31412,7 @@ function whSettle(r, sid, win) {
   if (w.history.length > 60) w.history.splice(0, w.history.length - 60);
   if (!whSave()) {
     Object.assign(playerInventory, before, { whack: previous });
-    h2Toast('獎勵尚未寫入，這一局仍可重新進入。');
+    h2Toast('獎勵未寫入，請先保留本局結算畫面。');
     return false;
   }
   console.log('[Whack] 結算：' + score + ' 分（' + rw.tierName + '）→ 金幣 +' + rw.coins + '、260 +' + rw.balloon260 + '、圓氣球 +' + rw.roundBalloon);
@@ -31421,7 +31421,7 @@ function whSettle(r, sid, win) {
 function whPatchResult(doc, sid) {
   const c = whData().current; if (!c || c.id !== sid) return;
   const t = doc.querySelector('#result .res-reward-title');
-  if (t) t.textContent = c.reward ? '本局獲得（已放進冒險背包）' : '獎勵未寫入，請回小V的家再試一次';
+  if (t) t.textContent = c.reward ? '本局獲得（已放進冒險背包）' : '獎勵尚未寫入';
   const cost = doc.getElementById('resCost'); if (cost) cost.textContent = '入場費 ' + c.fee + ' 冒險金幣（進場時已支付）';
   const box = doc.querySelector('#result .res-buttons');
   if (box && !doc.getElementById('c1uResHome')) {
@@ -31438,7 +31438,7 @@ function whCloseFrame(why) {
   const c = whData().current;
   try { h2ScheduleRefresh(); if (H2.panel && H2.panel.kind === 'whack') h2RenderPanel(); } catch (e) {}
   if (c && c.state === 'done' && c.reward && !c.shown) { c.shown = true; whSave(); whShowResult(c); }
-  else if (whPending() && why === 'exit') h2Toast('這一局已支付入場費，下次可繼續。');
+  else if (AdventureEntry.abandonStarted(whData(), why)) { whSave(); h2Toast('本局已結束。'); }
 }
 function whShowResult(c) {
   const r = c.reward;
@@ -31458,11 +31458,11 @@ function whPanelHtml() {
   h += '<div class="vb-box vb-recipe"><span class="vb-ico" style="font-size:44px">🔨</span><div class="vb-txt"><b>氣球槌打地鼠</b>（' + (un ? '已解鎖' : '🔒 尚未解鎖') + '）'
     + '<small>' + (un ? '用氣球槌敲蠍子怪、抓金色油管環、最後挑戰橘子王！30 秒一局。' : WH_BLOCK_TEXT.locked) + '</small></div>'
     + '<button type="button" class="h2-pill ' + (why ? 'h2-pill--yellow' : 'h2-pill--green') + '" data-wh-act="play"' + (why ? ' disabled' : '') + '>'
-    + (pend ? '繼續上一局（免費）' : why === 'locked' ? '尚未解鎖' : why === 'noPlays' ? '次數用完' : why === 'noCoins' ? '金幣不足' : '開始（付 ' + C1U_WHACK.fee + ' 金幣）') + '</button></div>';
+    + (pend ? '使用上次已支付的入場費' : why === 'locked' ? '尚未解鎖' : why === 'noPlays' ? '次數用完' : why === 'noCoins' ? '金幣不足' : '開始（付 ' + C1U_WHACK.fee + ' 金幣）') + '</button></div>';
   if (un) {
     h += '<div class="vb-box vb-stat"><span>剩餘次數：' + (w.playsLeft > 0 ? '🔨' : '⚪') + '　<b>' + w.playsLeft + '／' + C1U_WHACK.maxPlays + '</b></span><span>入場費：<b>' + C1U_WHACK.fee + '</b> 冒險金幣（目前 ' + coins + '）</span></div>';
     if (why && why !== 'locked') h += '<div class="vb-box vb-tired">' + h2Esc(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]) + '</div>';
-    if (pend) h += '<div class="vb-box">上一局還沒完成，這次進入<b>不會再扣金幣、不扣次數</b>。</div>';
+    if (pend) h += '<div class="vb-box">上次付費後未開始，這次進入<b>不會再扣金幣、不扣次數</b>。</div>';
   }
   h += AdventureEntry.storyHtml('whack');
   h += '<div class="vb-note">每一趟冒險中，每完成一個這一趟還沒完成過的主線關卡，回到小V的家，打地鼠次數補到 1（不會累積）；開始新的冒險後會重新計算。入場費用冒險金幣支付（不是 V幣），不算商店購買。分數越高，獎勵越多（金幣、260 長條氣球、圓氣球），結算後直接放進冒險背包。打地鼠是額外活動，不影響主線通關。</div></div>';

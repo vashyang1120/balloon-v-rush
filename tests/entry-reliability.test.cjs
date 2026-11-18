@@ -54,15 +54,24 @@ test('previous paid attempt and previous result do not earn a second initial pla
   }
 });
 
-test('paid resume uses the existing id and seed without a second debit', () => {
+test('reload cannot replay an active paid round', () => {
   const w = { ...fresh(), hammerRecipeVerified: true, playsLeft: 1 };
   const inv = { coins: 50 };
-  const round = rules.charge(inv, w, 'round-a', 321, 20, 1);
+  assert.ok(rules.charge(inv, w, 'round-a', 321, 20, 1));
   const reload = JSON.parse(JSON.stringify(w));
-  assert.equal(rules.charge(inv, reload, 'round-a', 322, 20, 2).seed, 321);
+  assert.equal(rules.charge(inv, reload, 'round-a', 321, 20, 2), null);
+  assert.equal(rules.abandonStarted(reload, 'reload'), true);
   assert.equal(rules.charge(inv, reload, 'round-b', 322, 20, 2), null);
   assert.equal(inv.coins, 30);
-  assert.equal(round.state, 'active');
+});
+
+test('legacy charged but unstarted entry can be used once', () => {
+  const w = { ...fresh(), current: { id: 'legacy', state: 'pending', paidAt: 1 } };
+  const inv = { coins: 30 };
+  assert.equal(rules.charge(inv, w, 'round-b', 322, 20, 2), null);
+  assert.equal(rules.charge(inv, w, 'legacy', 321, 20, 2).paidAt, 1);
+  assert.equal(inv.coins, 30);
+  assert.equal(w.playsLeft, 0);
 });
 
 test('insufficient funds or qualification does not mutate the save', () => {

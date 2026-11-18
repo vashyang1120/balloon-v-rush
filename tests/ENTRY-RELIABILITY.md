@@ -16,7 +16,7 @@ Download the `adventure-entry-preview` artifact from this PR's Actions run and e
 - Wait for Chapter 1 assets before resetting the previous adventure during official restart. Retry previously failed required assets on re-entry and use source URLs for the current checkout.
 - Audit found the old angry portrait primary path was absent in Git. The shipped file has a double extension. This was optional and does not independently explain the historical gate dialog.
 - Only a verified hammer recipe unlocks whack. The existing 1-2 guaranteed recipe and cleared milestone enable the first round. Legacy saves use the recipe or permanent 1-2 completion and keep existing paid attempts.
-- Images and audio report readiness to the shared Adventure Loading screen. Start debits once and persists the paid session. Aborted or failed loads do not reserve a round. A paid unfinished session can resume the same seed. Settlement still uses the current session's existing reward table.
+- Images and audio report readiness to the shared Adventure Loading screen. Start debits once and persists the paid session. Aborted or failed loads do not reserve a round. A legacy charged but unstarted entry retains one prepaid admission. A started round cannot restart for free after refresh or exit. Settlement still uses the current session's existing reward table.
 - Add the two approved stories in the existing home panels.
 
 ## Rollback

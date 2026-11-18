@@ -49,13 +49,23 @@
 
   function charge(inv, w, id, seed, fee, at) {
     const c = w.current;
-    if (c && c.state !== 'done') return c.id === id && c.paidAt ? c : null;
+    if (c && c.state !== 'done' && c.state !== 'abandoned') {
+      return c.state === 'pending' && !c.startedAt && c.id === id && c.paidAt ? c : null;
+    }
     if (!w.hammerRecipeVerified || w.playsLeft < 1 || (inv.coins || 0) < fee) return null;
     inv.coins -= fee;
     w.playsLeft -= 1;
     w.current = { id, seed, state: 'active', fee, paidAt: at, startedAt: at };
     w.history.push({ t: 'enter', at, session: id, fee, playsLeft: w.playsLeft });
     return w.current;
+  }
+
+  function abandonStarted(w, reason) {
+    const c = w.current;
+    if (!c || !c.paidAt || (c.state !== 'active' && !(c.state === 'pending' && c.startedAt))) return false;
+    c.state = 'abandoned';
+    c.lastStop = reason;
+    return true;
   }
 
   function storyHtml(game) {
@@ -115,5 +125,5 @@
     }
   }
 
-  root.AdventureEntry = { reconcile, charge, storyHtml, storyAt, drawHoles };
+  root.AdventureEntry = { reconcile, charge, abandonStarted, storyHtml, storyAt, drawHoles };
 })(globalThis);
