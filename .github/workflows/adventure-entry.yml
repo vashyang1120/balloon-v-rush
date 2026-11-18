@@ -1,0 +1,52 @@
+name: Adventure entry reliability
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'rpg-continent1-universe/**'
+      - 'rpg-dual-continent-test/**'
+      - 'assets/adventure/entry-reliability.js'
+      - 'tests/entry-reliability*'
+      - 'tests/preview-entry.cjs'
+      - '.github/workflows/adventure-entry.yml'
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax and rules
+        run: |
+          node --check rpg-continent1-universe/main.js
+          node --check rpg-dual-continent-test/main.js
+          node --check assets/adventure/entry-reliability.js
+          node --test tests/entry-reliability.test.cjs
+          node minigames/whack-a-mole/tests/rules.test.js
+      - name: Prepare isolated Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+          "$RUNNER_TEMP/entry/node_modules/.bin/playwright" install chromium
+      - name: Test both entries with actual repository assets
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
+        run: node --test tests/entry-reliability.browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adventure-entry-screenshots
+          path: entry-screenshots/
+          if-no-files-found: ignore
+      - name: Package offline preview
+        if: always()
+        run: git archive --format=zip --output="$RUNNER_TEMP/adventure-entry-preview.zip" HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adventure-entry-preview
+          path: ${{ runner.temp }}/adventure-entry-preview.zip
+          compression-level: 0
