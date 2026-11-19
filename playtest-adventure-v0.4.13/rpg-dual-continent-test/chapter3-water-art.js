@@ -6,6 +6,14 @@ const c34Art = (() => {
   const failures = new Set();
   const pathPrefix = 'rpg-dual-continent-test/chapter3-art/';
   const scale = 0.23;
+  const waterSurfaceFrames = new WeakMap();
+  const fadedRockEdges = new Map();
+  const swimmerLayer = document.createElement('canvas');
+
+  // Visible head widths measured in the approved art, excluding the transparent canvas.
+  const landHead = { width: 153, top: 14 };
+  const waterHead = { width: 490, top: 125 };
+  const palmWaterline = 754;
 
   function entries(backgroundOnly) {
     return Object.entries(catalog).filter(([id]) => id.startsWith('16_') === backgroundOnly)
@@ -40,8 +48,8 @@ const c34Art = (() => {
     try { draw(); } finally { ctx.restore(); }
   }
 
-  function tile(id, x, y, w, h, factor, repeatY = true) {
-    const im = image(id);
+  function tile(id, x, y, w, h, factor, repeatY = true, source = null) {
+    const im = source || image(id);
     if (!im || w <= 0 || h <= 0 || x >= CANVAS_W || x + w <= 0) return;
     const [iw, ih] = catalog[id].size;
     const tw = iw * factor, th = ih * factor;
@@ -54,6 +62,50 @@ const c34Art = (() => {
         }
       }
     });
+  }
+
+  // Use a common world origin so overlapping foundations and banks share the same texture phase.
+  function rockBody(x, y, w, h) {
+    const im = image('12_rock_body');
+    if (!im || w <= 0 || h <= 0) return;
+    const step = Math.round(im.naturalWidth * scale);
+    const left = -Math.round(cameraX);
+    const top = GROUND_Y;
+    const col = Math.floor((Math.max(x, 0) - left) / step);
+    const row = Math.floor((y - top) / step);
+    clip(x, y, w, h, () => {
+      for (let i = col; left + i * step < Math.min(CANVAS_W, x + w); i++) {
+        for (let j = row; top + j * step < y + h; j++) {
+          const sx = i % 2 ? -1 : 1, sy = j % 2 ? -1 : 1;
+          ctx.save();
+          ctx.translate(left + i * step + (sx < 0 ? step : 0), top + j * step + (sy < 0 ? step : 0));
+          ctx.scale(sx, sy);
+          ctx.drawImage(im, 0, 0, step, step);
+          ctx.restore();
+        }
+      }
+    });
+  }
+
+  function softEdge(id, innerRight, feather) {
+    if (fadedRockEdges.has(id)) return fadedRockEdges.get(id);
+    const im = image(id);
+    if (!im) return null;
+    const layer = document.createElement('canvas');
+    layer.width = im.naturalWidth;
+    layer.height = im.naturalHeight;
+    const g = layer.getContext('2d');
+    g.drawImage(im, 0, 0);
+    const start = innerRight ? layer.width - feather : feather;
+    const end = innerRight ? layer.width : 0;
+    const mask = g.createLinearGradient(start, 0, end, 0);
+    mask.addColorStop(0, '#000');
+    mask.addColorStop(1, 'transparent');
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = mask;
+    g.fillRect(0, 0, layer.width, layer.height);
+    fadedRockEdges.set(id, layer);
+    return layer;
   }
 
   function background(cam) {
@@ -103,8 +155,16 @@ const c34Art = (() => {
       const factor = w / 540;
       const width = spec.size[0] * factor;
       const height = (spec.size[1] - spec.anchor[1]) * factor;
-      tile('12_rock_body', x + 12, top + height - 2, w - 24, bottom - top - height + 2, scale);
-      clip(x - 35, top - 10, w + 70, bottom - top + 10, () => at('14_canyon_pillar', 0, x + w / 2, top, factor));
+      clip(x - 35, top - 10, w + 70, bottom - top + 10, () => {
+        at('14_canyon_pillar', 0, x + w / 2, top, factor);
+        if (bottom <= top + height) return;
+        // Extend from the pillar's own bottom contour so it retains both outer silhouettes.
+        ctx.save();
+        ctx.translate(0, 2 * (top + height));
+        ctx.scale(1, -1);
+        at('14_canyon_pillar', 0, x + w / 2, top, factor);
+        ctx.restore();
+      });
       grass(x + (width - w) * 0.1, right - (width - w) * 0.1, top, true, true);
       return;
     }
@@ -112,32 +172,60 @@ const c34Art = (() => {
     const edgeW = 682 * factor, overlap = catalog['13_rock_edge_left'].suggested_inner_overlap_px * factor;
     const leftInset = hasL ? edgeW * 0.63 : 0, rightInset = hasR ? edgeW * 0.63 : 0;
     const left = x + leftInset, end = right - rightInset;
-    tile('12_rock_body', left, top, end - left, bottom - top, scale);
-    if (hasL) tile('13_rock_edge_left', left - edgeW + overlap, top, edgeW, bottom - top, factor);
-    if (hasR) tile('13_rock_edge_right', end - overlap, top, edgeW, bottom - top, factor);
+    rockBody(left, top, end - left, bottom - top);
+    if (hasL) tile('13_rock_edge_left', left - edgeW + overlap, top, edgeW, bottom - top, factor, true,
+      softEdge('13_rock_edge_left', true, catalog['13_rock_edge_left'].suggested_inner_overlap_px));
+    if (hasR) tile('13_rock_edge_right', end - overlap, top, edgeW, bottom - top, factor, true,
+      softEdge('13_rock_edge_right', false, catalog['13_rock_edge_right'].suggested_inner_overlap_px));
     grass(x, right, top, hasL, hasR);
+  }
+
+  function poolFoundation(x, width, leftY, rightY, floor) {
+    // Keep the textured foundation behind the concave walls where their outer silhouettes pull away.
+    rockBody(x - 82, leftY + 12, 84, floor - leftY - 6);
+    rockBody(x + width - 2, rightY + 12, 84, floor - rightY - 6);
+    rockBody(x - 82, floor - 6, width + 164, c34Bottom() - floor + 6);
   }
 
   function poolWalls(x, width, leftY, rightY, floor) {
     const factor = 0.2, w = 682 * factor;
-    tile('15_pool_bottom', x - 6, floor - 3, width + 12, 69, 0.2, false);
+    tile('15_pool_bottom', x - 6, floor - 3, width + 12, 12, 0.2, false);
     const drawWall = (id, wallX, bankY) => {
       // Keep the upper grass cap continuous at the shared collision height.
       clip(wallX, bankY + 8, w, floor - bankY + 4,
-        () => tile(id, wallX, bankY, w, floor - bankY + 12, factor, false));
+        () => tile(id, wallX, bankY, w, floor - bankY + 12, factor, false, softEdge(id, id.endsWith('_right'), 118)));
     };
     drawWall('15_pool_wall_left', x - w + 32, leftY);
     drawWall('15_pool_wall_right', x + width - 32, rightY);
   }
 
+  function surfaceBlend(im, width) {
+    const w = Math.round(width);
+    const previous = waterSurfaceFrames.get(im);
+    if (previous?.width === w) return previous;
+    const layer = document.createElement('canvas');
+    layer.width = w;
+    layer.height = Math.round(w * im.naturalHeight / im.naturalWidth);
+    const g = layer.getContext('2d');
+    g.drawImage(im, 0, 0, layer.width, layer.height);
+    // Fade the baked shallow-water color into the separate 05 fill.
+    const mask = g.createLinearGradient(0, layer.height * 0.585, 0, layer.height * 0.71);
+    mask.addColorStop(0, '#000');
+    mask.addColorStop(1, 'transparent');
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = mask;
+    g.fillRect(0, 0, layer.width, layer.height);
+    waterSurfaceFrames.set(im, layer);
+    return layer;
+  }
+
   function poolWater(x, width, y, floor, time) {
     const factor = width / catalog['04_pool_surface'].size[0];
     clip(x, y - 11, width, floor - y + 11, () => {
-      ctx.save();
-      ctx.globalAlpha = catalog['05_pool_body'].suggested_engine_global_alpha ?? 0.79;
-      tile('05_pool_body', x, y + 3, width, floor - y - 3, 0.13);
-      ctx.restore();
-      at('04_pool_surface', time, x, y, factor);
+      // The water fill starts inside the opaque portion of the crest, not below a transparent gap.
+      tile('05_pool_body', x, y + 1, width, floor - y - 1, 0.13);
+      const crests = image('04_pool_surface', time);
+      if (crests) ctx.drawImage(surfaceBlend(crests, width), x, y - catalog['04_pool_surface'].anchor[1] * factor);
     });
   }
 
@@ -150,13 +238,13 @@ const c34Art = (() => {
     });
   }
 
-  function guide(side, x, y, landX, landY, time) {
-    at('02_umbrella_split', time, x, y, 0.044);
-    const dx = landX - x, dy = landY - y;
+  function guide(side, hitX, hitY, outX, outY, landX, landY, time) {
+    at('02_umbrella_split', time, hitX, hitY, 0.036);
+    const dx = landX - outX, dy = landY - outY;
     if (side === 'split' || Math.hypot(dx, dy) < 14) return;
     const id = '02_umbrella_' + side;
     const length = Math.hypot(dx, dy);
-    ctx.save(); ctx.translate(x, y);
+    ctx.save(); ctx.translate(outX, outY);
     ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
     at(id, time, 0, 0, Math.min(0.19, length / 1640));
     ctx.restore();
@@ -175,22 +263,58 @@ const c34Art = (() => {
     ctx.restore();
   }
 
-  function swimmer(x, y, moving, facingRight, time) {
-    const id = moving ? '09_v_water_move' : '08_v_water_idle';
-    const spec = catalog[id], factor = 0.065;
-    if (!image(id, time)) return null;
-    const draw = () => at(id, time, x, y - (spec.suggested_waterline_y - spec.anchor[1]) * factor, factor, !facingRight);
-    clip(0, y - 150, CANVAS_W, 150, draw);
-    ctx.save(); ctx.globalAlpha *= 0.34;
-    clip(0, y, CANVAS_W, 100, draw);
-    ctx.restore();
-    return y - (spec.suggested_waterline_y - spec.head_reference[1]) * factor;
+  function landPose() {
+    const idle = getAdventureImage('idle');
+    if (!idle) return { top: player.y, headWidth: player.w * 0.75 };
+    const rect = getHeroDrawRect(idle, 1);
+    const ratio = rect.dW / idle.naturalWidth;
+    return { top: player.y + rect.dY + landHead.top * ratio, headWidth: landHead.width * ratio };
+  }
+
+  function swimPose(x, surface, time, facingRight) {
+    const id = image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
+    const spec = catalog[id];
+    const factor = landPose().headWidth / waterHead.width;
+    const bob = Math.sin(time / 350) * 1.4;
+    const y = surface + (spec.anchor[1] - palmWaterline) * factor + bob;
+    return { id, x, y, surface, factor, mirror: !facingRight, time, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
+  }
+
+  function swimmer(pose) {
+    const { id, x, y, surface, factor, mirror, time } = pose;
+    const im = image(id, time), spec = catalog[id];
+    if (!im) return false;
+    clip(0, surface - 180, CANVAS_W, 180, () => at(id, time, x, y, factor, mirror));
+
+    // Refract only the submerged pixels and hide them gradually in the deeper water.
+    const width = Math.ceil(spec.size[0] * factor) + 2, depth = 26;
+    if (swimmerLayer.width !== width) swimmerLayer.width = width;
+    if (swimmerLayer.height !== depth) swimmerLayer.height = depth;
+    const g = swimmerLayer.getContext('2d');
+    const localAnchor = (mirror ? spec.size[0] - spec.anchor[0] : spec.anchor[0]) * factor;
+    g.clearRect(0, 0, width, depth);
+    g.save();
+    if (mirror) { g.translate(spec.size[0] * factor, 0); g.scale(-1, 1); }
+    g.drawImage(im, 0, y - surface - spec.anchor[1] * factor, spec.size[0] * factor, spec.size[1] * factor);
+    g.restore();
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = 'rgba(11,103,148,0.42)';
+    g.fillRect(0, 0, width, depth);
+    const mask = g.createLinearGradient(0, 0, 0, depth);
+    mask.addColorStop(0, 'rgba(0,0,0,0.68)');
+    mask.addColorStop(1, 'transparent');
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = mask;
+    g.fillRect(0, 0, width, depth);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(swimmerLayer, x - localAnchor, surface);
+    return true;
   }
 
   function drop(x, y, fraction) {
     const id = '10_wetness_drop', spec = catalog[id];
     if (!image(id) || fraction <= 0) return;
-    const factor = 0.115;
+    const factor = 0.085;
     const [top, bottom] = spec.suggested_mask_content_range_y;
     const y0 = y - spec.size[1] * factor;
     const boundary = y0 + (bottom - (bottom - top) * Math.min(1, fraction)) * factor;
@@ -201,6 +325,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolWalls, poolWater, column, guide, platform, swimmer, drop,
+  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, landPose, swimPose, swimmer, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();

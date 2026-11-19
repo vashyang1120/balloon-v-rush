@@ -4,15 +4,23 @@
 - 基準 `53ca70ebf92b671a9b458df2bb95baaed1ef00aa`
 - 施工範圍 `rpg-dual-continent-test/`
 
-## 啟動與測試入口
+## 線上試玩部署｜2026-11-19
 
-下載這個 Draft PR 的分支或提交 ZIP，解壓後在包含 `assets/`、`tests/` 的專案根目錄執行：
+| 入口 | HTTPS 網址 |
+| --- | --- |
+| 雙大陸開發測試版 | [開啟雙大陸測試版](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1) |
+| 3-4 起點 | [從入口瀑布開始](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1&ch3test=start) |
+| 3-4 水池區段 | [從峽谷頂左岸開始](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1&ch3test=pool) |
 
-```sh
-node tests/preview-entry.cjs
-```
+進入後按「開始冒險」。手機請橫向操作。雙大陸入口也可完成或略過開場，再從「暫停」→「開發測試工具」切換兩區。
 
-開啟 [3-4 起點](http://127.0.0.1:8412/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1&ch3test=start) 或 [3-4 水池區段](http://127.0.0.1:8412/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1&ch3test=pool)，按「開始冒險」直接進入。窄螢幕請橫向操作。也可從 [雙大陸開發入口](http://127.0.0.1:8412/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1) 完成或略過開場，再點「暫停」→「開發測試工具」切換兩區。
+## 版本與驗證
+
+- 遊戲提交 `a56ff7dc8552288fa58e263807b53c164d5785f1`。Pages 部署提交 `a0eec32863334f33c341e392a5f6e8474f50a648` 僅新增 `playtest-adventure-v0.4.13/`。正式檔案的 Git tree 與 v0.4.12 基準一致，Pages 沿用原發布來源。[部署結果](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44519623986)
+- 三個網址皆回傳 HTTPS 200、載入 v0.4.13 並以訪客沙盒啟動。桌機尺寸 1280×820 驗證雙大陸入口和 3-4 起點，手機橫向尺寸 844×390 驗證水池。兩個捷徑各載入 16 組、76 張 PNG。第一大陸正式入口的線上程式回報 v0.4.12。[線上 Chromium 驗證](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44520456952)
+- 試玩入口鎖定訪客沙盒，並在載入遊戲前為 `localStorage` 與 `sessionStorage` 的實際鍵加上 `balloon-v-rush:adventure-playtest:v0.4.13:`。同來源 Chromium 測試實際寫入存檔、背包、成績、成就與稱號、V 幣餘額／紀錄及音效，確認重新載入可讀取試玩資料，原有正式鍵值保持原樣，也未產生遊戲宇宙同步鍵。
+- 線上驗證只觀察到試玩目錄的讀取請求。隔離測試確認 `fetch` POST／PUT、XHR PUT 及 Beacon 被拒絕。部署專用 HTML 與防護腳本位於試玩目錄，沿用原始遊戲程式及素材位元組。
+- [PR #37](https://github.com/vashyang1120/balloon-v-rush/pull/37) 仍為未合併的草稿。線上工程驗證已完成，待總 PM 及使用者在實體手機與電腦試玩，特別檢查整關手感與手機長時間效能。
 
 | 按鈕 | 試玩方式 |
 | --- | --- |

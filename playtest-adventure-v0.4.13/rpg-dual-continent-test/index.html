@@ -3,14 +3,14 @@
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; frame-src 'self'; base-uri 'self'; form-action 'none'">
 <script src="/balloon-v-rush/playtest-adventure-v0.4.13/playtest-guard.js"></script>
-
+<meta name="adventure-playtest-commit" content="e38caa9919e515b731f0fad9d75590161b1fff0b">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.4.11-ch3-stage34-layout-fix-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <!-- v0.4.0：不載入舊 Firebase（遊戲宇宙版不讀寫 vparty-rhythm-game 的任何資料）；玩家身份改用遊戲宇宙共用 SDK（同網域、唯讀 API） -->
-  </head>
+</head>
 <body>
 
   <!-- 直式遮罩 -->
@@ -349,7 +349,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.4.13-ch3-water-terrain-integration-test-1 · 2026-11-19
+        adventure-v0.4.13-ch3-water-terrain-integration-test-2 · 2026-11-19
       </div>
 
     </div><!-- /#home-panel -->
@@ -510,11 +510,232 @@
     </div>
   </div><!-- /#game-wrapper -->
 
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript src=\"../assets/adventure/entry-reliability.js?v=adventure-v0.4.12-entry-reliability-test-1\">\u003c/script>");</script>
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript src=\"chapter3-art-catalog.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-1\">\u003c/script>");</script>
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript src=\"chapter3-water-art.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-1\">\u003c/script>");</script>
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript src=\"chapter3-water-runtime.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-1\">\u003c/script>");</script>
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript src=\"main.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-1\">\u003c/script>");</script>
-  <script>if(window.adventurePlaytestReady)document.write("\u003cscript>\n  // ─────────────────────────────────────────────\n  //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）\n  // ─────────────────────────────────────────────\n\n  const ASPECT  = 16 / 9;\n  const wrapper = document.getElementById('game-wrapper');\n\n  // ── 遊戲容器維持 16:9 ─────────────────────────\n  function resizeGame() {\n    const vw = window.innerWidth;\n    const vh = window.innerHeight;\n    let w, h;\n    if (vw / vh > ASPECT) { h = vh; w = h * ASPECT; }\n    else                   { w = vw; h = w / ASPECT; }\n    wrapper.style.width    = w + 'px';\n    wrapper.style.height   = h + 'px';\n    wrapper.style.maxWidth  = 'none';\n    wrapper.style.maxHeight = 'none';\n  }\n\n  // ── 全螢幕 ───────────────────────────────────\n  function isFS() {\n    return !!(document.fullscreenElement || document.webkitFullscreenElement);\n  }\n  function enterFS() {\n    const el  = document.documentElement;\n    const req = el.requestFullscreen || el.webkitRequestFullscreen\n              || el.mozRequestFullScreen || el.msRequestFullscreen;\n    if (req) req.call(el).catch(() => {});\n    try { if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}\n  }\n  function exitFS() {\n    const fn = document.exitFullscreen || document.webkitExitFullscreen\n             || document.mozCancelFullScreen || document.msExitFullscreen;\n    if (fn) fn.call(document).catch(() => {});\n  }\n  function toggleFS() { isFS() ? exitFS() : enterFS(); }\n\n  function onFSChange() {\n    const fs = isFS();\n    document.getElementById('top-bar').style.display        = fs ? 'none' : 'flex';\n    document.getElementById('ingame-top-bar').style.display = fs ? 'flex' : 'none';\n    document.getElementById('btn-fullscreen').textContent   = fs ? '× 離開全螢幕' : '⛶ 全螢幕';\n    document.getElementById('btn-fs-ingame').textContent    = fs ? '× 離開全螢幕' : '⛶ 全螢幕';\n    resizeGame();\n    checkOrientation();\n  }\n  ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']\n    .forEach(ev => document.addEventListener(ev, onFSChange));\n\n  document.getElementById('btn-fullscreen').addEventListener('click', toggleFS);\n  document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFS);\n  document.getElementById('btn-fs-ingame').addEventListener('click', toggleFS);\n  document.getElementById('btn-fs-ingame').addEventListener('touchstart', e => { e.preventDefault(); toggleFS(); });\n\n  // ── 暫停按鈕 ─────────────────────────────────\n  function handlePauseClick(e) {\n    e.preventDefault();\n    if (typeof pauseGame !== 'function') return;\n    // v0.3.33：發現物品視窗開著時，最優先關閉視窗並繼續冒險（與 ESC 相同優先序）\n    if (typeof isDiscoveryItemModalOpen === 'function' && isDiscoveryItemModalOpen()) {\n      closeDiscoveryItemModal();\n      return;\n    }\n    // v0.3.29-fix-1：暫停背包開著時，先關背包回到暫停選單（與 ESC 相同優先序）\n    if (typeof isPauseBagOpen === 'function' && isPauseBagOpen()) {\n      closePauseBagBackToPauseMenu();\n      return;\n    }\n    // v0.3.57：從暫停選單開的氣球秘笈 → 關秘笈回到暫停選單\n    if (typeof isGuidebookOpen === 'function' && isGuidebookOpen() && typeof guidebookFromPause !== 'undefined' && guidebookFromPause) {\n      closeGuidebook();\n      return;\n    }\n    if (typeof isGameStartGateActive === 'function' && isGameStartGateActive()) return; // v0.3.57：還沒開始冒險\n    if (typeof rpgIsActive === 'function' && rpgIsActive()) return; // v0.3.59：RPG 對話中不開 / 不關暫停選單\n    if (typeof rpgNotesOpen === 'function' && rpgNotesOpen()) { rpgCloseNotes(); return; } // v0.3.61：先關提示筆記\n    if (typeof orangeKingVictoryConfirmOpen !== 'undefined' && orangeKingVictoryConfirmOpen) return; // v0.3.61：勝利確認視窗\n    if (gameState === 'playing')     pauseGame();\n    else if (gameState === 'paused') resumeGame();\n  }\n  const btnPauseOuter  = document.getElementById('btn-pause');\n  const btnPauseIngame = document.getElementById('btn-pause-ingame');\n  btnPauseOuter.addEventListener('click',      handlePauseClick);\n  btnPauseOuter.addEventListener('touchstart', handlePauseClick);\n  btnPauseIngame.addEventListener('click',      handlePauseClick);\n  btnPauseIngame.addEventListener('touchstart', handlePauseClick);\n\n  // ── 道具切換（手機）───────────────────────────\n  const btnSwitch = document.getElementById('btn-switch-weapon');\n  if (btnSwitch) {\n    ['click','touchstart'].forEach(ev =>\n      btnSwitch.addEventListener(ev, e => {\n        e.preventDefault();\n        if (gameState === 'playing' && typeof cycleWeapon === 'function') cycleWeapon();\n      })\n    );\n  }\n\n  // ── 重試本關（失敗畫面）───────────────────────\n  function handleRetry(e) {\n    e.preventDefault();\n    if (gameState !== 'failed') return;\n    // v0.3.58：有返回整備節點 → 返回整備；沒有 → 原本的重試本關\n    if (typeof retryOrReturnToPrep === 'function') retryOrReturnToPrep('failed');\n    else if (typeof retryCurrentLevelFromStart === 'function') retryCurrentLevelFromStart();\n  }\n  const btnRetry = document.getElementById('btn-retry');\n  if (btnRetry) {\n    btnRetry.addEventListener('click',      handleRetry);\n    btnRetry.addEventListener('touchstart', handleRetry);\n  }\n\n  // ── 回小V的家（失敗畫面）─────────────────────\n  const btnGoHomeFailed = document.getElementById('btn-go-home-failed');\n  if (btnGoHomeFailed) {\n    ['click','touchstart'].forEach(ev =>\n      btnGoHomeFailed.addEventListener(ev, e => {\n        e.preventDefault();\n        // v0.3.58：有返回整備節點 → 直接回到上一節過關後的小V的家（整備）；沒有 → 原本的失敗模式小V的家\n        if (gameState === 'failed' && typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('failed-home', { toHome: true }); return; }\n        openHomeScreen('failed');\n      })\n    );\n  }\n\n  // ── 回小V的家（結算畫面）─────────────────────\n  const btnGoHome = document.getElementById('btn-go-home');\n  if (btnGoHome) {\n    ['click','touchstart'].forEach(ev =>\n      btnGoHome.addEventListener(ev, e => {\n        e.preventDefault();\n        // v0.3.58：時間到（gameover）不是通關 → 小V的家用「未完成」模式（之前會變成可以直接前往下一關）\n        if (gameState === 'gameover') {\n          if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('gameover-home', { toHome: true }); return; }\n          openHomeScreen('failed'); return;\n        }\n        openHomeScreen('clear');\n      })\n    );\n  }\n\n  // ── 小V的家：開啟氣球秘笈 ────────────────────\n  const btnHomeGuidebook = document.getElementById('btn-home-open-guidebook');\n  if (btnHomeGuidebook) {\n    ['click','touchstart'].forEach(ev =>\n      btnHomeGuidebook.addEventListener(ev, e => {\n        e.preventDefault();\n        if (typeof openGuidebook === 'function') openGuidebook();\n      })\n    );\n  }\n\n  // ── 小V的家：下一關按鈕 ─────────────────────\n  const btnHomeNextLevel = document.getElementById('btn-home-next-level');\n  if (btnHomeNextLevel) {\n    ['click','touchstart'].forEach(ev =>\n      btnHomeNextLevel.addEventListener(ev, e => {\n        e.preventDefault();\n        homeGoNextLevel();\n      })\n    );\n  }\n\n  // ── 小V的家：結算成績（placeholder）─────────\n  const btnChallengeSummary = document.getElementById('btn-home-challenge-summary');\n  if (btnChallengeSummary) {\n    ['click','touchstart'].forEach(ev =>\n      btnChallengeSummary.addEventListener(ev, e => {\n        e.preventDefault();\n        if (typeof openChallengeSummary === 'function') openChallengeSummary();\n        else alert('本次成績結算功能將在下一階段加入。');\n      })\n    );\n  }\n\n  // ── 小V的作品牆連結 ──────────────────────────\n  document.querySelectorAll('.home-link-btn').forEach(btn => {\n    ['click','touchstart'].forEach(ev =>\n      btn.addEventListener(ev, e => {\n        e.preventDefault();\n        const key = btn.dataset.link;\n        const url = (typeof LINKS !== 'undefined' && LINKS[key]) || '';\n        if (url) window.open(url, '_blank');\n        else alert('連結準備中，敬請期待！');\n      })\n    );\n  });\n\n  // ── pauseBtn 顯示控制 ─────────────────────────\n  window.hidePauseBtn = function() {\n    btnPauseOuter.style.display  = 'none';\n    btnPauseIngame.style.display = 'none';\n  };\n  window.showPauseBtn = function() {\n    btnPauseOuter.style.display  = '';\n    btnPauseIngame.style.display = '';\n  };\n\n  // ── 直式遮罩 ──────────────────────────────────\n  const portraitMask = document.getElementById('portrait-mask');\n  function checkOrientation() {\n    const isTouch    = navigator.maxTouchPoints > 0;\n    const isPortrait = window.innerHeight > window.innerWidth;\n    const fs         = isFS();\n    portraitMask.style.display = (isTouch && isPortrait && !fs) ? 'flex' : 'none';\n    document.getElementById('top-bar').style.display = fs ? 'none' : 'flex';\n  }\n\n  window.addEventListener('resize', () => { resizeGame(); checkOrientation(); });\n  window.addEventListener('orientationchange', () => {\n    setTimeout(() => { resizeGame(); checkOrientation(); }, 200);\n  });\n\n  // ── 初始化 ────────────────────────────────────\n  document.getElementById('ingame-top-bar').style.display = 'none';\n  resizeGame();\n  checkOrientation();\n  \u003c/script>");</script>
+  <script src="../assets/adventure/entry-reliability.js?v=adventure-v0.4.12-entry-reliability-test-1"></script>
+  <script src="chapter3-art-catalog.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script src="chapter3-water-art.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script src="chapter3-water-runtime.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script src="chapter3-treasure-dice.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script src="main.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script src="chapter3-treasure-interaction.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-2"></script>
+  <script>
+  // ─────────────────────────────────────────────
+  //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
+  // ─────────────────────────────────────────────
+
+  const ASPECT  = 16 / 9;
+  const wrapper = document.getElementById('game-wrapper');
+
+  // ── 遊戲容器維持 16:9 ─────────────────────────
+  function resizeGame() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let w, h;
+    if (vw / vh > ASPECT) { h = vh; w = h * ASPECT; }
+    else                   { w = vw; h = w / ASPECT; }
+    wrapper.style.width    = w + 'px';
+    wrapper.style.height   = h + 'px';
+    wrapper.style.maxWidth  = 'none';
+    wrapper.style.maxHeight = 'none';
+  }
+
+  // ── 全螢幕 ───────────────────────────────────
+  function isFS() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function enterFS() {
+    const el  = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen
+              || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) req.call(el).catch(() => {});
+    try { if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
+  }
+  function exitFS() {
+    const fn = document.exitFullscreen || document.webkitExitFullscreen
+             || document.mozCancelFullScreen || document.msExitFullscreen;
+    if (fn) fn.call(document).catch(() => {});
+  }
+  function toggleFS() { isFS() ? exitFS() : enterFS(); }
+
+  function onFSChange() {
+    const fs = isFS();
+    document.getElementById('top-bar').style.display        = fs ? 'none' : 'flex';
+    document.getElementById('ingame-top-bar').style.display = fs ? 'flex' : 'none';
+    document.getElementById('btn-fullscreen').textContent   = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
+    document.getElementById('btn-fs-ingame').textContent    = fs ? '× 離開全螢幕' : '⛶ 全螢幕';
+    resizeGame();
+    checkOrientation();
+  }
+  ['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']
+    .forEach(ev => document.addEventListener(ev, onFSChange));
+
+  document.getElementById('btn-fullscreen').addEventListener('click', toggleFS);
+  document.getElementById('btn-fullscreen-portrait').addEventListener('click', enterFS);
+  document.getElementById('btn-fs-ingame').addEventListener('click', toggleFS);
+  document.getElementById('btn-fs-ingame').addEventListener('touchstart', e => { e.preventDefault(); toggleFS(); });
+
+  // ── 暫停按鈕 ─────────────────────────────────
+  function handlePauseClick(e) {
+    e.preventDefault();
+    if (typeof pauseGame !== 'function') return;
+    // v0.3.33：發現物品視窗開著時，最優先關閉視窗並繼續冒險（與 ESC 相同優先序）
+    if (typeof isDiscoveryItemModalOpen === 'function' && isDiscoveryItemModalOpen()) {
+      closeDiscoveryItemModal();
+      return;
+    }
+    // v0.3.29-fix-1：暫停背包開著時，先關背包回到暫停選單（與 ESC 相同優先序）
+    if (typeof isPauseBagOpen === 'function' && isPauseBagOpen()) {
+      closePauseBagBackToPauseMenu();
+      return;
+    }
+    // v0.3.57：從暫停選單開的氣球秘笈 → 關秘笈回到暫停選單
+    if (typeof isGuidebookOpen === 'function' && isGuidebookOpen() && typeof guidebookFromPause !== 'undefined' && guidebookFromPause) {
+      closeGuidebook();
+      return;
+    }
+    if (typeof isGameStartGateActive === 'function' && isGameStartGateActive()) return; // v0.3.57：還沒開始冒險
+    if (typeof rpgIsActive === 'function' && rpgIsActive()) return; // v0.3.59：RPG 對話中不開 / 不關暫停選單
+    if (typeof rpgNotesOpen === 'function' && rpgNotesOpen()) { rpgCloseNotes(); return; } // v0.3.61：先關提示筆記
+    if (typeof orangeKingVictoryConfirmOpen !== 'undefined' && orangeKingVictoryConfirmOpen) return; // v0.3.61：勝利確認視窗
+    if (gameState === 'playing')     pauseGame();
+    else if (gameState === 'paused') resumeGame();
+  }
+  const btnPauseOuter  = document.getElementById('btn-pause');
+  const btnPauseIngame = document.getElementById('btn-pause-ingame');
+  btnPauseOuter.addEventListener('click',      handlePauseClick);
+  btnPauseOuter.addEventListener('touchstart', handlePauseClick);
+  btnPauseIngame.addEventListener('click',      handlePauseClick);
+  btnPauseIngame.addEventListener('touchstart', handlePauseClick);
+
+  // ── 道具切換（手機）───────────────────────────
+  const btnSwitch = document.getElementById('btn-switch-weapon');
+  if (btnSwitch) {
+    ['click','touchstart'].forEach(ev =>
+      btnSwitch.addEventListener(ev, e => {
+        e.preventDefault();
+        if (gameState === 'playing' && typeof cycleWeapon === 'function') cycleWeapon();
+      })
+    );
+  }
+
+  // ── 重試本關（失敗畫面）───────────────────────
+  function handleRetry(e) {
+    e.preventDefault();
+    if (gameState !== 'failed') return;
+    // v0.3.58：有返回整備節點 → 返回整備；沒有 → 原本的重試本關
+    if (typeof retryOrReturnToPrep === 'function') retryOrReturnToPrep('failed');
+    else if (typeof retryCurrentLevelFromStart === 'function') retryCurrentLevelFromStart();
+  }
+  const btnRetry = document.getElementById('btn-retry');
+  if (btnRetry) {
+    btnRetry.addEventListener('click',      handleRetry);
+    btnRetry.addEventListener('touchstart', handleRetry);
+  }
+
+  // ── 回小V的家（失敗畫面）─────────────────────
+  const btnGoHomeFailed = document.getElementById('btn-go-home-failed');
+  if (btnGoHomeFailed) {
+    ['click','touchstart'].forEach(ev =>
+      btnGoHomeFailed.addEventListener(ev, e => {
+        e.preventDefault();
+        // v0.3.58：有返回整備節點 → 直接回到上一節過關後的小V的家（整備）；沒有 → 原本的失敗模式小V的家
+        if (gameState === 'failed' && typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('failed-home', { toHome: true }); return; }
+        openHomeScreen('failed');
+      })
+    );
+  }
+
+  // ── 回小V的家（結算畫面）─────────────────────
+  const btnGoHome = document.getElementById('btn-go-home');
+  if (btnGoHome) {
+    ['click','touchstart'].forEach(ev =>
+      btnGoHome.addEventListener(ev, e => {
+        e.preventDefault();
+        // v0.3.58：時間到（gameover）不是通關 → 小V的家用「未完成」模式（之前會變成可以直接前往下一關）
+        if (gameState === 'gameover') {
+          if (typeof hasValidPrepCheckpoint === 'function' && hasValidPrepCheckpoint()) { returnToPrep('gameover-home', { toHome: true }); return; }
+          openHomeScreen('failed'); return;
+        }
+        openHomeScreen('clear');
+      })
+    );
+  }
+
+  // ── 小V的家：開啟氣球秘笈 ────────────────────
+  const btnHomeGuidebook = document.getElementById('btn-home-open-guidebook');
+  if (btnHomeGuidebook) {
+    ['click','touchstart'].forEach(ev =>
+      btnHomeGuidebook.addEventListener(ev, e => {
+        e.preventDefault();
+        if (typeof openGuidebook === 'function') openGuidebook();
+      })
+    );
+  }
+
+  // ── 小V的家：下一關按鈕 ─────────────────────
+  const btnHomeNextLevel = document.getElementById('btn-home-next-level');
+  if (btnHomeNextLevel) {
+    ['click','touchstart'].forEach(ev =>
+      btnHomeNextLevel.addEventListener(ev, e => {
+        e.preventDefault();
+        homeGoNextLevel();
+      })
+    );
+  }
+
+  // ── 小V的家：結算成績（placeholder）─────────
+  const btnChallengeSummary = document.getElementById('btn-home-challenge-summary');
+  if (btnChallengeSummary) {
+    ['click','touchstart'].forEach(ev =>
+      btnChallengeSummary.addEventListener(ev, e => {
+        e.preventDefault();
+        if (typeof openChallengeSummary === 'function') openChallengeSummary();
+        else alert('本次成績結算功能將在下一階段加入。');
+      })
+    );
+  }
+
+  // ── 小V的作品牆連結 ──────────────────────────
+  document.querySelectorAll('.home-link-btn').forEach(btn => {
+    ['click','touchstart'].forEach(ev =>
+      btn.addEventListener(ev, e => {
+        e.preventDefault();
+        const key = btn.dataset.link;
+        const url = (typeof LINKS !== 'undefined' && LINKS[key]) || '';
+        if (url) window.open(url, '_blank');
+        else alert('連結準備中，敬請期待！');
+      })
+    );
+  });
+
+  // ── pauseBtn 顯示控制 ─────────────────────────
+  window.hidePauseBtn = function() {
+    btnPauseOuter.style.display  = 'none';
+    btnPauseIngame.style.display = 'none';
+  };
+  window.showPauseBtn = function() {
+    btnPauseOuter.style.display  = '';
+    btnPauseIngame.style.display = '';
+  };
+
+  // ── 直式遮罩 ──────────────────────────────────
+  const portraitMask = document.getElementById('portrait-mask');
+  function checkOrientation() {
+    const isTouch    = navigator.maxTouchPoints > 0;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const fs         = isFS();
+    portraitMask.style.display = (isTouch && isPortrait && !fs) ? 'flex' : 'none';
+    document.getElementById('top-bar').style.display = fs ? 'none' : 'flex';
+  }
+
+  window.addEventListener('resize', () => { resizeGame(); checkOrientation(); });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => { resizeGame(); checkOrientation(); }, 200);
+  });
+
+  // ── 初始化 ────────────────────────────────────
+  document.getElementById('ingame-top-bar').style.display = 'none';
+  resizeGame();
+  checkOrientation();
+  </script>
 </body>
 </html>
