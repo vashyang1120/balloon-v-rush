@@ -8,10 +8,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const dir = 'rpg-dual-continent-test';
 const screenshotDir = process.env.CH3_SCREENSHOTS;
 
-async function boot(page, origin, section) {
+async function boot(page, origin, section, bagMode) {
   await page.route(/^https?:\/\/[^/]+\//, route =>
     route.request().url().startsWith(origin + '/') ? route.continue() : route.abort());
-  await page.goto(origin + '/' + dir + '/?guest=1&sandbox=1&devtools=1&ch3test=' + section);
+  const bag = bagMode ? '&ch3bag=' + bagMode : '';
+  await page.goto(origin + '/' + dir + '/?guest=1&sandbox=1&devtools=1&ch3test=' + section + bag);
   await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
   await page.locator('#btn-start-gate-go').click();
   await page.waitForFunction(expected =>
@@ -310,10 +311,19 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         }
       }
       keys.ArrowRight = false;
+      const bag = coins.find(c => c.c34PadBag);
+      player.x = bag.x - player.w / 2;
+      player.y = bag.y - player.h / 2;
+      const coinsBefore = currentRunStats.coins;
+      const inventoryBefore = playerInventory.coins;
+      checkCollectibles();
+      checkCollectibles();
+      const bagReward = { counted: currentRunStats.coins - coinsBefore, inventory: playerInventory.coins - inventoryBefore };
+
       const beforeExit = c34.log.filter(e => e.ev === 'complete').length;
       player.x = FINISH_X; player.y = bank.y - player.h; checkFinish(); checkFinish();
       const afterExit = c34.log.filter(e => e.ev === 'complete').length;
-      return { onWater, jump, swimsOut, landed, beforeExit, afterExit,
+      return { onWater, jump, swimsOut, landed, bagReward, beforeExit, afterExit,
         saved: localStorage.getItem(SAVE_KEY) === realSave, done: c2Proto.done };
     });
     assert.equal(actual.onWater.swim, true);
@@ -328,6 +338,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(actual.swimsOut.swimming, false);
     assert.ok(actual.swimsOut.vy < 0);
     assert.equal(actual.landed, true);
+    assert.deepEqual(actual.bagReward, { counted: 10, inventory: 10 });
     assert.equal(actual.beforeExit, 0);
     assert.equal(actual.afterExit, 1);
     assert.equal(actual.done, true);
@@ -366,6 +377,63 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await page.locator('#h2-back').click();
     assert.match(await body.textContent(), /尚無本關結算紀錄/);
     assert.deepEqual(await readState(), before);
+  });
+
+  await t.test('guest sandbox has three separate backpack modes and keeps the completed playtest bag', async () => {
+    const stored = await page.evaluate(() => ({
+      mode: c34.devBagMode,
+      base: localStorage.getItem(SAVE_KEY),
+      persisted: JSON.parse(localStorage.getItem(c34BagKey('cumulative'))),
+      current: playerInventory.coins,
+      cumulative: c34CumulativeResources().totals,
+      stocked: c34CreateInventory('stocked'),
+      empty: c34CreateInventory('empty'),
+    }));
+    assert.equal(stored.mode, 'cumulative');
+    assert.equal(stored.persisted.coins, stored.current);
+    assert.ok(stored.persisted.coins >= stored.cumulative.coins + 10);
+    assert.equal(stored.persisted.unlockedRecipes.balloonDice, true);
+    assert.deepEqual([stored.stocked.coins, stored.stocked.balloon260, stored.stocked.roundBalloon], [1000, 100, 50]);
+    assert.deepEqual([stored.empty.coins, stored.empty.balloon260, stored.empty.roundBalloon], [0, 0, 0]);
+    await page.reload();
+    await page.waitForFunction(() => assetBootReady);
+    await page.locator('#btn-start-gate-go').click();
+    await page.waitForFunction(() => !assetGateActive && gameState === 'playing' && c34.devBagMode === 'cumulative');
+    const reloaded = await page.evaluate(() => [playerInventory.coins, localStorage.getItem(SAVE_KEY)]);
+    assert.deepEqual(reloaded, [stored.current, stored.base]);
+    for (const [mode, amounts] of [['stocked', [1000, 100, 50]], ['empty', [0, 0, 0]]]) {
+      const testPage = await page.context().newPage();
+      try {
+        await boot(testPage, origin, 'pool', mode);
+        const state = await testPage.evaluate(() => ({
+          mode: c34.devBagMode,
+          start: [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon],
+          pickup: [currentRunStats.coins, currentRunStats.balloon260, currentRunStats.roundBalloon],
+          base: localStorage.getItem(SAVE_KEY),
+        }));
+        assert.deepEqual(state, { mode, start: amounts, pickup: [0, 0, 0], base: stored.base });
+      } finally { await testPage.close(); }
+    }
+  });
+
+  await t.test('Chapter 3 enemy tiers and the choice of where to fight', async () => {
+    const stages = await page.evaluate(() => {
+      return ['3-1', '3-2', '3-3', '3-4'].map(id => {
+        const level = LEVELS[getLevelIndexByStageId(id)];
+        return {
+          id, length: level.length, resources: adventureLevelResourceConfig(level).fixed,
+          enemies: level.buildEnemies().map(enemy => ({
+            id: enemy.c2Id, type: enemy.variant, x: enemy.x, y: enemy.y, platform: enemy.c1dPlat?.x,
+          })),
+        };
+      });
+    });
+    assert.equal(stages[1].length, 7300);
+    assert.ok(stages.every(stage => stage.enemies.some(enemy => enemy.type === 'windBlade')));
+    assert.ok(stages.every(stage => stage.enemies.some(enemy => enemy.type === 'gale')));
+    assert.ok(stages.slice(0, 2).every(stage => !stage.enemies.some(enemy => enemy.type === 'armored')));
+    assert.ok(stages[2].enemies.some(enemy => enemy.type === 'armored'));
+    assert.ok(stages[3].enemies.every(enemy => enemy.id.startsWith('P2-') || enemy.id.startsWith('CT-') || enemy.id.startsWith('BANK-')));
   });
 
   await t.test('mobile-size pool entry and stage-specific assets', async () => {

@@ -4825,7 +4825,7 @@ const C2_STAGE_31 = {
     [2600,55],[2750,55],
     [3060,150],[3130,150],
     [3600,270],[3800,270],                     // C 高台
-    [4000,55],[4060,55],[4250,55],
+    [4000,55],[4060,55],[4130,55],[4250,55],[4310,55],
   ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
   // 260 長條氣球 9 條（未來氣球雨傘＝260×5 的材料；沒有放在需要冒險才拿得到的位置）
   buildBalloons: () => [
@@ -4851,11 +4851,11 @@ const C2_STAGE_31 = {
   // 小蠍子（一般蠍子 normal）：S1 示範風口＋正常戰鬥；c2Wind＝會受風口影響
   buildEnemies: () => [
     Object.assign(makeChapter2Scorpion(900, 40, 'normal'), { c2Id: 'S1', c2Wind: true, c2Demo: true, c2StartX: 900, c2DemoPatrol: 800, c2DemoRange: 200 }),   // 示範前：風口右邊 860～940 巡邏；示範後：600～1000（經過風口）
-    Object.assign(makeChapter2Scorpion(1350, 90, 'normal'), { c2Id: 'S2', c2Wind: true }),
-    Object.assign(makeChapter2Scorpion(3180, 90, 'normal'), { c2Id: 'S3', c2Wind: true }),   // 秘笈之後（巡邏 3090～3270，和秘笈對話結束的位置留一點距離）
+    Object.assign(makeWindScorpion(1350, 75), { c2Id: 'S2', c2Wind: true }),
+    Object.assign(makeSwiftScorpion(3140, 50), { c2Id: 'S3', c2Wind: true, patrolRange0: 50 }),   // 秘笈之後（巡邏 3090～3270，和秘笈對話結束的位置留一點距離）
   ],
   buildOranges: () => [],
-  buildRoundBalloons: () => [],
+  buildRoundBalloons: () => buildChapter2RoundBalloons([[1020, 260], [3825, 270]]),
   // 氣球雨傘製作秘笈：放在必經路線（地面高度），小狗在附近鼻子會發亮；沿用既有隱藏寶物（recipe）流程
   hiddenTreasure: {
     type:       'recipe',
@@ -24434,7 +24434,7 @@ var advGuardArmed = false;
 function advGuardKey() { try { return 'balloonV_adventureStageGuard_v1__' + advPlayerKey(); } catch (e) { return 'balloonV_adventureStageGuard_v1__guest'; } }
 function advGuardWrite(reason) {
   try {
-    if (!advGuardArmed || !levelStartSnapshot || levelRolledBackForRetry) return;
+    if (c34?.devSnap || !advGuardArmed || !levelStartSnapshot || levelRolledBackForRetry) return;
     if (gameState !== 'playing' && gameState !== 'paused') return;
     const g = { v: 1, at: Date.now(), reason: reason || '', game: GAME_VERSION, mode: advPlayMode, stageId: (LEVELS[currentLevelIndex] || {}).stageId, levelIndex: currentLevelIndex,
       challengeId: advAttempt && !advAttempt.ended ? advAttempt.challengeId : null, snap: levelStartSnapshot };
@@ -24446,6 +24446,7 @@ function advGuardApplyAtBoot() {
   let g = null;
   try { g = JSON.parse(localStorage.getItem(advGuardKey()) || 'null'); } catch (e) { g = null; }
   if (!g || !g.snap) return null;
+  if (g.stageId === '3-4' && c34PreviewSection()) { advGuardClear('playtest'); return null; }
   try {
     levelStartSnapshot = g.snap;
     restoreLevelStartSnapshot();          // 背包、裝備耐用度、帶狗、HP 回到該關開始前（原本的回復函式；會存檔）
@@ -27256,10 +27257,10 @@ const C2_STAGE_32 = {
     [2780,55],[3060,90],[3140,90],               // 樹幹橋上方
     [3560,250],[3700,250],[3920,340],[4000,340],
     [4160,240],[4240,200],[4320,160],[4400,120], // 從最高平台撐傘飄下來時拿得到的空中金幣
-    [4600,55],
+    [4560,55],[4600,55],[4640,55],
   ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
   buildBalloons: () => [
-    [ 300,  60], [ 495, 150], [1130, 260], [1760, 260], [2460, 160], [3630, 260], [3960, 350],
+    [ 300,  60], [ 495, 150], [1130, 260], [1760, 260], [2460, 160], [3630, 260], [3960, 350], [4550, 60],
   ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
   buildSpikes: () => [], buildTackHazards: () => [],
   buildTrees: () => [
@@ -27267,11 +27268,11 @@ const C2_STAGE_32 = {
     { x: 2959, y: 0, h: 358, trunkW: 34, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 253, walkable: true, pivotRight: true, c3Art: true },
   ],
   buildEnemies: () => [
-    Object.assign(makeChapter2Scorpion(2190, 200, 'normal'), { c2Id: 'C1', c2Wind: true }),   // 巡邏 1990～2390，經過風口 C1
-    Object.assign(makeChapter2Scorpion(2600, 80, 'normal'), { c2Id: 'C2', c2Wind: true }),    // 巡邏 2520～2680（離坑 S2 的退回點 2780 有一段距離）
+    Object.assign(makeWindScorpion(2190, 110), { c2Id: 'C1', c2Wind: true }),   // 巡邏 1990～2390，經過風口 C1
+    Object.assign(makeSwiftScorpion(2600, 65), { c2Id: 'C2', c2Wind: true, patrolRange0: 65 }),    // 巡邏 2520～2680（離坑 S2 的退回點 2780 有一段距離）
     Object.assign(makeChapter2Scorpion(4300, 120, 'normal'), { c2Id: 'E2', c2Wind: true }),   // 飄下來之後的格擋練習
   ],
-  buildOranges: () => [], buildRoundBalloons: () => [],
+  buildOranges: () => [], buildRoundBalloons: () => buildChapter2RoundBalloons([[1200, 265]]),
   hiddenTreasure: null,
   // v0.3.85：第二大陸的「氣球排球秘笈」藏匿處 — 區域 B 的獎勵高台（x 960～1260、高 200；只有借風口 B1 才上得去，不是必經道路）右端
   //   不需要氣球排球、不需要雨傘（沒有雨傘時風口一樣托得起來）；高台上沒有尖刺與敵人；拾取判定 ±50px（從地面碰不到）
@@ -32205,8 +32206,9 @@ function c1dDevJump(what) {
     [200,55],[260,55],[530,140],[580,140],[900,55],[1300,55],
     [1700,55],[1780,55],[2420,140],[2640,230],[2740,230],
     [3000,140],[3060,140],[3220,230],[3300,230],[2970,320],[3060,320],[3470,320],[3560,320],[3720,230],[3975,160],
-    [4200,55],[4400,55],[4800,140],[5040,230],[5120,230],[5320,140],[5580,180],[5640,180],[6000,55],
+    [4200,55],[4400,55],[4800,140],[5040,230],[5120,230],[5320,140],[5580,180],[5640,180],[6000,55],[6070,55],
   ].map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 }));
+  S.buildRoundBalloons = () => buildChapter2RoundBalloons([[3520, 330], [5090, 246]]);
   S.buildBalloons = () => [ [1000, 60], [2700, 240], [3010, 330], [3980, 170], [5080, 240], [5600, 190] ]
     .map(([x, yOff]) => ({ x, y: GROUND_Y - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 }));
   S.hints = [
@@ -33600,12 +33602,12 @@ const C2_STAGE_34 = (function () {
       [200,55],[260,55],[700,55],[760,55],
       [L.p1.x + 60, L.p1.h + 55], [L.p1.x + 300, L.p1.h + 55],
       [L.p2.x + 70, L.p2.h + 55], [L.p2.x + 130, L.p2.h + 55],
-      [L.ct.x + 120, L.ct.h + 55], [L.ct.x + 220, L.ct.h + 55], [L.ct.x + 420, L.ct.h + 55],
+      [L.ct.x + 120, L.ct.h + 55], [L.ct.x + 220, L.ct.h + 55], [L.ct.x + 385, L.ct.h + 55], [L.ct.x + 450, L.ct.h + 55],
       [L.pool.x + 230, L.ct.h + 215],                                      // 錢袋（金幣袋：沿用既有特殊拾取物，+10 冒險金幣、同一次遊玩只拿一次）
-      [L.bank.x + 160, L.bank.h + 55], [L.bank.x + 260, L.bank.h + 55], [L.bank.x + 420, L.bank.h + 55],
+      [L.bank.x + 160, L.bank.h + 55], [L.bank.x + 260, L.bank.h + 55], [L.bank.x + 490, L.bank.h + 55], [L.bank.x + 535, L.bank.h + 55],
     ].map(([x, yOff]) => ({ x, y: G - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2,
       c34PadBag: x === L.pool.x + 230 })),
-    buildBalloons: () => [ [400, 60], [L.p1.x + 180, L.p1.h + 80], [L.ct.x + 560, L.ct.h + 80], [L.bank.x + 340, L.bank.h + 80] ]
+    buildBalloons: () => [ [400, 60], [L.p1.x + 180, L.p1.h + 80], [L.ct.x + 560, L.ct.h + 80], [L.bank.x + 340, L.bank.h + 80], [L.bank.x + 518, L.bank.h + 60] ]
       .map(([x, yOff]) => ({ x, y: G - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
     buildSpikes: () => [], buildTackHazards: () => [],
     buildTrees: () => [
@@ -33614,12 +33616,22 @@ const C2_STAGE_34 = (function () {
         c34BaseDy: L.p2.h, c41SlopeTo: { x: L.p3.x, y: L.y(L.p3.h) } },
     ],
     buildEnemies: () => {
-      const p = { x: L.p2.x, y: L.y(L.p2.h), w: L.p2.w };
-      const e = Object.assign(makeWindScorpion(p.x + p.w / 2, 120), { c2Id: 'P2-W1', c2Wind: true, c34OnMesa: true });
-      e.c1dPlat = { x: p.x, y: p.y, w: p.w }; e.y = p.y - e.h; e.patrol = p.x + p.w / 2 - e.w / 2; e.patrolRange = Math.max(10, (p.w - e.w) / 2 - 30); e.x = e.patrol;
-      return [e];
+      function onMesa(enemy, mesa, id, range) {
+        const top = L.y(mesa.h);
+        return Object.assign(enemy, {
+          c2Id: id, c2Wind: true, c34OnMesa: true,
+          c1dPlat: { x: mesa.x, y: top, w: mesa.w },
+          y: top - enemy.h, patrolRange: range,
+        });
+      }
+      return [
+        onMesa(makeWindScorpion(L.p2.x + 146, 45), L.p2, 'P2-W1', 45),
+        onMesa(makeSwiftScorpion(L.ct.x + 245, 48), L.ct, 'CT-G1', 48),
+        onMesa(makeWindScorpion(L.bank.x + 400, 50), L.bank, 'BANK-W1', 50),
+      ];
     },
-    buildOranges: () => [], buildRoundBalloons: () => [],
+    buildOranges: () => [],
+    buildRoundBalloons: () => buildChapter2RoundBalloons([[L.ct.x + 530, L.ct.h + 65], [L.bank.x + 530, L.bank.h + 95]]),
     hiddenTreasure: null, extraHiddenTreasures: [],
   };
 })();
@@ -33673,19 +33685,95 @@ function c34Start(sid, mode, section) {
     console.log('[3-4] 進入 ' + sid + (c34.section === 'pool' ? '（水池區段）' : '') + (dev ? '（開發測試裝備）' : ''));
   });
 }
-// 開發入口的存檔隔離：保留進入前的記憶體背包，回家或離關時還原。試玩期間不寫背包存檔。
-function c34DevBegin() { if (!c34.devSnap) { c34.devSnap = JSON.stringify(playerInventory); c34L({ ev: 'devBegin' }); } }
+// 只有同時啟用訪客沙盒及開發工具，才建立獨立的 3-4 測試背包。
+const C34_TEST_BAG_MODES = ['cumulative', 'stocked', 'empty'];
+function c34BagMode() {
+  const query = new URLSearchParams(location.search);
+  if (!advDevMode() || query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
+  const mode = query.get('ch3bag');
+  return C34_TEST_BAG_MODES.includes(mode) ? mode : 'cumulative';
+}
+function c34BagKey(mode) { return 'balloonV_dev_c34_inventory_v2:' + mode; }
+
+function adventureLevelResourceConfig(lv) {
+  const coins = lv.buildCoins();
+  const b260 = lv.buildBalloons();
+  const round = lv.buildRoundBalloons?.() || [];
+  const fixed = { coins: coins.length, balloon260: b260.length, roundBalloon: round.length };
+  const specials = [];
+  for (const drop of V395_DROPS[lv.stageId] || []) {
+    const source = drop.from === 'coin' ? coins : b260;
+    if (!source.some(item => item.x === drop.x && (drop.y == null || GROUND_Y - item.y === drop.y))) continue;
+    const from = drop.from === 'coin' ? 'coins' : 'balloon260';
+    const to = { coinBag: 'coins', b260Bundle: 'balloon260', roundBundle: 'roundBalloon' }[drop.kind];
+    const amount = V395_BUNDLE[drop.kind];
+    fixed[from] -= 1;
+    fixed[to] += amount;
+    specials.push({ kind: drop.kind, x: drop.x, y: GROUND_Y - drop.y, amount });
+  }
+  const hidden = [lv.hiddenTreasure, ...(lv.extraHiddenTreasures || [])]
+    .filter(Boolean).map(({ type, recipeKey, name, recipeName, title, x, y, rewardCoins }) => ({
+      type, recipeKey, name: name || recipeName || title || recipeKey || type,
+      x, y, coins: type === 'goldChest' ? (rewardCoins || 30) : 0,
+    }));
+  return { fixed, specials, hidden };
+}
+
+function c34CumulativeResources() {
+  const stages = [...OFFICIAL_ADVENTURE_STAGE_IDS, '3-1', '3-2', '3-3'];
+  const totals = { coins: 0, balloon260: 0, roundBalloon: 0 };
+  const recipes = new Set();
+  for (const id of stages) {
+    const level = LEVELS[getLevelIndexByStageId(id)];
+    const { fixed, hidden } = adventureLevelResourceConfig(level);
+    for (const key of Object.keys(totals)) totals[key] += fixed[key];
+    for (const item of hidden) {
+      totals.coins += item.coins;
+      if (item.recipeKey) recipes.add(item.recipeKey);
+    }
+  }
+  return { totals, recipes: [...recipes] };
+}
+
+function c34CreateInventory(mode) {
+  const { totals, recipes } = c34CumulativeResources();
+  const resources = mode === 'cumulative' ? totals : mode === 'stocked'
+    ? { coins: 1000, balloon260: 100, roundBalloon: 50 }
+    : { coins: 0, balloon260: 0, roundBalloon: 0 };
+  const inventory = structuredClone(INVENTORY_DEFAULTS);
+  Object.assign(inventory, resources);
+  inventory.unlockedRecipes = Object.assign(inventory.unlockedRecipes, Object.fromEntries(recipes.map(id => [id, true])),
+    { balloonDice: true });
+  return inventory;
+}
+
+function c34DevBegin() {
+  if (c34.devSnap) return;
+  c34.devSnap = JSON.stringify(playerInventory);
+  c34.devBagMode = c34BagMode();
+  if (c34.devBagMode) {
+    const key = c34BagKey(c34.devBagMode);
+    let inventory;
+    try { inventory = JSON.parse(localStorage.getItem(key)); } catch {}
+    if (!inventory || typeof inventory.coins !== 'number') inventory = c34CreateInventory(c34.devBagMode);
+    playerInventory = inventory;
+    saveInventory();
+  }
+  c34L({ ev: 'devBegin', bagMode: c34.devBagMode });
+}
 function c34DevEnd(why) {
   if (!c34.devSnap) return;
-  const snap = JSON.parse(c34.devSnap); c34.devSnap = null; c34.dev = false;
-  Object.keys(playerInventory).forEach(k => { if (!(k in snap)) delete playerInventory[k]; }); Object.assign(playerInventory, snap);
-  c34L({ ev: 'devRestore', why }); console.log('[3-4] 開發測試結束（' + why + '）：背包還原成進入前的正式存檔');
+  playerInventory = JSON.parse(c34.devSnap);
+  c34.devSnap = null;
+  c34.devBagMode = null;
+  c34.dev = false;
+  c34L({ ev: 'devRestore', why });
 }
 // 開發測試雨傘：沿用雨傘測試場的記憶體雨傘（c2UmbTest），不碰背包
 function c34DevUmbrella() { c2UmbTest.active = true; c2UmbTest.stock = 9; equippedUmbrella.test = false; }
 function c34PlaceAtPool() {
   const D = c34Pool(); if (!D) return;
-  player.x = D.resetX - 40; player.y = D.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
+  player.x = D.resetX + 10; player.y = D.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   cameraX = Math.max(0, Math.min(LEVEL_LENGTH - CANVAS_W, player.x - 380));
   c34.camY = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
   activeSlot = 'umbrella'; try { initEquippedUmbrella(); } catch (e) {}
@@ -33705,7 +33793,7 @@ function c34Complete(sid) {
   flow['stage' + key + 'BestSec'] = flow['stage' + key + 'BestSec'] ? Math.min(flow['stage' + key + 'BestSec'], sec) : sec;
   c34L({ ev: 'complete', sid, first, got, sec, level: +c34.level.toFixed(2) });
   c2ClearGuard = true;
-  try { triggerClear(); } finally { c2ClearGuard = false; if (!dev) saveInventory(); }
+  try { triggerClear(); } finally { c2ClearGuard = false; if (!dev || c34.devBagMode) saveInventory(); }
   try {
     if (H2.pendingSummary) {
       const rows = H2.pendingSummary.rows;
@@ -33773,8 +33861,18 @@ function c34Complete(sid) {
     return r;
   });
   // 開發入口存檔隔離（見 c34DevBegin）
-  wrapFn('saveInventory', o => function () { return c34.devSnap ? true : o.apply(this, arguments); });
-  wrapFn('openHomeScreen', o => function () { try { c34DevEnd('home'); } catch (e) {} return o.apply(this, arguments); });
+  wrapFn('saveInventory', o => function () {
+    if (!c34.devSnap) return o.apply(this, arguments);
+    if (!c34.devBagMode) return true;
+    try {
+      localStorage.setItem(c34BagKey(c34.devBagMode), JSON.stringify(playerInventory));
+      return true;
+    } catch { return false; }
+  });
+  wrapFn('openHomeScreen', o => function () {
+    if (!c34.devBagMode) c34DevEnd('home');
+    return o.apply(this, arguments);
+  });
   wrapFn('restart', o => function () {
     const r = o.apply(this, arguments);
     if (c34Is()) {
@@ -33893,6 +33991,20 @@ function c34Complete(sid) {
       const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = ref.className; b.textContent = label;
       b.addEventListener('click', ev => { ev.preventDefault(); c34Start('3-4', 'dev', sec); }); ref.insertAdjacentElement('afterend', b);
     });
+    if (c34BagMode() && !document.getElementById('btn-pause-reset-c34-bag')) {
+      const button = document.createElement('button');
+      button.id = 'btn-pause-reset-c34-bag';
+      button.type = 'button';
+      button.className = ref.className;
+      button.textContent = '重置目前的 3-4 測試背包';
+      button.addEventListener('click', () => {
+        if (!confirm('清除目前模式的 3-4 試玩背包並重新開始？')) return;
+        try { localStorage.removeItem(c34BagKey(c34BagMode())); }
+        catch { showHint('無法重置測試背包。', 180); return; }
+        location.reload();
+      });
+      box.append(button);
+    }
     return true;
   };
   if (!addBtns()) { let n = 0; const t = setInterval(() => { if (addBtns() || ++n > 60) clearInterval(t); }, 500); }
