@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.12-entry-reliability-test-1';
-const BUILD_TIME   = '2026-11-18';
+const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-1';
+const BUILD_TIME   = '2026-11-19';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -3622,7 +3622,7 @@ let currentRunStats = {
 
 // ── Asset loading ─────────────────────────────
 const playerImg = new Image();
-playerImg.src = 'assets/player.png'; // place your image here
+playerImg.src = '../assets/player.png';
 
 // ── Game state ────────────────────────────────
 // gameState 用 var 使其成為全域變數，讓 index.html script 也可讀取
@@ -5849,7 +5849,8 @@ function updatePlayer(dt) {
   // v0.3.95：翼靴＝地面跑速 ×倍率（只有裝備中的玩家、只有生效的那一關）。空中維持原本速度 → 跳躍水平距離不變，
   //   不會讓「一般跳不過」的尖刺坑（例如 3-2 S2 寬 200、助跑跳約 182）變成跳得過，唯一正解型解謎不受影響
   // v0.3.96（#27）翼靴＝跑速、跳躍高度、跳躍水平距離各 +25%：地面 ×1.25；空中 ×√1.25（起跳初速也 ×√1.25 → 滯空時間 ×√1.25 → 水平距離 ×1.25）
-  const _spd = PLAYER_SPEED * ((typeof v396BootsMoveMul === 'function') ? v396BootsMoveMul() : 1);
+  const waterMotion = c34Motion();
+  const _spd = waterMotion.move * PLAYER_SPEED * ((typeof v396BootsMoveMul === 'function') ? v396BootsMoveMul() : 1);
   if (inp('left'))  { player.vx = -_spd; player.facingRight = false; moving = true; }
   if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
   if (!moving) player.vx *= 0.75; // friction
@@ -5859,13 +5860,15 @@ function updatePlayer(dt) {
   player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + player.vx));
 
   // Jump（v0.3.80：在風口裡低空飄浮時也可以起跳 → windCanJump；沒有風口的關卡永遠是 false）
-  if (inp('jump') && (player.onGround || (typeof windCanJump === 'function' && windCanJump()))) {
-    player.vy = -JUMP_FORCE * ((typeof c2UmbWindJumpMul === 'function') ? c2UmbWindJumpMul() : 1) * ((typeof v396BootsJumpMul === 'function') ? v396BootsJumpMul() : 1);   // v0.3.96：翼靴起跳 ×√1.25（跳躍高度 +25%）   // v0.3.84：撐雨傘在風口裡起跳 → 第二大陸工作區的起跳加成（其他情況一律 ×1）
+  if (inp('jump') && (waterMotion.swim ? waterMotion.canJump : (player.onGround || (typeof windCanJump === 'function' && windCanJump())))) {
+    if (waterMotion.swim) c34LeaveSurface();
+    player.vy = waterMotion.swim ? -c34JumpSpeed(JUMP_FORCE, waterMotion.height) : -c34JumpSpeed(JUMP_FORCE, waterMotion.height) * ((typeof c2UmbWindJumpMul === 'function') ? c2UmbWindJumpMul() : 1) * ((typeof v396BootsJumpMul === 'function') ? v396BootsJumpMul() : 1);   // v0.3.96：翼靴起跳 ×√1.25（跳躍高度 +25%）   // v0.3.84：撐雨傘在風口裡起跳 → 第二大陸工作區的起跳加成（其他情況一律 ×1）
     player.onGround = false;
     try { sfxPlay('jump'); } catch (e) {} // v0.3.64：真的起跳才播一次
   }
 
   // Gravity
+  const feetBeforeFall = player.y + player.h;
   player.vy += GRAVITY;
   try { if (windVents.length) applyWindToPlayer(); } catch (e) {} // v0.3.80：環境風力（只有設定了風口的關卡；和角色本身的重力／跳躍分開計算）
   try { if (typeof c2UmbrellaFallCap === 'function') c2UmbrellaFallCap(); } catch (e) {} // v0.3.82：撐氣球雨傘時在空中慢慢落下（不扣耐久）
@@ -5905,12 +5908,14 @@ function updatePlayer(dt) {
 
   // Platform collisions (top only)
   platforms.forEach(p => {
+    const top = c34PlatformSurface(p);
     if (
       player.vy >= 0 &&
       player.x + player.w > p.x && player.x < p.x + p.w &&
-      player.y + player.h >= p.y && player.y + player.h <= p.y + 24
+      player.y + player.h >= top && player.y + player.h <= top + 24 &&
+      (!(p.c34Pad || p.c34Escape) || feetBeforeFall <= top + 2)
     ) {
-      player.y = p.y - player.h;
+      player.y = top - player.h;
       player.vy = 0;
       player.onGround = true;
     }
@@ -11053,13 +11058,21 @@ function startAdventureFromGate() {
   if (!gameStartGateActive) return;
   if (typeof assetBootReady !== 'undefined' && !assetBootReady) return;   // v0.3.79：開機素材還沒載好不能開始
   if (isTouchPlayDevice() && isPortraitNow()) { renderStartGate(); return; }
+  const chapter3Preview = c34PreviewSection();
   gameStartGateActive = false;
   lastTime = 0; fixedStepAccumulator = 0;   // 遊戲迴圈時間基準從現在算起（等待多久都不會一次補進遊戲）
-  if (gameState === 'paused') resumeGame();
+  if (gameState === 'paused' && !chapter3Preview) resumeGame();
   const el = document.getElementById('start-gate-overlay');
   if (el) { el.style.display = 'none'; el.dataset.key = ''; el.innerHTML = ''; }   // 按鈕一起移除（不會留下看不見但還能按的按鈕）
   try { Object.keys(keys).forEach(k => { keys[k] = false; }); Object.keys(mobileBtn).forEach(k => { mobileBtn[k] = false; }); } catch (e) {}
   console.log('[StartGate] 開始冒險（從這一刻起才開始計時）');
+  if (chapter3Preview) {
+    advIntroChecked = true;
+    advBootHomePending = null;
+    advResumePromptDeferred = null;
+    c34Start('3-4', 'dev', chapter3Preview);
+    return;
+  }
   // v0.3.79：開機時已經判斷好的去向，等玩家按下開始才顯示（下一個事件迴圈再做 → 同一次按鍵／點擊不會順便按到新出現的按鈕）
   setTimeout(() => {
     try {
@@ -13251,7 +13264,7 @@ function drawWorldInner() {
   }
 
   // v0.3.27-terrain：地面缺口（低處坑道）— 挖掉地面，坑底由平台繪製（v0.3.49：第二章正式地面帶已畫好凹洞時跳過）
-  if (!chapter2TilesDrawn) groundGaps.forEach(g => {
+  if (!chapter2TilesDrawn && !c34Is()) groundGaps.forEach(g => {
     if (g.c2Pit && chapter3BgDrawn && typeof c3PitArtReady === 'function' && c3PitArtReady()) return;   // v0.3.83：第三章尖刺坑改畫正式坑洞圖（不再填深色長方形）
     const gx = g.x - cx;
     if (gx > CANVAS_W + 10 || gx + g.w < -10) return;
@@ -13472,6 +13485,8 @@ function drawWorldInner() {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
   try { drawHealFx(cx, 'front'); } catch (e) {}
+  if (c34Is()) c34Falls().forEach(f => c34DrawFall(f, cx));
+  c34DrawWetStatus(cx);
 
   // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
   orangeNemeses.forEach(o => {
@@ -14909,18 +14924,19 @@ function drawFinishFlag(cx) {
   if (sx < -160 || sx > CANVAS_W + 60) return;
   // v0.3.50：全章節通用過關旗（旗桿對齊原本旗桿、石座站在地面上；過關判定 FINISH_X 不變）；沒載好 → 原本畫法
   const A = ADVENTURE_ITEM_ICON;
-  if (drawAdventureItemIcon('goalFlag', sx + A.goalFlagOffsetX, GROUND_Y + A.goalFlagOffsetY, A.goalFlagScale, A.goalFlagAlpha)) return;
+  const ground = c34Is() ? C34_LAY.y(C34_LAY.bank.h) : GROUND_Y;
+  if (drawAdventureItemIcon('goalFlag', sx + A.goalFlagOffsetX, ground + A.goalFlagOffsetY, A.goalFlagScale, A.goalFlagAlpha)) return;
   if (sx < -40 || sx > CANVAS_W + 40) return;
   // Pole
   ctx.fillStyle = '#888';
-  ctx.fillRect(sx, GROUND_Y - 120, 6, 120);
+  ctx.fillRect(sx, ground - 120, 6, 120);
   // Flag
   ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(sx + 6, GROUND_Y - 118, 50, 32);
+  ctx.fillRect(sx + 6, ground - 118, 50, 32);
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 11px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('GOAL', sx + 10, GROUND_Y - 98);
+  ctx.fillText('GOAL', sx + 10, ground - 98);
 }
 
 
@@ -26744,7 +26760,8 @@ function c3TreeAngle(t) {
 function c3TreeArtReady() { return !!(c3TreeImg('tree') && c3TreeImg('root')); }
 // 只畫在地面以上；尖刺坑範圍內可以往下到坑底（倒下的樹冠可以垂進坑裡）
 function c3TreeClip(cx) {
-  ctx.beginPath(); ctx.rect(-10, -10, CANVAS_W + 20, GROUND_Y + 10 + (C3_TREE_ART.groundOverlapPx || 0));   // v0.3.84：倒下的樹幹可以壓在草地上（不再切出直角）
+  const top = c34Is() ? -Math.ceil(c34.camY) - 10 : -10;
+  ctx.beginPath(); ctx.rect(-10, top, CANVAS_W + 20, GROUND_Y - top + (C3_TREE_ART.groundOverlapPx || 0));   // v0.3.84：倒下的樹幹可以壓在草地上（不再切出直角）
   (typeof c2Pits !== 'undefined' ? c2Pits : []).forEach(p => { ctx.rect(p.x - cx, GROUND_Y - 1, p.w, (typeof GROUND_GAP_FLOOR_Y !== 'undefined' ? GROUND_GAP_FLOOR_Y : GROUND_Y + 66) - GROUND_Y + 1); });
   ctx.clip();
 }
@@ -33484,267 +33501,28 @@ function c42DrawBrokenIcon(barLeft, cy) {
 //  ・3-1～3-3、第一大陸、雨傘耐久規則、敵人、角色動作都沒有改
 // ════════════════════════════════════════════════════════════════════
 var C34 = {
-  // v0.4.11：峽谷地形素材 v2（使用者 2026-11-17 提供：Left／Right 懸崖收邊＋Middle A／B／C），縮放 0.25 等比例、不拉伸
-  //   surf＝草地可站立面在原圖的 y（量測：實心草地上緣中位數）；edge＝草地邊緣（碰撞邊緣）在原圖的 x；joint＝和 Middle 接合的垂直切邊
-  //   Middle B 右側約 72px 是半透明淡出（素材本身）→ 只用到 x 712（裁掉淡出那段，不模糊、不重畫）
-  art: { dir: 'assets/adventure/tiles/chapter3/', scale: 0.25,
-         files: { midA: 'canyon_v2_middle_A.png', midB: 'canyon_v2_middle_B.png', midC: 'canyon_v2_middle_C.png', left: 'canyon_v2_left.png', right: 'canyon_v2_right.png' },
-         mid: { midA: { w: 784, surf: 69 }, midB: { w: 712, surf: 72 }, midC: { w: 784, surf: 74 } }, midH: 2006, midStack: 440,
-         left:  { W: 1254, surf: 146, edge: 110, joint: 1179, topCut: 900, bandY0: 460, bandY1: 900 },
-         right: { W: 1254, surf: 84, edge: 1150, joint: 177, topCut: 900, bandY0: 420, bandY1: 900 } },
   abyssDepth: 70,              // 深淵：腳低於地面 70px（快到畫面下緣）才算掉下去
   wallTol: 8,                  // 高台側面：腳低於高台頂面 8px 以上才算撞牆（站在頂面邊緣不會被推開）
-  cam: { top: 110, max: 430, ease: 0.12, sky: '#9cc8f2', skyTop: '#6fa9e6' },   // v0.4.11：峽谷變高 → 往上追蹤最多 430px（跟隨手感不變）
+  cam: { top: 110, max: 430, ease: 0.12 },
   // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度只用 45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
   //   v0.4.11 重新校準：噴嘴對準 60° 才是全風速（openAngle 60），45° 剩 offThrust；沒撐雨傘風力只剩 noUmbThrust（「用雨傘接風」）
   wd: { deviceX: 1040, angles: [45, 60], maxUp: 17, openAngle: 60, offThrust: 0.6, noUmbThrust: 0.35 },
-  pool: { fillFrames: 360, sinkPx: 6, surf0: 64, surf1: -36, inSink: 18, padW: 170, floor: 130 },   // 水位 0→1 約 6 秒；水面＝池邊頂面 +64 → −36；池底岩層在池邊頂面下 130px；掉水裡回到瀑布左邊
-  fall: { x: 0, half: 22 },
+  pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
+  float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
+  water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
 };
-var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, splash: [], log: [], wallHits: 0, poolResets: 0, bagGot: false };
-function c34L(o) { try { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); } catch (e) {} }
+var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits: 0, bagGot: false,
+  swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true };
+function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }
-var c34Imgs = {}, c34Status = {};
-function c34Entries() {
-  return Object.keys(C34.art.files).map(k => ({ path: C34.art.dir + C34.art.files[k], type: 'image', critical: false, label: 'c34:' + k,
-    apply: im => { c34Imgs[k] = im; c34Status[k] = 'ok'; }, fail: () => { c34Status[k] = 'error'; console.error('[3-4] ❌ 峽谷素材載入失敗：' + C34.art.files[k]); } }));
-}
-function c34Img(k) { const im = c34Imgs[k]; return (im && im.complete && im.naturalWidth > 0) ? im : null; }
-function c34ArtReady() { return ['midA', 'midB', 'midC', 'left', 'right'].every(k => c34Img(k)); }
+function c34ArtReady() { const status = c34Art.status(); return status.loaded === 76 && !status.failed.length; }
+
 function c34Mesas() { return (platforms || []).filter(p => p.c34Mesa); }
 function c34Gaps(kind) { return (c2Pits || []).filter(p => p.c34 && (!kind || p.c34 === kind)); }
 function c34Pool() { const lv = c34Lv(); return (lv && lv.c34) ? (lv.c34PoolDef || null) : null; }   // v0.4.11：水池在峽谷頂部，左右是高台岩壁（不是地面缺口）
 function c34SurfaceY() { const P = C34.pool, D = c34Pool(); return (D ? D.baseY : GROUND_Y) + P.surf0 + (P.surf1 - P.surf0) * c34.level; }
 
-// ── 畫面：峽谷頂部（中央岩體 A／B／C 交錯）、懸崖口（右側原圖／左側鏡像）、岩壁延伸、深淵 ──
-function c34MidKey(i) { const h = ((i * 2654435761) >>> 0) % 7; return h < 3 ? 'midA' : h < 5 ? 'midB' : 'midC'; }   // 不固定順序（避免 ABCABC 重複感）
-function c34Bottom() { return GROUND_Y + 150; }   // 岩壁往下畫到這裡（鏡頭最低時畫面底＝GROUND_Y＋80）
-// 中段岩體（Middle A／B／C）：從 x0 起一張接一張（等比例、不拉伸），往下疊到 bottom；keys 可指定順序（拼接測試用）
-function c34Strip(x0, x1, top, cx, bottom, keys) {
-  const A = C34.art, S = A.scale, H = A.midH * S, step = A.midStack;
-  bottom = bottom == null ? c34Bottom() : bottom;
-  const sx0 = Math.max(Math.round(x0 - cx), -4), sx1 = Math.min(Math.round(x1 - cx), CANVAS_W + 4); if (sx1 <= sx0) return;
-  const tiles = []; let x = x0, i = 0, seed = Math.round(x0 / 7);
-  while (x < x1 && i < 400) { const k = keys ? keys[i % keys.length] : c34MidKey(seed + i), M = A.mid[k], w = M.w * S; tiles.push({ k, x, w, M }); x += w; i++; }
-  ctx.save(); ctx.beginPath(); ctx.rect(sx0, top - 40, sx1 - sx0, bottom - top + 40); ctx.clip();
-  const rows = Math.max(0, Math.ceil((bottom - (top + H - 20)) / step));
-  for (let r = rows; r >= 0; r--) tiles.forEach(t => {   // 深的先畫：上一層蓋住下一層的草地
-    const dx = Math.round(t.x - cx); if (dx > sx1 || dx + t.w < sx0) return;
-    const im = c34Img(t.k); if (!im) return;
-    ctx.drawImage(im, 0, 0, t.M.w, A.midH, dx, Math.round(top - t.M.surf * S + r * step), Math.ceil(t.w) + 1, H);
-  });
-  ctx.restore();
-}
-// 懸崖收邊（Left／Right）：edgeX＝草地邊緣（碰撞邊緣）的世界座標；maxW＝從邊緣往內最多畫多寬（窄平台兩端各一半，從接合邊那一側裁掉，不壓縮）
-//   上半段＝原圖 0～topCut；下面用同一張圖的岩壁段（bandY0～bandY1）往下接到 bottom（岩壁夠高、不露底）
-function c34Edge(side, edgeX, top, cx, maxW, bottom) {
-  const A = C34.art, S = A.scale, P = side === 'L' ? A.left : A.right, im = c34Img(side === 'L' ? 'left' : 'right'); if (!im) return;
-  bottom = bottom == null ? c34Bottom() : bottom;
-  const full = Math.abs(P.joint - P.edge) * S, w = Math.min(full, maxW == null ? full : maxW);
-  // 原圖要畫的橫向範圍（外側整片保留透明外輪廓；只從接合邊那一側裁）
-  let s0, s1; if (side === 'L') { s0 = 0; s1 = P.edge + w / S; } else { s0 = P.edge - w / S; s1 = P.W; }
-  const dx = Math.round(edgeX - (P.edge - s0) * S - cx), dw = (s1 - s0) * S;
-  if (dx > CANVAS_W + 10 || dx + dw < -10) return;
-  const y0 = top - P.surf * S;
-  ctx.save();
-  ctx.drawImage(im, s0, 0, s1 - s0, P.topCut, dx, Math.round(y0), Math.ceil(dw), Math.ceil(P.topCut * S));
-  const bh = (P.bandY1 - P.bandY0) * S;
-  for (let y = y0 + P.topCut * S; y < bottom && bh > 0; y += bh) ctx.drawImage(im, s0, P.bandY0, s1 - s0, P.bandY1 - P.bandY0, dx, Math.round(y), Math.ceil(dw), Math.ceil(bh) + 1);
-  ctx.restore();
-}
-function c34EdgeW(side) { const A = C34.art, P = side === 'L' ? A.left : A.right; return Math.abs(P.joint - P.edge) * A.scale; }
-// 一段連續的峽谷地形：左端 Left、中間 Middle、右端 Right（hasL／hasR＝這一端是懸崖）
-function c34Seg(x0, x1, top, hasL, hasR, cx, bottom) {
-  const half = (x1 - x0) / 2, wl = hasL ? Math.min(c34EdgeW('L'), half) : 0, wr = hasR ? Math.min(c34EdgeW('R'), half) : 0;
-  if (x1 - wr - (x0 + wl) > 0) c34Strip(x0 + wl - 1, x1 - wr + 1, top, cx, bottom);
-  if (hasL) c34Edge('L', x0, top, cx, wl, bottom);
-  if (hasR) c34Edge('R', x1, top, cx, wr, bottom);
-}
-function c34DrawAbyssFill(g, cx, deep) {
-  const sx = Math.round(g.x - cx); if (sx > CANVAS_W + 20 || sx + g.w < -20) return;
-  const bottom = CANVAS_H + C34.cam.max + 10;
-  ctx.save();
-  const gr = ctx.createLinearGradient(0, GROUND_Y - 10, 0, bottom);
-  gr.addColorStop(0, deep ? '#3a1d0e' : '#4a2a16'); gr.addColorStop(0.35, deep ? '#1c0d06' : '#2c170b'); gr.addColorStop(1, '#070302');
-  ctx.fillStyle = gr; ctx.fillRect(sx, GROUND_Y - 10, g.w, bottom - GROUND_Y + 10);
-  // 遠處岩層（淡淡的橫紋，看得出很深）
-  ctx.globalAlpha = 0.18; ctx.strokeStyle = '#c0703c'; ctx.lineWidth = 2;
-  for (let y = GROUND_Y + 14, k = 0; y < bottom; y += 18 + k * 4, k++) { ctx.beginPath(); ctx.moveTo(sx + 6, y); ctx.lineTo(sx + g.w - 6, y + ((k % 2) ? 3 : -3)); ctx.stroke(); }
-  ctx.restore();
-}
-function c34DrawTerrain(cx) {
-  const gaps = [];   // 連在一起的缺口合併（一整片深淵，中間不畫懸崖口）
-  groundGaps.slice().sort((a, b) => a.x - b.x).forEach(g => { const L = gaps[gaps.length - 1]; if (L && g.x <= L.x + L.w + 1) L.w = Math.max(L.w, g.x + g.w - L.x); else gaps.push({ x: g.x, w: g.w }); });
-  // ① 深淵：深色深谷。左右各多畫 90px 到地面下 → 懸崖外輪廓凹進去的地方看到的是深谷（不是背景）；地面段之後會蓋在上面
-  gaps.forEach(g => c34DrawAbyssFill({ x: g.x - 90, w: g.w + 180 }, cx, true));
-  // ② 水池：池子內側的深色池壁（左右多畫 90px → 峽谷岩壁外輪廓凹進去的地方是池壁陰影）
-  const P = c34Pool();
-  if (P) { ctx.save(); const y0 = P.baseY - 10, y1 = P.baseY + C34.pool.floor + 30, bg = ctx.createLinearGradient(0, y0, 0, y1); bg.addColorStop(0, '#3a2414'); bg.addColorStop(1, '#1a0f07'); ctx.fillStyle = bg; ctx.fillRect(Math.round(P.x - 90 - cx), y0, P.w + 180, y1 - y0); ctx.restore(); }
-  // ③ 一般高度的地面：缺口之間的每一段（世界座標固定起點 → 鏡頭移動時圖案不會跳動）
-  let cur = -60; const segs = [];
-  gaps.forEach(g => { if (g.x > cur) segs.push([cur, g.x, cur > -60, true]); cur = Math.max(cur, g.x + g.w); });
-  if (cur < LEVEL_LENGTH + 60) segs.push([cur, LEVEL_LENGTH + 60, cur > -60, false]);
-  segs.forEach(([a, b, hl, hr]) => c34Seg(a, b, GROUND_Y, hl, hr, cx));
-  // ④ 高台（實心岩體）：頂面＝平台、兩端懸崖收邊
-  c34Mesas().forEach(m => { if (m.x > cx + CANVAS_W + 300 || m.x + m.w < cx - 300) return; c34Seg(m.x, m.x + m.w, m.y, m.x > 0, m.x + m.w < LEVEL_LENGTH - 5, cx); });
-}
-// 拼接測試（開發用）：用遊戲同一套畫法，把指定順序畫在畫面上（L＝Left、A／B／C＝Middle、R＝Right）
-function c34DebugArtRow(seq, sx, top, bottom) {
-  const A = C34.art, S = A.scale; let x = sx;
-  for (const ch of seq) {
-    if (ch === 'L') { const w = c34EdgeW('L'); c34Edge('L', x, top, 0, w, bottom); x += w; }
-    else if (ch === 'R') { const w = c34EdgeW('R'); c34Edge('R', x + w, top, 0, w, bottom); x += w; }
-    else { const k = 'mid' + ch, w = A.mid[k].w * S; c34Strip(x, x + w, top, 0, bottom, [k]); x += w; }
-  }
-  return x;
-}
-
-// ── 瀑布（程式畫：沒有提供瀑布素材）──
-function c34Falls() { const lv = c34Lv(); return (lv && lv.c34Falls) || []; }
-function c34FallBase(f) { return f.baseY != null ? f.baseY : GROUND_Y; }
-function c34UnderFall(f) { const pcx = player.x + player.w / 2, B = c34FallBase(f); return Math.abs(pcx - f.x) <= f.w / 2 + 12 && player.y < B && player.y + player.h > B - 160; }
-function c34FallDeflect(f) { if (!c34UnderFall(f) || !(typeof umbEquipped === 'function' && umbEquipped())) return null; return f.split ? 'split' : (player.facingRight ? 'right' : 'left'); }
-// 被雨傘擋開後的水流：從傘面往面向的方向拋出（拋物線）
-function c34ArcAt(f, dir, t) { const x0 = player.x + player.w / 2 + dir * 18, y0 = player.y - 6; return { x: x0 + dir * f.vx * t, y: y0 - f.vy * t + 0.25 * t * t }; }
-function c34ArcLand(f, dir, surf) { const vy = f.vy, dy = surf - (player.y - 6); const t = (vy + Math.sqrt(vy * vy + dy)) / 0.5; return { t, x: player.x + player.w / 2 + dir * 18 + dir * f.vx * t }; }
-function c34DrawFall(f, cx) {
-  const sx = f.x - cx; if (sx < -120 || sx > CANVAS_W + 120) return;
-  const t = frameCount, top = -C34.cam.max - 20, def = c34FallDeflect(f);
-  const B = c34FallBase(f), stopY = def ? player.y - 4 : B + 2;
-  ctx.save();
-  // 岩壁後方的濕潤陰影
-  ctx.fillStyle = 'rgba(40,70,90,0.18)'; ctx.fillRect(sx - f.w / 2 - 8, top, f.w + 16, B - top);
-  // 水柱
-  const gr = ctx.createLinearGradient(sx - f.w / 2, 0, sx + f.w / 2, 0);
-  gr.addColorStop(0, 'rgba(170,225,255,0.55)'); gr.addColorStop(0.5, 'rgba(235,250,255,0.85)'); gr.addColorStop(1, 'rgba(170,225,255,0.55)');
-  ctx.fillStyle = gr; ctx.fillRect(sx - f.w / 2, top, f.w, stopY - top);
-  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
-  for (let i = 0; i < 5; i++) { const lx = sx - f.w / 2 + 5 + i * (f.w - 10) / 4; for (let y = top + ((t * 7 + i * 23) % 40); y < stopY; y += 40) { ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(lx, Math.min(stopY, y + 16)); ctx.stroke(); } }
-  if (!def) { c34Splash(sx, B + 2, 1); }
-  else {
-    const dirs = def === 'split' ? [-1, 1] : [def === 'right' ? 1 : -1];
-    const P = c34Pool(), surf = P ? c34SurfaceY() : B;
-    dirs.forEach(d => {
-      const land = c34ArcLand(f, d, (P && def !== 'split') ? surf : B);
-      const intoPool = P && def !== 'split' && land.x > P.x + 4 && land.x < P.x + P.w - 4;
-      const endY = intoPool ? surf : B;
-      const L = c34ArcLand(f, d, endY);
-      ctx.lineCap = 'round';
-      for (let k = 0; k < 3; k++) {
-        ctx.strokeStyle = k === 0 ? 'rgba(170,225,255,0.55)' : k === 1 ? 'rgba(225,245,255,0.8)' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = (def === 'split' ? 10 : 14) - k * 4;
-        ctx.beginPath(); for (let s = 0; s <= 1.0001; s += 0.05) { const p = c34ArcAt(f, d, s * L.t); s === 0 ? ctx.moveTo(p.x - cx, p.y) : ctx.lineTo(p.x - cx, p.y); } ctx.stroke();
-      }
-      // 流動的水珠
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      for (let i = 0; i < 6; i++) { const s = ((t * 0.03 + i / 6) % 1), p = c34ArcAt(f, d, s * L.t); ctx.beginPath(); ctx.arc(p.x - cx, p.y, 2.2, 0, Math.PI * 2); ctx.fill(); }
-      // 傘面上的水花
-      ctx.fillStyle = 'rgba(235,250,255,0.85)';
-      for (let i = 0; i < 4; i++) { const a = -Math.PI / 2 + d * (0.4 + i * 0.25), r = 10 + ((t * 2 + i * 9) % 12); ctx.beginPath(); ctx.arc(player.x + player.w / 2 - cx + Math.cos(a) * r, player.y - 6 + Math.sin(a) * r, 2, 0, Math.PI * 2); ctx.fill(); }
-      c34Splash(L.x - cx, endY, intoPool ? 1.4 : 0.8);
-    });
-  }
-  ctx.restore();
-}
-function c34Splash(sx, y, k) {
-  const t = frameCount; ctx.save(); ctx.fillStyle = 'rgba(240,252,255,0.85)';
-  for (let i = 0; i < 7; i++) { const ph = ((t * 0.08 + i / 7) % 1), a = Math.PI + (i / 6) * Math.PI, r = 4 + ph * 16 * k; ctx.globalAlpha = 0.9 * (1 - ph); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * r, y + Math.sin(a) * r * 0.8, 2.4, 0, Math.PI * 2); ctx.fill(); }
-  ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.ellipse(sx, y, 14 * k, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-}
-// ── 水池：水面、水位刻度、浮墊（程式畫：沒有提供水池／浮墊素材）──
-function c34DrawPool(cx) {
-  const P = c34Pool(); if (!P) return;
-  const sx = Math.round(P.x - cx), surf = c34SurfaceY(), t = frameCount, bottom = CANVAS_H + C34.cam.max + 10;
-  const floorY = P.baseY + C34.pool.floor;
-  // 池子：左右是高台的厚岩壁（高台自己畫懸崖口），底部是岩層；空的部分是深色池壁
-  ctx.save(); const bg = ctx.createLinearGradient(0, P.baseY - 10, 0, floorY); bg.addColorStop(0, '#3a2414'); bg.addColorStop(1, '#1a0f07');
-  ctx.fillStyle = bg; ctx.fillRect(sx, P.baseY - 10, P.w, floorY - P.baseY + 24); ctx.restore();
-  ctx.save(); ctx.beginPath(); ctx.rect(sx - 40, floorY + 21, P.w + 80, CANVAS_H + C34.cam.max); ctx.clip(); c34Strip(P.x - 30, P.x + P.w + 30, floorY, cx); ctx.restore();   // 池底岩層（不畫最上面的草地帶：池底不是草地）
-  ctx.save();
-  ctx.beginPath(); ctx.rect(sx, P.baseY - 200, P.w, floorY - P.baseY + 200 + 4); ctx.clip();
-  const gr = ctx.createLinearGradient(0, surf, 0, floorY); gr.addColorStop(0, 'rgba(70,170,215,0.82)'); gr.addColorStop(1, 'rgba(10,50,90,0.95)');
-  ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(sx, floorY + 4);
-  for (let x = 0; x <= P.w; x += 10) ctx.lineTo(sx + x, surf + Math.sin(x * 0.05 + t * 0.08) * 2);
-  ctx.lineTo(sx + P.w, floorY + 4); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(230,250,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
-  for (let x = 0; x <= P.w; x += 10) { const y = surf + Math.sin(x * 0.05 + t * 0.08) * 2; x === 0 ? ctx.moveTo(sx + x, y) : ctx.lineTo(sx + x, y); } ctx.stroke();
-  ctx.restore();
-  // 水位刻度（池子左壁）：看得出水位升了多少
-  ctx.save(); ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  for (let i = 0; i <= 4; i++) { const y = P.baseY + C34.pool.surf0 + (C34.pool.surf1 - C34.pool.surf0) * (i / 4); ctx.fillStyle = c34.level >= i / 4 - 1e-6 ? 'rgba(255,240,150,0.95)' : 'rgba(255,255,255,0.45)'; ctx.fillRect(sx + 4, y - 1, 12, 3); }
-  ctx.restore();
-  // 浮墊
-  const pad = platforms.find(p => p.c34Pad);
-  if (pad) c34DrawPad(pad, cx);
-}
-function c34DrawPad(p, cx) {
-  const x = Math.round(p.x - cx), y = Math.round(p.y), w = p.w, h = 18;
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,40,70,0.35)'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h + 3, w / 2, 5, 0, 0, Math.PI * 2); ctx.fill();
-  const r = h / 2;
-  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2); ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
-  ctx.fillStyle = '#ff7a3d'; ctx.fill(); ctx.save(); ctx.clip();
-  ctx.fillStyle = '#ffe066'; for (let i = 0; i < w; i += 34) ctx.fillRect(x + i + 8, y, 14, h);
-  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(x, y + 2, w, 4);
-  ctx.restore();
-  ctx.strokeStyle = '#a3381a'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.restore();
-}
-
-// ── 每一步：高台側面、深淵、瀑布導流、水位、浮墊、垂直鏡頭 ──
-function c34Step() {
-  if (!c34Is() || gameState !== 'playing') return;
-  // 高台側面＝實心牆（腳比頂面低 8px 以上時不能穿進岩壁）
-  c34Mesas().forEach(m => {
-    if (!(player.x + player.w > m.x && player.x < m.x + m.w)) return;
-    if (player.y + player.h <= m.y + C34.wallTol) return;
-    const pcx = player.x + player.w / 2, fromLeft = pcx < m.x + m.w / 2;
-    player.x = fromLeft ? m.x - player.w : m.x + m.w; player.vx = 0;
-    try { wd.wdVx = 0; } catch (e) {}
-    c34.wallHits++; if (c34.wallHits % 30 === 1) c34L({ ev: 'wall', mesa: m.x, side: fromLeft ? 'L' : 'R', feet: Math.round(player.y + player.h), top: m.y });
-  });
-  // 瀑布導流
-  let filling = false;
-  c34.stream = 'none';
-  c34Falls().forEach(f => {
-    const d = c34FallDeflect(f); if (!d) return; c34.stream = d;
-    const P = c34Pool();
-    if (P && d !== 'split') { const land = c34ArcLand(f, d === 'right' ? 1 : -1, c34SurfaceY()); if (land.x > P.x + 4 && land.x < P.x + P.w - 4) filling = true; }
-  });
-  if (filling && c34.level < 1) { const before = c34.level; c34.level = Math.min(1, c34.level + 1 / C34.pool.fillFrames); c34.fillFrames++; if (Math.floor(before * 4) !== Math.floor(c34.level * 4)) c34L({ ev: 'level', level: +c34.level.toFixed(2) }); if (c34.fillFrames === 1) { c34L({ ev: 'fillStart' }); try { showHint('💧 水流進水池了！水位慢慢上升中…', 150); } catch (e) {} } }
-  if (filling !== c34._filling) { c34._filling = filling; c34L({ ev: filling ? 'fillOn' : 'fillOff', level: +c34.level.toFixed(3) }); }
-  // 浮墊：跟著水面（站在上面時一起上升）
-  const pad = platforms.find(p => p.c34Pad);
-  if (pad) {
-    const ny = c34SurfaceY() - C34.pool.sinkPx;
-    if (Math.abs(ny - pad.y) > 0.001) {
-      const on = player.x + player.w > pad.x && player.x < pad.x + pad.w && Math.abs(player.y + player.h - pad.y) <= 3 && player.vy >= -0.01;
-      pad.y = ny; if (on) { player.y = pad.y - player.h; player.onGround = true; }
-    }
-  }
-  // 掉進水裡（腳在水面下 18px）→ 回到岸邊（不扣血）
-  const P = c34Pool();
-  if (P) {
-    const pcx = player.x + player.w / 2;
-    if (pcx > P.x && pcx < P.x + P.w && player.y + player.h > c34SurfaceY() + C34.pool.inSink) {
-      c34.poolResets++; c34L({ ev: 'poolReset', level: +c34.level.toFixed(2) });
-      player.x = P.resetX; player.y = P.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
-      player.invincible = Math.max(player.invincible || 0, 30);
-      try { sfxOnPlayerHurt(); } catch (e) {}
-      try { showHint('💦 掉進水裡了！回到岸邊（不扣血）— 水位會保留', 150); } catch (e) {}
-    }
-  }
-  // 垂直鏡頭
-  const target = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
-  c34.camY += (target - c34.camY) * C34.cam.ease; if (Math.abs(c34.camY) < 0.05) c34.camY = 0;
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  關卡資料（v0.4.11：單一連續關卡 3-4 風之峽谷；配置全部由 C34_LAY 推算）
-//   x ──►   低地(瀑布) │導風│ 深淵 A1 │ P1(蠍子) │A2│ P2(樹) │   A3    │P3│ 峽谷頂部 ……瀑布│ 水池 │ 對岸 → 出口
-//   高度（離一般地面）：低地 0 ／ P1 h1 ／ P2 h1+120 ／ 岩棚 P3 再 +145 ／ 峽谷頂部再 +110 ／ 對岸再 +140
-// ════════════════════════════════════════════════════════════════════
 const C34_G = GROUND_Y;
 var C34_LAY = (function () {
   const G = C34_G, L = {};
@@ -33784,7 +33562,8 @@ const C2_STAGE_34 = (function () {
       { x: L.p2.x, y: L.y(L.p2.h), w: L.p2.w, h: 22, c34Mesa: true, c34Id: 'P2' },     // 中間更高平台（樹）
       { x: L.p3.x, y: L.y(L.p3.h), w: L.p3.w, h: 22, c34Id: 'P3' },                    // 岩棚（第三章平台；倒樹斜橋的終點）
       { x: L.ct.x, y: ct, w: L.ct.w, h: 22, c34Mesa: true, c34Id: 'CT' },              // 峽谷頂部（水池左岸）
-      { x: L.pool.x + 145, y: ct + C34.pool.surf0 - C34.pool.sinkPx, w: C34.pool.padW, h: 14, c34Pad: true },   // 充氣浮墊（跟著水面）
+      { x: L.pool.x, y: ct + C34.pool.escapeY, w: C34.pool.escapeWidth, h: 14, c34Escape: true }, // Left-bank return ledge, below the bank lip.
+      { x: L.pool.x + 145, y: ct + C34.pool.surf0 - C34.pool.padClear, w: C34.pool.padW, h: 14, c34Pad: true },   // 充氣浮墊（跟著水面）
       { x: L.bank.x, y: L.y(L.bank.h), w: L.bank.w, h: 22, c34Mesa: true, c34Id: 'BANK' },   // 對岸（水位夠高才跳得上去）
     ],
     buildWindVents: () => [],
@@ -33830,6 +33609,13 @@ if (ADV_WORKSPACE) {
   try { V395_DROPS['3-4'] = [{ from: 'coin', x: C34_LAY.pool.x + 230, y: C34_LAY.ct.h + 215, kind: 'coinBag' }]; } catch (e) {}
 }
 function c2Is34Clear() { return c34Is('3-4') && gameState === 'clear' && homeEntryMode !== 'failed'; }
+function c34PreviewSection() {
+  if (!ADV_WORKSPACE || !advDevMode()) return null;
+  const query = new URLSearchParams(location.search);
+  if (query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
+  const section = query.get('ch3test');
+  return section === 'start' || section === 'pool' ? section : null;
+}
 // v0.4.11：3-4 只有一個關卡。section：'start'（起點）／'pool'（開發用：直接放到峽谷頂部的水池區段；同一個關卡、同一套通關狀態）
 //   開發者入口（?devtools=1）：測試用氣球劍＋氣球槌（999）＋測試雨傘（只在記憶體，6／6 ×9）→ 不寫進正式背包、存檔
 function c34Start(sid, mode, section) {
@@ -33840,13 +33626,13 @@ function c34Start(sid, mode, section) {
   v396DevDog = false;
   if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
   const idx = getLevelIndexByStageId(sid); if (idx < 0) return;
-  if (dev) c34DevBegin(); else c34DevEnd('normal-start');
   c2HideDone();
   try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
   try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
   bringBalloonDog = dog; levelStartBringDog = dog; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
+    if (dev) c34DevBegin(); else c34DevEnd('normal-start');
     advMarkTestEntry('c2-stage-' + sid.toLowerCase());
     c34.dev = dev;   // 第二大陸既有規則（test_only）
     currentLevelIndex = idx;
@@ -33867,14 +33653,12 @@ function c34Start(sid, mode, section) {
     console.log('[3-4] 進入 ' + sid + (c34.section === 'pool' ? '（水池區段）' : '') + (dev ? '（開發測試裝備）' : ''));
   });
 }
-// 開發入口的存檔隔離：進入時記下正式背包（playerInventory）；開發測試期間存檔一律寫回這份（測試中撿到的金幣、錢袋、材料、通關紀錄都不會進正式存檔）；
-//   回小V之家／進其他關卡時，記憶體裡的背包也還原成這份
+// 開發入口的存檔隔離：保留進入前的記憶體背包，回家或離關時還原。試玩期間不寫背包存檔。
 function c34DevBegin() { if (!c34.devSnap) { c34.devSnap = JSON.stringify(playerInventory); c34L({ ev: 'devBegin' }); } }
 function c34DevEnd(why) {
   if (!c34.devSnap) return;
   const snap = JSON.parse(c34.devSnap); c34.devSnap = null; c34.dev = false;
   Object.keys(playerInventory).forEach(k => { if (!(k in snap)) delete playerInventory[k]; }); Object.assign(playerInventory, snap);
-  try { saveInventory(); } catch (e) {}
   c34L({ ev: 'devRestore', why }); console.log('[3-4] 開發測試結束（' + why + '）：背包還原成進入前的正式存檔');
 }
 // 開發測試雨傘：沿用雨傘測試場的記憶體雨傘（c2UmbTest），不碰背包
@@ -33889,6 +33673,7 @@ function c34PlaceAtPool() {
 }
 function c34Complete(sid) {
   if (c2Proto.done) return; c2Proto.done = true;
+  const dev = !!c34.devSnap;
   const key = '34';   // v0.4.11：整關只在最後出口結算一次
   const sec = +(elapsedSec || 0).toFixed(1);
   const flow = c2Flow();
@@ -33900,7 +33685,7 @@ function c34Complete(sid) {
   flow['stage' + key + 'BestSec'] = flow['stage' + key + 'BestSec'] ? Math.min(flow['stage' + key + 'BestSec'], sec) : sec;
   c34L({ ev: 'complete', sid, first, got, sec, level: +c34.level.toFixed(2) });
   c2ClearGuard = true;
-  try { triggerClear(); } finally { c2ClearGuard = false; try { saveInventory(); } catch (e) {} }
+  try { triggerClear(); } finally { c2ClearGuard = false; if (!dev) saveInventory(); }
   try {
     if (H2.pendingSummary) {
       const rows = H2.pendingSummary.rows;
@@ -33917,13 +33702,21 @@ function c34Complete(sid) {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._c34w) { if (typeof o !== 'function') console.warn('[3-4] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._c34w = true; globalThis[name] = w; };
   // 素材群組（只在 3-4 進關時載入）
   const G = 'c34canyon';
-  const addGroup = M => { if (M && !M[G]) M[G] = c34Entries(); return M; };
+  const BG = 'chapter3vertical';
+  const addGroup = M => {
+    if (M && !M[G]) M[G] = c34Art.entries(false);
+    if (M && !M[BG]) M[BG] = c34Art.entries(true);
+    return M;
+  };
   try { addGroup(getAssetManifest()); } catch (e) {}
   if (typeof ASSET_MANIFEST !== 'undefined' && ASSET_MANIFEST) addGroup(ASSET_MANIFEST);
   wrapFn('buildAssetManifest', o => function () { return addGroup(o.apply(this, arguments)); });
   wrapFn('getAssetGroupsForLevelBase', o => function (idx) {
-    const r = o.apply(this, arguments), lv = LEVELS[idx]; if (!(lv && lv.c34)) return r;
-    let out = r.includes(G) ? r : r.concat([G]);
+    const r = o.apply(this, arguments), lv = LEVELS[idx];
+    if (!lv || lv.chapterId !== 3) return r;
+    const groups = r.filter(group => group !== 'chapter3bg').concat([BG]);
+    if (!lv.c34) return groups;
+    let out = groups.concat([G]);
     if (!out.includes('wdart')) out = out.concat(['wdart']);   // 導風裝置正式圖
     return out;
   });
@@ -33940,7 +33733,8 @@ function c34Complete(sid) {
     WD_KEYS.forEach(k => { WD_TUNING[k] = Array.isArray(wdSaved[k]) ? wdSaved[k].slice() : wdSaved[k]; });   // 先回到原本設定（3-2／3-T）
     c34WdOn = false;
     const r = o.apply(this, arguments);
-    c34.camY = 0; c34.level = 0; c34.fillFrames = 0; c34.stream = 'none'; c34._filling = false; c34.wallHits = 0; c34.poolResets = 0;
+    c34ResetWater();
+    c34.wallHits = 0;
     if (lv && lv.c34) {
       // 深淵／水池：沒有坑底保險平台（真正的缺口）
       for (let i = platforms.length - 1; i >= 0; i--) { const p = platforms[i]; if (p.c2PitFloor && c2Pits.some(q => q.c34 && q.x === p.x && q.w === p.w)) platforms.splice(i, 1); }
@@ -33957,13 +33751,14 @@ function c34Complete(sid) {
     return r;
   });
   // 開發入口存檔隔離（見 c34DevBegin）
-  wrapFn('saveInventory', o => function () { if (c34.devSnap) { try { localStorage.setItem(SAVE_KEY, c34.devSnap); } catch (e) {} return; } return o.apply(this, arguments); });
+  wrapFn('saveInventory', o => function () { return c34.devSnap ? true : o.apply(this, arguments); });
   wrapFn('openHomeScreen', o => function () { try { c34DevEnd('home'); } catch (e) {} return o.apply(this, arguments); });
   wrapFn('restart', o => function () {
     const r = o.apply(this, arguments);
     if (c34Is()) {
-      c34.camY = 0; c34.level = 0; c34.fillFrames = 0; c34.stream = 'none'; c34._filling = false;
-      const pad = platforms.find(p => p.c34Pad); if (pad) pad.y = c34SurfaceY() - C34.pool.sinkPx;
+      c34ResetWater();
+      const pad = platforms.find(p => p.c34Pad);
+      if (pad) Object.assign(pad, { y: c34SurfaceY() - C34.pool.padClear, c34Angle: 0, c34Sink: 0, c34SpringSpeed: 0 });
       if (c34Is('3-4')) { try { wdResetState(true); } catch (e) {} }
     }
     return r;
@@ -33983,36 +33778,39 @@ function c34Complete(sid) {
   wrapFn('wdPitHit', o => function (pit) { const r = o.apply(this, arguments); if (c34Is('3-4')) { c34L({ ev: 'wdAbyssReset', x: Math.round(player.x), hp: player.hp, ang: wd.ang }); try { showHint('💨 沒飛上對面的平台，回到起點 — 敲機關換個角度再試（不扣血）', 170); } catch (e) {} } return r; });
   // 畫面：地形（取代第三章一般地面圖）、深淵不畫尖刺、瀑布與水池、高台與浮墊不畫成一般平台
   wrapFn('drawChapter3Ground', o => function (cx) { if (c34Is() && c34ArtReady()) { c34DrawTerrain(cx); return true; } return o.apply(this, arguments); });
-  wrapFn('drawChapter3PlatformArt', o => function (p, cx) { if (p && (p.c34Mesa || p.c34Pad) && c34Is()) return true; return o.apply(this, arguments); });
+  wrapFn('drawChapter3PlatformArt', o => function (p, cx) {
+    if (c34Is() && p && (p.c34Mesa || p.c34Id === 'P3' || p.c34Pad || p.c34Escape)) return true;
+    return o.apply(this, arguments);
+  });
   wrapFn('drawC2SpikePits', o => function (cx) {
     if (!c34Is()) return o.apply(this, arguments);
     const all = c2Pits; c2Pits = all.filter(p => !p.c34);
     try { if (c2Pits.length) o.apply(this, arguments); else { try { if (wdActive()) wdDrawDevice(cx); } catch (e) {} } } finally { c2Pits = all; }
-    try { c34DrawPool(cx); c34Falls().forEach(f => c34DrawFall(f, cx)); } catch (e) { console.warn('[3-4] draw', e); }
+    c34DrawPool(cx);
   });
-  // 垂直鏡頭：整個世界（含背景）往下移；上方露出的部分用天空色補
   wrapFn('drawWorldInner', o => function () {
-    if (!c34Is() || !(c34.camY > 0.5)) return o.apply(this, arguments);
-    ctx.save(); ctx.fillStyle = C34.cam.sky; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H); ctx.translate(0, Math.round(c34.camY));
+    if (!c34Is() || c34.camY < 0.5) return o.apply(this, arguments);
+    ctx.save(); ctx.translate(0, Math.round(c34.camY));
     try { return o.apply(this, arguments); } finally { ctx.restore(); }
   });
-  // v0.4.11 暫時處理：鏡頭往上時，背景圖上緣會露出一條水平色塊 → 背景上方畫天空漸層、背景上緣 90px 淡入（畫在地形下面；正式背景延伸留待美術階段）
   wrapFn('drawChapter3ParallaxBg', o => function () {
-    const r = o.apply(this, arguments);
-    try {
-      if (r && c34Is() && c34.camY > 0.5) {
-        const top = -Math.ceil(c34.camY) - 2, fade = 90;
-        ctx.save();
-        const g = ctx.createLinearGradient(0, top, 0, 0); g.addColorStop(0, C34.cam.skyTop); g.addColorStop(1, C34.cam.sky);
-        ctx.fillStyle = g; ctx.fillRect(0, top, CANVAS_W, -top + 1);
-        const f = ctx.createLinearGradient(0, 0, 0, fade); f.addColorStop(0, C34.cam.sky); f.addColorStop(1, 'rgba(156,200,242,0)');
-        ctx.fillStyle = f; ctx.fillRect(0, 0, CANVAS_W, fade);
-        ctx.restore();
-      }
-    } catch (e) {}
-    return r;
+    return isChapter3ParallaxStage() && c34Art.background(c34Is() ? Math.round(c34.camY) : 0) || o.apply(this, arguments);
   });
-  wrapFn('updatePlayer', o => function () { const r = o.apply(this, arguments); try { c34Step(); } catch (e) { console.warn('[3-4] step', e); } return r; });
+  wrapFn('drawPlayer', o => function (cx) {
+    if (c34Is() && c34.swim && c34Art.swimmer(player.x + player.w / 2 - cx, c34SurfaceY(), Math.abs(player.vx) > 0.28, player.facingRight, c34.waterTick * 1000 / 60) !== null) return;
+    return o.apply(this, arguments);
+  });
+  wrapFn('rpgBuildScene', o => function (id) {
+    const line = C34_TEACHING[id];
+    if (!line) return o.apply(this, arguments);
+    return { id, title: '水域探索', policy: 'oncePerAttempt', saveHistory: false, left: line.face, right: null,
+      pages: [{ sp: 'balloonv', face: line.face, text: line.text }] };
+  });
+  wrapFn('updatePlayer', o => function () {
+    const result = o.apply(this, arguments);
+    if (c34Is() && gameState === 'playing' && !rpgActive) c34Step();
+    return result;
+  });
   // 一般深淵：沿用第三章尖刺坑的受傷＋退回（3-1／3-2 由原本的流程呼叫；3-4 在這裡呼叫，導風深淵照舊交給導風機關）
   wrapFn('update', o => function () {
     const r = o.apply(this, arguments);
@@ -34069,9 +33867,9 @@ function c34Complete(sid) {
     return true;
   };
   if (!addBtns()) { let n = 0; const t = setInterval(() => { if (addBtns() || ++n > 60) clearInterval(t); }, 500); }
-  Object.assign(window, { c34Start, c34DebugArtRow, debugC34: () => ({ version: GAME_VERSION, stage: (c34Lv() || {}).stageId, section: c34.section, dev: !!c34.dev, lay: C34_LAY, umb: Object.assign({}, equippedUmbrella, { stock: c2UmbStock(), testStock: c2UmbTest.stock, testActive: c2UmbTest.active }), gs: gameState, art: Object.assign({}, c34Status), ready: c34ArtReady(), camY: +c34.camY.toFixed(1), level: +c34.level.toFixed(3), stream: c34.stream,
+  Object.assign(window, { c34Start, c34DebugArtRow, debugC34: () => ({ version: GAME_VERSION, stage: (c34Lv() || {}).stageId, section: c34.section, dev: !!c34.dev, lay: C34_LAY, umb: Object.assign({}, equippedUmbrella, { stock: c2UmbStock(), testStock: c2UmbTest.stock, testActive: c2UmbTest.active }), gs: gameState, art: c34Art.status(), ready: c34ArtReady(), wetSeconds: c34.wet / 60, swim: c34.swim, surface: c34SurfaceY(), float: C34.float, camY: +c34.camY.toFixed(1), level: +c34.level.toFixed(3), stream: c34.stream,
     pits: c2Pits.map(p => ({ id: p.id, x: p.x, w: p.w, c34: p.c34 || null, wd: !!p.wd })), gaps: groundGaps.map(g => [g.x, g.w]), floors: platforms.filter(p => p.c2PitFloor).map(p => p.x),
     mesas: c34Mesas().map(m => ({ x: m.x, w: m.w, top: m.y })), pad: (platforms.find(p => p.c34Pad) || null), wd: { active: wdActive(), angles: WD_TUNING.angles, openAngle: WD_TUNING.openAngle, offThrust: WD_TUNING.offThrust, maxUp: WD_TUNING.maxUp, ang: wd.ang, deviceX: WD_TUNING.deviceX, pitX: WD_TUNING.pitX, pitW: WD_TUNING.pitW, resetX: WD_TUNING.resetX },
     trees: breakableTrees.map(t => ({ x: t.x, st: t.state, slopeTo: t.c41SlopeTo || null, slope: t.c41Slope || null })), log: c34.log.slice(-60) }) });
-  console.log('[v0.4.11] 3-4 風之峽谷（單一關卡原型）已載入');
+  console.log('[v0.4.13] 3-4 風之峽谷水域與地形整合已載入');
 })();
