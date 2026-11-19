@@ -21894,7 +21894,7 @@ var h2BulkBuying = false;
 const H2_COLLAPSIBLE = { recipes: 'left', res: 'left', supply: 'left', shop: 'right' };  // 可收合的一般功能卡（玩家資料、氣球小狗常駐）
 const H2 = { open: false, legacy: false, dir: 0, notes: false, car: { recipes: 0, res: 0, supply: 0, shop: 0 }, expanded: { left: null, right: null },
   panel: null, shopQty: {}, borrowed: [], bound: false, rendering: false, raf: 0, lastTap: {},
-  img: {}, failed: [], coreLoading: false, forceResult: false, enterPending: false, enterReason: null, pendingSummary: null, summary: null };
+  img: {}, failed: [], coreLoading: false, enterPending: false, enterReason: null, pendingSummary: null, summary: null };
 const H2_DEVTOOLS = (() => { try { return /[?&]devtools=1\b/.test(location.search); } catch (e) { return false; } })();   // v0.3.99：只認網址
 // 開發用：?homeLegacy=1 或 localStorage balloonV_dev_homeLegacy=1 → 一開始就用舊版小V的家與舊結算流程（回歸測試用）
 try { if (/[?&]homeLegacy=1\b/.test(location.search) || localStorage.getItem('balloonV_dev_homeLegacy') === '1') H2.legacy = true; } catch (e) {}
@@ -22634,23 +22634,24 @@ function h2BuildSummary(b) {
   if (rs.dogGoneThisClear) rows.push({ icon: 'balloonDog', text: '氣球小狗陪你完成最後一次冒險，已消氣', val: '', neg: true });
   const v = Number(rs.vCoinsEarnedThisClear || 0);
   if (v > 0) rows.push({ icon: null, emoji: '🐷', text: 'V 幣' + ((rs.vCoinEarnDetails || []).length ? '（' + rs.vCoinEarnDetails.map(x => x.label).join('、') + '）' : ''), val: '+' + v });
-  return { title: getChapterDisplayTitle(currentLevelIndex) + ' 通關！', rows };
+  return { levelIndex: currentLevelIndex, title: getChapterDisplayTitle(currentLevelIndex) + ' 通關！', rows };
 }
 function h2ShowSummary(s) {
   const wrap = h2$('h2-sum-wrap'), body = h2$('h2-sum-body'), title = h2$('h2-sum-title');
   if (!wrap || !body) return;
-  H2.summary = s;
   if (title) title.textContent = s.title;
   body.innerHTML = s.rows.length ? s.rows.map(r => '<div class="h2-sum-row"><span class="h2-row-slot">' + (r.icon ? h2Icon(r.icon) : '<span class="h2-ico-txt">' + h2Esc(r.emoji || '') + '</span>') + '</span>'
       + '<span>' + h2Esc(r.text) + '</span>' + (r.val ? '<b' + (r.neg ? ' class="is-neg"' : '') + '>' + h2Esc(r.val) + '</b>' : '') + '</div>').join('')
-    : '<div class="h2-empty">這一關沒有拿到新的物品。</div>';
+    : '<div class="h2-empty">' + (s.emptyMessage || '這一關沒有拿到新的物品。') + '</div>';
   wrap.classList.add('is-open');
 }
 function h2HideSummary() { const w = h2$('h2-sum-wrap'); if (w) w.classList.remove('is-open'); }
-function h2ShowLegacyResult() {
-  h2HideSummary(); h2ClosePanel();
-  H2.forceResult = true;
-  try { closeHomeScreen(); if (typeof window.hidePauseBtn === 'function') window.hidePauseBtn(); showResultButtons(); } finally { H2.forceResult = false; }
+function h2ReopenSummary() {
+  h2ClosePanel();
+  const summary = H2.summary;
+  h2ShowSummary(summary?.levelIndex === currentLevelIndex ? summary : {
+    title: '本關詳細結算', rows: [], emptyMessage: '尚無本關結算紀錄。',
+  });
 }
 function h2FinalOverlayOpen() { const f = h2$('adv-final-overlay'); return !!(f && getComputedStyle(f).display !== 'none'); }
 function h2EnterHomeAfterResult() {
@@ -22660,7 +22661,7 @@ function h2EnterHomeAfterResult() {
   if (h2FinalOverlayOpen()) { H2.pendingSummary = null; return; }  // 2-4：維持「冒險總結算 → 回到小V的家」
   openHomeScreen('clear');
   const s = H2.pendingSummary; H2.pendingSummary = null;
-  if (s) h2ShowSummary(s);
+  if (s) { H2.summary = s; h2ShowSummary(s); }
   else if (reason === 'prep') h2Toast('↩ 已返回上一關過關後的整備。本節獎勵先前已領取，不會重複發放。');
   else if (reason === 'resume') h2Toast('↩ 已恢復上一趟冒險的整備。本節獎勵先前已領取，不會重複發放。');
 }
@@ -22782,7 +22783,7 @@ function h2PanelBody(kind, tab) {
     return '<div class="h2-sub">' + h2Esc(pr.name) + '正式挑戰：已通過 ' + pr.done + ' / ' + pr.total + ' 關' + (summary ? '<br>' + summary : '') + '</div>'
       + '<div class="h2-progress" style="height:1.1em;margin-bottom:0.8em"><div class="h2-progress-fill" style="width:' + (pr.total ? pr.done / pr.total * 100 : 0).toFixed(2) + '%"></div></div>'
       + '<div class="h2-sub">本次冒險統計</div><div id="h2-borrow-challenge"></div>'
-      + (gameState === 'clear' ? '<div style="margin-top:0.7em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="legacyResult">查看本關詳細結算</button></div>' : '')
+      + (gameState === 'clear' ? '<div style="margin-top:0.7em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="stageResult">查看本關詳細結算</button></div>' : '')
       + '<div class="h2-soon" style="margin-top:0.8em">「正式挑戰／自由練習」的模式選擇與世界地圖，會在下一階段開放。<br>目前請用「出發」繼續目前的冒險。</div>';
   }
   if (kind === 'handbook') {
@@ -22875,13 +22876,19 @@ function h2BindOnce() {
     }
     if (c('#h2-bulb')) { const b = h2$('h2-bulb-bubble'); if (b && b.style.display === 'block') h2HideBubble(); else h2ShowBubble(); return; }
     if (c('#h2-sum-ok')) { h2HideSummary(); return; }
-    if (c('#h2-sum-detail')) { h2ShowLegacyResult(); return; }
+    if (c('#h2-sum-detail')) { h2ReopenSummary(); return; }
     if (t === h2$('h2-panel-wrap') || c('#h2-panel-close')) { h2ClosePanel(); return; }
     if (c('#h2-turn-l')) { h2SetDir(H2.dir - 1); return; }
     if (c('#h2-turn-r')) { h2SetDir(H2.dir + 1); return; }
     if (c('#h2-hero-btn')) { h2HeroTap(); return; }
     if (c('#h2-player-btn')) { h2OpenPanel('player'); return; }
-    if (c('#h2-back')) { if (!h2$('h2-back').disabled) homeGoBack(); return; }
+    if (c('#h2-back')) {
+      if (!h2$('h2-back').disabled) {
+        if (homeEntryMode === 'clear') h2ReopenSummary();
+        else homeGoBack();
+      }
+      return;
+    }
     if (c('#h2-handbook-btn')) { h2OpenPanel('handbook'); return; }
     if (c('#h2-nav-map')) { h2MapOpen(); return; }
     if (c('#h2-map-wrap')) { h2MapClick(e); return; }
@@ -22911,7 +22918,7 @@ function h2BindOnce() {
     if (act === 'readKey') { const k = (playerInventory.keyItems || {})[key]; if (k) openDiscoveryItemModal(k, { mode: 'read' }); return; }
     if (act === 'notes') { rpgOpenNotes(); return; }
     if (act === 'openPanel') { h2OpenPanel(key, { tab: a.dataset.tab }); return; }
-    if (act === 'legacyResult') { h2ShowLegacyResult(); return; }
+    if (act === 'stageResult') { h2ReopenSummary(); return; }
     if (act === 'go') { h2Go(); return; }
   });
   h2BindSwipe(root);
@@ -23100,7 +23107,7 @@ if (typeof window !== 'undefined') {
   });
   // 結算畫面：正常通關（clear）→ 直接進小V之家；時間到（gameover）照舊顯示結算畫面
   wrap('showResultButtons', orig => function () {
-    if (!H2.legacy && !H2.forceResult && gameState === 'clear' && h2$('h2-root')) {
+    if (!H2.legacy && gameState === 'clear' && h2$('h2-root')) {
       const el = h2$('result-overlay'); if (el) el.style.display = 'none';
       if (!H2.enterPending) { H2.enterPending = true; setTimeout(h2EnterHomeAfterResult, 0); }
       return;

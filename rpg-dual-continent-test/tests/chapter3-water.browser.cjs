@@ -123,9 +123,10 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       put(f.x, baseY, true, 'umbrella');
       for (let i = 0; i < 180; i++) c34Step();
       const half = { stream: c34.stream, level: c34.level, surface: c34SurfaceY(), pad: pad.y, wet: c34.wet };
-      put(f.x - 80, baseY, true, 'umbrella');
+      put(f.x - 160, baseY, true, 'umbrella');
+      const awayFromCanopy = c34FallCanopy(f) === null;
       for (let i = 0; i < 60; i++) c34Step();
-      const stop = { stream: c34.stream, level: c34.level, surface: c34SurfaceY() };
+      const stop = { stream: c34.stream, level: c34.level, surface: c34SurfaceY(), awayFromCanopy };
       put(f.x, baseY, true, 'umbrella');
       for (let i = 0; i < 240; i++) c34Step();
       const full = { level: c34.level, surface: c34SurfaceY(), pad: pad.y };
@@ -169,6 +170,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(half.wet, 0);
     assert.ok(half.surface < initial.surface);
     assert.ok(half.pad < initial.pad);
+    assert.equal(stop.awayFromCanopy, true);
     assert.equal(stop.stream, 'none');
     assert.equal(stop.level, half.level);
     assert.equal(stop.surface, half.surface);
@@ -254,6 +256,40 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(actual.afterExit, 1);
     assert.equal(actual.done, true);
     assert.equal(actual.saved, true);
+  });
+
+  await t.test('reopens the settled result in the same home overlay without changing the save', async () => {
+    const summary = page.locator('#h2-sum-wrap');
+    const body = page.locator('#h2-sum-body');
+    await page.waitForFunction(() => H2.open && H2.summary && !H2.enterPending);
+    await summary.waitFor({ state: 'visible' });
+    const originalTitle = await page.locator('#h2-sum-title').textContent();
+    const originalRows = await body.textContent();
+    const readState = () => page.evaluate(() => ({
+      inventory: JSON.stringify(playerInventory),
+      hp: player.hp,
+      local: Object.entries(localStorage).sort(),
+      session: Object.entries(sessionStorage).sort(),
+    }));
+    const before = await readState();
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await page.locator('#h2-sum-ok').click();
+      await summary.waitFor({ state: 'hidden' });
+      await page.locator('#h2-back').click();
+      await summary.waitFor({ state: 'visible' });
+      assert.equal(await page.locator('#h2-sum-title').textContent(), originalTitle);
+      assert.equal(await body.textContent(), originalRows);
+      assert.equal(await page.locator('#result-overlay').isVisible(), false);
+    }
+    assert.deepEqual(await readState(), before);
+    await record(page, 'desktop-3-4-reopened-result');
+
+    await page.evaluate(() => { H2.summary = null; });
+    await page.locator('#h2-sum-ok').click();
+    await page.locator('#h2-back').click();
+    assert.match(await body.textContent(), /尚無本關結算紀錄/);
+    assert.deepEqual(await readState(), before);
   });
 
   await t.test('mobile-size pool entry and stage-specific assets', async () => {
