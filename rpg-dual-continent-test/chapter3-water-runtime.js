@@ -41,7 +41,8 @@ function c34Bottom() {
 
 function c34DrawTerrain(cx) {
   const pool = c34Pool();
-  if (pool) c34Art.poolFoundation(pool.x - cx, pool.w, pool.baseY + C34.pool.floor);
+  if (pool) c34Art.poolFoundation(pool.x - cx, pool.w, pool.baseY,
+    C34_LAY.y(C34_LAY.bank.h), pool.baseY + C34.pool.floor);
   const gaps = [];
   for (const gap of groundGaps.slice().sort((a, b) => a.x - b.x)) {
     const prev = gaps[gaps.length - 1], end = gap.x + gap.w;

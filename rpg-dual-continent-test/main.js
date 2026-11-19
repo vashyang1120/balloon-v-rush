@@ -32849,7 +32849,7 @@ function c4TreeIsPit(t) {   // 支點右邊（樹幹往右倒的範圍內）有�
   try { const px = t.x + (t.trunkW || 34) / 2; return (typeof c2Pits !== 'undefined' ? c2Pits : []).some(p => p.x > px - 40 && p.x < px + 320); } catch (e) { return false; }
 }
 function c4TreeArt(t) {   // 這棵樹用哪一組圖：坑邊樹＝崖邊樹（素材載好才用）；其他＝原本的正式樹木
-  if (t._c4Pit == null) t._c4Pit = c4TreeIsPit(t);
+  if (t._c4Pit == null) t._c4Pit = !!t.c34BaseDy || c4TreeIsPit(t);
   if (t._c4Pit && c4CliffImg('tree') && c4CliffImg('root')) return { tree: c4CliffImg('tree'), root: c4CliffImg('root'), cliff: true };
   return { tree: c3TreeImg('tree'), root: c3TreeImg('root'), cliff: false };
 }
@@ -33038,7 +33038,13 @@ function c4RoadTree(x) { return { x, y: 0, h: 358, trunkW: 34, crownR: 40, state
       if (sx + G.w < -20 || sx - G.w > CANVAS_W + 20) return;
       const pit = (typeof c2Pits !== 'undefined' ? c2Pits : []).find(p => p.x > G.px - 40 && p.x < G.px + G.w);
       ctx.save();
-      if (pit) { ctx.beginPath(); ctx.rect(-10, -10, pit.x - cx + 10, CANVAS_H + 20); ctx.clip(); }   // 坑口上方不畫（崖邊樹的草皮剛好停在崖邊）
+      const edge = t.c34BaseDy ? C34_LAY.p2.x + C34_LAY.p2.w : pit?.x;
+      if (edge != null) {
+        ctx.beginPath();
+        const upper = t.c34BaseDy ? -C34.cam.max : -10;
+        ctx.rect(-10, upper, Math.max(0, edge - cx + 10), CANVAS_H - upper + 10);
+        ctx.clip();
+      }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       const fg = (pit && !art.cliff) ? c3TreeRootFgFaded(t, pit) : null;
       if (fg) ctx.drawImage(fg.c, Math.round(sx + G.imgX), Math.round(G.py + G.imgY));
@@ -33631,7 +33637,7 @@ const C2_STAGE_34 = (function () {
       ];
     },
     buildOranges: () => [],
-    buildRoundBalloons: () => buildChapter2RoundBalloons([[L.ct.x + 530, L.ct.h + 65], [L.bank.x + 530, L.bank.h + 95]]),
+    buildRoundBalloons: () => buildChapter2RoundBalloons([[L.ct.x + 610, L.ct.h + 65], [L.bank.x + 530, L.bank.h + 95]]),
     hiddenTreasure: null, extraHiddenTreasures: [],
   };
 })();
@@ -33773,7 +33779,7 @@ function c34DevEnd(why) {
 function c34DevUmbrella() { c2UmbTest.active = true; c2UmbTest.stock = 9; equippedUmbrella.test = false; }
 function c34PlaceAtPool() {
   const D = c34Pool(); if (!D) return;
-  player.x = D.resetX + 10; player.y = D.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
+  player.x = D.resetX - 110; player.y = D.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   cameraX = Math.max(0, Math.min(LEVEL_LENGTH - CANVAS_W, player.x - 380));
   c34.camY = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
   activeSlot = 'umbrella'; try { initEquippedUmbrella(); } catch (e) {}

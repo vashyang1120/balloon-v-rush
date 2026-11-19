@@ -7,6 +7,7 @@ const c34Art = (() => {
   const pathPrefix = 'rpg-dual-continent-test/chapter3-art/';
   const scale = 0.23;
   const waterSurfaceFrames = new WeakMap();
+  const fadedRockEdges = new Map();
   const swimmerLayer = document.createElement('canvas');
 
   // Visible head widths measured in the approved art, excluding the transparent canvas.
@@ -47,8 +48,8 @@ const c34Art = (() => {
     try { draw(); } finally { ctx.restore(); }
   }
 
-  function tile(id, x, y, w, h, factor, repeatY = true) {
-    const im = image(id);
+  function tile(id, x, y, w, h, factor, repeatY = true, source = null) {
+    const im = source || image(id);
     if (!im || w <= 0 || h <= 0 || x >= CANVAS_W || x + w <= 0) return;
     const [iw, ih] = catalog[id].size;
     const tw = iw * factor, th = ih * factor;
@@ -61,6 +62,50 @@ const c34Art = (() => {
         }
       }
     });
+  }
+
+  // Use a common world origin so overlapping foundations and banks share the same texture phase.
+  function rockBody(x, y, w, h) {
+    const im = image('12_rock_body');
+    if (!im || w <= 0 || h <= 0) return;
+    const step = Math.round(im.naturalWidth * scale);
+    const left = -Math.round(cameraX);
+    const top = GROUND_Y;
+    const col = Math.floor((Math.max(x, 0) - left) / step);
+    const row = Math.floor((y - top) / step);
+    clip(x, y, w, h, () => {
+      for (let i = col; left + i * step < Math.min(CANVAS_W, x + w); i++) {
+        for (let j = row; top + j * step < y + h; j++) {
+          const sx = i % 2 ? -1 : 1, sy = j % 2 ? -1 : 1;
+          ctx.save();
+          ctx.translate(left + i * step + (sx < 0 ? step : 0), top + j * step + (sy < 0 ? step : 0));
+          ctx.scale(sx, sy);
+          ctx.drawImage(im, 0, 0, step, step);
+          ctx.restore();
+        }
+      }
+    });
+  }
+
+  function softEdge(id, innerRight, feather) {
+    if (fadedRockEdges.has(id)) return fadedRockEdges.get(id);
+    const im = image(id);
+    if (!im) return null;
+    const layer = document.createElement('canvas');
+    layer.width = im.naturalWidth;
+    layer.height = im.naturalHeight;
+    const g = layer.getContext('2d');
+    g.drawImage(im, 0, 0);
+    const start = innerRight ? layer.width - feather : feather;
+    const end = innerRight ? layer.width : 0;
+    const mask = g.createLinearGradient(start, 0, end, 0);
+    mask.addColorStop(0, '#000');
+    mask.addColorStop(1, 'transparent');
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = mask;
+    g.fillRect(0, 0, layer.width, layer.height);
+    fadedRockEdges.set(id, layer);
+    return layer;
   }
 
   function background(cam) {
@@ -110,8 +155,16 @@ const c34Art = (() => {
       const factor = w / 540;
       const width = spec.size[0] * factor;
       const height = (spec.size[1] - spec.anchor[1]) * factor;
-      tile('12_rock_body', x + 12, top + height - 2, w - 24, bottom - top - height + 2, scale);
-      clip(x - 35, top - 10, w + 70, bottom - top + 10, () => at('14_canyon_pillar', 0, x + w / 2, top, factor));
+      clip(x - 35, top - 10, w + 70, bottom - top + 10, () => {
+        at('14_canyon_pillar', 0, x + w / 2, top, factor);
+        if (bottom <= top + height) return;
+        // Extend from the pillar's own bottom contour so it retains both outer silhouettes.
+        ctx.save();
+        ctx.translate(0, 2 * (top + height));
+        ctx.scale(1, -1);
+        at('14_canyon_pillar', 0, x + w / 2, top, factor);
+        ctx.restore();
+      });
       grass(x + (width - w) * 0.1, right - (width - w) * 0.1, top, true, true);
       return;
     }
@@ -119,24 +172,28 @@ const c34Art = (() => {
     const edgeW = 682 * factor, overlap = catalog['13_rock_edge_left'].suggested_inner_overlap_px * factor;
     const leftInset = hasL ? edgeW * 0.63 : 0, rightInset = hasR ? edgeW * 0.63 : 0;
     const left = x + leftInset, end = right - rightInset;
-    tile('12_rock_body', left, top, end - left, bottom - top, scale);
-    if (hasL) tile('13_rock_edge_left', left - edgeW + overlap, top, edgeW, bottom - top, factor);
-    if (hasR) tile('13_rock_edge_right', end - overlap, top, edgeW, bottom - top, factor);
+    rockBody(left, top, end - left, bottom - top);
+    if (hasL) tile('13_rock_edge_left', left - edgeW + overlap, top, edgeW, bottom - top, factor, true,
+      softEdge('13_rock_edge_left', true, catalog['13_rock_edge_left'].suggested_inner_overlap_px));
+    if (hasR) tile('13_rock_edge_right', end - overlap, top, edgeW, bottom - top, factor, true,
+      softEdge('13_rock_edge_right', false, catalog['13_rock_edge_right'].suggested_inner_overlap_px));
     grass(x, right, top, hasL, hasR);
   }
 
-  function poolFoundation(x, width, floor) {
-    // Bridge behind both translucent wall silhouettes so the canyon never shows through below the basin.
-    tile('12_rock_body', x - 76, floor - 6, width + 152, c34Bottom() - floor + 6, scale);
+  function poolFoundation(x, width, leftY, rightY, floor) {
+    // Keep the textured foundation behind the concave walls where their outer silhouettes pull away.
+    rockBody(x - 82, leftY + 12, 84, floor - leftY - 6);
+    rockBody(x + width - 2, rightY + 12, 84, floor - rightY - 6);
+    rockBody(x - 82, floor - 6, width + 164, c34Bottom() - floor + 6);
   }
 
   function poolWalls(x, width, leftY, rightY, floor) {
     const factor = 0.2, w = 682 * factor;
-    tile('15_pool_bottom', x - 6, floor - 3, width + 12, 25, 0.2, false);
+    tile('15_pool_bottom', x - 6, floor - 3, width + 12, 12, 0.2, false);
     const drawWall = (id, wallX, bankY) => {
       // Keep the upper grass cap continuous at the shared collision height.
       clip(wallX, bankY + 8, w, floor - bankY + 4,
-        () => tile(id, wallX, bankY, w, floor - bankY + 12, factor, false));
+        () => tile(id, wallX, bankY, w, floor - bankY + 12, factor, false, softEdge(id, id.endsWith('_right'), 118)));
     };
     drawWall('15_pool_wall_left', x - w + 32, leftY);
     drawWall('15_pool_wall_right', x + width - 32, rightY);

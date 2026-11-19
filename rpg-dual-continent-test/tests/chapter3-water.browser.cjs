@@ -29,7 +29,7 @@ async function openSection(page, section) {
   if (!await entry.isVisible()) await page.locator('#p2-dev-toggle').click();
   await entry.click();
   await page.waitForFunction(expected =>
-    gameState === 'playing' && debugC34().ready && debugC34().section === expected,
+    !assetGateActive && gameState === 'playing' && debugC34().ready && debugC34().section === expected,
   section, { timeout: 90000 });
 }
 
@@ -46,7 +46,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   const origin = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await boot(page, origin, 'start');
@@ -183,6 +184,55 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     ]);
   });
 
+  await t.test('3-4 uses the approved cliff tree and one-piece rock pillar', async () => {
+    const upright = await page.evaluate(() => {
+      if (rpgActive) rpgClose('skipped');
+      rpgQueue.length = 0;
+      screenFreezeForTest = true;
+      const tree = breakableTrees[0];
+      const mesa = platforms.find(p => p.c34Id === 'P2');
+      const pillar = platforms.find(p => p.c34Id === 'P3');
+      Object.assign(player, { x: mesa.x + 65, y: mesa.y - player.h, vx: 0, vy: 0, onGround: true });
+      cameraX = mesa.x - 165;
+      c34.camY = 180;
+      const art = c4TreeArt(tree);
+      return {
+        cliff: art.cliff,
+        tree: art.tree && new URL(art.tree.src).pathname,
+        root: art.root && new URL(art.root.src).pathname,
+        pillar: [pillar.x, pillar.w, pillar.y],
+        slopeTarget: tree.c41SlopeTo,
+      };
+    });
+    assert.equal(upright.cliff, true);
+    assert.match(upright.tree, /tree_standing_cliff\.png$/);
+    assert.match(upright.root, /tree_cliff_turf_foreground\.png$/);
+    assert.equal(upright.pillar[1], 130);
+    assert.deepEqual(upright.slopeTarget, { x: upright.pillar[0], y: upright.pillar[2] });
+    await record(page, 'desktop-3-4-standing-tree-and-pillar');
+
+    const fallen = await page.evaluate(() => {
+      const tree = breakableTrees[0];
+      tree.state = 'falling';
+      tree.fallTimer = 0;
+      for (let i = 0; i < 120 && tree.state !== 'fallen'; i++) updateBreakableTrees(1);
+      const { c41Slope: slope, state } = tree;
+      if (!slope) return { state };
+      const x = (slope.x0 + slope.x1) / 2;
+      const y = c41SlopeY(slope, x);
+      Object.assign(player, { x: x - player.w / 2, y: y - player.h - 1, vy: 0.4, onGround: false });
+      c41SlopeStep();
+      return { state, slope, footError: Math.abs(player.y + player.h - y), onGround: player.onGround };
+    });
+    assert.equal(fallen.state, 'fallen');
+    assert.ok(fallen.slope.k < 0);
+    assert.equal(fallen.slope.y1, upright.pillar[2]);
+    assert.equal(fallen.footError, 0);
+    assert.equal(fallen.onGround, true);
+    await record(page, 'desktop-3-4-fallen-tree-and-pillar');
+    await page.evaluate(() => { screenFreezeForTest = false; });
+  });
+
   await openSection(page, 'pool');
   await t.test('pool fills only on rightward diversion, follows water level and drains wetness per wind entry', async () => {
     const actual = await page.evaluate(() => {
@@ -266,6 +316,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(actual.dryLine, '哇！這裡的風讓我身體乾了一些！！');
     assert.equal(actual.dryFace, 'balloonv_happy');
     assert.equal(actual.taught, 1);
+    await page.evaluate(() => { if (rpgActive) rpgClose('skipped'); rpgQueue.length = 0; });
     await record(page, 'desktop-3-4-full-pool');
   });
 
@@ -402,7 +453,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     const reloaded = await page.evaluate(() => [playerInventory.coins, localStorage.getItem(SAVE_KEY)]);
     assert.deepEqual(reloaded, [stored.current, stored.base]);
     for (const [mode, amounts] of [['stocked', [1000, 100, 50]], ['empty', [0, 0, 0]]]) {
-      const testPage = await page.context().newPage();
+      const testPage = await context.newPage();
       try {
         await boot(testPage, origin, 'pool', mode);
         const state = await testPage.evaluate(() => ({

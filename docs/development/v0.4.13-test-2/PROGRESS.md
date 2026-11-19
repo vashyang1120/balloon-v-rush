@@ -22,3 +22,5 @@
 - 階段 C 自 `2d7896d580d60809ba3e05455c6f6167d965e964` 續接。變更 `rpg-dual-continent-test/main.js`、`chapter3-water-runtime.js`、`tests/chapter3-water.browser.cjs`。第三章 7 通過；前一檢查點完整本機 Node／隔離 Chromium 33 通過，打地鼠核心另外列 92 項通過。仍需整關及使用者實機操作。
 
 - 階段 A、D 自 `2da85c1a9c2d3a9cd66dda62c6ab3d286590eb94` 續接。更新 `main.js`、第三章 Chromium 測試、資源產生器和統計檔。第三章 Chromium 9 通過、0 失敗。
+
+- 岩壁、池壁與倒樹檢查點以 `777812371ede0a33a129276a87f9baa0ec6354ca` 續接。共用岩壁貼圖定位，邊緣以原素材柔接，窄岩柱維持 14 號獨立圖，樹使用既有懸崖樹與草皮。桌機 Chromium 第三章 10 通過。修正上次 Actions 的共用背景 Playwright 情境與水池出生即觸及水柱問題，重新跑 PR CI。
