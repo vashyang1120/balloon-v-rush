@@ -181,13 +181,13 @@ const c34Art = (() => {
     });
   }
 
-  function guide(side, x, y, landX, landY, time) {
-    at('02_umbrella_split', time, x, y, 0.044);
-    const dx = landX - x, dy = landY - y;
+  function guide(side, hitX, hitY, outX, outY, landX, landY, time) {
+    at('02_umbrella_split', time, hitX, hitY, 0.036);
+    const dx = landX - outX, dy = landY - outY;
     if (side === 'split' || Math.hypot(dx, dy) < 14) return;
     const id = '02_umbrella_' + side;
     const length = Math.hypot(dx, dy);
-    ctx.save(); ctx.translate(x, y);
+    ctx.save(); ctx.translate(outX, outY);
     ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
     at(id, time, 0, 0, Math.min(0.19, length / 1640));
     ctx.restore();

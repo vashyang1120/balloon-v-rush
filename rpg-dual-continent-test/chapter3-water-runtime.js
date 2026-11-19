@@ -79,43 +79,72 @@ function c34UnderFall(f) {
     player.y < c34FallBase(f) && player.y + player.h > c34FallTop();
 }
 
+// Canopy bounds recorded in each existing umbrella sprite's source pixels.
+// [outer left, outer right, crown top, skirt edge], before the hero transform.
+const C34_UMBRELLA_CANOPY = {
+  idle: [432, 1026, 24, 300], jump: [568, 1118, 20, 296], fall: [390, 865, 120, 380],
+  hurt: [550, 1095, 32, 375], block: [835, 1114, 305, 575],
+  run1: [602, 1158, 18, 309], run2: [606, 1179, 18, 311], run3: [592, 1187, 19, 334],
+  run4: [587, 1190, 23, 347], run5: [618, 1213, 13, 331],
+};
+
+function c34FallCanopy(f) {
+  if (!umbEquipped() || c34.swim) return null;
+  const key = c2UmbArtKey();
+  if (!c2UmbArtReady(key)) return null;
+  const frame = UMBRELLA_ART.frames[key], pose = c2UmbPoseOf(key);
+  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
+  const k = c2UmbFrameScale(pose);
+  const sign = player.facingRight ? 1 : -1;
+  const originX = Math.round(player.x + player.w / 2 + c2BlockFxHeroDx()) + sign * (pose.dx || 0);
+  const originY = player.y + player.h + frame.feet + (pose.dy || 0) + c2HoverBobY();
+  const toX = u => originX + sign * (u - frame.ax) * k;
+  const toY = v => originY + (v - frame.gy) * k;
+  const x0 = Math.min(toX(left), toX(right)), x1 = Math.max(toX(left), toX(right));
+  const reach0 = Math.max(x0, f.x - f.w / 2), reach1 = Math.min(x1, f.x + f.w / 2);
+  if (reach1 <= reach0) return null;
+  const x = Math.max(reach0, Math.min(reach1, f.x));
+  const u = Math.abs(2 * (x - x0) / (x1 - x0) - 1);
+  const y = toY(edge - Math.sqrt(1 - u * u) * (edge - crown));
+  if (y > c34FallBase(f) || y < c34FallTop()) return null;
+  const direction = f.split ? 'split' : (sign > 0 ? 'right' : 'left');
+  return { x, y, direction, outX: f.split ? x : (sign > 0 ? x1 : x0), outY: f.split ? y : toY(edge) };
+}
+
 function c34FallDeflect(f) {
-  // Retain the level's original umbrella range, orientation and contact rules.
-  if (!c34UnderFall(f) || player.y + player.h <= c34FallBase(f) - 160 || !umbEquipped()) return null;
-  return f.split ? 'split' : (player.facingRight ? 'right' : 'left');
+  return c34FallCanopy(f)?.direction ?? null;
 }
 
-function c34ArcLand(f, dir, surface) {
-  const y0 = player.y - 6;
-  const t = (f.vy + Math.sqrt(Math.max(0, f.vy * f.vy + surface - y0))) / 0.5;
-  return player.x + player.w / 2 + dir * (18 + f.vx * t);
+function c34ArcLand(f, dir, surface, canopy) {
+  const t = (f.vy + Math.sqrt(Math.max(0, f.vy * f.vy + surface - canopy.outY))) / 0.5;
+  return canopy.outX + dir * f.vx * t;
 }
 
-function c34FallImpact(f, direction) {
+function c34FallImpact(f, direction, canopy = c34FallCanopy(f)) {
   const dir = direction === 'right' ? 1 : -1, pool = c34Pool();
+  if (!canopy) return { x: f.x, y: c34FallBase(f), fills: false };
   if (pool && direction !== 'split') {
-    const y = c34SurfaceY(), x = c34ArcLand(f, dir, y);
+    const y = c34SurfaceY(), x = c34ArcLand(f, dir, y, canopy);
     if (x > pool.x + 4 && x < pool.x + pool.w - 4) return { x, y, fills: true };
   }
   const y = c34FallBase(f);
-  return { x: c34ArcLand(f, dir, y), y, fills: false };
+  return { x: c34ArcLand(f, dir, y, canopy), y, fills: false };
 }
 
 function c34DrawFall(f, cx) {
   const x = f.x - cx;
   if (x < -160 || x > CANVAS_W + 160) return;
   const time = c34.waterTick * 1000 / 60;
-  const deflect = c34FallDeflect(f);
-  const end = deflect ? player.y - 8 : c34FallBase(f);
+  const canopy = c34FallCanopy(f);
+  const end = canopy?.y ?? c34FallBase(f);
   c34Art.column(x, c34FallTop(), end, f.w, time);
-  if (deflect) {
-    const hit = c34FallImpact(f, deflect);
-    const center = player.x + player.w / 2 - cx;
-    c34Art.guide(deflect, center, end, hit.x - cx, hit.y, time);
-    if (deflect !== 'split') c34Art.at('03_waterfall_splash', time, hit.x - cx, hit.y, 0.041);
+  if (canopy) {
+    const hit = c34FallImpact(f, canopy.direction, canopy);
+    c34Art.guide(canopy.direction, canopy.x - cx, canopy.y, canopy.outX - cx, canopy.outY, hit.x - cx, hit.y, time);
+    if (canopy.direction !== 'split') c34Art.at('03_waterfall_splash', time, hit.x - cx, hit.y, 0.041);
   } else {
     c34Art.at('03_waterfall_splash', time, x, end, 0.047);
-    if (c34UnderFall(f)) c34Art.at('03_waterfall_splash', time, player.x + player.w / 2 - cx, player.y + 5, 0.026);
+    if (c34UnderFall(f)) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
   }
 }
 
@@ -242,13 +271,13 @@ function c34Step() {
   let fills = false, touching = false;
   c34.stream = 'none';
   for (const fall of c34Falls()) {
-    const deflect = c34FallDeflect(fall);
-    if (!deflect) {
+    const canopy = c34FallCanopy(fall);
+    if (!canopy) {
       touching ||= c34UnderFall(fall);
       continue;
     }
-    c34.stream = deflect;
-    fills ||= c34FallImpact(fall, deflect).fills;
+    c34.stream = canopy.direction;
+    fills ||= c34FallImpact(fall, canopy.direction, canopy).fills;
   }
   if (fills && c34.fillFrames < C34.pool.fillFrames) {
     c34.level = ++c34.fillFrames / C34.pool.fillFrames;

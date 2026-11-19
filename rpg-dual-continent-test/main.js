@@ -5749,7 +5749,7 @@ function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
 
 // ── Update ────────────────────────────────────
 function update(dt, dtMs = 16.667) {
-  if (gameState !== 'playing') return; // paused / failed / gameover / clear 都停
+  if (assetGateActive || gameState !== 'playing') return;
 
   frameCount++;
   elapsedSec += dtMs / 1000; // real seconds
@@ -9864,7 +9864,7 @@ function syncOrangeKingBgm() {
   const a = orangeKingBgm;
   if (!a || orangeKingBgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopOrangeKingBgm(); return; }
-  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause，不重開（v0.3.60：RPG 對話中照常播放）
+  if (assetGateActive || (gameState !== 'playing' && !isRpgDialogKeepingBgm())) { try { if (!a.paused) a.pause(); } catch (e) {} return; }
   if (orangeKingBgmWantRestart) {
     orangeKingBgmWantRestart = false;
     try { a.currentTime = 0; } catch (e) {}
@@ -11886,7 +11886,7 @@ function syncChapter2Bgm() {
   const a = chapter2Bgm;
   if (!a || chapter2BgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter2Bgm(); return; }
-  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause（v0.3.60：RPG 對話中照常播放）
+  if (assetGateActive || (gameState !== 'playing' && !isRpgDialogKeepingBgm())) { try { if (!a.paused) a.pause(); } catch (e) {} return; }
   if (chapter2BgmWantRestart) { chapter2BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
   try { a.volume = Math.max(0, Math.min(1, CHAPTER2_BG.chapter2BgmVolume)); } catch (e) {}
   if (a.paused && !chapter2BgmBlocked) {
@@ -12917,7 +12917,7 @@ function syncChapter1Bgm() {
   const a = chapter1Bgm;
   if (!a || chapter1BgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter1Bgm(); return; }
-  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; } // 暫停：只 pause（v0.3.60：RPG 對話中照常播放）
+  if (assetGateActive || (gameState !== 'playing' && !isRpgDialogKeepingBgm())) { try { if (!a.paused) a.pause(); } catch (e) {} return; }
   if (chapter1BgmWantRestart) { chapter1BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
   try { a.volume = Math.max(0, Math.min(1, CHAPTER1_BG.chapter1BgmVolume)); } catch (e) {}
   if (a.paused && !chapter1BgmBlocked) {
@@ -19596,7 +19596,7 @@ function loop(timestamp) {
   // 容許 1ms 誤差：60Hz 螢幕的 rAF 間隔在 16.6～16.8ms 之間跳動，不會出現「這幀 0 步、下幀 2 步」的抖動
   while (fixedStepAccumulator >= FIXED_STEP_MS - 1 && steps < FIXED_MAX_STEPS) {
     // v0.3.57：手機「開始冒險」之前不推進遊戲（不扣時間、鏡頭不前進、敵人不動、不會受傷）
-    if (!screenFreezeForTest && !isGameStartGateActive() && !(typeof advIsBlockingGame === 'function' && advIsBlockingGame())) update(1, FIXED_STEP_MS); // 測試版 F8 凍結時跳過 update
+    if (!assetGateActive && !screenFreezeForTest && !isGameStartGateActive() && !(typeof advIsBlockingGame === 'function' && advIsBlockingGame())) update(1, FIXED_STEP_MS);
     fixedStepAccumulator -= FIXED_STEP_MS;
     steps++; fixedStepCount++;
   }
@@ -25744,7 +25744,7 @@ function syncChapter3Bgm() {
   if (!chapter3Bgm) initChapter3Bgm();
   const a = chapter3Bgm; if (!a || chapter3BgmStatus === 'error') return;
   if (gameState === 'failed' || gameState === 'clear' || gameState === 'gameover') { stopChapter3Bgm(); chapter3BgmWantRestart = true; return; }
-  if (gameState !== 'playing' && !isRpgDialogKeepingBgm()) { try { if (!a.paused) a.pause(); } catch (e) {} return; }
+  if (assetGateActive || (gameState !== 'playing' && !isRpgDialogKeepingBgm())) { try { if (!a.paused) a.pause(); } catch (e) {} return; }
   if (chapter3BgmWantRestart) { chapter3BgmWantRestart = false; try { a.currentTime = 0; } catch (e) {} }
   if (a.paused && !chapter3BgmBlocked) {
     try {
@@ -26076,9 +26076,12 @@ function c2UmbPoseOf(key) {
   const c = (typeof c2UmbPose !== 'undefined' && c2UmbPose && c2UmbPose[g]) || null;
   return c ? c : { s: f.scaleMul || 1, dx: 0, dy: 0 };
 }
+function c2UmbFrameScale(pose) {
+  return player.w * HERO_DRAW_SCALE * UMBRELLA_ART.scale * (pose.s || 1) / UMBRELLA_ART.refCanvasW;
+}
 function c2DrawUmbFrame(key, cx, bob, fxX, alpha) {
   const f = UMBRELLA_ART.frames[key], img = umbImgs[key], P = c2UmbPoseOf(key);
-  const k = player.w * HERO_DRAW_SCALE * UMBRELLA_ART.scale * (P.s || 1) / UMBRELLA_ART.refCanvasW;   // 每個原圖像素 → 畫面像素（共用 ×1.28，再乘各動作倍率）
+  const k = c2UmbFrameScale(P);
   ctx.save();
   if (alpha < 1) ctx.globalAlpha = alpha;
   ctx.translate(Math.round(player.x - cx + player.w / 2 + fxX), player.y + player.h + f.feet + (P.dy || 0) + bob);

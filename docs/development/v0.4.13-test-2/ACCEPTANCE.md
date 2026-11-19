@@ -7,3 +7,19 @@
 - 新風口至瀑布作用邊緣相隔 242 世界像素，至池沿 340 像素。WET 固定步由 1800→1620→1619→1618→1438；關閉音效後可再次觸發。沿用同一音效資源，已確認配置與圖像載入。實體喇叭聽感待驗收。
 - 實際 `updatePlayer` 驗證持傘、持劍及乾、濕四種跳躍，均出現風口升力，最高水平進度未抵達右岸，雨傘耐久未減。低水位可先跳左側岩棚再回岸，滿水可由浮墊正常登上右側高岸。試玩測試配置由程式置位，移動與風力仍由遊戲物理推進。
 - 本次為 Chromium 工程驗證。實機與原 Revision 2 其他逐項驗收待續。
+
+## 實際畫面
+
+相同遊戲畫布縮放及 1280×800 Chromium 視窗。測試程式將角色放到指定情境，錄影中的左右移動使用鍵盤事件。
+
+- [A 陸地站立](https://chatgpt.com/library?file_id=libfile_da60aaccab788191a76a85a87306508b&account_id=personal)
+- [B 原地划水](https://chatgpt.com/library?file_id=libfile_1ebf9e530a7c81919b7a858fbede0c56&account_id=personal)
+- [C 水中移動](https://chatgpt.com/library?file_id=libfile_1607a95827b481919aaccc2a490e8ac4&account_id=personal)
+- [D 水中動作錄影](https://chatgpt.com/library?file_id=libfile_edefbeceb18c8191b3205e604ac7434a&account_id=personal)
+
+## 原規格的相關回歸
+
+- 3-1、3-2、3-3 實際開關成功，既有正式地面圖載入並由原繪製函式使用，新風口只在 3-4 設置。根因是 test-1 替換 `chapter3bg` 群組時，也移除了該群組內的舊地面與坑洞美術。
+- 已驗證兩道瀑布、傘面定位及左右行為。判斷取雨傘角色當前影格的實際傘面座標，沿用同一繪製倍率、鏡像、畫面位移。兩道瀑布各檢查左右方向，第一道雙向分流，第二道向右才增加水位，四個攔截情境濕度維持 0。
+- Loading 受控延遲重現正式挑戰入口。舊關仍為 playing 時，計時、畫面幀、相機、玩家、HP、背包及挑戰狀態維持原值，釋放素材後正常執行 1-1 回呼。修正位置為 RAF 與遊戲更新的 Loading gate 及關卡 BGM 判斷。完整實機正式挑戰流程、其他非同步回歸待階段 G。
+- 既有入口／稱號 Node 測試 23 通過，打地鼠核心 92 通過。
