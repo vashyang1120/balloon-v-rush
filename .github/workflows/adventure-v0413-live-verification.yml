@@ -47,11 +47,16 @@ jobs:
                 const context = await browser.newContext({viewport:{width,height},isMobile:width<900,hasTouch:width<900});
                 const page = await context.newPage();
                 const writes = [];
+              page.on('pageerror', error => console.log('Page exception:', error.stack));
+              page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') console.log('Browser:', message.text().slice(0,350)); });
+              page.on('response', response => { if (response.status() >= 400 || /\.(js|html)(\?|$)/.test(response.url())) console.log('HTTP',response.status(),response.url()); });
+              page.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') console.log('Network:',request.failure(),request.url()); });
                 const cdp = await context.newCDPSession(page);
-                const inspect = async (expression) => (await cdp.send('Runtime.evaluate',{expression,returnByValue:true})).result.value;
+                const inspect = async (expression) => (await cdp.send('Runtime.evaluate',{expression,returnByValue:true,allowUnsafeEvalBlockedByCSP:true})).result.value;
                 const waitFor = async (expression) => {
-                  for (let i = 0; i < 180; i++) {
+                  for (let i = 0; i < 65; i++) {
                     if (await inspect(expression)) return;
+                    if (i === 0 || i === 40) console.log('Runtime snapshot:', await inspect("[location.href,document.contentType,typeof adventurePlaytestReady,typeof GAME_VERSION,typeof assetBootReady, typeof bootStats,document.readyState,Array.from(document.scripts,s=>[s.src,s.text.length])]"));
                     await new Promise(resolve => setTimeout(resolve, 500));
                   }
                   throw Error('Timed out: ' + expression);
