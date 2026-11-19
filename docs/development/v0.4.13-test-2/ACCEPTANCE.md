@@ -91,3 +91,9 @@
 
 - 3-4 從起點完整通關，未改角色座標或水位。Chromium 固定步發送正常移動、跳躍及攻擊，完成左右岸的物理解謎、通關結算及返回小V之家。局內完成事件一次。
 - 讀取五張 1254×1254 RGBA PNG，核對桌機顯示兩顆骰的點數與平手獎勵，並確認 844×390 橫向可觸控接受和繼續冒險。第三章 Chromium 13/13。隔離 Pages fixture 7/7。既有雙入口及小遊戲 Chromium 3/3。真實手機效能與使用者實機體感待驗收。
+
+## HTTPS 與 CI 驗收
+
+- [Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583784616) 實際完成 Node 28/28、Chromium 23/23、打地鼠核心 92/92。[Pages 部署](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583929075) 完成。[截圖](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583784616/artifacts/14560951225) 有 `desktop-3-4-full-route-clear.png`、`desktop-3-4-balloon-dice-result.png`、`mobile-3-4-balloon-dice-result.png`。
+- 線上核對六入口皆為同一試玩提交。3-1、3-2、3-3 目視地面美術正常。3-4 起點首次有圖檔逾時，按一次重新載入後成功。3-4 水池、雙大陸及其他三關直接進入。雙大陸以線上實際按鈕核對正式挑戰確認，看到 1-1 飛行地圖、開場故事與教學。正式挑戰凍結數值及外部寫入攔截使用受控 Chromium 驗證。
+- 實體手機效能、現場音效與 3-1～3-3 逐關完整操作仍待總 PM 實機驗收。

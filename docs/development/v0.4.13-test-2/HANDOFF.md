@@ -1,5 +1,9 @@
 # test-2 工程交接
 
+## 最新可試玩檢查點
+
+[試玩入口](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/) 已發布並完成六入口核對。線上 HTML 的 `adventure-playtest-commit` 記錄程式提交 `e38caa9919e515b731f0fad9d75590161b1fff0b`，main 隔離部署提交 `423c2043cb1d860cfe38dd14f3d874576e3c8291`。完整 Actions、連結、限制及未完成的實機驗收見 [PROGRESS](PROGRESS.md) 和 [ACCEPTANCE](ACCEPTANCE.md)。如 3-4 初次載圖逾時，可按畫面的「重新載入」，工程瀏覽器已核實重試可進關。以下較早交接點用於保留歷史記錄。
+
 - 版本 `adventure-v0.4.13-ch3-water-terrain-integration-test-2`。遊戲基準 `a56ff7dc8552288fa58e263807b53c164d5785f1`，正式基準 `53ca70eb`，test-1 交接 `92ec5f10`。本檔所在提交為開發分支最新水域驗證點。[開發分支及 Draft PR #37](https://github.com/vashyang1120/balloon-v-rush/pull/37)
 - 程式變更位於 `rpg-dual-continent-test/{main.js,index.html,chapter3-water-art.js,chapter3-water-runtime.js}`。使用原始美術包。追加驗收結果與 A–D 證據列於 [ACCEPTANCE](ACCEPTANCE.md)。
 - 資源盤點和三種 3-4 測試背包已可操作。B 已新增岩壁、窄岩柱及倒樹的畫面與碰撞檢查。續接優先完成 E 三級寶箱和骰子，以及 G 的完整回歸與隔離部署。C 已完成飛行、鏡頭與提示的桌機 Chromium 驗證。F 已完成同一次通關的新版結算重開驗證。完整規格見 [SPEC](SPEC.md)。

@@ -49,3 +49,20 @@
 
 - 第三章本機 Chromium 13/13 通過。3-4 從起點以固定步的方向、跳躍與攻擊輸入完整走到結算及小V之家，包括 60° 飛行、倒樹橋、登頂、導水、浮墊及右岸；角色全程由物理推進。核准五圖均由遊戲成功讀取，骰面顯示符合結果。骰子視窗在桌機置中，手機橫向以觸控接受、擲骰及返回。
 - 既有 Pages 隔離規則的 Chromium 測試 7/7 通過，涵蓋完整入口、3-4 起點及水池、3-1／3-2／3-3 共六種入口，並驗證手機觸控、存檔隔離及外部寫入攔截。雙入口與小遊戲 Chromium 3/3 通過，含正式挑戰 Loading 資源失敗／重試、排球、打地鼠。仍待覆核實際 HTTPS 與完整 CI。
+
+## test-2 線上試玩交付
+
+- 開發與驗收程式提交 `e38caa9919e515b731f0fad9d75590161b1fff0b`。部署提交 `423c2043cb1d860cfe38dd14f3d874576e3c8291`，只更新 main 既有的 `playtest-adventure-v0.4.13/`。Draft PR #37 保持開啟。
+- [開發 Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583784616) 通過 28 項 Node、23 項 Chromium 與 92 項打地鼠核心測試。[Game Pages 部署](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583929075) 通過。[Chromium 遊戲截圖](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44583784616/artifacts/14560951225) 曾記錄 3-4 完整通關、小V之家、桌機及手機擲骰。
+- 以線上瀏覽器逐一進入六個 HTTPS 入口，確認版本與畫面。3-4 起點首次有必要圖片逾時，按一次「重新載入」即進入關卡。其餘五個入口本輪直接進入。
+
+| 試玩入口 | HTTPS |
+| --- | --- |
+| 雙大陸 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/) |
+| 3-4 起點 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?ch3test=start) |
+| 3-4 水池 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?ch3test=pool) |
+| 3-1 風之峽谷 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?ch3test=3-1) |
+| 3-2 雨傘試煉 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?ch3test=3-2) |
+| 3-3 蠍群岩道 | [開啟](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13/rpg-dual-continent-test/?ch3test=3-3) |
+
+3-1、3-2、3-3 本輪完成入口及場景回歸，3-4 完成整關。正式挑戰在線上訪客沙盒以小V之家按鈕確認，觀察到 1-1 飛行地圖、開場故事與教學。受控 Loading 狀態不運作的數值驗證及背包和詳細結算隔離見 ACCEPTANCE。
