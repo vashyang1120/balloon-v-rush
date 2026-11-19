@@ -22,3 +22,5 @@ E/G 續接自 `a68424255f7f8ab1fa551b6fe916f866e27b9e2b`。骰子和寶箱獎勵
 2026-11-20 續接已將 Phase E 串到遊戲。主入口載入 `chapter3-treasure-dice.js` 與 `chapter3-treasure-interaction.js`。需將五張核准的 PNG 落檔到 `assets/adventure/ui/items/`，普通為金框木箱，稀有為銀框藍箱，珍貴為紫寶石金箱，檔名 `item_treasure_chest_normal.png`、`item_treasure_chest_rare.png`、`item_treasure_chest_precious.png`。兩張骰子為 `item_balloon_dice.png`、`dice_face_blank.png`。使用者附圖已辨識，下載回傳失敗。取得完整 PNG 後核對寶箱顯示、點數與結算畫面，完成整關回歸後再更新獨立 Pages 目錄。
 
 Final Recovery 以 PR HEAD `337d5ff6` 接續。骰子在接受時消耗一顆，勝負平手皆以同一筆寫入保存骰子扣除、金幣和寶箱紀錄。拒絕維持原額且保留骰子。關卡失敗依既有快照一起還原。進度見 [PROGRESS](PROGRESS.md)。
+
+骰子回歸請讀 `c34BagKey('cumulative')` 核對快捷入口存檔。初次 Actions #25 因查錯鍵失敗，同一套測試修正後本機 Chromium 11/11 通過。五張正式 PNG 尚待取得原始檔案，避免使用預覽截圖取代。

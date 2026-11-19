@@ -566,8 +566,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(await page.evaluate(id => {
       window.restoreTestRollFace();
       delete window.restoreTestRollFace;
-      const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
-      return [saved.craftedItems.balloonDice, saved.coins, saved.chapter3Chests[id]?.outcome];
+      const saved = JSON.parse(localStorage.getItem(c34BagKey('cumulative')));
+      return [saved?.craftedItems?.balloonDice, saved?.coins, saved?.chapter3Chests?.[id]?.outcome];
     }, setup.chest), [1, beforeRoll + 100, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
     assert.match(await page.locator('.ch3-treasure-note').textContent(), /獲得 100 金幣/);
