@@ -1,0 +1,21 @@
+name: Adventure v0.4.13 test-2 water browser checks
+on:
+  push:
+    branches: ['verify/adventure-v0413-revision2-water']
+permissions:
+  contents: read
+jobs:
+  water:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright
+        run: npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+      - name: Run 3-4 integration suite with repository assets
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
+        run: node --test rpg-dual-continent-test/tests/chapter3-water.browser.cjs
