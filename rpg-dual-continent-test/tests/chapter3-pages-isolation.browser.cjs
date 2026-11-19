@@ -7,10 +7,11 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13/';
+const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-3/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
-const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
+const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
+const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-3:';
 const mime = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
@@ -70,13 +71,14 @@ async function fixture(context, guard, requests) {
   });
 }
 
-test('test-2 in the existing Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
+test('test-3 in the isolated Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-adventure-v0.4.13/playtest-guard.js'));
+    resolve(root, 'playtest-adventure-v0.4.13/playtest-guard.js'), 'utf8');
+  const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const formalKeys = ['balloonV_inventory', 'adventure:title', 'adventure:achievement',
-    'adventure:vcoins', 'adventure:settings', 'adventure:progress'];
+    'adventure:vcoins', 'adventure:settings', 'adventure:progress', test2Namespace + 'probe'];
 
   const desktop = { width: 1280, height: 820 };
   for (const [section, viewport] of [['', desktop], ['start', desktop],
@@ -86,7 +88,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
       const context = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
       try {
         const requests = [];
-        await fixture(context, guard, requests);
+        await fixture(context, test3Guard, requests);
         const page = await context.newPage();
         await page.goto(origin + '/formal-fixture');
         await page.evaluate(keys => {
@@ -100,7 +102,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-2');
+        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-3');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
