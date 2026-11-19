@@ -184,6 +184,42 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     ]);
   });
 
+  await t.test('a running jump with an umbrella cannot bypass the 3-4 angle puzzle', async () => {
+    const flight = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+    try {
+      await boot(flight, origin, 'start');
+      const outcomes = await flight.evaluate(() => {
+        screenFreezeForTest = true;
+        const mesa = C34_LAY.p1;
+        const top = C34_LAY.y(mesa.h);
+        return [45, 60].map(angle => {
+          if (rpgActive) rpgClose('skipped');
+          rpgQueue.length = 0;
+          Object.assign(player, { x: 950, y: GROUND_Y - player.h, vx: 0, vy: 0,
+            onGround: true, facingRight: true, invincible: 0 });
+          cameraX = 660;
+          activeSlot = 'umbrella';
+          wdSetAngleIndex(WD_TUNING.angles.indexOf(angle));
+          wdResetState(false);
+          wd.pitRecovers = 0;
+          let landed = false;
+          try {
+            for (let tick = 0; tick < 245 && !landed && !wd.pitRecovers; tick++) {
+              if (rpgActive) rpgClose('skipped');
+              keys.ArrowRight = player.x < mesa.x + 110;
+              keys.Space = tick === 14;
+              update(1);
+              landed = player.onGround && player.x + player.w > mesa.x &&
+                player.x < mesa.x + mesa.w && Math.abs(player.y + player.h - top) < 2;
+            }
+          } finally { keys.ArrowRight = keys.Space = false; }
+          return { landed, fell: wd.pitRecovers > 0 };
+        });
+      });
+      assert.deepEqual(outcomes, [{ landed: false, fell: true }, { landed: true, fell: false }]);
+    } finally { await flight.close(); }
+  });
+
   await t.test('3-4 uses the approved cliff tree and one-piece rock pillar', async () => {
     const upright = await page.evaluate(() => {
       if (rpgActive) rpgClose('skipped');
@@ -558,20 +594,25 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           { jump: true, right: () => player.x < pad.x + 50 });
         advance(80, () => player.x >= pad.x + pad.w - 7);
         const bank = advance(95, () => onMesa(layout.bank), { jump: true });
-        activeSlot = 'hammer';
-        advance(68, () => player.x >= layout.bank.x + 245, { attack: true });
-        advance(60, () => player.x >= layout.bank.x + 465, { jump: true, attack: true });
-        const finished = advance(80, () => c2Proto.done, { attack: true });
+        const bankWind = enemies.find(e => e.c2Id === 'BANK-W1');
+        activeSlot = 'umbrella';
+        const blocked = advance(185, () => wsBlades.some(b => b.owner === bankWind && b.st === 'reflect'),
+          { right: () => false, attack: true });
+        activeSlot = 'sword';
+        advance(100, () => player.x >= layout.bank.x + 335);
+        const bankEnemyDefeated = advance(65, () => !bankWind.active, { right: () => false, attack: true });
+        const finished = advance(80, () => c2Proto.done);
         screenFreezeForTest = false;
         const completes = c34.log.filter(event => event.ev === 'complete').length;
         return { launcher, firstMesa, secondMesa, bridge, pillar, canyonTop, filled,
-          reachedPad, bank, finished, completes, hp: player.hp };
+          reachedPad, bank, blocked, bankEnemyDefeated, finished, completes, hp: player.hp };
       });
       const { hp, ...checkpoints } = result;
       assert.ok(hp > 0);
       assert.deepEqual(checkpoints, {
         launcher: true, firstMesa: true, secondMesa: true, bridge: true, pillar: true,
-        canyonTop: true, filled: true, reachedPad: true, bank: true, finished: true,
+        canyonTop: true, filled: true, reachedPad: true, bank: true, blocked: true,
+        bankEnemyDefeated: true, finished: true,
         completes: 1,
       });
       await runPage.waitForFunction(() => h2IsOpen());

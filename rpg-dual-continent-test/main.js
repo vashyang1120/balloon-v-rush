@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-2';
+const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
 const BUILD_TIME   = '2026-11-19';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -29079,9 +29079,8 @@ function wdFlowAt(px, py) {
 // v0.3.94（#24）角度推力校準：噴嘴的進氣口在 openAngle（45°）正對石座裡的風道 → 風速 100%；
 //   偏離越多、進氣口被擋住越多（30°／60° 剩 offThrust＝45%）。用目前的噴嘴角度（wd.dispAng）計算，轉動途中連續變化。
 //   這是力的大小，不是成功／失敗判定：飛不飛得過完全由風、重力、雨傘與玩家操作的實際軌跡決定。
-function wdThrust(ang) {
+function wdThrust(ang, off = WD_TUNING.offThrust ?? 1) {
   const T = WD_TUNING, band = Math.max(1, T.thrustBand || 15), d = Math.abs((typeof ang === 'number' ? ang : wd.dispAng) - (T.openAngle != null ? T.openAngle : 45));
-  const off = T.offThrust != null ? T.offThrust : 1;
   return off + (1 - off) * Math.max(0, 1 - d / band);
 }
 // updatePlayer 裡「重力＋風口之後、雨傘緩降與移動之前」呼叫（掛在 c2UmbrellaFallCap 前面）
@@ -33546,7 +33545,7 @@ var C34 = {
   cam: { top: 110, max: 430, ease: 0.12 },
   // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度為 30°／45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
   //   v0.4.11 重新校準：噴嘴對準 60° 才是全風速（openAngle 60），45° 剩 offThrust；沒撐雨傘風力只剩 noUmbThrust（「用雨傘接風」）
-  wd: { deviceX: 1040, angles: [30, 45, 60], maxUp: 17, openAngle: 60, offThrust: 0.5, noUmbThrust: 0.35 },
+  wd: { deviceX: 1040, angles: [30, 45, 60], maxUp: 17, openAngle: 60, offThrust: 0.5, noUmbOffThrust: 0.8, noUmbThrust: 0.35 },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
   water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
@@ -33861,7 +33860,12 @@ function c34Complete(sid) {
   const wdSaved = {}; WD_KEYS.forEach(k => { wdSaved[k] = Array.isArray(WD_TUNING[k]) ? WD_TUNING[k].slice() : WD_TUNING[k]; });
   let c34WdOn = false;
   wrapFn('wdActive', o => function () { return o.apply(this, arguments) || (c34WdOn && c34Is('3-4')); });
-  wrapFn('wdThrust', o => function () { const v = o.apply(this, arguments); if (c34WdOn && c34Is('3-4') && !(typeof umbEquipped === 'function' && umbEquipped())) return v * C34.wd.noUmbThrust; return v; });
+  wrapFn('wdThrust', o => function (ang) {
+    if (c34WdOn && c34Is('3-4') && !umbEquipped()) {
+      return o.call(this, ang, C34.wd.noUmbOffThrust) * C34.wd.noUmbThrust;
+    }
+    return o.call(this, ang);
+  });
   wrapFn('loadLevel', o => function (idx) {
     const lv = LEVELS[idx];
     if (!(lv && lv.c34)) { try { c34DevEnd('leave'); } catch (e) {} }
