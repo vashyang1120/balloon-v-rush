@@ -27,3 +27,5 @@
 
 - E 狀態：已完成參數化獎勵、一次性領取決策與擲骰繪製／動畫核心。5 項 Node 測試通過。實際寶箱出現、骰子圖檔、星靈邀約與存檔串接待原始素材及定案規則。
 - G 狀態：既有 [Adventure entry reliability](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44569196581) 已通過。沿用現行 Pages guard 與路徑的隔離 Chromium fixture 4 項通過，含三入口、手機左方向觸控、寫入嘗試拒絕、同來源正式存檔前後一致。新增兩套測試至 PR CI。線上 test-2 部署仍待 E 與完整遊戲回歸。
+
+- 關卡切換複查發現疾風蠍子的正式圖仍只掛在 3-3。現將共用快取接到 3-1～3-4 的素材讀取，手機 3-4 直接讀取的畫面檢查通過。Actions 22 的 Pages fixture 因舊版 Playwright 等待方式碰到既有 CSP，改為測試端輪詢並保留所有隔離規則。

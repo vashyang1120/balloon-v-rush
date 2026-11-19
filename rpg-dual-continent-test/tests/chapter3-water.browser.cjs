@@ -492,7 +492,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     mobile.on('pageerror', error => errors.push(error.message));
     await boot(mobile, origin, 'pool');
     const state = await mobile.evaluate(() => ({
-      ready: debugC34().ready, stage: debugC34().stage, cam: c34.camY,
+      ready: debugC34().ready, scorpionArt: c3sReady, stage: debugC34().stage, cam: c34.camY,
       groups: ['3-1', '3-2', '3-3', '3-4'].map(sid => getAssetGroupsForLevel(getLevelIndexByStageId(sid))),
       canvas: document.querySelector('canvas').getBoundingClientRect().width,
     }));
@@ -500,7 +500,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(state.stage, '3-4');
     assert.ok(state.cam > 0 && state.cam <= 430);
     assert.ok(state.canvas > 0 && state.canvas <= 844);
-    assert.ok(state.groups.every(groups => groups.includes('chapter3vertical')));
+    assert.ok(state.groups.every(groups => groups.includes('chapter3vertical') && groups.includes('ch3NewScorpions')));
+    assert.equal(state.scorpionArt, true);
     assert.ok(state.groups.slice(0, 3).every(groups => !groups.includes('c34canyon')));
     assert.ok(state.groups[3].includes('c34canyon'));
     await record(mobile, 'mobile-3-4-pool');

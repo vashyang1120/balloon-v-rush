@@ -30998,7 +30998,7 @@ function c2Complete33() {
 (function v398Install() {
   if (typeof globalThis === 'undefined' || !ADV_WORKSPACE) return;
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v398) { if (typeof o !== 'function') console.warn('[v0.3.98] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v398 = true; globalThis[name] = w; };
-  // 素材群組：只在 3-3 的載入畫面一起載（16 張；optional）
+  // 第三章各關使用疾風素材，與磐甲共用既有圖像快取。
   const G = 'ch3NewScorpions';
   const addGroup = M => {
     if (!M || M[G]) return M;
@@ -31010,7 +31010,7 @@ function c2Complete33() {
   };
   if (typeof ASSET_MANIFEST !== 'undefined' && ASSET_MANIFEST) addGroup(ASSET_MANIFEST);
   wrapFn('buildAssetManifest', o => function () { return addGroup(o.apply(this, arguments)); });
-  wrapFn('getAssetGroupsForLevelBase', o => function (idx) { const r = o.apply(this, arguments); const lv = LEVELS[idx]; return (lv && lv.stageId === '3-3' && !r.includes(G)) ? r.concat([G]) : r; });
+  wrapFn('getAssetGroupsForLevelBase', o => function (idx) { const r = o.apply(this, arguments); const lv = LEVELS[idx]; return (lv && /^3-[1-4]$/.test(lv.stageId) && !r.includes(G)) ? r.concat([G]) : r; });
   // 移動：普通蠍子的巡邏照常跑；不在 WALK 狀態時把這一步的移動還原（站定／衝刺由狀態機控制）
   wrapFn('updateEnemies', o => function () {
     const keep = [];

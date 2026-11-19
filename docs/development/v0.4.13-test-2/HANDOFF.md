@@ -15,3 +15,5 @@ Recovery 施工自 `334b50a0c4f959525a72a5142026dc16e4b657cd` 繼續。CI 範圍
 
 
 E/G 續接自 `a68424255f7f8ab1fa551b6fe916f866e27b9e2b`。骰子和寶箱獎勵核心在 `rpg-dual-continent-test/chapter3-treasure-dice.js`，獨立測試在同目錄的 tests。取得正式素材後，量測黃球可繪製範圍再把正面圖與核心串接。需取得精確的製作、消耗、觸發、次數與星靈首句規格才打開邀約。剩餘工程：核對寶箱原檔三等級，完成實際遊戲操作與整關回歸。部署時從最新 PR HEAD 建置並僅覆蓋 main 的 `playtest-adventure-v0.4.13/`，完成 GitHub Pages 實際 HTTPS 三入口驗證。精確指令及驗收紀錄見 [PROGRESS](PROGRESS.md) 和 [ACCEPTANCE](ACCEPTANCE.md)。
+
+最新檢查點接續 `e896c57fc3571f8d787d6a52f6cf129ee360a27d`，另補 3-1～3-4 疾風共用圖組、修正 Pages 測試端輪詢。

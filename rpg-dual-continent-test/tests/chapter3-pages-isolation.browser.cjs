@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { readFile } = require('node:fs/promises');
 const { extname, resolve, sep } = require('node:path');
 const { test } = require('node:test');
+const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const root = resolve(__dirname, '../..');
@@ -19,6 +20,15 @@ const mime = {
 const csp = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; " +
   "connect-src 'self' data: blob:; frame-src 'self'; base-uri 'self'; form-action 'none'";
+
+async function waitUntil(page, predicate, value, timeout = 30000) {
+  const deadline = Date.now() + timeout;
+  do {
+    if (await page.evaluate(predicate, value)) return;
+    await delay(50);
+  } while (Date.now() < deadline);
+  throw new Error('Timed out waiting for the playtest: ' + predicate);
+}
 
 async function fixture(context, guard, requests) {
   await context.route('**/*', async route => {
@@ -84,7 +94,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
         requests.length = 0;
         const entry = origin + prefix + tree + (section ? '?ch3test=' + section : '');
         await page.goto(entry);
-        await page.waitForFunction(() => window.adventurePlaytestReady && assetBootReady);
+        await waitUntil(page, () => window.adventurePlaytestReady && assetBootReady);
         const identity = await page.evaluate(() => ({
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
@@ -94,7 +104,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
         if (section) {
-          await page.waitForFunction(s => !assetGateActive && gameState === 'playing' &&
+          await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
             c34Is() && c34.section === s && c34ArtReady(), section);
           const persisted = await page.evaluate(() => {
             playerInventory.coins += 10;
@@ -104,7 +114,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           assert.equal(persisted, true);
           bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('cumulative')));
         } else {
-          await page.waitForFunction(() => !gameStartGateActive);
+          await waitUntil(page, () => !gameStartGateActive);
         }
         if (mobile) {
           const held = await page.locator('#btn-left').boundingBox();
@@ -114,7 +124,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart',
             touchPoints: [{ x: held.x + held.width / 2, y: held.y + held.height / 2 }] });
           try {
-            await page.waitForFunction(x => player.x < x - 5, playerX);
+            await waitUntil(page, x => player.x < x - 5, playerX);
           } finally {
             await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
             await cdp.detach();
