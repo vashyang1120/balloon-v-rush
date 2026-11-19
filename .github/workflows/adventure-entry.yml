@@ -25,7 +25,7 @@ jobs:
           node --check rpg-continent1-universe/main.js
           node --check rpg-dual-continent-test/main.js
           node --check assets/adventure/entry-reliability.js
-          node --test tests/entry-reliability.test.cjs rpg-continent1-universe/tests/title-sync.test.cjs
+          node --test tests/entry-reliability.test.cjs rpg-continent1-universe/tests/title-sync.test.cjs rpg-dual-continent-test/tests/chapter3-treasure-dice.test.cjs
           node minigames/whack-a-mole/tests/rules.test.js
       - name: Prepare isolated Chromium
         run: |
@@ -35,7 +35,7 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
           CH3_SCREENSHOTS: entry-screenshots/chapter3
-        run: node --test tests/entry-reliability.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs
+        run: node --test tests/entry-reliability.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs rpg-dual-continent-test/tests/chapter3-pages-isolation.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

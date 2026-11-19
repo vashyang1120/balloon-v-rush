@@ -24,3 +24,6 @@
 - 階段 A、D 自 `2da85c1a9c2d3a9cd66dda62c6ab3d286590eb94` 續接。更新 `main.js`、第三章 Chromium 測試、資源產生器和統計檔。第三章 Chromium 9 通過、0 失敗。
 
 - 岩壁、池壁與倒樹檢查點以 `777812371ede0a33a129276a87f9baa0ec6354ca` 續接。共用岩壁貼圖定位，邊緣以原素材柔接，窄岩柱維持 14 號獨立圖，樹使用既有懸崖樹與草皮。桌機 Chromium 第三章 10 通過。修正上次 Actions 的共用背景 Playwright 情境與水池出生即觸及水柱問題，重新跑 PR CI。
+
+- E 狀態：已完成參數化獎勵、一次性領取決策與擲骰繪製／動畫核心。5 項 Node 測試通過。實際寶箱出現、骰子圖檔、星靈邀約與存檔串接待原始素材及定案規則。
+- G 狀態：既有 [Adventure entry reliability](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44569196581) 已通過。沿用現行 Pages guard 與路徑的隔離 Chromium fixture 4 項通過，含三入口、手機左方向觸控、寫入嘗試拒絕、同來源正式存檔前後一致。新增兩套測試至 PR CI。線上 test-2 部署仍待 E 與完整遊戲回歸。

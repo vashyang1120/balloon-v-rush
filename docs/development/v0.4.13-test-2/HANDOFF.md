@@ -12,3 +12,6 @@ Recovery 施工自 `334b50a0c4f959525a72a5142026dc16e4b657cd` 繼續。CI 範圍
 3-4 飛行續調優先使用新增的軌跡測試。階段 C 只改 3-4 專屬地形、鏡頭和導風參數；3-2 既有分支仍用原有計數及文案。
 
 背包用 `&ch3bag=cumulative|stocked|empty` 選模式。測試背包重置在暫停開發工具內。資源來源和不確定項目見 [RESOURCE_CATALOG](RESOURCE_CATALOG.md)。
+
+
+E/G 續接自 `a68424255f7f8ab1fa551b6fe916f866e27b9e2b`。骰子和寶箱獎勵核心在 `rpg-dual-continent-test/chapter3-treasure-dice.js`，獨立測試在同目錄的 tests。取得正式素材後，量測黃球可繪製範圍再把正面圖與核心串接。需取得精確的製作、消耗、觸發、次數與星靈首句規格才打開邀約。剩餘工程：核對寶箱原檔三等級，完成實際遊戲操作與整關回歸。部署時從最新 PR HEAD 建置並僅覆蓋 main 的 `playtest-adventure-v0.4.13/`，完成 GitHub Pages 實際 HTTPS 三入口驗證。精確指令及驗收紀錄見 [PROGRESS](PROGRESS.md) 和 [ACCEPTANCE](ACCEPTANCE.md)。
