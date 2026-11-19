@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.1-continent1-universe-test-1';
-const BUILD_TIME   = '2026-11-13 10:00';
+const GAME_VERSION = 'adventure-v0.4.12-entry-reliability-test-1';
+const BUILD_TIME   = '2026-11-18';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -669,7 +669,7 @@ function addVCoins(amount, source, meta) {
 // =============================================
 
 // 冒險遊戲部署根路徑（GitHub Pages）
-const ADVENTURE_BASE_URL = 'https://vashyang1120.github.io/balloon-v-rush/';
+const ADVENTURE_BASE_URL = new URL('../', location.href).href;
 
 function resolveAdventureAssetSrc(path) {
   if (!path) return '';
@@ -3493,7 +3493,8 @@ function saveInventory() {
       data = Object.assign({}, playerInventory, { items: Object.assign({}, testSupplyOriginalItems) });
     }
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch(e) {}
+    return true;
+  } catch(e) { return false; }
 }
 
 function resetInventory() {
@@ -18743,8 +18744,8 @@ function getAssetSourceCandidates(path, altPaths) {
   const q = '?v=' + encodeURIComponent(GAME_VERSION);
   const out = [];
   [path].concat(altPaths || []).forEach(p => {
-    out.push({ src: 'pages', url: resolveAdventureAssetSrc(p) + q });
-    try { if (typeof location !== 'undefined' && location.href) out.push({ src: 'relative', url: new URL(p, location.href).href + q }); } catch (e) {}
+    if (/^https?:\/\//.test(p)) { out.push({ src: 'external', url: p }); return; }
+    out.push({ src: 'relative', url: resolveAdventureAssetSrc(p) + q });
     out.push({ src: 'raw', url: ASSET_RAW_BASE + p.replace(/^\//, '') + q });
   });
   return out.filter((c, i) => out.findIndex(x => x.url === c.url) === i);
@@ -18785,6 +18786,7 @@ function loadImageRecord(r) {
         resolve(r); return;
       }
       const c = cands[i];
+      if (r.retry) c.url += (c.url.includes('?') ? '&' : '?') + 'retry=' + r.retry;
       r.current = c.url;
       let done = false;
       const im = new Image();
@@ -18833,7 +18835,7 @@ function preloadAssetGroup(groupName, options) {
   const st = ASSET_GROUP_STATE[groupName] || (ASSET_GROUP_STATE[groupName] = { promise: null, settled: false, summary: null });
   if (st.promise && !opts.force) return st.promise;
   const entries = getAssetManifest()[groupName] || [];
-  if (opts.force) entries.forEach(e => { const r = ASSET_REGISTRY[e.path]; if (r && r.status === 'failed') { r.promise = null; r.tried = []; r.status = 'idle'; r.applied = false; } });
+  if (opts.force) entries.forEach(e => { const r = ASSET_REGISTRY[e.path]; if (r && r.status === 'failed') { r.promise = null; r.tried = []; r.status = 'idle'; r.applied = false; r.retry = (r.retry || 0) + 1; } });
   const recs = entries.map(e => { const r = getAssetRecord(e); if (!r.groups.includes(groupName)) r.groups.push(groupName); return { r, e }; });
   st.settled = false;
   const loadOne = ({ r, e }) => (e.type === 'audio' ? loadAudioRecord(r, e) : loadImageRecord(r)).then(() => { if (opts.onProgress) opts.onProgress(groupName); });
@@ -19243,7 +19245,8 @@ function advLoadRender(g, S, st, now) {
   const groundY = bar.y - 1;
   st.dbg = null;
   try {
-    if (scene === 'BOOT') {
+    if (scene === 'WHACK') { AdventureEntry.drawHoles(g, bar, realP, now, st); }
+    else if (scene === 'BOOT') {
       const T = L.BOOT, fi = advLoadBootFrame(realP), img = advLoadArtImg(LOAD_ART_FILES.BOOT[fi]);
       if (img) {
         const fr = T.frames[fi], s = img.naturalWidth / T.refW, k = T.bodyW / (fr.srcBodyW * s);
@@ -19295,11 +19298,12 @@ function advLoadRender(g, S, st, now) {
   g.textAlign = 'center'; g.fillStyle = '#fff3c4'; g.font = 'bold 22px sans-serif';
   g.fillText(st.error ? '載入遇到問題' : Math.floor(realP * 100) + '%', W / 2, L.pctY);
   // 氣球知識／劇情文案（錯誤訊息出現時讓位給錯誤說明）
-  if (!st.error && st.trivia) {
+  const trivia = scene === 'WHACK' ? '遊戲背後的故事　' + AdventureEntry.storyAt(realP) : st.trivia;
+  if (!st.error && trivia) {
     const T = L.trivia;
     g.fillStyle = 'rgba(255,255,255,0.07)'; rr(T.x, T.y, T.w, T.h, 12); g.fill();
     let fs = T.font, lines;
-    for (;;) { g.font = fs + 'px sans-serif'; lines = advLoadWrap(g, '💡 ' + st.trivia, T.w - 40); if (lines.length <= T.maxLines || fs <= T.minFont) break; fs--; }
+    for (;;) { g.font = fs + 'px sans-serif'; lines = advLoadWrap(g, (scene === 'WHACK' ? '' : '💡 ') + trivia, T.w - 40); if (lines.length <= T.maxLines || fs <= T.minFont) break; fs--; }
     const lh = fs * T.lineH, y0 = T.y + T.h / 2 - (lines.length - 1) * lh / 2;
     g.fillStyle = '#ffe9a8'; g.textBaseline = 'middle';
     lines.forEach((ln, i) => g.fillText(ln, W / 2, y0 + i * lh));
@@ -19401,7 +19405,7 @@ function advLoadStopLoop() {
 }
 function showAssetLoadingOverlay(title, groups) {
   // 進度只算這次真的要載的群組（已載好的群組不重複計入）
-  const fresh = groups.filter(g => !isAssetGroupSettled(g));
+  const fresh = groups.filter(g => !isAssetGroupReady(g));
   assetGateProgress.title = title; assetGateProgress.groups = fresh.length ? fresh : groups;
   const scene = advLoadSceneFor(groups);   // 依玩家要前往的地方（完整群組）判斷，不看剩下哪些群組
   advLoadEnsureSceneArt(scene, false);      // 讀取動畫圖：裝飾用，不算進度、不擋進關
@@ -19427,20 +19431,23 @@ function hideAssetLoadingOverlay() {
   ADV_LOAD.st = null;
   if (assetLoadingEl) { assetLoadingEl.style.display = 'none'; assetLoadingEl.onclick = null; }
 }
-function showAssetLoadingError(result, onRetry, onContinue) {
+function showAssetLoadingError(result, onRetry, onContinue, options = {}) {
   const el = assetLoadingEl;
   if (!el) { onContinue(); return; }
-  clearInterval(assetLoadingTimer); updateAssetLoadingOverlay();
+  clearInterval(assetLoadingTimer);
+  if (!options.back) updateAssetLoadingOverlay();
   const st = ADV_LOAD.st, dev = st ? st.dev : advLoadDevOn();
   if (st) st.error = true;
   const box = el.querySelector('[data-k="err"]');
   const n = result.criticalFailedPaths.length;
-  const list = dev ? '<div class="adv-load-err-list">' + result.criticalFailedPaths.slice(0, 8).map(p => '・' + p.split('/').pop()).join('<br>') + (n > 8 ? '<br>…共 ' + n + ' 個' : '') + '</div>' : '';
-  box.innerHTML = '<b>⚠️ 有些遊戲需要的素材沒有載入成功</b><div>請確認網路連線後，按「重新載入」再試一次。</div>'
+  const list = dev ? '<div class="adv-load-err-list">' + result.criticalFailedPaths.slice(0, 8).map(p => '・' + h2Esc(p.split('/').pop())).join('<br>') + (n > 8 ? '<br>…共 ' + n + ' 個' : '') + '</div>' : '';
+  const heading = options.message ? '<b>⚠️ ' + h2Esc(options.message) + '</b>' :
+    '<b>⚠️ 有些遊戲需要的素材沒有載入成功</b><div>請確認網路連線後，按「重新載入」再試一次。</div>';
+  box.innerHTML = heading
     + (dev ? '<div class="adv-load-err-dev">［開發者］必要素材失敗 ' + n + ' 個（完整網址與原因已列在 console）</div>' + list : '')
     + '<div class="adv-load-err-btns">'
     + '<button type="button" data-k="retry">🔄 重新載入</button>'
-    + '<button type="button" data-k="cont">' + (ADVENTURE_TEST_TOOLS_ENABLED && dev ? '測試版：用 fallback 繼續' : '仍要繼續（部分畫面會簡化）') + '</button></div>';
+    + '<button type="button" data-k="cont">' + (options.back ? '返回小V的家' : ADVENTURE_TEST_TOOLS_ENABLED && dev ? '測試版：用 fallback 繼續' : '仍要繼續（部分畫面會簡化）') + '</button></div>';
   box.style.display = 'block';
   box.querySelector('[data-k="retry"]').onclick = e => {
     if (e) e.stopPropagation();
@@ -19448,7 +19455,7 @@ function showAssetLoadingError(result, onRetry, onContinue) {
     if (ADV_LOAD.st) { ADV_LOAD.st.error = false; ADV_LOAD.st.attemptMax = 0; }   // 重試＝新的一次載入：進度從實際剩下的開始算
     onRetry();
   };
-  box.querySelector('[data-k="cont"]').onclick = e => { if (e) e.stopPropagation(); console.warn('[AssetPreload] 使用者選擇以 fallback 繼續，缺少：', result.criticalFailedPaths); onContinue(); };
+  box.querySelector('[data-k="cont"]').onclick = e => { if (e) e.stopPropagation(); if (!options.back) console.warn('[AssetPreload] 使用者選擇以 fallback 繼續，缺少：', result.criticalFailedPaths); onContinue(); };
 }
 // 5. drawLoadingScreen(progress)：canvas 版（開機 gate 時畫在遊戲畫面上）— v0.3.78 與 HTML 讀取畫面共用同一個繪製器
 //    HTML 讀取畫面顯示中（它蓋在遊戲畫面上）→ 這裡只鋪底色，避免同一個動畫畫兩次
@@ -19484,18 +19491,20 @@ if (typeof window !== 'undefined') Object.assign(window, { LOADING_TRIVIA, LOAD_
 let assetGateBusy = false;
 function runWithAssetGate(groups, title, fn) {
   if (typeof globalThis !== 'undefined' && globalThis.__ASSET_GATE_BYPASS) { fn(); return; } // 只給無頭測試用
-  if (groups.every(isAssetGroupSettled) && groups.every(g => !ASSET_GROUP_STATE[g].needsRetry)) { flushPendingAssetApplies(); fn(); return; }
-  if (assetGateBusy) { console.warn('[AssetPreload] 已在載入中，忽略重複的進關要求'); return; }
+  if (assetGateBusy || whFrame?.el) { console.warn('[AssetPreload] 已在載入中，忽略重複的進關要求'); return; }
+  if (groups.every(g => isAssetGroupReady(g) || ASSET_GROUP_STATE[g]?.acceptedFallback)) {
+    flushPendingAssetApplies(); fn(); return;
+  }
   assetGateBusy = true; assetGateActive = true;
   showAssetLoadingOverlay(title, groups);
   const attempt = (force) => ensureAssetGroups(groups, null, force).then(res => {
     if (!res.ok) {
-      groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = true; });
+      groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].acceptedFallback = false; });
       showAssetLoadingError(res, () => { clearInterval(assetLoadingTimer); assetLoadingTimer = setInterval(updateAssetLoadingOverlay, 120); attempt(true); },
-        () => { groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = false; }); finish(); });
+        () => { groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].acceptedFallback = true; }); finish(); });
       return;
     }
-    groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].needsRetry = false; });
+    groups.forEach(g => { if (ASSET_GROUP_STATE[g]) ASSET_GROUP_STATE[g].acceptedFallback = false; });
     finish();
   });
   const finish = () => {
@@ -19504,7 +19513,7 @@ function runWithAssetGate(groups, title, fn) {
     assetGateBusy = false;
     try { fn(); } finally { assetGateActive = false; }
   };
-  attempt(false);
+  attempt(groups.some(g => ASSET_GROUP_STATE[g]?.summary?.criticalFailed > 0));
 }
 
 // ── debug 指令 ──
@@ -19653,7 +19662,7 @@ const RPG_ASSETS = {
   dog_treasure_alert: 'assets/adventure/rpg/portraits/dog/dog_treasure_alert.png',
   balloon_recipe_book:'assets/adventure/rpg/objects/balloon_recipe_book.png',
   // v0.3.61：正式 RPG 立繪（使用者已上傳）
-  balloonv_angry:     'assets/adventure/rpg/portraits/balloonv/balloonv_angry.png',
+  balloonv_angry:     'assets/adventure/rpg/portraits/balloonv/balloonv_angry.png.png',
   balloonv_heroic:    'assets/adventure/rpg/portraits/balloonv/balloonv_heroic.png',
   orange_king_taunt:  'assets/adventure/rpg/portraits/boss/orange_king_taunt.png',
   orange_king_angry:  'assets/adventure/rpg/portraits/boss/orange_king_angry.png',
@@ -19667,8 +19676,8 @@ const RPG_BOSS_PORTRAIT = {
   orange_king_taunt: { size: 640, right: -80, bottom: -45 },
   orange_king_angry: { size: 660, right: -100, bottom: -50 },
 };
-// v0.3.61：GitHub 上目前的檔名是 balloonv_angry.png.png（多了一個 .png）→ 先試正確檔名，找不到再試這個；改名後自動用正確檔名
-const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png.png'] };
+// 目前素材使用雙副檔名，先走已存在的路徑，單副檔名保留為改名後的備援。
+const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png'] };
 const RPG_EXTERNAL_ASSET_KEYS = []; // 由其他素材群組載入的立繪（目前沒有）
 // v0.3.61：RPG 立繪改成「一張一張依序載入」（手機上 13 張同時下載容易逾時失敗），常用的先載；每個來源最多等 30 秒
 const RPG_ASSET_LOAD_ORDER = ['balloonv_surprised', 'balloonv_thinking', 'balloonv_shocked', 'balloonv_confused', 'balloonv_happy', 'dog_treasure_alert',
@@ -22801,7 +22810,9 @@ function h2RenderPanel(first) {
   const defs = P.kind === 'bag' ? H2_BAG_TABS : P.kind === 'shop' ? H2_SHOP_TABS : [];
   if (tabs) { tabs.style.display = defs.length ? '' : 'none'; tabs.innerHTML = defs.map(([id, label]) => '<button type="button" class="h2-pill h2-pill--yellow h2-tab' + (P.tab === id ? ' is-on' : '') + '" data-h2-act="tab" data-key="' + id + '">' + label + '</button>').join(''); }
   if (P.kind === 'challenge') { try { renderHomeChallenge(); } catch (e) {} }
+  const story = !first && body.querySelector('details[data-entry-story="' + P.kind + '"][open]');
   body.innerHTML = h2PanelBody(P.kind, P.tab);
+  if (story) body.querySelector('details[data-entry-story="' + P.kind + '"]').open = true;
   if (P.kind === 'challenge') h2Borrow('home-challenge-body', h2$('h2-borrow-challenge'));
   if (P.kind === 'next') h2Borrow('home-next-stage-body', h2$('h2-borrow-next'));
   body.scrollTop = scroll;
@@ -24539,6 +24550,11 @@ function advConfirmOfficialChallenge() {
   setTimeout(() => { const b = ov.querySelector('[data-oc="no"]'); if (b) try { b.focus({ preventScroll: true }); } catch (e) {} }, 30);
 }
 function advStartOfficialChallenge() {
+  if (assetGateBusy || whFrame?.el) return;
+  runWithAssetGate(getAssetGroupsForLevelBase(0), getAssetGateTitleForLevel(0), advBeginOfficialChallenge);
+}
+
+function advBeginOfficialChallenge() {
   console.log('[Mode] 正式挑戰：清空本次冒險背包，從 1-1 出發');
   advPlayMode = 'official';
   try { if (advAttempt) advAttempt.ended = true; } catch (e) {}
@@ -24559,7 +24575,7 @@ function advStartOfficialChallenge() {
     currentLevelIndex = 0; loadLevel(0); restart({ keepHp: false });
     try { if (!advIntroActive && !(typeof ocActive !== 'undefined' && ocActive) && advIntroShouldPlay()) advIntroRunInLevel(); } catch (e) {}   // 世界地圖：飛行屋飛向 1-1 → 故事選擇 → 1-1
   };
-  if (typeof runWithAssetGate === 'function') runWithAssetGate(getAssetGroupsForLevel(0), getAssetGateTitleForLevel(0), go); else go();
+  go();
 }
 
 //  【暫停選單】氣球秘笈／冒險手冊 → 使用小V的家 2.0 的同一套面板（同一份資料、同一套點擊處理），關閉後回到暫停選單
@@ -24870,7 +24886,7 @@ function advRestoreHomeCtx() {
   });
   // ── 重新整理用：進入關卡時記錄模式 ──
   wrapFn('restart', o => function () { const r = o.apply(this, arguments); advSessionSave('stage'); return r; });
-  wrapFn('advStartOfficialChallenge', o => function () { advHomeCtx = null; return o.apply(this, arguments); });
+  wrapFn('advBeginOfficialChallenge', o => function () { advHomeCtx = null; return o.apply(this, arguments); });
   // 小V之家「關卡進度」條：有進行中的正式挑戰 → 本趟進度（照舊）；沒有 → 永久解鎖進度（重新整理後不再顯示成 0）
   wrapFn('h2OfficialProgress', o => function () {
     const r = o.apply(this, arguments);
@@ -31154,18 +31170,15 @@ function whData() {
   if (!Array.isArray(w.history)) w.history = [];
   return w;
 }
-function whUnlocked() { return !!whData().unlocked; }
-function whSave() { try { saveInventory(); } catch (e) {} }
-function whUnlock(how) {
-  const w = whData(); if (w.unlocked) return false;
-  const now = Date.now();
-  vbKnownClearedStages().forEach(s => { if (OFFICIAL_ADVENTURE_STAGE_IDS.includes(s) && !w.clearLog[s]) w.clearLog[s] = { at: now, before: true }; });
-  w.unlocked = true; w.unlockedAt = now; w.unlockedHow = how; w.playsLeft = 0; w.refillPending = null;   // 解鎖不送免費次數
-  w.history.push({ t: 'unlock', at: now, how });
-  whSave();
-  console.log('[Whack] 打地鼠永久解鎖（' + how + '）；目前次數 0／' + C1U_WHACK.maxPlays + '；已完成過的關卡：' + Object.keys(w.clearLog).join('、'));
-  return true;
+function whReconcile(clearedHere) {
+  const inv = playerInventory, w = whData();
+  const cleared = clearedHere || inv.chapter1Flow?.hammerRecipeGranted === true || advProgressGet().has('1-2');
+  const changed = AdventureEntry.reconcile(w, inv.unlockedRecipes?.basicHammer === true, cleared, Date.now());
+  const interrupted = !whFrame?.el && AdventureEntry.abandonStarted(w, 'reload');
+  return changed || interrupted;
 }
+function whUnlocked() { return !!whData().hammerRecipeVerified; }
+function whSave() { try { return saveInventory() === true; } catch (e) { return false; } }
 function whOnStageClear(sid) {
   if (!whUnlocked() || !sid || !OFFICIAL_ADVENTURE_STAGE_IDS.includes(sid)) return;
   const w = whData(); if (w.clearLog[sid]) return;                          // 重玩已完成的關卡 → 不補
@@ -31183,127 +31196,198 @@ function whApplyRefill() {
   w.refillPending = null; whSave();
   return true;
 }
-function whPending() { const c = whData().current; return (c && c.state !== 'done') ? c : null; }
+function whPending() { const c = whData().current; return c?.paidAt && c.state === 'pending' && !c.startedAt ? c : null; }
 function whBlockReason() {
   if (!whUnlocked()) return 'locked';
   if (whPending()) return '';
-  if (whData().playsLeft <= 0) return 'noPlays';
+  if (!whData().firstPlayGranted || whData().playsLeft <= 0) return 'noPlays';
   if ((playerInventory.coins || 0) < C1U_WHACK.fee) return 'noCoins';
   return '';
 }
-const WH_BLOCK_TEXT = { locked: '第一次做出氣球槌之後就能玩打地鼠！', noPlays: '完成下一個新的冒險關卡後回到小V的家，就能玩一次打地鼠。', noPlaysNew: '打地鼠剛解鎖！完成下一個新的冒險關卡後回到小V的家，就能玩第一次。', noCoins: '冒險金幣不夠喔！打地鼠入場需要 20 金幣。' };
+const WH_BLOCK_TEXT = { locked: '取得氣球槌秘笈並通過 1-2，回到小V的家就能玩打地鼠！', noPlays: '完成下一個新的冒險關卡後回到小V的家，就能玩一次打地鼠。', noPlaysNew: '通過 1-2 回到小V的家，就能玩第一次打地鼠。', noCoins: '冒險金幣不夠喔！打地鼠入場需要 20 金幣。' };
 function whNoPlaysText() { const w = whData(); return w.history.some(h => h.t === 'game' || h.t === 'enter') ? WH_BLOCK_TEXT.noPlays : WH_BLOCK_TEXT.noPlaysNew; }
 function whStart() {
+  if (assetGateBusy || whFrame.el || !h2IsOpen() || gameState === 'playing' || gameState === 'paused') return false;
+  if (whReconcile(false)) whSave();
   const why = whBlockReason();
-  if (why) { h2Toast(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]); console.log('[Whack] 不能進入：' + why + '（沒有扣金幣、沒有扣次數）'); return false; }
-  if (typeof gameState !== 'undefined' && (gameState === 'playing' || gameState === 'paused')) return false;
-  if (whFrame.el && whFrame.el.classList.contains('is-open')) return false;
-  const w = whData();
-  let c = whPending();
-  if (!c) {
-    playerInventory.coins = (playerInventory.coins || 0) - C1U_WHACK.fee;     // 入場費：冒險金幣（不是 V幣；不算商店購買）
-    w.playsLeft = Math.max(0, w.playsLeft - 1);
-    c = w.current = { id: 'w-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e9).toString(36), state: 'pending', fee: C1U_WHACK.fee, paidAt: Date.now() };
-    w.history.push({ t: 'enter', at: Date.now(), session: c.id, fee: C1U_WHACK.fee, playsLeft: w.playsLeft });
-    whSave();
-    console.log('[Whack] 進入打地鼠：扣 ' + C1U_WHACK.fee + ' 金幣、次數剩 ' + w.playsLeft + '（session ' + c.id + '）');
-  } else console.log('[Whack] 上一局沒有完成 → 免費重新進入（session ' + c.id + '）');
-  whOpenFrame(c);
-  try { h2ScheduleRefresh(); } catch (e) {}
+  if (why) { h2Toast(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]); return false; }
+  const paid = whPending();
+  whOpenFrame({
+    id: paid?.id || 'w-' + crypto.randomUUID(),
+    seed: paid?.seed || (1 + Math.floor(Math.random() * 2147483000))
+  });
   return true;
 }
-var whFrame = { el: null, iframe: null, session: null, timer: 0, poll: 0, ready: false };
+
+const WH_LOADING_TITLE = '氣球槌打地鼠素材載入中...';
+var whFrame = { el: null, iframe: null, session: null, timer: 0, poll: 0, ready: false, loading: false };
+
+function whCloseLoading() {
+  const el = assetLoadingEl;
+  if (!whFrame.loading || !el) return;
+  el.querySelector('#whack-loading-back')?.remove();
+  el.style.zIndex = '';
+  hideAssetLoadingOverlay();
+  whFrame.loading = false;
+}
+
 function whOpenFrame(sess) {
   c1uEnsureStyle();
-  if (!whFrame.el) {
-    const w = document.createElement('div'); w.id = 'wam-frame-wrap';
-    w.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#0b1020;display:none;';
-    w.innerHTML = '<iframe id="wam-frame" title="氣球槌打地鼠" allow="autoplay; fullscreen" style="width:100%;height:100%;border:0;display:block;background:#0b1020"></iframe>'
-      + '<button type="button" class="c1u-wexit" id="wam-exit" style="display:none">🏠 回小V的家</button>'
-      + '<div id="wam-frame-msg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#fff;font:bold 18px sans-serif;text-align:center;padding:20px"></div>';
-    document.body.appendChild(w);
-    whFrame.el = w; whFrame.iframe = w.querySelector('iframe');
-    w.querySelector('#wam-exit').addEventListener('click', e => { e.preventDefault(); whCloseFrame('exit'); });
-    whFrame.iframe.addEventListener('load', () => { if (whFrame.session) whAdapt(); });
-  }
-  whFrame.session = sess.id; whFrame.ready = false;
-  whFrame.el.querySelector('#wam-frame-msg').style.display = 'none';
-  whFrame.iframe.style.visibility = 'hidden';
-  whFrame.iframe.src = C1U_WHACK.frameUrl + '?embed=adventure&seed=' + (1 + Math.floor(Math.random() * 2147483000));
-  whFrame.el.style.display = 'block'; whFrame.el.classList.add('is-open');
-  clearTimeout(whFrame.timer);
-  whFrame.timer = setTimeout(() => { if (!whFrame.ready && whFrame.el.classList.contains('is-open')) whFrameFail(); }, C1U_WHACK.loadTimeoutMs);
+  const el = document.createElement('div');
+  el.id = 'wam-frame-wrap';
+  el.className = 'is-open';
+  el.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#140e28;visibility:hidden';
+  el.innerHTML = '<iframe id="wam-frame" title="氣球槌打地鼠" allow="autoplay; fullscreen" style="width:100%;height:100%;border:0;display:block"></iframe>'
+    + '<button type="button" class="c1u-wexit" id="wam-exit">🏠 回小V的家</button>';
+  const overlay = ensureAssetLoadingOverlay();
+  whFrame.el = el;
+  whFrame.iframe = el.querySelector('iframe');
+  whFrame.session = sess.id;
+  whFrame.loading = true;
+  ADV_LOAD.st = { scene: 'WHACK', title: WH_LOADING_TITLE, realP: 0, dispP: 0, t0: performance.now() };
+  overlay.querySelector('[data-k="err"]').style.display = 'none';
+  overlay.style.zIndex = '2147483001';
+  overlay.style.display = 'flex';
+  const back = document.createElement('button');
+  back.id = 'whack-loading-back';
+  back.type = 'button';
+  back.className = 'h2-pill h2-pill--yellow';
+  back.style.cssText = 'position:absolute;right:12px;bottom:12px';
+  back.textContent = '返回小V的家';
+  back.onclick = () => whCloseFrame('cancel');
+  overlay.appendChild(back);
+  advLoadStartLoop();
+
+  el.querySelector('#wam-exit').onclick = () => whCloseFrame('exit');
+  const frame = whFrame.iframe;
+  frame.src = C1U_WHACK.frameUrl + '?embed=adventure&seed=' + sess.seed;
+  document.body.appendChild(el);
+  whFrame.poll = setInterval(() => whCheckFrame(frame, sess), 50);
+  whFrame.timer = setTimeout(() => whFrameFail(sess), C1U_WHACK.loadTimeoutMs);
 }
-function whFrameFail() {
-  const msg = whFrame.el.querySelector('#wam-frame-msg');
-  whFrame.iframe.style.display = 'none';
-  msg.innerHTML = '<div>😢 打地鼠沒有順利載入</div><div style="font-size:14px;font-weight:normal">這一局保留著，下次進入不會再扣金幣。</div><button type="button" id="wam-frame-close" style="font:bold 16px sans-serif;padding:10px 22px;border-radius:12px;border:0;background:#ffd23a">返回小V的家</button>';
-  msg.style.display = 'flex';
-  msg.querySelector('#wam-frame-close').addEventListener('click', () => whCloseFrame('loadFail'));
+
+function whFrameFail(sess, failed = [], message = '') {
+  clearTimeout(whFrame.timer);
+  clearInterval(whFrame.poll);
+  whFrame.ready = false;
+  whFrame.el.style.visibility = 'hidden';
+  whFrame.iframe.remove();
+  const overlay = ensureAssetLoadingOverlay();
+  overlay.querySelector('#whack-loading-back')?.remove();
+  if (!whFrame.loading) {
+    whFrame.loading = true;
+    ADV_LOAD.st = { scene: 'WHACK', title: WH_LOADING_TITLE, realP: 1, dispP: 1, t0: performance.now() };
+    overlay.style.zIndex = '2147483001';
+    overlay.style.display = 'flex';
+    advLoadStartLoop();
+  }
+  console.warn('[Whack] 入場未完成：', message || '素材或遊戲載入失敗／逾時', failed);
+  showAssetLoadingError({ criticalFailedPaths: failed }, () => {
+    whCloseFrame('retry');
+    if (!message) whOpenFrame(sess); else whStart();
+  }, () => whCloseFrame('loadFail'), { back: true, message });
+}
+
+function whCheckFrame(frame, sess) {
+  if (whFrame.iframe !== frame || !whFrame.loading) return;
+  const win = frame.contentWindow;
+  let W, assets, audio, config;
+  try {
+    W = win.__wam;
+    if (!W?.game || !W.renderer) return;
+    assets = win.WAM.Assets.report();
+    audio = win.WAM.Audio.report();
+    config = win.WAM.CONFIG;
+  } catch (e) { return; }
+  const images = Object.entries(config.IMAGES).map(([key, def]) => [def.path, assets[key]]);
+  const sounds = Object.entries(config.AUDIO.SFX).map(([key, def]) => [def.path, audio.sfx[key]]);
+  const files = images.concat(sounds, [[audio.bgmSrc || 'BGM', audio.bgm]]);
+  const ready = files.filter(([, state]) => /^(ok|fetched|html)(?:・|$)/.test(state));
+  ADV_LOAD.st.realP = ready.length / files.length;
+  const failed = files.filter(([, state]) => state === 'failed').map(([path]) => path);
+  if (failed.length) { whFrameFail(sess, failed); return; }
+  if (ready.length !== files.length) return;
+  clearTimeout(whFrame.timer);
+  clearInterval(whFrame.poll);
+  try { whAdapt(win, W, sess); }
+  catch (e) { console.warn('[Whack] 啟動轉接失敗', e); whFrameFail(sess); }
+}
+
+function whPay(sess) {
+  const w = whData();
+  const previous = JSON.parse(JSON.stringify(w)), coins = playerInventory.coins;
+  const paid = AdventureEntry.charge(playerInventory, w, sess.id, sess.seed, C1U_WHACK.fee, Date.now());
+  if (!paid) return false;
+  paid.seed = sess.seed;
+  paid.state = 'active';
+  paid.startedAt ||= Date.now();
+  if (whSave()) return true;
+  playerInventory.coins = coins;
+  playerInventory.whack = previous;
+  return false;
 }
 // 小遊戲轉接（不修改打地鼠本身的檔案）：背景換成第一大陸窗景、結算接到冒險背包、隱藏「再玩一局」
-function whAdapt() {
-  let win, doc;
-  try { win = whFrame.iframe.contentWindow; doc = win.document; } catch (e) { return; }
-  const sid = whFrame.session;
-  let n = 0;
-  const tryHook = () => {
-    if (whFrame.session !== sid) return;
-    const W = win.__wam;
-    if (!W || !W.game || !W.renderer || !win.WAM) { if (++n < 200) setTimeout(tryHook, 50); return; }
-    // 1) 背景：九宮格後方只換成第一大陸窗景（等比例填滿＋原本的 12% 白色薄霧）；洞口、平台、怪物、資訊欄照舊
-    const bgInfo = c1uMinigameBg();                                   // v0.4.1：淡化＋輕微模糊過的窗景（讓前景更清楚）
-    const img = new win.Image(); img.src = bgInfo.url;
-    const orig = win.WAM.Renderer.prototype.drawBackground;
-    W.renderer.drawBackground = function (ctx, t) {
-      if (!(img.complete && img.naturalWidth)) return orig.call(this, ctx, t);
-      const VW = win.WAM.VIEW_W, VH = win.WAM.VIEW_H;
-      const s = Math.max(VW / img.naturalWidth, VH / img.naturalHeight), w = img.naturalWidth * s, h = img.naturalHeight * s;
-      ctx.drawImage(img, (VW - w) / 2, (VH - h) / 2, w, h);
-      if (!bgInfo.processed) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, VW, VH); }
-    };
-    W.renderer._c1uBg = true;
-    // 2) 結算：原本的結算畫面照常顯示，之後冒險端發一次獎勵
-    const g = W.game, onEnd = g.hooks.onEnd;
-    g.hooks.onEnd = function (r) {
-      if (onEnd) onEnd.apply(this, arguments);
-      try { whSettle(r, sid, win); whPatchResult(doc, sid); } catch (e) { console.warn('[Whack] 結算', e); }
-    };
-    // 3) 一次入場＝一局：隱藏「同種子再玩／再玩一局」與測試按鈕；暫停畫面加「回小V的家」
-    try {
-      ['btnSameSeed', 'btnNewSeed'].forEach(id => { const b = doc.getElementById(id); if (b) b.style.display = 'none'; });
-      const db = doc.getElementById('debugBar'); if (db) db.style.display = 'none';
-      const pp = doc.querySelector('#pauseOverlay .panel');
-      if (pp && !doc.getElementById('c1uPauseHome')) {
-        const b = doc.createElement('button'); b.id = 'c1uPauseHome'; b.type = 'button'; b.className = 'resume-btn'; b.style.marginTop = '12px';
-        b.textContent = '🏠 回小V的家（這一局保留）';
-        b.addEventListener('click', e => { e.preventDefault(); whCloseFrame('exit'); });
-        pp.appendChild(b);
-      }
-    } catch (e) {}
-    whFrame.ready = true; clearTimeout(whFrame.timer);
-    whFrame.iframe.style.visibility = 'visible';
-    // 開場對話時可以先離開（還沒開始＝這一局保留）
-    clearInterval(whFrame.poll);
-    whFrame.poll = setInterval(() => {
-      if (whFrame.session !== sid) { clearInterval(whFrame.poll); return; }
-      const st = g.state, c = whData().current;
-      if (st === 'playing' && c && c.id === sid && c.state === 'pending') { c.state = 'active'; c.startedAt = Date.now(); whSave(); }
-      const ex = whFrame.el.querySelector('#wam-exit'); if (ex) ex.style.display = (st === 'intro' || st === 'idle') ? '' : 'none';
-    }, 250);
-    console.log('[Whack] 打地鼠已載入（背景：第一大陸窗景）');
+function whAdapt(win, W, sess) {
+  const doc = win.document, sid = sess.id;
+  // 1) 背景：九宮格後方只換成第一大陸窗景（等比例填滿＋原本的 12% 白色薄霧）；洞口、平台、怪物、資訊欄照舊
+  const bgInfo = c1uMinigameBg();                                   // v0.4.1：淡化＋輕微模糊過的窗景（讓前景更清楚）
+  const img = new win.Image(); img.src = bgInfo.url;
+  const orig = win.WAM.Renderer.prototype.drawBackground;
+  W.renderer.drawBackground = function (ctx, t) {
+    if (!(img.complete && img.naturalWidth)) return orig.call(this, ctx, t);
+    const VW = win.WAM.VIEW_W, VH = win.WAM.VIEW_H;
+    const s = Math.max(VW / img.naturalWidth, VH / img.naturalHeight), w = img.naturalWidth * s, h = img.naturalHeight * s;
+    ctx.drawImage(img, (VW - w) / 2, (VH - h) / 2, w, h);
+    if (!bgInfo.processed) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, VW, VH); }
   };
-  tryHook();
+  W.renderer._c1uBg = true;
+  // 2) 結算：原本的結算畫面照常顯示，之後冒險端發一次獎勵
+  const g = W.game, onEnd = g.hooks.onEnd;
+  g.hooks.onEnd = function (r) {
+    if (onEnd) onEnd.apply(this, arguments);
+    try {
+      const storeResult = () => whSettle(r, sid, win);
+      storeResult();
+      whPatchResult(doc, sid, storeResult);
+    } catch (e) { console.warn('[Whack] 結算', e); }
+  };
+  // 3) 一次入場＝一局：隱藏「同種子再玩／再玩一局」與測試按鈕；暫停畫面加「回小V的家」
+  try {
+    ['btnSameSeed', 'btnNewSeed'].forEach(id => { const b = doc.getElementById(id); if (b) b.style.display = 'none'; });
+    const db = doc.getElementById('debugBar'); if (db) db.style.display = 'none';
+    const pp = doc.querySelector('#pauseOverlay .panel');
+    if (pp && !doc.getElementById('c1uPauseHome')) {
+      const b = doc.createElement('button'); b.id = 'c1uPauseHome'; b.type = 'button'; b.className = 'resume-btn'; b.style.marginTop = '12px';
+      b.textContent = '🏠 回小V的家（結束本局）';
+      b.addEventListener('click', e => { e.preventDefault(); whCloseFrame('exit'); });
+      pp.appendChild(b);
+    }
+  } catch (e) {}
+  const start = g.start;
+  g.start = function () {
+    if (whFrame.session !== sid || !whFrame.ready || this.state !== 'intro') return;
+    if (!whPay(sess)) {
+      whFrameFail(sess, [], '無法儲存入場費或遊玩次數，請確認資格後再試一次');
+      return;
+    }
+    whFrame.el.querySelector('#wam-exit').style.display = 'none';
+    return start.apply(this, arguments);
+  };
+  whFrame.ready = true;
+  whCloseLoading();
+  whFrame.el.style.visibility = 'visible';
 }
 function whSettle(r, sid, win) {
   const w = whData(), c = w.current;
   if (!c || c.id !== sid) { console.warn('[Whack] 結果不屬於目前這一局 → 不發獎'); return false; }
-  if (c.state === 'done' || w.settled[sid]) { console.warn('[Whack] 同一局重複結算 → 不重複發獎'); return false; }
+  if (c.state !== 'active' || w.settled[sid]) { console.warn('[Whack] 同一局重複結算 → 不重複發獎'); return false; }
   const score = Math.max(0, Math.floor(Number(r && r.score) || 0));
   let tier = null; try { tier = win.WAM.Rewards.tierFor(score); } catch (e) {}
   if (!tier) tier = r && r.tier;
   if (!tier) return false;
   const rw = { coins: tier.coins || 0, balloon260: tier.balloon260 || 0, roundBalloon: tier.roundBalloon || 0, tier: tier.id, tierName: tier.name };
+  const previous = JSON.parse(JSON.stringify(w));
+  const before = { coins: playerInventory.coins, balloon260: playerInventory.balloon260, roundBalloon: playerInventory.roundBalloon };
   playerInventory.coins = (playerInventory.coins || 0) + rw.coins;
   playerInventory.balloon260 = (playerInventory.balloon260 || 0) + rw.balloon260;
   playerInventory.roundBalloon = (playerInventory.roundBalloon || 0) + rw.roundBalloon;
@@ -31311,15 +31395,26 @@ function whSettle(r, sid, win) {
   Object.assign(c, { state: 'done', settledAt: Date.now(), score, reward: rw, shown: false });
   w.history.push({ t: 'game', at: Date.now(), session: sid, score, tier: rw.tier, coins: rw.coins, b260: rw.balloon260, round: rw.roundBalloon });
   if (w.history.length > 60) w.history.splice(0, w.history.length - 60);
-  whSave();
+  if (!whSave()) {
+    Object.assign(playerInventory, before, { whack: previous });
+    h2Toast('獎勵未寫入，請先保留本局結算畫面。');
+    return false;
+  }
   console.log('[Whack] 結算：' + score + ' 分（' + rw.tierName + '）→ 金幣 +' + rw.coins + '、260 +' + rw.balloon260 + '、圓氣球 +' + rw.roundBalloon);
   return true;
 }
-function whPatchResult(doc, sid) {
-  const c = whData().current; if (!c || c.id !== sid || !c.reward) return;
-  const t = doc.querySelector('#result .res-reward-title'); if (t) t.textContent = '本局獲得（已放進冒險背包）';
+function whPatchResult(doc, sid, retry) {
+  const c = whData().current; if (!c || c.id !== sid) return;
+  const t = doc.querySelector('#result .res-reward-title');
+  if (t) t.textContent = c.reward ? '本局獲得（已放進冒險背包）' : '獎勵尚未寫入';
   const cost = doc.getElementById('resCost'); if (cost) cost.textContent = '入場費 ' + c.fee + ' 冒險金幣（進場時已支付）';
   const box = doc.querySelector('#result .res-buttons');
+  if (box && !c.reward && retry && !doc.getElementById('c1uRetryReward')) {
+    const retryButton = doc.createElement('button');
+    retryButton.id = 'c1uRetryReward'; retryButton.type = 'button'; retryButton.textContent = '重新儲存獎勵';
+    retryButton.onclick = () => { if (retry()) { retryButton.remove(); whPatchResult(doc, sid); } };
+    box.appendChild(retryButton);
+  }
   if (box && !doc.getElementById('c1uResHome')) {
     const b = doc.createElement('button'); b.id = 'c1uResHome'; b.type = 'button'; b.className = 'primary'; b.textContent = '🏠 回到小V的家';
     b.addEventListener('click', e => { e.preventDefault(); whCloseFrame('done'); });
@@ -31328,13 +31423,13 @@ function whPatchResult(doc, sid) {
 }
 function whCloseFrame(why) {
   clearTimeout(whFrame.timer); clearInterval(whFrame.poll);
-  const w = whData(), c = w.current;
-  if (c && c.state !== 'done') { c.state = 'pending'; c.lastStop = why || 'close'; whSave(); }
-  if (whFrame.el) { whFrame.el.classList.remove('is-open'); whFrame.el.style.display = 'none'; try { whFrame.iframe.src = 'about:blank'; } catch (e) {} whFrame.iframe.style.display = 'block'; }
-  whFrame.session = null;
+  whCloseLoading();
+  whFrame.el?.remove();
+  Object.assign(whFrame, { el: null, iframe: null, session: null, ready: false });
+  const c = whData().current;
   try { h2ScheduleRefresh(); if (H2.panel && H2.panel.kind === 'whack') h2RenderPanel(); } catch (e) {}
   if (c && c.state === 'done' && c.reward && !c.shown) { c.shown = true; whSave(); whShowResult(c); }
-  else if (c && c.state !== 'done') { try { h2Toast('這一局還沒完成，下次進入打地鼠不會再扣金幣。'); } catch (e) {} }
+  else if (AdventureEntry.abandonStarted(whData(), why)) { whSave(); h2Toast('本局已結束。'); }
 }
 function whShowResult(c) {
   const r = c.reward;
@@ -31354,12 +31449,13 @@ function whPanelHtml() {
   h += '<div class="vb-box vb-recipe"><span class="vb-ico" style="font-size:44px">🔨</span><div class="vb-txt"><b>氣球槌打地鼠</b>（' + (un ? '已解鎖' : '🔒 尚未解鎖') + '）'
     + '<small>' + (un ? '用氣球槌敲蠍子怪、抓金色油管環、最後挑戰橘子王！30 秒一局。' : WH_BLOCK_TEXT.locked) + '</small></div>'
     + '<button type="button" class="h2-pill ' + (why ? 'h2-pill--yellow' : 'h2-pill--green') + '" data-wh-act="play"' + (why ? ' disabled' : '') + '>'
-    + (pend ? '繼續上一局（免費）' : why === 'locked' ? '尚未解鎖' : why === 'noPlays' ? '次數用完' : why === 'noCoins' ? '金幣不足' : '開始（付 ' + C1U_WHACK.fee + ' 金幣）') + '</button></div>';
+    + (pend ? '使用上次已支付的入場費' : why === 'locked' ? '尚未解鎖' : why === 'noPlays' ? '次數用完' : why === 'noCoins' ? '金幣不足' : '開始（付 ' + C1U_WHACK.fee + ' 金幣）') + '</button></div>';
   if (un) {
     h += '<div class="vb-box vb-stat"><span>剩餘次數：' + (w.playsLeft > 0 ? '🔨' : '⚪') + '　<b>' + w.playsLeft + '／' + C1U_WHACK.maxPlays + '</b></span><span>入場費：<b>' + C1U_WHACK.fee + '</b> 冒險金幣（目前 ' + coins + '）</span></div>';
     if (why && why !== 'locked') h += '<div class="vb-box vb-tired">' + h2Esc(why === 'noPlays' ? whNoPlaysText() : WH_BLOCK_TEXT[why]) + '</div>';
-    if (pend) h += '<div class="vb-box">上一局還沒完成，這次進入<b>不會再扣金幣、不扣次數</b>。</div>';
+    if (pend) h += '<div class="vb-box">上次付費後未開始，這次進入<b>不會再扣金幣、不扣次數</b>。</div>';
   }
+  h += AdventureEntry.storyHtml('whack');
   h += '<div class="vb-note">每一趟冒險中，每完成一個這一趟還沒完成過的主線關卡，回到小V的家，打地鼠次數補到 1（不會累積）；開始新的冒險後會重新計算。入場費用冒險金幣支付（不是 V幣），不算商店購買。分數越高，獎勵越多（金幣、260 長條氣球、圓氣球），結算後直接放進冒險背包。打地鼠是額外活動，不影響主線通關。</div></div>';
   return h;
 }
@@ -31524,33 +31620,22 @@ function c1uFinalSectionsHtml(snap) {
   });
   try { if (RPG_NOTE_DEFS && RPG_NOTE_DEFS.hammer && Array.isArray(RPG_NOTE_DEFS.hammer.from)) RPG_NOTE_DEFS.hammer.from.push(C1U_HAMMER_SCENE); } catch (e) {}
   wrapFn('craftItem', o => function (id) {
-    const before = id === 'basicHammer' ? whUnlocked() : true;
     const r = o.apply(this, arguments);
-    if (id === 'basicHammer' && r && !before) {
-      whUnlock('firstHammerCraft');
+    if (id === 'basicHammer' && r && !rpgIsSeen(C1U_HAMMER_SCENE)) {
       // v0.4.1：原本的「做出氣球槌」耐用度教學（rpg011）照舊在進關後播放（兩段說的是不同的事）
       try { rpgRequestUi(C1U_HAMMER_SCENE, 650); } catch (e) { console.warn('[C1U] 氣球槌對話', e); }
       try { h2ScheduleRefresh(); } catch (e) {}
     }
     return r;
   });
-  // 舊存檔補登：做過氣球槌（背包有製作紀錄或看過氣球槌教學）→ 直接解鎖，不重播對話、不送次數
-  try {
-    const ci = playerInventory.craftedItems || {};
-    const made = Object.prototype.hasOwnProperty.call(ci, 'basicHammer') && ci.basicHammer !== undefined && (ci.basicHammer > 0 || (playerInventory.equippedHammerDur || 0) > 0 || rpgIsSeen('rpg011_hammer_crafted') || rpgIsSeen(C1U_HAMMER_SCENE));
-    if (!whUnlocked() && (made || rpgIsSeen(C1U_HAMMER_SCENE))) { whUnlock('backfill'); try { if (!rpgIsSeen(C1U_HAMMER_SCENE)) rpgMarkSeen(C1U_HAMMER_SCENE, 'backfill'); } catch (e) {} }
-  } catch (e) { console.warn('[C1U] 打地鼠補登', e); }
-  // 重新整理時打地鼠還在進行 → 這一局保留（下次免費重新進入）
-  try { const c = whData().current; if (c && c.state === 'active') { c.state = 'pending'; c.lastStop = 'reload'; whSave(); } } catch (e) {}
-
   // 4) 小V的家：打地鼠／氣球排球入口、遊戲宇宙按鈕、玩家資料
   H2_PANEL_TITLES.whack = '氣球槌打地鼠';
   wrapFn('h2PanelBody', o => function (kind) {
     if (kind === 'whack') { try { return whPanelHtml(); } catch (e) { console.warn('[Whack] 面板', e); return ''; } }
     if (kind === 'volleyball' && !vbUnlocked()) { vbEnsureStyle();
       return '<div class="vb-panel"><div class="vb-box vb-recipe"><span class="vb-ico">' + h2Icon('balloonVolleyball', 'vb-ico-img') + '</span><div class="vb-txt"><b>氣球排球</b>（🔒 尚未解鎖）<small>在冒險中找到「氣球排球秘笈」就能製作排球（製作：260 長條氣球 ×' + VB_CONFIG.cost.balloon260 + '）。帶著氣球小狗仔細找找看吧！</small></div></div>'
-        + '<div class="vb-note">解鎖後每輪最多 ' + VB_CONFIG.maxMatches + ' 場（蠍子怪、橘子怪、橘子王共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡回到小V的家會補回。</div></div>'; }
-    if (kind === 'volleyball') { const h = o.apply(this, arguments); return h.replace('<div class="vb-panel">', '<div class="vb-panel"><div class="vb-box" style="font-size:14px">✅ 已解鎖・本輪剩餘 <b>' + vbData().matchesLeft + '／' + VB_CONFIG.maxMatches + '</b> 場・製作一顆排球：260 ×' + VB_CONFIG.cost.balloon260 + '</div>'); }
+        + '<div class="vb-note">解鎖後每輪最多 ' + VB_CONFIG.maxMatches + ' 場（蠍子怪、橘子怪、橘子王共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡回到小V的家會補回。</div>' + AdventureEntry.storyHtml('volleyball') + '</div>'; }
+    if (kind === 'volleyball') { const h = o.apply(this, arguments); return h.replace('<div class="vb-panel">', '<div class="vb-panel"><div class="vb-box" style="font-size:14px">✅ 已解鎖・本輪剩餘 <b>' + vbData().matchesLeft + '／' + VB_CONFIG.maxMatches + '</b> 場・製作一顆排球：260 ×' + VB_CONFIG.cost.balloon260 + '</div>' + AdventureEntry.storyHtml('volleyball')); }
     if (kind === 'player' && c1uIsUniversePlayer()) {
       c1uEnsureStyle();
       const p = h2Profile(), base = p.baseAvatarKey || 'boy1', disp = p.displayAvatarKey || base;
@@ -31570,6 +31655,7 @@ function c1uFinalSectionsHtml(snap) {
     const r = o.apply(this, arguments);
     try {
       c1uEnsureStyle(); c1uEnsureLobbyNav();
+      if (h2IsOpen() && whReconcile(false)) whSave();
       if (whUnlocked() && typeof gameState !== 'undefined' && gameState !== 'playing' && gameState !== 'paused' && h2IsOpen()) { if (whApplyRefill() && H2.panel && H2.panel.kind === 'whack') h2RenderPanel(); }
       whEnsureNav(); vbEnsureNav();
     } catch (e) {}
@@ -31577,8 +31663,12 @@ function c1uFinalSectionsHtml(snap) {
   });
   wrapFn('triggerClear', o => function () {
     const sid = advCurrentStageId();
+    const runId = c1uRunId();
     const r = o.apply(this, arguments);
-    try { if (gameState === 'clear' && homeEntryMode !== 'failed') { whOnStageClear(sid); whSave(); } } catch (e) { console.warn('[Whack] 通關', e); }
+    try { if (gameState === 'clear' && homeEntryMode !== 'failed') {
+      if (sid === '1-2' && advPlayMode === 'official') whReconcile(true);
+      whOnStageClear(sid, runId); whSave();
+    } } catch (e) { console.warn('[Whack] 通關', e); }
     return r;
   });
   try { document.addEventListener('click', e => {
@@ -31726,8 +31816,8 @@ function c1uPrepareMinigameBg() {
 }
 function c1uRunId() { try { const r = advLoad().active; return (r && r.challengeId && r.status !== 'completed') ? r.challengeId : null; } catch (e) { return null; } }
 // 這一趟冒險第一次完成 sid？（自選練習、橘子王重戰不算）
-function c1uRunClearNew(obj, sid) {
-  const rid = c1uRunId(); if (!rid || advPlayMode !== 'official') return false;
+function c1uRunClearNew(obj, sid, rid = c1uRunId()) {
+  if (!rid || advPlayMode !== 'official') return false;
   if (!obj.runClears || obj.runClears.id !== rid) obj.runClears = { id: rid, stages: {} };
   if (obj.runClears.stages[sid]) return false;
   obj.runClears.stages[sid] = Date.now();
@@ -31793,11 +31883,11 @@ function c1uStarOrangeSeriesStep() {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v401) { if (typeof o !== 'function') console.warn('[v0.4.1] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v401 = true; globalThis[name] = w; };
 
   // 1) 小遊戲次數：每一趟新冒險重新計算
-  globalThis.whOnStageClear = function (sid) {
+  globalThis.whOnStageClear = function (sid, runId) {
     if (!whUnlocked() || !sid || !OFFICIAL_ADVENTURE_STAGE_IDS.includes(sid)) return;
     const w = whData();
     if (!w.clearLog[sid]) w.clearLog[sid] = { at: Date.now() };
-    if (!c1uRunClearNew(w, sid)) return;                                   // 這一趟已經完成過這一關／練習模式 → 不補
+    if (!c1uRunClearNew(w, sid, runId)) return;                                   // 這一趟已經完成過這一關／練習模式 → 不補
     w.refillPending = { sid, at: Date.now(), run: w.runClears.id };
     console.log('[Whack] 這一趟第一次完成 ' + sid + ' → 回到小V的家時補 1 次');
   };
@@ -31808,12 +31898,6 @@ function c1uStarOrangeSeriesStep() {
     if (!c1uRunClearNew(v, sid)) return;
     if (!newlyUnlocked) { v.refillPending = { sid, at: Date.now(), run: v.runClears.id }; console.log('[Volleyball] 這一趟第一次完成 ' + sid + ' → 回到小V的家時補回場次'); }
   };
-  wrapFn('whUnlock', o => function () {
-    const r = o.apply(this, arguments);
-    try { if (r) { const w = whData(), rid = c1uRunId(); if (rid) { const run = advLoad().active; w.runClears = { id: rid, stages: {} }; Object.keys((run && run.stageResults) || {}).forEach(s => { w.runClears.stages[s] = Date.now(); }); whSave(); } } } catch (e) {}
-    return r;
-  });
-
   // 2) 小遊戲稱號
   wrapFn('vbSettle', o => function (d, c) {
     const r = o.apply(this, arguments);
