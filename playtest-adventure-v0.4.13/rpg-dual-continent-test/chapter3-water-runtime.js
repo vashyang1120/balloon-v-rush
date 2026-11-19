@@ -1,0 +1,246 @@
+'use strict';
+
+const C34_TEACHING = {
+  c34_first_wet: { face: 'balloonv_surprised', text: '啊！！我全身都溼了...身體變好重好難動...' },
+  c34_first_dry_wind: { face: 'balloonv_happy', text: '哇！這裡的風讓我身體乾了一些！！' },
+};
+
+function c34JumpSpeed(base, heightRatio) {
+  return GRAVITY / 2 + (base - GRAVITY / 2) * Math.sqrt(heightRatio);
+}
+
+function c34Motion() {
+  if (!c34Is() || !c34.wet && !c34.swim) return { move: 1, height: 1, swim: false };
+  if (!c34.swim) return { move: C34.water.wetSpeed, height: C34.water.wetHeight, swim: false };
+  if (!inp('jump')) c34.jumpReleased = true;
+  return { move: C34.water.swimSpeed, height: C34.water.swimHeight, swim: true, canJump: c34.jumpReleased };
+}
+
+function c34LeaveSurface() {
+  c34.swim = false;
+  c34.jumpReleased = false;
+}
+
+function c34ResetWater() {
+  Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
+    swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true });
+}
+
+function c34PlatformSurface(p, x = player.x + player.w / 2) {
+  if (!p.c34Pad) return p.y;
+  const angle = p.c34Angle || 0;
+  const offset = Math.max(-p.w / 2, Math.min(p.w / 2, x - p.x - p.w / 2));
+  return p.y + Math.tan(angle) * offset;
+}
+
+function c34Bottom() {
+  return GROUND_Y + 150;
+}
+
+function c34DrawTerrain(cx) {
+  const gaps = [];
+  for (const gap of groundGaps.slice().sort((a, b) => a.x - b.x)) {
+    const prev = gaps[gaps.length - 1], end = gap.x + gap.w;
+    if (prev && gap.x <= prev.end + 1) prev.end = Math.max(prev.end, end);
+    else gaps.push({ x: gap.x, end });
+  }
+  let start = -60;
+  for (const gap of gaps) {
+    if (gap.x > start) c34Art.terrain(start - cx, gap.x - cx, GROUND_Y, start > -60, true, c34Bottom());
+    start = gap.end;
+  }
+  c34Art.terrain(start - cx, LEVEL_LENGTH + 60 - cx, GROUND_Y, true, false, c34Bottom());
+  for (const mesa of platforms.filter(p => p.c34Mesa || p.c34Id === 'P3')) {
+    c34Art.terrain(mesa.x - cx, mesa.x + mesa.w - cx, mesa.y, true, mesa.c34Id !== 'BANK', c34Bottom(), mesa.c34Id === 'P3');
+  }
+}
+
+function c34DebugArtRow(_seq, x, top, bottom) {
+  c34Art.terrain(x, x + 540, top, true, true, bottom);
+  return x + 540;
+}
+
+function c34Falls() {
+  return c34Lv()?.c34Falls || [];
+}
+
+function c34FallBase(f) {
+  return f.baseY ?? GROUND_Y;
+}
+
+function c34FallTop() {
+  return -C34.cam.max - 20;
+}
+
+function c34UnderFall(f) {
+  return Math.abs(player.x + player.w / 2 - f.x) <= f.w / 2 + Math.min(12, player.w / 2) &&
+    player.y < c34FallBase(f) && player.y + player.h > c34FallTop();
+}
+
+function c34FallDeflect(f) {
+  // Retain the level's original umbrella range, orientation and contact rules.
+  if (!c34UnderFall(f) || player.y + player.h <= c34FallBase(f) - 160 || !umbEquipped()) return null;
+  return f.split ? 'split' : (player.facingRight ? 'right' : 'left');
+}
+
+function c34ArcLand(f, dir, surface) {
+  const y0 = player.y - 6;
+  const t = (f.vy + Math.sqrt(Math.max(0, f.vy * f.vy + surface - y0))) / 0.5;
+  return player.x + player.w / 2 + dir * (18 + f.vx * t);
+}
+
+function c34FallImpact(f, direction) {
+  const dir = direction === 'right' ? 1 : -1, pool = c34Pool();
+  if (pool && direction !== 'split') {
+    const y = c34SurfaceY(), x = c34ArcLand(f, dir, y);
+    if (x > pool.x + 4 && x < pool.x + pool.w - 4) return { x, y, fills: true };
+  }
+  const y = c34FallBase(f);
+  return { x: c34ArcLand(f, dir, y), y, fills: false };
+}
+
+function c34DrawFall(f, cx) {
+  const x = f.x - cx;
+  if (x < -160 || x > CANVAS_W + 160) return;
+  const time = c34.waterTick * 1000 / 60;
+  const deflect = c34FallDeflect(f);
+  const end = deflect ? player.y - 8 : c34FallBase(f);
+  c34Art.column(x, c34FallTop(), end, f.w, time);
+  if (deflect) {
+    const hit = c34FallImpact(f, deflect);
+    const center = player.x + player.w / 2 - cx;
+    c34Art.guide(deflect, center, end, hit.x - cx, hit.y, time);
+    if (deflect !== 'split') c34Art.at('03_waterfall_splash', time, hit.x - cx, hit.y, 0.041);
+  } else {
+    c34Art.at('03_waterfall_splash', time, x, end, 0.047);
+    if (c34UnderFall(f)) c34Art.at('03_waterfall_splash', time, player.x + player.w / 2 - cx, player.y + 5, 0.026);
+  }
+}
+
+function c34DrawPool(cx) {
+  const pool = c34Pool();
+  if (!pool || pool.x - cx > CANVAS_W + 160 || pool.x + pool.w - cx < -160) return;
+  const x = pool.x - cx, y = c34SurfaceY(), floor = pool.baseY + C34.pool.floor;
+  const time = c34.waterTick * 1000 / 60;
+  c34Art.poolWater(x, pool.w, y, floor, time);
+  c34Art.poolWalls(x, pool.w, pool.baseY, C34_LAY.y(C34_LAY.bank.h), floor);
+  const ledge = platforms.find(p => p.c34Escape);
+  if (ledge) c34Art.tile('15_pool_bottom', ledge.x - cx, ledge.y, ledge.w, 14, 0.16, false);
+  const pad = platforms.find(p => p.c34Pad);
+  if (pad) c34Art.platform(pad, cx);
+  c34Art.clip(x, y - 12, pool.w, 25, () => {
+    for (const ripple of c34.ripples) {
+      const progress = (c34.waterTick - ripple.start) / C34.water.rippleSteps;
+      ctx.save(); ctx.globalAlpha *= (1 - progress) * 0.7;
+      c34Art.at('07_water_ripple', 0, ripple.x - cx, y, 0.018 + progress * 0.032);
+      ctx.restore();
+    }
+  });
+}
+
+function c34DrawWetStatus(cx) {
+  if (!c34Is() || c34.wet <= 0) return;
+  const head = c34.swim ? c34SurfaceY() - 39 : player.y - 9;
+  c34Art.drop(player.x + player.w / 2 - cx, head - 8, c34.wet / C34.water.steps);
+}
+
+function c34Ripple(x) {
+  if (c34.waterTick < c34.rippleAt) return;
+  c34.rippleAt = c34.waterTick + 14;
+  c34.ripples.push({ start: c34.waterTick, x });
+}
+
+function c34StepPad(pad) {
+  if (!pad) return;
+  const F = C34.float, center = player.x + player.w / 2;
+  const onPad = player.x < pad.x + pad.w && player.x + player.w > pad.x &&
+    Math.abs(player.y + player.h - c34PlatformSurface(pad)) < 3.5 && player.vy >= 0;
+  const sink = pad.c34Sink || 0, wantSink = onPad ? F.sink : 0;
+  pad.c34SpringSpeed = ((pad.c34SpringSpeed || 0) + (wantSink - sink) * F.spring) * F.damping;
+  pad.c34Sink = sink + pad.c34SpringSpeed;
+  const offset = Math.max(-1, Math.min(1, (center - pad.x - pad.w / 2) / (pad.w / 2)));
+  const angle = pad.c34Angle || 0;
+  pad.c34Angle = angle + ((onPad ? offset * F.maxTilt : 0) - angle) * F.tiltEase;
+  pad.y = c34SurfaceY() - C34.pool.padClear + Math.sin(c34.waterTick * Math.PI * 2 / F.period) * F.bob + pad.c34Sink;
+  if (onPad) {
+    player.y = c34PlatformSurface(pad) - player.h; player.onGround = true;
+    if (!pad.c34Occupied) c34Ripple(center);
+  }
+  pad.c34Occupied = onPad;
+}
+
+function c34StepSwim() {
+  const pool = c34Pool(), x = player.x + player.w / 2, feet = player.y + player.h;
+  const wasSwimming = c34.swim;
+  const inside = pool && x > pool.x && x < pool.x + pool.w;
+  const surface = c34SurfaceY();
+  c34.swim = !!(inside && !player.onGround && feet >= surface + 8 &&
+    (wasSwimming || player.vy >= 0));
+  if (c34.swim) {
+    player.y = surface + C34.water.feetDepth - player.h;
+    player.vy = 0;
+    if (!wasSwimming || Math.abs(player.vx) > 0.35) c34Ripple(x);
+  }
+}
+
+function c34Teach(id) {
+  if (c34.taught.has(id)) return;
+  c34.taught.add(id);
+  rpgRequest(id, () => c34Is() && gameState === 'playing');
+}
+
+function c34StepWet(touching) {
+  const wasWet = c34.wet > 0;
+  const inWind = windVents.some(v => windLiftAt(v, player) > 0) ||
+    (wdActive() && wdFlowAt(player.x + player.w / 2, player.y + player.h / 2) > 0);
+  const entering = inWind && !c34.inWind;
+  c34.inWind = inWind;
+  if (touching) {
+    c34.wet = C34.water.steps;
+    if (!wasWet) c34Teach('c34_first_wet');
+    return;
+  }
+  if (c34.wet <= 0) return;
+  if (entering) {
+    c34.wet = Math.max(0, c34.wet - C34.water.windDry);
+    c34L({ ev: 'windDry', wetSeconds: c34.wet / 60 });
+    c34Teach('c34_first_dry_wind');
+  } else c34.wet--;
+}
+
+function c34Step() {
+  c34.waterTick++;
+  c34.ripples = c34.ripples.filter(r => c34.waterTick - r.start < C34.water.rippleSteps);
+  for (const m of c34Mesas()) {
+    if (player.x + player.w <= m.x || player.x >= m.x + m.w || player.y + player.h <= m.y + C34.wallTol) continue;
+    const fromLeft = player.x + player.w / 2 < m.x + m.w / 2;
+    player.x = fromLeft ? m.x - player.w : m.x + m.w; player.vx = 0;
+    wd.wdVx = 0;
+    if (++c34.wallHits % 30 === 1) c34L({ ev: 'wall', mesa: m.x, side: fromLeft ? 'L' : 'R' });
+  }
+  let fills = false, touching = false;
+  c34.stream = 'none';
+  for (const fall of c34Falls()) {
+    const deflect = c34FallDeflect(fall);
+    if (!deflect) {
+      touching ||= c34UnderFall(fall);
+      continue;
+    }
+    c34.stream = deflect;
+    fills ||= c34FallImpact(fall, deflect).fills;
+  }
+  if (fills && c34.fillFrames < C34.pool.fillFrames) {
+    c34.level = ++c34.fillFrames / C34.pool.fillFrames;
+    if (c34.fillFrames === 1) showHint('💧 水流進水池了！水位慢慢上升中…', 150);
+  }
+  if (fills !== c34._filling) {
+    c34._filling = fills;
+    c34L({ ev: fills ? 'fillOn' : 'fillOff', level: c34.level });
+  }
+  c34StepPad(platforms.find(p => p.c34Pad));
+  c34StepSwim();
+  c34StepWet(touching || c34.swim);
+  const target = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
+  c34.camY += (target - c34.camY) * C34.cam.ease;
+  if (Math.abs(c34.camY) < 0.05) c34.camY = 0;
+}
