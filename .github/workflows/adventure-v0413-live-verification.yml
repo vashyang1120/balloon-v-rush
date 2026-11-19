@@ -1,0 +1,75 @@
+name: Adventure v0.4.13 live Pages verification
+on:
+  push:
+    branches: ['verify/adventure-v0413-pages']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser test dependencies
+        run: npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+      - name: Verify live HTTPS entry, both checkpoints and art
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
+        run: |
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
+          const base = 'https://vashyang1120.github.io/balloon-v-rush/';
+          const deploy = base + 'playtest-adventure-v0.4.13/';
+          const entry = deploy + 'rpg-dual-continent-test/';
+          const query = '?guest=1&sandbox=1&devtools=1';
+          const version = 'adventure-v0.4.13-ch3-water-terrain-integration-test-1';
+          (async () => {
+            let ready = false;
+            for (let i = 0; i < 48; i++) {
+              const result = await fetch(deploy + 'playtest-guard.js?verify=' + Date.now(), {cache:'no-store'}).catch(() => null);
+              if (result?.ok && (await result.text()).includes('adventurePlaytestReady')) {
+                ready = true;
+                break;
+              }
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            assert.ok(ready, 'The live Pages guard never became available');
+            const official = await fetch(base + 'rpg-continent1-universe/main.js?verify=' + Date.now());
+            assert.equal(official.status, 200);
+            assert.ok((await official.text()).includes("const GAME_VERSION = 'adventure-v0.4.12-entry-reliability-test-1'"));
+            console.log('Official continent 1 JavaScript serves v0.4.12');
+            const browser = await chromium.launch({channel:'chrome', args:['--no-sandbox']});
+            try {
+              for (const [section, width, height] of [['',1280,820],['start',1280,820],['pool',844,390]]) {
+                const context = await browser.newContext({viewport:{width,height},isMobile:width<900,hasTouch:width<900});
+                const page = await context.newPage();
+                const writes = [];
+                await context.route('**/*', route => {
+                  const request = route.request();
+                  if (!request.url().startsWith(deploy) || !['GET','HEAD'].includes(request.method())) {
+                    if (!request.url().endsWith('/favicon.ico')) writes.push([request.method(),request.url()]);
+                    return route.abort();
+                  }
+                  return route.continue();
+                });
+                const url = entry + query + (section ? '&ch3test=' + section : '');
+                const response = await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+                assert.equal(response.status(),200);
+                await page.waitForFunction(() => window.adventurePlaytestReady && assetBootReady,undefined,{timeout:90000});
+                assert.deepEqual(await page.evaluate(()=>[GAME_VERSION,C1U.guest,C1U.mode,advDevMode()]),[version,true,'sandbox',true]);
+                if (section) {
+                  await page.locator('#btn-start-gate-go').click();
+                  await page.waitForFunction(expected => !gameStartGateActive && gameState === 'playing' && debugC34().ready && debugC34().section === expected,section,{timeout:90000});
+                  const art = await page.evaluate(() => ({status:debugC34().art,groups:new Set(Object.values(chapter3ArtCatalog).flatMap(a=>a.files.map(f=>f.split('/')[0]))).size}));
+                  assert.deepEqual(art,{status:{loaded:76,failed:[]},groups:16});
+                }
+                assert.deepEqual(writes,[]);
+                console.log('HTTPS 200 and correct runtime: ' + url + ', ' + width + 'x' + height + (section ? ', 76 PNG in 16 groups' : ''));
+                await context.close();
+              }
+            } finally { await browser.close(); }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          JS
