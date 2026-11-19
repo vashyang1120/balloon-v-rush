@@ -33546,7 +33546,7 @@ var C34 = {
   cam: { top: 110, max: 430, ease: 0.12 },
   // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度為 30°／45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
   //   v0.4.11 重新校準：噴嘴對準 60° 才是全風速（openAngle 60），45° 剩 offThrust；沒撐雨傘風力只剩 noUmbThrust（「用雨傘接風」）
-  wd: { deviceX: 1040, angles: [30, 45, 60], maxUp: 17, openAngle: 60, offThrust: 0.8, noUmbThrust: 0.35 },
+  wd: { deviceX: 1040, angles: [30, 45, 60], maxUp: 17, openAngle: 60, offThrust: 0.5, noUmbThrust: 0.35 },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
   water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
