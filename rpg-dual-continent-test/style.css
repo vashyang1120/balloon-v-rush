@@ -4033,6 +4033,7 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 
 .ch3-treasure-dialog {
   box-sizing: border-box;
+  margin: auto;
   width: min(30rem, 90vw);
   max-height: 91dvh;
   overflow-y: auto;

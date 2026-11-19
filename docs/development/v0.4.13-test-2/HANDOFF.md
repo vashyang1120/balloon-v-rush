@@ -26,3 +26,5 @@ Final Recovery 以 PR HEAD `337d5ff6` 接續。骰子在接受時消耗一顆，
 骰子回歸請讀 `c34BagKey('cumulative')` 核對快捷入口存檔。初次 Actions #25 因查錯鍵失敗，同一套測試修正後本機 Chromium 11/11 通過。五張正式 PNG 尚待取得原始檔案，避免使用預覽截圖取代。
 
 五張核准 PNG 原檔已在 `assets/adventure/ui/items/`，使用上述指定檔名。後續驗證遊戲中的點數、寶箱呈現及隔離版本部署。
+
+3-4 的完整輸入路線已加入 `tests/chapter3-water.browser.cjs`，並有手機骰子操作。Pages 可用 `?ch3test=3-1`、`3-2` 或 `3-3` 走既有第三章開發入口。訪客沙盒開發關卡預設取得骰子秘笈。更新僅在雙大陸測試版，日後續接應查本分支 HEAD 與 Pages 部署紀錄。

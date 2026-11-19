@@ -78,8 +78,9 @@ test('test-2 in the existing Pages directory can load without touching formal sa
   const formalKeys = ['balloonV_inventory', 'adventure:title', 'adventure:achievement',
     'adventure:vcoins', 'adventure:settings', 'adventure:progress'];
 
-  for (const [section, viewport] of [['', { width: 1280, height: 820 }],
-    ['start', { width: 1280, height: 820 }], ['pool', { width: 844, height: 390 }]]) {
+  const desktop = { width: 1280, height: 820 };
+  for (const [section, viewport] of [['', desktop], ['start', desktop],
+    ['pool', { width: 844, height: 390 }], ['3-1', desktop], ['3-2', desktop], ['3-3', desktop]]) {
     await t.test(section || 'general', async () => {
       const mobile = section === 'pool';
       const context = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
@@ -103,7 +104,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
-        if (section) {
+        if (section === 'start' || section === 'pool') {
           await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
             c34Is() && c34.section === s && c34ArtReady(), section);
           const persisted = await page.evaluate(() => {
@@ -113,6 +114,9 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           });
           assert.equal(persisted, true);
           bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('cumulative')));
+        } else if (section) {
+          await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
+            advCurrentStageId() === s && playerInventory.unlockedRecipes.balloonDice === true, section);
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }
@@ -154,7 +158,7 @@ test('test-2 in the existing Pages directory can load without touching formal sa
         }), { keys: formalKeys, namespace, bagKey });
         assert.equal(storage.preserved, true);
         assert.equal(storage.session, 'playtest');
-        if (section) assert.ok(JSON.parse(storage.bag).coins > 0);
+        if (bagKey) assert.ok(JSON.parse(storage.bag).coins > 0);
       } finally { await context.close(); }
     });
   }

@@ -507,7 +507,89 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await record(mobile, 'mobile-3-4-pool');
     await mobile.close();
   });
+
+  await t.test('3-4 can be cleared from the start using movement and attacks', async () => {
+    const runPage = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+    try {
+      await boot(runPage, origin, 'start');
+      const result = await runPage.evaluate(() => {
+        screenFreezeForTest = true;
+        const layout = C34_LAY;
+        function advance(limit, stop, { right = () => true, jump = false, attack = false } = {}) {
+          for (let tick = 0; tick < limit && !stop(); tick++) {
+            if (rpgActive) rpgClose('finished');
+            if (gameState !== 'playing') break;
+            keys.ArrowRight = right();
+            keys.Space = jump && tick === 0;
+            keys.KeyZ = attack;
+            update(1);
+          }
+          keys.ArrowRight = keys.Space = keys.KeyZ = false;
+          return stop();
+        }
+        const onTop = (x, w, y) => player.onGround && player.x + player.w > x &&
+          player.x < x + w && Math.abs(player.y + player.h - y) < 2;
+        const onMesa = mesa => onTop(mesa.x, mesa.w, layout.y(mesa.h));
+
+        activeSlot = 'umbrella';
+        const launcher = advance(240, () => player.x >= 960);
+        wdSetAngleIndex(WD_TUNING.angles.indexOf(60));
+        const firstMesa = advance(280, () => onMesa(layout.p1), { right: () => player.x < 1780 });
+        advance(90, () => player.x >= layout.p1.x + layout.p1.w - player.w - 8);
+        const secondMesa = advance(80, () => player.onGround && player.x >= layout.p2.x, { jump: true });
+
+        activeSlot = 'hammer';
+        const tree = breakableTrees[0];
+        advance(100, () => tree.state !== 'standing' || player.x >= layout.tree.x - 28, { attack: true });
+        const bridge = advance(110, () => tree.state === 'fallen', { right: () => false, attack: true });
+        advance(110, () => player.x >= layout.p3.x + 75, { attack: true });
+        const pillar = onMesa(layout.p3);
+        activeSlot = 'umbrella';
+        const canyonTop = advance(92, () => onMesa(layout.ct), { jump: true });
+
+        activeSlot = 'sword';
+        advance(120, () => player.x >= layout.ct.x + 440, { attack: true });
+        activeSlot = 'umbrella';
+        advance(100, () => player.x + player.w / 2 >= layout.fallX);
+        const filled = advance(430, () => c34.level === 1, { right: () => false });
+        const pad = platforms.find(p => p.c34Pad);
+        advance(70, () => player.x >= layout.pool.x - player.w / 2 - 4);
+        const reachedPad = advance(120, () => onTop(pad.x, pad.w, c34PlatformSurface(pad)),
+          { jump: true, right: () => player.x < pad.x + 50 });
+        advance(80, () => player.x >= pad.x + pad.w - 7);
+        const bank = advance(95, () => onMesa(layout.bank), { jump: true });
+        activeSlot = 'hammer';
+        advance(68, () => player.x >= layout.bank.x + 245, { attack: true });
+        advance(60, () => player.x >= layout.bank.x + 465, { jump: true, attack: true });
+        const finished = advance(80, () => c2Proto.done, { attack: true });
+        screenFreezeForTest = false;
+        const completes = c34.log.filter(event => event.ev === 'complete').length;
+        return { launcher, firstMesa, secondMesa, bridge, pillar, canyonTop, filled,
+          reachedPad, bank, finished, completes, hp: player.hp };
+      });
+      const { hp, ...checkpoints } = result;
+      assert.ok(hp > 0);
+      assert.deepEqual(checkpoints, {
+        launcher: true, firstMesa: true, secondMesa: true, bridge: true, pillar: true,
+        canyonTop: true, filled: true, reachedPad: true, bank: true, finished: true,
+        completes: 1,
+      });
+      await runPage.waitForFunction(() => h2IsOpen());
+      await record(runPage, 'desktop-3-4-full-route-clear');
+    } finally { await runPage.close(); }
+  });
+
   await t.test('dice crafting and hidden chest decision use the real game inventory', async () => {
+    const chestArt = await page.evaluate(async () => {
+      const files = ['dice_face_blank.png', 'item_balloon_dice.png',
+        ...Object.keys(chapter3TreasureDice.tiers).map(tier => 'item_treasure_chest_' + tier + '.png')];
+      return Promise.all(files.map(async name => {
+        ch3TreasureImage(name);
+        await ch3TreasureImages.get(name).decode();
+        return ch3TreasureImage(name).naturalWidth;
+      }));
+    });
+    assert.deepEqual(chestArt, [1254, 1254, 1254, 1254, 1254]);
     const setup = await page.evaluate(() => {
       if (rpgActive) rpgClose('reset');
       const chest = chapter3TreasureSpots('3-4')[0];
@@ -570,11 +652,40 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       return [saved?.craftedItems?.balloonDice, saved?.coins, saved?.chapter3Chests?.[id]?.outcome];
     }, setup.chest), [1, beforeRoll + 100, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
+    assert.equal(await page.locator('.ch3-treasure-dialog canvas').isVisible(), true);
+    const dialog = await page.locator('.ch3-treasure-dialog').boundingBox();
+    assert.ok(dialog && Math.abs(dialog.x + dialog.width / 2 - 640) < 2);
+    assert.deepEqual(await page.locator('.ch3-treasure-scores span').allTextContents(), ['小V　4', '星靈　4']);
     assert.match(await page.locator('.ch3-treasure-note').textContent(), /獲得 100 金幣/);
     assert.deepEqual(await page.evaluate(id => [
       playerInventory.coins, v395Count('balloonDice'), playerInventory.chapter3Chests[id]?.outcome,
     ], setup.chest), [beforeRoll + 100, 1, 'tie']);
+    await record(page, 'desktop-3-4-balloon-dice-result');
     await page.getByRole('button', { name: '繼續冒險' }).click();
+  });
+  await t.test('the chest challenge fits a mobile viewport and accepts touch', async () => {
+    const mobile = await browser.newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+    try {
+      await boot(mobile, origin, 'pool');
+      await mobile.evaluate(() => {
+        const chest = chapter3TreasureSpots('3-4')[0];
+        playerInventory.craftedItems.balloonDice = 1;
+        bringBalloonDog = true;
+        player.x = chest.x - player.w / 2;
+        player.y = chest.y - player.h / 2;
+        checkChapter3Treasure();
+        rpgClose('finished');
+      });
+      await mobile.locator('[data-choice="accept"]').tap();
+      const continueButton = mobile.getByRole('button', { name: '繼續冒險' });
+      await continueButton.waitFor();
+      const dialog = await mobile.locator('.ch3-treasure-dialog').boundingBox();
+      assert.ok(dialog && dialog.x > 0 && dialog.y > 0 && dialog.y + dialog.height < 390);
+      assert.equal(await mobile.evaluate(() => v395Count('balloonDice')), 0);
+      await record(mobile, 'mobile-3-4-balloon-dice-result');
+      await continueButton.tap();
+      assert.equal(await mobile.locator('.ch3-treasure-dialog').count(), 0);
+    } finally { await mobile.close(); }
   });
   assert.deepEqual(errors, []);
 });

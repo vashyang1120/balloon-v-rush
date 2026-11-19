@@ -2152,6 +2152,7 @@ function applyAdventureTestLoadout() {
   // v0.3.96（#37）：999 測試裝備只在開發者模式（?devtools=1）的開發測試入口使用；一般遊玩一律用背包裡的正式武器與耐久
   if (!advDevMode()) { adventureTestLoadoutActive = false; console.log('[AdventureTest] 一般遊玩：不配發 999 測試裝備'); return; }
   adventureTestLoadoutActive = true;
+  if (/^3-[1-4]$/.test(advCurrentStageId())) playerInventory.unlockedRecipes.balloonDice = true;
   equippedSword.id         = 'basicSword';
   equippedSword.name       = '基礎氣球劍（測試）';
   equippedSword.maxDur     = 999;
@@ -11075,7 +11076,10 @@ function startAdventureFromGate() {
     advIntroChecked = true;
     advBootHomePending = null;
     advResumePromptDeferred = null;
-    c34Start('3-4', 'dev', chapter3Preview);
+    if (chapter3Preview === '3-1') c2Start31();
+    else if (chapter3Preview === '3-2') c2Start32('dev');
+    else if (chapter3Preview === '3-3') c2Start33('dev');
+    else c34Start('3-4', 'dev', chapter3Preview);
     return;
   }
   // v0.3.79：開機時已經判斷好的去向，等玩家按下開始才顯示（下一個事件迴圈再做 → 同一次按鍵／點擊不會順便按到新出現的按鈕）
@@ -33663,7 +33667,7 @@ function c34PreviewSection() {
   const query = new URLSearchParams(location.search);
   if (query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
   const section = query.get('ch3test');
-  return section === 'start' || section === 'pool' ? section : null;
+  return ['start', 'pool', '3-1', '3-2', '3-3'].includes(section) ? section : null;
 }
 // v0.4.11：3-4 只有一個關卡。section：'start'（起點）／'pool'（開發用：直接放到峽谷頂部的水池區段；同一個關卡、同一套通關狀態）
 //   開發者入口（?devtools=1）：測試用氣球劍＋氣球槌（999）＋測試雨傘（只在記憶體，6／6 ×9）→ 不寫進正式背包、存檔
