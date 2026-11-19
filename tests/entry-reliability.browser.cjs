@@ -140,6 +140,8 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.evaluate(() => { C1U_WHACK.loadTimeoutMs = 20000; });
       await page.locator('.adv-load-err [data-k="retry"]').click();
       await page.waitForFunction(() => whFrame.ready);
+      // The intro rejects input during its first 250 ms to prevent accidental skips.
+      await page.waitForTimeout(300);
       console.log(dir, 'slow failure, cancellation, timeout and retry completed');
       assert.equal((await balances(page)).coins, 50);
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
@@ -164,7 +166,10 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.evaluate(() => { whData().playsLeft = 1; saveInventory(); h2RenderPanel(); });
       await page.locator('[data-wh-act="play"]').click();
       await page.waitForFunction(() => whFrame.ready);
+      // The intro rejects input during its first 250 ms to prevent accidental skips.
+      await page.waitForTimeout(300);
       await page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ }).dispatchEvent('click');
+      await page.waitForFunction(() => whData().current?.state === 'active');
       assert.equal((await balances(page)).coins, 30);
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => assetBootReady);

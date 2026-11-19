@@ -1,0 +1,19 @@
+name: First-continent title sync
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'rpg-continent1-universe/**'
+      - '.github/workflows/title-sync.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check rpg-continent1-universe/universe-official.js
+      - run: node --test rpg-continent1-universe/tests/title-sync.test.cjs
