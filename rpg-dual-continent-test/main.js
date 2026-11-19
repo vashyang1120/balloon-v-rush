@@ -28555,10 +28555,11 @@ function wsUpdateBlades() {
       else if (h.y + h.r * 0.5 >= GROUND_Y) end = '碰到地面';
       else if ((platforms || []).some(p => wsCircleRect(h.x, h.y, h.r * 0.6, p.x, p.y, p.w, p.h))) end = '碰到平台';
       if (end) { b.st = 'fade'; b.t = 0; b.why = end; wsLogPush({ ev: 'end', id: b.id, why: end }); continue; }
-      if (b.dist > WS_TUNING.bladeMaxDist || b.x < cameraX - 200 || b.x > cameraX + CANVAS_W + 200 || b.y < -120) { wsLogPush({ ev: 'end', id: b.id, why: '飛出範圍' }); wsBlades.splice(i, 1); continue; }
+      const top = -120 - (c34Is() ? Math.round(c34.camY) : 0);
+      if (b.dist > WS_TUNING.bladeMaxDist || b.x < cameraX - 200 || b.x > cameraX + CANVAS_W + 200 || b.y < top) { wsLogPush({ ev: 'end', id: b.id, why: '飛出範圍' }); wsBlades.splice(i, 1); continue; }
     } else if (b.st === 'reflect') {
       b.x += b.vx; b.y += b.vy;
-      if (b.t >= WS_TUNING.reflectLife || b.y < -120) { wsBlades.splice(i, 1); continue; }
+      if (b.t >= WS_TUNING.reflectLife || b.y < -120 - (c34Is() ? Math.round(c34.camY) : 0)) { wsBlades.splice(i, 1); continue; }
     } else if (b.st === 'fade') {
       if (b.t >= 12) { wsBlades.splice(i, 1); continue; }
     }
@@ -30695,7 +30696,7 @@ function c3sSwiftStopX(e, s) {
   for (let i = 0; i < 400; i++) {
     let nx = x + s.face * T.dashSpeed;
     if (s.face > 0 ? nx >= want : nx <= want) { nx = want; }
-    if (c3sPitAhead(nx, e.w)) { why = '前面是尖刺坑'; break; }
+    if (!e.c34OnMesa && c3sPitAhead(nx, e.w)) { why = '前面是尖刺坑'; break; }
     if (Math.abs(nx - from) > T.dashMax) { why = '衝到最遠'; break; }
     if (plat && (nx < plat.x || nx + e.w > plat.x + plat.w)) { why = '平台邊緣'; break; }
     if (nx < 10 || nx + e.w > LEVEL_LENGTH - 10) { why = '關卡邊界'; break; }
@@ -30707,6 +30708,7 @@ function c3sSwiftStopX(e, s) {
 }
 // ── 疾風蠍子怪：WALK → LOCK（紅色準星）→ DASH（衝刺＋風流殘影）→ STUN（硬直 1.4 秒）→ RECOVER → WALK ──
 function c3sSwiftStep(e) {
+  if (e.c34OnMesa && e.c1dPlat) e.y = e.c1dPlat.y - e.h;
   const T = C3S_TUNING.swift, s = c3sState(e), pc = c3sPC(), ex = e.x + e.w / 2;
   s.t++;
   if (s.st === 'walk') {
