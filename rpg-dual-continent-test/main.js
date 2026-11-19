@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-1';
+const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-2';
 const BUILD_TIME   = '2026-11-19';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -13481,6 +13481,7 @@ function drawWorldInner() {
   try { drawHealFx(cx, 'back'); } catch (e) {}
   // Player
   drawPlayer(cx);
+  if (c34Is()) c34DrawRipples(cx);
   if (bringBalloonDog) {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
@@ -27434,7 +27435,7 @@ const C2_UMB_WIND = {
   jumpMul: 1.02,      // 撐雨傘時在風口裡（含站在風口地面上）起跳的初速 ×1.02（風柱變高已經讓起跳明顯更高；第一版 ×1.12 會從 3-2 獎勵高台上方飛過頭 → 調低）
   jumpBand: 105,      // 撐雨傘時可以在風裡起跳的高度範圍 70 → 105px（＝70 ×1.5；浮得比較高也按得出跳）
 };
-function c2UmbWindActive() { try { return !!(ADV_WORKSPACE && (c2IsWindStage() || (typeof c2IsField === 'function' && c2IsField())) && umbEquipped()); } catch (e) { return false; } }
+function c2UmbWindActive() { try { return !!(ADV_WORKSPACE && (c34Is() || c2IsWindStage() || (typeof c2IsField === 'function' && c2IsField())) && umbEquipped()); } catch (e) { return false; } }
 function c2UmbWindLiftAt(v, p) {   // 和 windLiftAt 同一條公式，只有風柱高度 ×heightMul（給撐雨傘的小V）
   if (!v || !v.enabled || v.dir !== 'up') return 0;
   const px0 = p.x + 6, px1 = p.x + p.w - 6;
@@ -33535,6 +33536,7 @@ var C34_LAY = (function () {
   L.ct = { x: L.p3.x + L.p3.w, w: 760, h: L.p3.h + 110 };                                         // 峽谷頂部（高大岩壁）
   L.pool = { x: L.ct.x + L.ct.w, w: 460 };                                                        // 水池（峽谷頂部；左右是岩壁）
   L.fallX = L.pool.x - 80;                                                                        // 水池上方的瀑布
+  L.dryingVent = { x: L.fallX - 340, w: 80, h: 112 };
   L.bank = { x: L.pool.x + L.pool.w, w: 760, h: L.ct.h + 140 };                                   // 對岸（出口所在）
   L.length = L.bank.x + L.bank.w;
   L.y = h => G - h;
@@ -33566,7 +33568,7 @@ const C2_STAGE_34 = (function () {
       { x: L.pool.x + 145, y: ct + C34.pool.surf0 - C34.pool.padClear, w: C34.pool.padW, h: 14, c34Pad: true },   // 充氣浮墊（跟著水面）
       { x: L.bank.x, y: L.y(L.bank.h), w: L.bank.w, h: 22, c34Mesa: true, c34Id: 'BANK' },   // 對岸（水位夠高才跳得上去）
     ],
-    buildWindVents: () => [],
+    buildWindVents: () => [makeWindVent({ ...L.dryingVent, y: ct, id: '3-4-left-bank' })],
     spikePits: [
       { id: 'A1', x: L.a1, w: L.p1.x - L.a1, resetX: 850, wd: true, c34: 'abyss' },                       // 導風深淵（失敗：沿用導風機關規則，不扣血回起點）
       { id: 'A2', x: L.p1.x, w: L.p2.x - L.p1.x, resetX: L.p1.x + L.p1.w / 2 - 20, c34: 'abyss' },          // P1 右邊的深淵 → 受傷一次＋回到 P1
@@ -33584,7 +33586,8 @@ const C2_STAGE_34 = (function () {
       [L.ct.x + 120, L.ct.h + 55], [L.ct.x + 220, L.ct.h + 55], [L.ct.x + 420, L.ct.h + 55],
       [L.pool.x + 230, L.ct.h + 215],                                      // 錢袋（金幣袋：沿用既有特殊拾取物，+10 冒險金幣、同一次遊玩只拿一次）
       [L.bank.x + 160, L.bank.h + 55], [L.bank.x + 260, L.bank.h + 55], [L.bank.x + 420, L.bank.h + 55],
-    ].map(([x, yOff]) => ({ x, y: G - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
+    ].map(([x, yOff]) => ({ x, y: G - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2,
+      c34PadBag: x === L.pool.x + 230 })),
     buildBalloons: () => [ [400, 60], [L.p1.x + 180, L.p1.h + 80], [L.ct.x + 560, L.ct.h + 80], [L.bank.x + 340, L.bank.h + 80] ]
       .map(([x, yOff]) => ({ x, y: G - yOff, collected: false, bobOffset: Math.random() * Math.PI * 2 })),
     buildSpikes: () => [], buildTackHazards: () => [],
@@ -33714,8 +33717,9 @@ function c34Complete(sid) {
   wrapFn('getAssetGroupsForLevelBase', o => function (idx) {
     const r = o.apply(this, arguments), lv = LEVELS[idx];
     if (!lv || lv.chapterId !== 3) return r;
+    // The legacy chapter3bg group also owns the approved 3-1 through 3-3 ground and pit tiles.
+    if (!lv.c34) return r.concat([BG]);
     const groups = r.filter(group => group !== 'chapter3bg').concat([BG]);
-    if (!lv.c34) return groups;
     let out = groups.concat([G]);
     if (!out.includes('wdart')) out = out.concat(['wdart']);   // 導風裝置正式圖
     return out;
@@ -33797,7 +33801,7 @@ function c34Complete(sid) {
     return isChapter3ParallaxStage() && c34Art.background(c34Is() ? Math.round(c34.camY) : 0) || o.apply(this, arguments);
   });
   wrapFn('drawPlayer', o => function (cx) {
-    if (c34Is() && c34.swim && c34Art.swimmer(player.x + player.w / 2 - cx, c34SurfaceY(), Math.abs(player.vx) > 0.28, player.facingRight, c34.waterTick * 1000 / 60) !== null) return;
+    if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
     return o.apply(this, arguments);
   });
   wrapFn('rpgBuildScene', o => function (id) {

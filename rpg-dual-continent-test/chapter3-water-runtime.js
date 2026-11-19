@@ -23,7 +23,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
-    swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true });
+    swim: false, swimTime: 0, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true });
 }
 
 function c34PlatformSurface(p, x = player.x + player.w / 2) {
@@ -38,6 +38,8 @@ function c34Bottom() {
 }
 
 function c34DrawTerrain(cx) {
+  const pool = c34Pool();
+  if (pool) c34Art.poolFoundation(pool.x - cx, pool.w, pool.baseY + C34.pool.floor);
   const gaps = [];
   for (const gap of groundGaps.slice().sort((a, b) => a.x - b.x)) {
     const prev = gaps[gaps.length - 1], end = gap.x + gap.w;
@@ -128,26 +130,36 @@ function c34DrawPool(cx) {
   if (ledge) c34Art.tile('15_pool_bottom', ledge.x - cx, ledge.y, ledge.w, 14, 0.16, false);
   const pad = platforms.find(p => p.c34Pad);
   if (pad) c34Art.platform(pad, cx);
+}
+
+function c34DrawRipples(cx) {
+  const pool = c34Pool();
+  if (!pool) return;
+  const x = pool.x - cx, y = c34SurfaceY();
   c34Art.clip(x, y - 12, pool.w, 25, () => {
     for (const ripple of c34.ripples) {
       const progress = (c34.waterTick - ripple.start) / C34.water.rippleSteps;
       ctx.save(); ctx.globalAlpha *= (1 - progress) * 0.7;
-      c34Art.at('07_water_ripple', 0, ripple.x - cx, y, 0.018 + progress * 0.032);
+      c34Art.at('07_water_ripple', 0, ripple.x - cx, y, ripple.scale + progress * 0.027);
       ctx.restore();
     }
   });
 }
 
-function c34DrawWetStatus(cx) {
-  if (!c34Is() || c34.wet <= 0) return;
-  const head = c34.swim ? c34SurfaceY() - 39 : player.y - 9;
-  c34Art.drop(player.x + player.w / 2 - cx, head - 8, c34.wet / C34.water.steps);
+function c34SwimPose(cx) {
+  return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime, player.facingRight);
 }
 
-function c34Ripple(x) {
+function c34DrawWetStatus(cx) {
+  if (!c34Is() || c34.wet <= 0) return;
+  const head = c34.swim ? c34SwimPose(cx).headTop : c34Art.landPose().top;
+  c34Art.drop(player.x + player.w / 2 - cx, head - 5, c34.wet / C34.water.steps);
+}
+
+function c34Ripple(x, interval = 14, scale = 0.018) {
   if (c34.waterTick < c34.rippleAt) return;
-  c34.rippleAt = c34.waterTick + 14;
-  c34.ripples.push({ start: c34.waterTick, x });
+  c34.rippleAt = c34.waterTick + interval;
+  c34.ripples.push({ start: c34.waterTick, x, scale });
 }
 
 function c34StepPad(pad) {
@@ -166,6 +178,11 @@ function c34StepPad(pad) {
     player.y = c34PlatformSurface(pad) - player.h; player.onGround = true;
     if (!pad.c34Occupied) c34Ripple(center);
   }
+  const bag = coins.find(coin => coin.c34PadBag && !coin.collected);
+  if (bag) {
+    bag.x = pad.x + pad.w / 2;
+    bag.y = c34PlatformSurface(pad, bag.x) - 32;
+  }
   pad.c34Occupied = onPad;
 }
 
@@ -179,7 +196,10 @@ function c34StepSwim() {
   if (c34.swim) {
     player.y = surface + C34.water.feetDepth - player.h;
     player.vy = 0;
-    if (!wasSwimming || Math.abs(player.vx) > 0.35) c34Ripple(x);
+    const paddling = Math.abs(player.vx) > 0.35;
+    if (!wasSwimming) c34.swimTime = 0;
+    c34.swimTime += (paddling ? 1 : 0.7) * 1000 / 60;
+    c34Ripple(x + (player.facingRight ? 1 : -1) * (paddling ? 17 : 7), paddling ? 14 : 25, paddling ? 0.018 : 0.012);
   }
 }
 
@@ -191,7 +211,8 @@ function c34Teach(id) {
 
 function c34StepWet(touching) {
   const wasWet = c34.wet > 0;
-  const inWind = windVents.some(v => windLiftAt(v, player) > 0) ||
+  const windLift = c2UmbWindActive() ? c2UmbWindLiftAt : windLiftAt;
+  const inWind = windVents.some(v => windLift(v, player) > 0) ||
     (wdActive() && wdFlowAt(player.x + player.w / 2, player.y + player.h / 2) > 0);
   const entering = inWind && !c34.inWind;
   c34.inWind = inWind;
