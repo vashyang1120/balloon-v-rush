@@ -47,6 +47,15 @@ jobs:
                 const context = await browser.newContext({viewport:{width,height},isMobile:width<900,hasTouch:width<900});
                 const page = await context.newPage();
                 const writes = [];
+                const cdp = await context.newCDPSession(page);
+                const inspect = async (expression) => (await cdp.send('Runtime.evaluate',{expression,returnByValue:true})).result.value;
+                const waitFor = async (expression) => {
+                  for (let i = 0; i < 180; i++) {
+                    if (await inspect(expression)) return;
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                  }
+                  throw Error('Timed out: ' + expression);
+                };
                 await context.route('**/*', route => {
                   const request = route.request();
                   if (!request.url().startsWith(deploy) || !['GET','HEAD'].includes(request.method())) {
@@ -58,12 +67,12 @@ jobs:
                 const url = entry + query + (section ? '&ch3test=' + section : '');
                 const response = await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
                 assert.equal(response.status(),200);
-                await page.waitForFunction(() => window.adventurePlaytestReady && assetBootReady,undefined,{timeout:90000});
-                assert.deepEqual(await page.evaluate(()=>[GAME_VERSION,C1U.guest,C1U.mode,advDevMode()]),[version,true,'sandbox',true]);
+                await waitFor('window.adventurePlaytestReady && typeof assetBootReady !== "undefined" && assetBootReady');
+                assert.deepEqual(await inspect('[GAME_VERSION,C1U.guest,C1U.mode,advDevMode()]'),[version,true,'sandbox',true]);
                 if (section) {
                   await page.locator('#btn-start-gate-go').click();
-                  await page.waitForFunction(expected => !gameStartGateActive && gameState === 'playing' && debugC34().ready && debugC34().section === expected,section,{timeout:90000});
-                  const art = await page.evaluate(() => ({status:debugC34().art,groups:new Set(Object.values(chapter3ArtCatalog).flatMap(a=>a.files.map(f=>f.split('/')[0]))).size}));
+                  await waitFor("!gameStartGateActive && gameState === 'playing' && debugC34().ready && debugC34().section === " + JSON.stringify(section));
+                  const art = await inspect("({status:debugC34().art,groups:new Set(Object.values(chapter3ArtCatalog).flatMap(a=>a.files.map(f=>f.split('/')[0]))).size})");
                   assert.deepEqual(art,{status:{loaded:76,failed:[]},groups:16});
                 }
                 assert.deepEqual(writes,[]);
