@@ -487,6 +487,14 @@
           "x": 2900,
           "y": 390,
           "coins": 0
+        },
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 1020,
+          "y": 238,
+          "coins": 40,
+          "tier": "normal"
         }
       ],
       "enemies": [
@@ -580,7 +588,16 @@
         "roundBalloon": 2
       },
       "specials": [],
-      "hidden": [],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 3580,
+          "y": 163,
+          "coins": 60,
+          "tier": "rare"
+        }
+      ],
       "enemies": [
         {
           "id": "A-G1",
@@ -657,7 +674,16 @@
           "amount": 10
         }
       ],
-      "hidden": [],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 4427,
+          "y": -272,
+          "coins": 100,
+          "tier": "precious"
+        }
+      ],
       "enemies": [
         {
           "id": "P2-W1",
@@ -726,7 +752,7 @@
         "balloon260": 29,
         "roundBalloon": 11
       },
-      "optionalCoins": 0
+      "optionalCoins": 200
     },
     "both": {
       "fixed": {
@@ -734,12 +760,12 @@
         "balloon260": 73,
         "roundBalloon": 24
       },
-      "optionalCoins": 40
+      "optionalCoins": 240
     }
   },
   "opening34": {
     "totals": {
-      "coins": 397,
+      "coins": 497,
       "balloon260": 68,
       "roundBalloon": 22
     },
@@ -750,7 +776,7 @@
       "balloonUmbrella"
     ],
     "afterRequiredKnown": {
-      "coins": 397,
+      "coins": 497,
       "balloon260": 61,
       "roundBalloon": 20
     }

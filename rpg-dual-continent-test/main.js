@@ -3358,6 +3358,7 @@ function craftItem(recipeId) {
 // 製作道具（一般）
   const recipe = RECIPES.find(r => r.id === recipeId);
   if (!recipe) return false;
+  if (recipeId === 'balloonDice' && !playerInventory.unlockedRecipes?.balloonDice) return false;
   // v0.3.57：氣球棒棒糖「現做現吃」— 生命已滿不能製作；成功扣材料並立刻 +0.5（不增加庫存）
   if (recipe.eatOnCraft) {
     const maxHp = player.maxHp || CONFIG.PLAYER_MAX_HP || 3;
@@ -5313,6 +5314,7 @@ var prepCheckpoint = null;
 
 function createLevelStartSnapshot() {
   levelStartSnapshot = {
+    chapter3Chests:     { ...(playerInventory.chapter3Chests || {}) },
     // 背包資料
     coins:              playerInventory.coins,
     balloon260:         playerInventory.balloon260,
@@ -5344,6 +5346,7 @@ function createLevelStartSnapshot() {
 
 function restoreLevelStartSnapshot() {
   if (!levelStartSnapshot) return;
+  if (levelStartSnapshot.chapter3Chests) playerInventory.chapter3Chests = { ...levelStartSnapshot.chapter3Chests };
   playerInventory.coins              = levelStartSnapshot.coins;
   playerInventory.balloon260         = levelStartSnapshot.balloon260;
   playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
@@ -5441,6 +5444,7 @@ function cycleWeapon() {
 
 // ── loadLevel：載入指定關卡資料 ──────────────
 function loadLevel(index) {
+  if (typeof closeChapter3TreasureChoice === 'function') closeChapter3TreasureChoice();
   const lv = LEVELS[index];
   if (!lv) return;
   // v0.3.35：離開 / 重新載入關卡時，清掉 2-4 橘子王與金色油管環暫時能力（restart 會依關卡重新建立）
@@ -5788,6 +5792,7 @@ function update(dt, dtMs = 16.667) {
   tickHint();
   if (bringBalloonDog) updateDogNose();
   checkHiddenTreasure();
+  checkChapter3Treasure();
   checkFinish();
   if (gameState === 'playing') { try { rpgUpdate(); } catch (e) { console.warn('[RPG] update error', e); } } // v0.3.59：RPG 事件觸發（只在仍在冒險中時）
 }
@@ -11205,6 +11210,7 @@ function triggerGameOver() {
 }
 
 function triggerClear() {
+  if (advCurrentStageId() === '1-2b') playerInventory.unlockedRecipes.balloonDice = true;
   try { advOnAttemptCleared(); } catch (e) { console.warn('[Score] 通關提交失敗', e); } // v0.3.63：本關有效成果
   try { sfxOnLevelClear(); } catch (e) {} // v0.3.65：每一次正式過關播一次（不延遲結算畫面）
   try { rpgHideDogFloat(true); } catch (e) {} // v0.3.59
@@ -13386,6 +13392,7 @@ function drawWorldInner() {
       if (tx > -60 && tx < CANVAS_W + 60) drawHiddenTreasure(tx, currentHiddenTreasure);
     } catch(e) {}
   }
+  drawChapter3Treasure(cx);
 
   // 圓氣球
   roundBalloons.forEach(r => {
@@ -15574,6 +15581,7 @@ function buildBagRows() {
     rows.push([itemIconHtml('round', '⚪') + ' 圓氣球總計', `${playerInventory.roundBalloon} 顆`, 'result-purple']);
   }
   // 基礎氣球劍：x數量｜裝備 dur/max（合併，不重複）
+  if (ci.balloonDice > 0) rows.push(['🎲 氣球骰子', ci.balloonDice + '／' + v395Cap('balloonDice') + ' 顆', 'result-purple']);
   const swordQty = ci.basicSword || 0;
   if (swordQty > 0 || equippedSword.id === 'basicSword') {
     const qty    = Math.max(swordQty, equippedSword.id === 'basicSword' ? 1 : 0);
@@ -20484,6 +20492,7 @@ function rpgClose(how) {
   }
   if (how === 'reset') rpgPauseAfterClose = false;
   console.log('[RPG] 結束對話', scene.id, how);
+  if (scene.onEnd) scene.onEnd(how);
 }
 function rpgOpenLog() { rpgOpenNotes(); } // v0.3.61：舊入口改開「冒險提示筆記」
 // v0.3.61：冒險提示筆記面板（對話中 / 暫停選單都能開；只顯示學過的知識，每種一筆）
@@ -22757,8 +22766,10 @@ function h2PanelBody(kind, tab) {
   }
   if (kind === 'bag' && tab === 'key') {
     const ks = Object.values(inv.keyItems || {}).sort((a, b) => (a.acquiredAt || 0) - (b.acquiredAt || 0));
-    if (!ks.length) return '<div class="h2-empty">還沒有重要物品。冒險中找到的 Boss 弱點筆記等會放在這裡。</div>';
-    return '<div class="h2-list">' + ks.map(k => h2RowHtml({ iconHtml: h2Icon(k.type === 'bossNote' ? 'bossNote' : 'bossNote'), name: k.name || k.title || '重要物品', desc: h2Esc(k.title && k.title !== k.name ? k.title : ''),
+    const dice = v395Count('balloonDice');
+    const diceRow = dice ? h2RowHtml({ iconHtml: h2Icon('balloonDice'), name: '氣球骰子', desc: dice + '／' + v395Cap('balloonDice') + ' 顆' }) : '';
+    if (!ks.length && !diceRow) return '<div class="h2-empty">還沒有重要物品。冒險中找到的 Boss 弱點筆記等會放在這裡。</div>';
+    return '<div class="h2-list">' + diceRow + ks.map(k => h2RowHtml({ iconHtml: h2Icon(k.type === 'bossNote' ? 'bossNote' : 'bossNote'), name: k.name || k.title || '重要物品', desc: h2Esc(k.title && k.title !== k.name ? k.title : ''),
       side: '<button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="readKey" data-key="' + h2Esc(k.id) + '">閱讀</button>' })).join('') + '</div>';
   }
   if (kind === 'shop' && tab === 'style') return '<div class="h2-soon">造型商品與寵物配件<br>即將推出，目前還不能購買。<br><small>（角色換裝與小狗配件的取得方式尚未開放）</small></div>';
@@ -29891,7 +29902,7 @@ function v395Inv() {
 }
 function v395BagLevel() { return v395Inv().bagLevel; }
 function v395Cap(id) { const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
-function v395Count(id) { const inv = v395Inv(); if (id === 'basicSword' || id === 'basicHammer') return Math.max(0, Math.floor(Number((inv.craftedItems || {})[id]) || 0)); return Math.max(0, Math.floor(Number(inv.items[id]) || 0)); }
+function v395Count(id) { const inv = v395Inv(); if (id === 'basicSword' || id === 'basicHammer' || id === 'balloonDice') return Math.max(0, Math.floor(Number((inv.craftedItems || {})[id]) || 0)); return Math.max(0, Math.floor(Number(inv.items[id]) || 0)); }
 function v395Over() { return Object.keys(V395_BAG.caps).filter(id => v395Count(id) > v395Cap(id)).map(id => ({ id, have: v395Count(id), cap: v395Cap(id) })); }
 // 繃帶、急救包的攜帶上限改由背包等級決定（LV1 和原本一樣 5／1）；商店、暫停背包等所有讀 maxCarry 的地方自動跟著
 ['bandage', 'firstAidKit'].forEach(id => { if (SHOP_ITEMS[id]) Object.defineProperty(SHOP_ITEMS[id], 'maxCarry', { configurable: true, enumerable: true, get() { return v395Cap(id); } }); });
@@ -33722,6 +33733,9 @@ function adventureLevelResourceConfig(lv) {
       type, recipeKey, name: name || recipeName || title || recipeKey || type,
       x, y, coins: type === 'goldChest' ? (rewardCoins || 30) : 0,
     }));
+  for (const chest of chapter3TreasureSpots(lv.stageId)) {
+    hidden.push({ type: 'goldChest', name: '隱藏金幣寶箱', x: chest.x, y: chest.y, coins: chapter3TreasureDice.tiers[chest.tier], tier: chest.tier });
+  }
   return { fixed, specials, hidden };
 }
 
