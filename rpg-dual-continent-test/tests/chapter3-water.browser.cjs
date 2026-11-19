@@ -15,7 +15,7 @@ async function boot(page, origin, section) {
   await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
   await page.locator('#btn-start-gate-go').click();
   await page.waitForFunction(expected =>
-    !gameStartGateActive && !advIntroActive && !ocActive && gameState === 'playing' &&
+    !assetGateActive && !gameStartGateActive && !advIntroActive && !ocActive && gameState === 'playing' &&
     debugC34().ready && debugC34().section === expected, section, { timeout: 90000 });
 }
 
@@ -83,7 +83,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(report.floors, []);
     assert.deepEqual(report.falls, ['WA', 'WB']);
     assert.equal(report.stock, 9);
-    assert.deepEqual(report.willFloat, [45, 60]);
+    assert.deepEqual(report.willFloat, [30, 45, 60]);
     assert.ok(report.tree);
     await record(page, 'desktop-3-4-start');
 
@@ -105,6 +105,81 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await page.evaluate(() => c34.wet), 1800);
     await record(page, 'desktop-first-wet');
+  });
+
+  await t.test('first canyon uses the three angles, a safe landing and the two approved hints', async caseTest => {
+    const composition = await page.evaluate(() => {
+      if (rpgActive) rpgClose('skipped');
+      Object.assign(player, { x: 925, y: GROUND_Y - player.h, vx: 0, vy: 0, onGround: true });
+      for (let i = 0; i < 100; i++) updateCamera();
+      updatePlayer(1);
+      const firstHint = rpgQueue.find(q => q.scene.id === 'c34_canyon_arrival');
+      const platform = platforms.find(p => p.c34Id === 'P1');
+      return {
+        inView: platform.x + 25 < cameraX + CANVAS_W,
+        high: GROUND_Y - platform.y,
+        safe: !enemies.some(e => e.c1dPlat?.x === platform.x),
+        firstLine: firstHint?.scene.pages[0].text,
+      };
+    });
+    assert.equal(composition.inView, true);
+    assert.equal(composition.high, 190);
+    assert.equal(composition.safe, true);
+    assert.equal(composition.firstLine, '哇！好大的峽谷...我要怎麼飛到對面去呢？');
+    await record(page, 'desktop-3-4-canyon-approach');
+
+    const report = await page.evaluate(() => {
+      function run(angle, umbrella, x = 970, wet = false) {
+        if (rpgActive) rpgClose('skipped');
+        rpgQueue.length = 0;
+        Object.assign(player, { x, y: GROUND_Y - player.h, vx: 0, vy: 0,
+          onGround: true, facingRight: true, invincible: 0 });
+        cameraX = x - 220;
+        gameState = 'playing';
+        activeSlot = umbrella ? 'umbrella' : 'sword';
+        c34.wet = wet ? C34.water.steps : 0;
+        c34.swim = false;
+        wd.idx = WD_TUNING.angles.indexOf(angle);
+        wdResetState(false);
+        wd.history.length = 0;
+        keys.ArrowRight = true;
+        try {
+          for (let i = 0; i < 280 && !wd.history.length; i++) {
+            update(1);
+            if (rpgActive && !wd.history.length) rpgClose('skipped');
+          }
+        } finally { keys.ArrowRight = false; }
+        const route = wd.history.at(-1);
+        const platform = platforms.find(p => p.c34Id === 'P1');
+        const onPlatform = player.onGround && Math.abs(player.y + player.h - platform.y) < 1;
+        return { angle, umbrella, land: route?.result, high: route?.maxH, far: route?.maxX, onPlatform,
+          noUmbrellaFalls: c34.noUmbrellaFalls,
+          hint: [...rpgQueue.map(q => q.scene), rpgActive].find(s => s?.id === 'c34_canyon_umbrella')?.pages[0].text };
+      }
+
+      const before = localStorage.getItem('balloonV_c41WindFail_v1');
+      const trials = [run(30, false), run(30, true), run(45, false),
+        run(45, true), run(60, false), run(60, true)];
+      const wet = [run(60, true, 950, true), run(60, true, 990, true)];
+      const ordinaryFall = c2Pits.find(p => p.id === 'A1');
+      wdPitHit(ordinaryFall);
+      const withoutWindAttempt = c34.noUmbrellaFalls;
+      const hintTrials = [run(45, false), run(60, false), run(45, false)];
+      return { trials, wet, hintTrials, withoutWindAttempt,
+        legacy: before === localStorage.getItem('balloonV_c41WindFail_v1') };
+    });
+    caseTest.diagnostic(JSON.stringify({ routes: report.trials, wetRoutes: report.wet }));
+    assert.deepEqual(report.trials.map(r => r.land), ['pit', 'pit', 'pit', 'pit', 'pit', 'far'], JSON.stringify(report));
+    assert.equal(report.trials[5].onPlatform, true);
+    assert.ok(report.trials[3].high < composition.high);
+    assert.ok(report.trials[5].high > composition.high);
+    assert.ok(report.wet.every(r => r.land === 'far' && r.onPlatform));
+    assert.equal(report.withoutWindAttempt, 0);
+    assert.equal(report.legacy, true);
+    assert.deepEqual(report.trials.map(r => r.noUmbrellaFalls), [1, 0, 1, 0, 1, 0]);
+    assert.deepEqual(report.hintTrials.map(r => r.hint), [
+      undefined, '咦...還是飛得不夠高...如果加上氣球雨傘的輔助呢？', undefined,
+    ]);
   });
 
   await openSection(page, 'pool');
@@ -138,6 +213,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       for (let i = 0; i < 65; i++) c34Step();
       const released = { sink: pad.c34Sink, angle: pad.c34Angle, occupied: pad.c34Occupied };
 
+      c34.taught.delete('c34_first_dry_wind');
       c34.wet = C34.water.steps;
       c34.swim = false;
       const wet = c34Motion();

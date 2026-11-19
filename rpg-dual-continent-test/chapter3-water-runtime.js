@@ -1,6 +1,8 @@
 'use strict';
 
 const C34_TEACHING = {
+  c34_canyon_arrival: { face: 'balloonv_confused', text: '哇！好大的峽谷...我要怎麼飛到對面去呢？' },
+  c34_canyon_umbrella: { face: 'balloonv_confused', text: '咦...還是飛得不夠高...如果加上氣球雨傘的輔助呢？' },
   c34_first_wet: { face: 'balloonv_surprised', text: '啊！！我全身都溼了...身體變好重好難動...' },
   c34_first_dry_wind: { face: 'balloonv_happy', text: '哇！這裡的風讓我身體乾了一些！！' },
 };

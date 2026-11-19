@@ -33392,7 +33392,11 @@ function c41SlopeStep() {
     const blown = !!(A && !A._c41 && (A.airborne || A.frames > 0));
     const umb = !!(A && A.umbrella);   // 從被風吹離機關到掉坑的整段過程中有沒有撐雨傘
     const r = o.apply(this, arguments);
-    if (blown) {
+    if (blown && c34Is('3-4')) {
+      A._c41 = true;
+      if (umb) c34.noUmbrellaFalls = 0;
+      else if (++c34.noUmbrellaFalls === 2) c34Teach('c34_canyon_umbrella');
+    } else if (blown) {
       A._c41 = true;
       const d = wfLoad(); d.wind++; if (!umb) d.noUmb++; wfSave(d);
       c41L({ ev: 'windFail', wind: d.wind, noUmb: d.noUmb, umbrella: umb, ang: A.ang });
@@ -33502,7 +33506,7 @@ function c42DrawBrokenIcon(barLeft, cy) {
 // ════════════════════════════════════════════════════════════════════
 //  v0.4.10：第三章 3-4「風之峽谷」功能原型（3-4 v0.1.0-test-1）
 //  v0.4.11：3-4 改成單一連續關卡、依手繪示意圖重排攀登路線（見下面 C34_LAY）：
-//    低地＋瀑布 → 導風（60° 才到第一平台 P1，蠍子在 P1）→ 跳上樹平台 P2 → 倒樹斜靠岩壁上的岩棚 P3 → 跳上峽谷頂部
+//    低地＋瀑布 → 導風（60°＋雨傘可達安全平台 P1，蠍子在 P2）→ 跳上樹平台 P2 → 倒樹斜靠岩壁上的岩棚 P3 → 跳上峽谷頂部
 //    → 峽谷頂部的水池（左右都是厚岩壁）→ 浮墊 → 對岸 → 出口（整關只在最後出口結算一次）
 //  ・（v0.4.10 的 3-4A／3-4B 兩個關卡已合併成這一關；水池機關：瀑布＋雨傘導流 → 水位只升不降 → 浮墊 → 錢袋 → 對岸）
 //  ・地形：峽谷頂部（Middle A／B／C 交錯）＋懸崖頂部 v1.1（另一側水平鏡像）＋岩壁延伸 v1.2
@@ -33515,15 +33519,15 @@ var C34 = {
   abyssDepth: 70,              // 深淵：腳低於地面 70px（快到畫面下緣）才算掉下去
   wallTol: 8,                  // 高台側面：腳低於高台頂面 8px 以上才算撞牆（站在頂面邊緣不會被推開）
   cam: { top: 110, max: 430, ease: 0.12 },
-  // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度只用 45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
+  // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度為 30°／45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
   //   v0.4.11 重新校準：噴嘴對準 60° 才是全風速（openAngle 60），45° 剩 offThrust；沒撐雨傘風力只剩 noUmbThrust（「用雨傘接風」）
-  wd: { deviceX: 1040, angles: [45, 60], maxUp: 17, openAngle: 60, offThrust: 0.6, noUmbThrust: 0.35 },
+  wd: { deviceX: 1040, angles: [30, 45, 60], maxUp: 17, openAngle: 60, offThrust: 0.8, noUmbThrust: 0.35 },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
   water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
 };
 var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits: 0, bagGot: false,
-  swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true };
+  swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true, noUmbrellaFalls: 0 };
 function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }
@@ -33539,7 +33543,7 @@ var C34_LAY = (function () {
   const G = C34_G, L = {};
   L.devX = C34.wd.deviceX;                 // 導風裝置底座左緣
   L.a1 = 1170;                             // 深淵 A1 起點（導風坑）
-  L.p1 = { x: 1880, w: 360, h: 160 };      // 第一平台 P1：60°＋雨傘的落點（h＝離地高度）
+  L.p1 = { x: 1620, w: 360, h: 190 };      // 第一平台為安全落點，且站在導風裝置旁可看見
   L.p2 = { x: 0, w: 260, h: 0 }; L.p2.x = L.p1.x + L.p1.w + 70; L.p2.h = L.p1.h + 120;            // 中間更高平台 P2（樹長在這裡）
   L.tree = { x: L.p2.x + L.p2.w - 57 };                                                           // 樹：支點離 P2 右緣 40px
   L.p3 = { x: L.p2.x + L.p2.w + 202, w: 130, h: L.p2.h + 145 };                                  // 岩棚 P3（貼在峽谷岩壁左側；跳不上去 → 只能靠倒樹斜橋）
@@ -33561,8 +33565,8 @@ const C2_STAGE_34 = (function () {
     hints: [
       { triggerX:   30, msg: '🏜️ 3-4 風之峽谷：從低地出發，一段一段爬上峽谷頂部！', shown: false, duration: 240 },
       { triggerX:  420, msg: '💧 前面有瀑布！拿出雨傘（按 3）站到瀑布下面看看', shown: false, duration: 220 },
-      { triggerX:  860, msg: '🌬️ 導風裝置！用氣球槌（按 2）敲紅色星星墊，噴嘴會在 45°／60° 之間切換；撐雨傘走進風裡，飛上對面的高台！', shown: false, duration: 360 },
-      { triggerX: L.p1.x + 60, msg: '🦂 風刃蠍子！拿雨傘按住攻擊鍵可以擋下風刃，也可以用劍或槌子打倒', shown: false, duration: 260 },
+      { triggerX:  860, msg: '🌬️ 用氣球槌（按 2）敲紅色星星墊，可以切換噴嘴的角度。', shown: false, duration: 260 },
+      { triggerX: L.p2.x + 50, msg: '🦂 風刃蠍子！拿雨傘按住攻擊鍵可以擋下風刃，也可以用劍或槌子打倒', shown: false, duration: 260 },
       { triggerX: L.p2.x + 20, msg: '🔨 用氣球槌敲倒大樹，讓樹幹斜靠在右邊的岩棚上，沿著樹幹走上去！', shown: false, duration: 300 },
       { triggerX: L.ct.x + 40, msg: '🏞️ 登上峽谷頂部了！前面是瀑布和水池', shown: false, duration: 220 },
       { triggerX: L.fallX - 200, msg: '☂️ 站到瀑布下撐開雨傘、面向水池 → 水會被雨傘導進水池，水位會慢慢上升！', shown: false, duration: 320 },
@@ -33570,7 +33574,7 @@ const C2_STAGE_34 = (function () {
     ],
     c34PoolDef: { x: L.pool.x, w: L.pool.w, baseY: ct, resetX: L.fallX - 90 },
     buildPlatforms: () => [
-      { x: L.p1.x, y: L.y(L.p1.h), w: L.p1.w, h: 22, c34Mesa: true, c34Id: 'P1' },     // 第一平台（導風落點、蠍子）
+      { x: L.p1.x, y: L.y(L.p1.h), w: L.p1.w, h: 22, c34Mesa: true, c34Id: 'P1' },     // 第一平台（安全的導風落點）
       { x: L.p2.x, y: L.y(L.p2.h), w: L.p2.w, h: 22, c34Mesa: true, c34Id: 'P2' },     // 中間更高平台（樹）
       { x: L.p3.x, y: L.y(L.p3.h), w: L.p3.w, h: 22, c34Id: 'P3' },                    // 岩棚（第三章平台；倒樹斜橋的終點）
       { x: L.ct.x, y: ct, w: L.ct.w, h: 22, c34Mesa: true, c34Id: 'CT' },              // 峽谷頂部（水池左岸）
@@ -33588,7 +33592,10 @@ const C2_STAGE_34 = (function () {
       { id: 'WA', x: 620, w: 34, vx: 4, vy: 2, split: true },                    // 入口景觀瀑布（只是環境互動）
       { id: 'WB', x: L.fallX, w: 36, vx: 6, vy: 2, baseY: ct },                  // 水池瀑布（雨傘導流 → 水位）
     ],
-    cameraZones: [ { id: 'ALL', x0: 0, x1: L.length, camMin: 0, camMax: L.length - 960, lead: 0.40, ease: 0.12 } ],
+    cameraZones: [
+      { id: 'A1', x0: 0, x1: L.p1.x, camMin: 0, camMax: L.length - CANVAS_W, lead: 0.23, ease: 0.12 },
+      { id: 'UPPER', x0: L.p1.x, x1: L.length, camMin: 0, camMax: L.length - CANVAS_W, lead: 0.40, ease: 0.12 },
+    ],
     buildCoins: () => [
       [200,55],[260,55],[700,55],[760,55],
       [L.p1.x + 60, L.p1.h + 55], [L.p1.x + 300, L.p1.h + 55],
@@ -33607,8 +33614,8 @@ const C2_STAGE_34 = (function () {
         c34BaseDy: L.p2.h, c41SlopeTo: { x: L.p3.x, y: L.y(L.p3.h) } },
     ],
     buildEnemies: () => {
-      const p = { x: L.p1.x, y: L.y(L.p1.h), w: L.p1.w };
-      const e = Object.assign(makeWindScorpion(L.p1.x + L.p1.w / 2, 120), { c2Id: 'P1-W1', c2Wind: true, c34OnMesa: true });
+      const p = { x: L.p2.x, y: L.y(L.p2.h), w: L.p2.w };
+      const e = Object.assign(makeWindScorpion(p.x + p.w / 2, 120), { c2Id: 'P2-W1', c2Wind: true, c34OnMesa: true });
       e.c1dPlat = { x: p.x, y: p.y, w: p.w }; e.y = p.y - e.h; e.patrol = p.x + p.w / 2 - e.w / 2; e.patrolRange = Math.max(10, (p.w - e.w) / 2 - 30); e.x = e.patrol;
       return [e];
     },
@@ -33734,7 +33741,7 @@ function c34Complete(sid) {
     if (!out.includes('wdart')) out = out.concat(['wdart']);   // 導風裝置正式圖
     return out;
   });
-  // 導風裝置：3-4 也啟用（沿用 3-2 的機關與物理；位置平移、角度 45°／60°）
+  // 導風裝置：3-4 也啟用（沿用 3-2 的機關與物理；位置平移、角度 30°／45°／60°）
   //   v0.4.11：3-4 專用推力（openAngle 60、45° 剩 offThrust、沒撐雨傘乘 noUmbThrust）；離開 3-4 一律還原（3-2 的值不變）
   const WD_KEYS = ['angles', 'startIndex', 'pitW', 'maxUp', 'offThrust', 'openAngle'];
   const wdSaved = {}; WD_KEYS.forEach(k => { wdSaved[k] = Array.isArray(WD_TUNING[k]) ? WD_TUNING[k].slice() : WD_TUNING[k]; });
@@ -33748,6 +33755,7 @@ function c34Complete(sid) {
     c34WdOn = false;
     const r = o.apply(this, arguments);
     c34ResetWater();
+    c34.noUmbrellaFalls = 0;
     c34.wallHits = 0;
     if (lv && lv.c34) {
       // 深淵／水池：沒有坑底保險平台（真正的缺口）
@@ -33789,6 +33797,10 @@ function c34Complete(sid) {
     if (c34Is()) { const m = c34Mesas().find(q => player.x + player.w / 2 > q.x && player.x + player.w / 2 < q.x + q.w); if (m && player.y + player.h > m.y + 1) { player.y = m.y - player.h; player.vy = 0; player.onGround = true; c34L({ ev: 'abyssReset', x: Math.round(player.x), onMesa: m.c34Id || m.x, hp: player.hp }); try { if (gameState === 'playing') showHint('🕳️ 掉進深淵了！受傷一次，回到平台上', 150); } catch (e) {} } }
     return r;
   });
+  wrapFn('wdEndAttempt', o => function (result) {
+    if (c34Is('3-4') && (wd.attempt?.umbrella || result === 'far' || result === 'near')) c34.noUmbrellaFalls = 0;
+    return o.apply(this, arguments);
+  });
   wrapFn('wdPitHit', o => function (pit) { const r = o.apply(this, arguments); if (c34Is('3-4')) { c34L({ ev: 'wdAbyssReset', x: Math.round(player.x), hp: player.hp, ang: wd.ang }); try { showHint('💨 沒飛上對面的平台，回到起點 — 敲機關換個角度再試（不扣血）', 170); } catch (e) {} } return r; });
   // 畫面：地形（取代第三章一般地面圖）、深淵不畫尖刺、瀑布與水池、高台與浮墊不畫成一般平台
   wrapFn('drawChapter3Ground', o => function (cx) { if (c34Is() && c34ArtReady()) { c34DrawTerrain(cx); return true; } return o.apply(this, arguments); });
@@ -33817,18 +33829,21 @@ function c34Complete(sid) {
   wrapFn('rpgBuildScene', o => function (id) {
     const line = C34_TEACHING[id];
     if (!line) return o.apply(this, arguments);
-    return { id, title: '水域探索', policy: 'oncePerAttempt', saveHistory: false, left: line.face, right: null,
+    return { id, title: id.startsWith('c34_canyon_') ? '飛越峽谷' : '水域探索', policy: 'oncePerAttempt', saveHistory: false, left: line.face, right: null,
       pages: [{ sp: 'balloonv', face: line.face, text: line.text }] };
   });
   wrapFn('updatePlayer', o => function () {
     const result = o.apply(this, arguments);
-    if (c34Is() && gameState === 'playing' && !rpgActive) c34Step();
+    if (c34Is() && gameState === 'playing' && !rpgActive) {
+      if (player.x >= 900 && player.x < C34_LAY.a1) c34Teach('c34_canyon_arrival');
+      c34Step();
+    }
     return result;
   });
   // 一般深淵：沿用第三章尖刺坑的受傷＋退回（3-1／3-2 由原本的流程呼叫；3-4 在這裡呼叫，導風深淵照舊交給導風機關）
   wrapFn('update', o => function () {
     const r = o.apply(this, arguments);
-    if (c34Is() && c2Run && gameState === 'playing') { try { c2PitHazardStep(); } catch (e) { console.warn('[3-4] pit', e); } }
+    if (!assetGateActive && c34Is() && c2Run && gameState === 'playing') { try { c2PitHazardStep(); } catch (e) { console.warn('[3-4] pit', e); } }
     return r;
   });
   // 終點
