@@ -526,10 +526,12 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       player.x = chest.x - player.w / 2;
       player.y = chest.y - player.h / 2;
       createLevelStartSnapshot();
-      const coins = inventory.coins;
-      const before = currentRunStats.coins;
       checkChapter3Treasure();
-      return { lv1, lv2, crafted, coins, before, chest: chest.id,
+      // Leave the pickup zone once the invite is open so the resumed game loop
+      // cannot collect a nearby map coin while the chest payout is measured.
+      player.x = 100;
+      player.y = 0;
+      return { lv1, lv2, crafted, coins: inventory.coins, before: currentRunStats.coins, chest: chest.id,
         pages: rpgActive?.pages.map(p => [p.face, p.text]) };
     });
     assert.deepEqual(setup.lv1, [true, false]);
@@ -541,8 +543,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await page.evaluate(() => rpgClose('finished'));
     await page.getByRole('button', { name: '不用了，直接領取寶箱。' }).click();
     assert.deepEqual(await page.evaluate(id => [
-      playerInventory.coins, currentRunStats.coins, playerInventory.chapter3Chests[id]?.coins,
-    ], setup.chest), [setup.coins + 100, setup.before + 100, 100]);
+      playerInventory.coins, currentRunStats.coins, playerInventory.chapter3Chests[id]?.coins, v395Count('balloonDice'),
+    ], setup.chest), [setup.coins + 100, setup.before + 100, 100, 2]);
 
     const beforeRoll = await page.evaluate(id => {
       const chest = chapter3TreasureSpots('3-4')[0];
@@ -554,17 +556,24 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       player.y = chest.y - player.h / 2;
       bringBalloonDog = true;
       checkChapter3Treasure();
-      const random = Math.random;
-      Math.random = () => 0.5;
-      try { rpgClose('finished'); } finally { Math.random = random; }
+      rpgClose('finished');
+      const rollFace = chapter3TreasureDice.rollFace;
+      chapter3TreasureDice.rollFace = () => 4;
+      window.restoreTestRollFace = () => { chapter3TreasureDice.rollFace = rollFace; };
       return playerInventory.coins;
     }, setup.chest);
     await page.getByRole('button', { name: '好啊！來挑戰看看！' }).click();
+    assert.deepEqual(await page.evaluate(id => {
+      window.restoreTestRollFace();
+      delete window.restoreTestRollFace;
+      const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
+      return [saved.craftedItems.balloonDice, saved.coins, saved.chapter3Chests[id]?.outcome];
+    }, setup.chest), [1, beforeRoll + 100, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
     assert.match(await page.locator('.ch3-treasure-note').textContent(), /獲得 100 金幣/);
     assert.deepEqual(await page.evaluate(id => [
       playerInventory.coins, v395Count('balloonDice'), playerInventory.chapter3Chests[id]?.outcome,
-    ], setup.chest), [beforeRoll + 100, 2, 'tie']);
+    ], setup.chest), [beforeRoll + 100, 1, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).click();
   });
   assert.deepEqual(errors, []);

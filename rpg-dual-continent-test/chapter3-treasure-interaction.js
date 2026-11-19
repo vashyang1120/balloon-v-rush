@@ -50,10 +50,14 @@ function ch3TreasureClaim(chest, rolls) {
   const priorLedger = playerInventory.chapter3Chests;
   const result = chapter3TreasureDice.prepareClaim(priorLedger || {}, chest.id, chest.tier, rolls);
   if (!result) return null;
+  const diceCount = rolls ? v395Count(CH3_DICE_RECIPE) : 0;
+  if (rolls && diceCount < 1) return null;
   const priorCoins = playerInventory.coins;
+  if (rolls) playerInventory.craftedItems[CH3_DICE_RECIPE] = diceCount - 1;
   playerInventory.coins += result.coins;
   playerInventory.chapter3Chests = result.ledger;
   if (!saveInventory()) {
+    if (rolls) playerInventory.craftedItems[CH3_DICE_RECIPE] = diceCount;
     playerInventory.coins = priorCoins;
     playerInventory.chapter3Chests = priorLedger;
     return null;
@@ -127,6 +131,7 @@ function ch3TreasureChoose(chest) {
     g.clearRect(0, 0, board.width, board.height);
     const face = ch3TreasureImage('dice_face_blank.png');
     if (face) {
+      board.hidden = false;
       chapter3TreasureDice.drawFace(g, face, { x: 78, y: 53, w: 154, h: 154 }, { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 }, faces.player, motion);
       chapter3TreasureDice.drawFace(g, face, { x: 368, y: 53, w: 154, h: 154 }, { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 }, faces.spirit, motion);
     }
@@ -142,10 +147,9 @@ function ch3TreasureChoose(chest) {
       if (rpgPauseAfterClose) { rpgPauseAfterClose = false; pauseGame(); }
     }
   }
-  function finish(rolls) {
-    const result = ch3TreasureClaim(chest, rolls);
-    if (!result) { note.textContent = '未能儲存寶箱獎勵。'; return; }
-    if (!rolls) { resume(); return; }
+  function showResult(result, rolls) {
+    scores.children[0].textContent = '小V　' + rolls.player;
+    scores.children[1].textContent = '星靈　' + rolls.spirit;
     const copy = {
       win: ['哇！你贏了！金幣加倍送給你！', 'star_spirit_surprised', 'star_spirit_happy'],
       loss: ['嘿嘿！這次是我贏了！', 'star_spirit_happy', 'star_spirit_happy'],
@@ -162,19 +166,23 @@ function ch3TreasureChoose(chest) {
     done.focus();
   }
   box.addEventListener('cancel', event => event.preventDefault());
-  decline.addEventListener('click', () => finish(null));
+  decline.addEventListener('click', () => {
+    if (ch3TreasureClaim(chest, null)) resume();
+    else note.textContent = '未能儲存寶箱獎勵。';
+  });
   accept.addEventListener('click', async () => {
+    if (accept.disabled) return;
+    const rolls = { player: chapter3TreasureDice.rollFace(), spirit: chapter3TreasureDice.rollFace() };
+    const result = ch3TreasureClaim(chest, rolls);
+    if (!result) { note.textContent = '未能儲存寶箱獎勵。'; return; }
     accept.disabled = decline.disabled = true;
     scores.hidden = false;
-    board.hidden = !ch3TreasureImage('dice_face_blank.png');
     try {
-      const rolls = await roll();
-      if (ch3TreasureDialog === box) finish(rolls);
+      await roll(rolls);
     } catch {
-      if (ch3TreasureDialog === box) note.textContent = '骰子暫時無法顯示。';
-    } finally {
-      if (accept.isConnected && ch3TreasureDialog === box) accept.disabled = decline.disabled = false;
+      board.hidden = true;
     }
+    if (ch3TreasureDialog === box) showResult(result, rolls);
   });
   document.body.append(box);
   box.showModal();

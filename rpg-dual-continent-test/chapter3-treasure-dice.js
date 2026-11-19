@@ -57,9 +57,9 @@ const chapter3TreasureDice = (() => {
   function animate(draw, { random = Math.random, nextFrame = requestAnimationFrame } = {}) {
     if (typeof draw !== 'function') throw new TypeError('Missing dice renderer');
     let active;
-    return function play() {
+    return function play(final) {
       if (active) return active;
-      const final = { player: rollFace(random), spirit: rollFace(random) };
+      final ??= { player: rollFace(random), spirit: rollFace(random) };
       let firstTime, lastChange = -Infinity;
       let faces = { player: rollFace(random), spirit: rollFace(random) };
       let finish, fail;
