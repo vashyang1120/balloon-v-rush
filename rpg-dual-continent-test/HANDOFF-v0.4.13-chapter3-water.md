@@ -4,6 +4,15 @@
 - 基準 `53ca70ebf92b671a9b458df2bb95baaed1ef00aa`
 - 施工範圍 `rpg-dual-continent-test/`
 
+## 線上試玩部署接續｜2026-11-19
+
+- 當前版本：`adventure-v0.4.13-ch3-water-terrain-integration-test-1`。
+- 待部署遊戲提交：`a56ff7dc8552288fa58e263807b53c164d5785f1`。此後的交接提交僅更新本文，遊戲版本仍以這個提交為準。
+- 已確認 [PR #37](https://github.com/vashyang1120/balloon-v-rush/pull/37) 為草稿，正式 `main` 仍是 `53ca70ebf92b671a9b458df2bb95baaed1ef00aa`。[正式 Pages 發布紀錄](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44451025625) 顯示來源為 `main`，開發分支的成功紀錄是 [入口測試](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44510772494)。
+- 已知問題：正式版與新增的 Pages 子目錄會共用瀏覽器來源。訪客沙盒有獨立的進度命名空間，但音效設定等鍵仍共用。獨立試玩站已建立，執行環境無法解析其 Git 來源主機 `git.chatgpt-team.site`，因此來源同步與發布未完成。
+- 實際 HTTPS 測試網址：雙大陸入口、3-4 起點、水池區段均待發布。未驗證線上版本、76 張 PNG、兩條捷徑、桌機與手機尺寸、線上沙盒隔離或正式入口的瀏覽器表現；既有 CI 紀錄仍可參照。
+- 下一步：從可連線的環境將上述遊戲提交部署到獨立來源，固定 `guest=1&sandbox=1&devtools=1`，確認 `ch3test=start` 與 `ch3test=pool`，完成實際 HTTPS 驗證後將三條連結填入本文。保留 PR #37 草稿及正式 Pages 來源。
+
 ## 啟動與測試入口
 
 下載這個 Draft PR 的分支或提交 ZIP，解壓後在包含 `assets/`、`tests/` 的專案根目錄執行：
