@@ -28,13 +28,16 @@ jobs:
           node --test tests/entry-reliability.test.cjs rpg-continent1-universe/tests/title-sync.test.cjs rpg-dual-continent-test/tests/chapter3-treasure-dice.test.cjs
           node minigames/whack-a-mole/tests/rules.test.js
       - name: Prepare Chromium
-        run: npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+        run: |
+          npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+          "$RUNNER_TEMP/entry/node_modules/.bin/playwright" install ffmpeg
       - name: Browser regression
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
           CH3_SCREENSHOTS: entry-screenshots/chapter3
         run: node --test tests/entry-reliability.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs rpg-dual-continent-test/tests/chapter3-pages-isolation.browser.cjs
       - name: Normal input exploration recording
+        timeout-minutes: 4
         if: always()
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
