@@ -159,6 +159,15 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           hint: [...rpgQueue.map(q => q.scene), rpgActive].find(s => s?.id === 'c34_canyon_umbrella')?.pages[0].text };
       }
 
+      const thrust = {};
+      for (const [label, slot] of [['umbrella', 'umbrella'], ['bare', 'sword']]) {
+        activeSlot = slot;
+        thrust[label] = WD_TUNING.angles.map(angle => {
+          const speed = WD_TUNING.windSpeed * wdThrust(angle);
+          const rad = angle * Math.PI / 180;
+          return Math.hypot(speed * Math.cos(rad), Math.min(speed * Math.sin(rad), WD_TUNING.maxUp));
+        });
+      }
       const before = localStorage.getItem('balloonV_c41WindFail_v1');
       const trials = [run(30, false), run(30, true), run(45, false),
         run(45, true), run(60, false), run(60, true)];
@@ -167,12 +176,16 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       wdPitHit(ordinaryFall);
       const withoutWindAttempt = c34.noUmbrellaFalls;
       const hintTrials = [run(45, false), run(60, false), run(45, false)];
-      return { trials, wet, hintTrials, withoutWindAttempt,
+      return { trials, wet, hintTrials, withoutWindAttempt, thrust,
         legacy: before === localStorage.getItem('balloonV_c41WindFail_v1') };
     });
     caseTest.diagnostic(JSON.stringify({ routes: report.trials, wetRoutes: report.wet }));
     assert.deepEqual(report.trials.map(r => r.land), ['pit', 'pit', 'pit', 'pit', 'pit', 'far'], JSON.stringify(report));
     assert.equal(report.trials[5].onPlatform, true);
+    for (const speeds of Object.values(report.thrust)) {
+      assert.ok(speeds[0] > 0);
+      assert.ok(speeds.every(speed => Math.abs(speed - speeds[0]) < 1e-9));
+    }
     assert.ok(report.trials[3].high < composition.high);
     assert.ok(report.trials[5].high > composition.high);
     assert.ok(report.wet.every(r => r.land === 'far' && r.onPlatform));
