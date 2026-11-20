@@ -112,13 +112,13 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
           const persisted = await page.evaluate(() => {
             playerInventory.coins += 10;
             const ok = saveInventory();
-            return ok && !!localStorage.getItem(c34BagKey('cumulative'));
+            return ok && !!localStorage.getItem(c34BagKey('3-4', 'cumulative'));
           });
           assert.equal(persisted, true);
-          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('cumulative')));
+          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('3-4', 'cumulative')));
         } else if (section) {
-          await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
-            advCurrentStageId() === s && playerInventory.unlockedRecipes.balloonDice === true, section);
+          await waitUntil(page, s => !assetGateActive && h2IsOpen() &&
+            c34.devBagStage === s && playerInventory.unlockedRecipes.balloonDice === true, section);
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }
