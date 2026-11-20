@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch C1';
+const GAME_BUILD_REVISION = 'Batch C2';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -13586,6 +13586,7 @@ function drawPlayer(cx) {
       ctx.imageSmoothingQuality = 'high';
       const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
       ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (c34Is()) c34HeroWater.heroDrips(heroImg, hr);
       if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
         const gr = getHeroDrawRect(ghostImg, 1, 0);
         ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
@@ -13603,6 +13604,7 @@ function drawPlayer(cx) {
       ctx.imageSmoothingQuality = 'high';
       const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
       ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (c34Is()) c34HeroWater.heroDrips(heroImg, hr);
       if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
         const gr = getHeroDrawRect(ghostImg, 1, 0);
         ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
@@ -26112,6 +26114,7 @@ function c2DrawUmbFrame(key, cx, bob, fxX, alpha) {
   ctx.translate(P.dx || 0, 0);                                   // 水平微調（翻轉後一起左右對稱）
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, -f.ax * k, -f.gy * k, img.naturalWidth * k, img.naturalHeight * k);
+  if (alpha === 1 && c34Is()) c34HeroWater.drips(0, 0);
   ctx.restore();
 }
 // ── ⑦-3 格擋：按住攻擊鍵（Z／手機攻擊鍵）＋站在地上 → 站定、不能移動／跳／轉向；前方碰到蠍子 → 擋下（蠍子轉向、不扣血；雨傘 −1）──
@@ -33851,7 +33854,7 @@ function c34Complete(sid) {
   const G = 'c34canyon';
   const BG = 'chapter3vertical';
   const addGroup = M => {
-    if (M && !M[G]) M[G] = c34Art.entries(false);
+    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries()];
     if (M && !M[BG]) M[BG] = c34Art.entries(true);
     return M;
   };
@@ -33991,6 +33994,7 @@ function c34Complete(sid) {
   });
   wrapFn('drawPlayer', o => function (cx) {
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
+    if (c34Is() && c34HeroWater.drawShower(cx)) return;
     return o.apply(this, arguments);
   });
   wrapFn('rpgBuildScene', o => function (id) {
