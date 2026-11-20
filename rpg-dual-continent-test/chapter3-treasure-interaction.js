@@ -5,13 +5,15 @@ const CH3_DICE_RECIPE = 'balloonDice';
 const ch3TreasureImages = new Map();
 let ch3TreasureDialog = null;
 
-RECIPES.push({
-  id: CH3_DICE_RECIPE, unlockKey: CH3_DICE_RECIPE, name: '氣球骰子',
-  effect: '帶著氣球骰子發現隱藏寶箱，星靈會邀請你比點數。接受會用掉一顆骰子，贏得兩倍金幣，輸了領一半，平手或婉拒可領原額。',
-  cost: { balloon260: 3, roundBalloon: 1 }, emoji: '🎲',
-});
-V395_BAG.caps.balloonDice = 1;
-H2_ICON.balloonDice = { path: CH3_TREASURE_ART + 'item_balloon_dice.png', emoji: '🎲' };
+function installChapter3TreasureItems() {
+  RECIPES.push({
+    id: CH3_DICE_RECIPE, unlockKey: CH3_DICE_RECIPE, name: '氣球骰子',
+    effect: '帶著氣球骰子發現隱藏寶箱，星靈會邀請你比點數。接受會用掉一顆骰子，贏得兩倍金幣，輸了領一半，平手或婉拒可領原額。',
+    cost: { balloon260: 3, roundBalloon: 1 }, emoji: '🎲',
+  });
+  V395_BAG.caps.balloonDice = 1;
+  H2_ICON.balloonDice = { path: CH3_TREASURE_ART + 'item_balloon_dice.png', emoji: '🎲' };
+}
 
 function chapter3TreasureSpots(stageId) {
   switch (stageId) {
@@ -71,6 +73,7 @@ function ch3TreasureClaim(chest, rolls) {
     levelStartSnapshot.chapter3Chests = { ...result.ledger };
     if (rolls) levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] = Math.max(0, (levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] || 0) - 1);
   }
+  advGuardWrite('treasure-claim');
   currentRunStats.coins += result.coins;
   player.coinsCollected += result.coins;
   currentRunStats.foundTreasureCoins = (currentRunStats.foundTreasureCoins || 0) + result.coins;

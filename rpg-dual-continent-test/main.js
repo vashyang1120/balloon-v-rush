@@ -45,6 +45,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
 const GAME_BUILD_REVISION = 'Batch B';
+const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -3409,6 +3410,7 @@ function craftItem(recipeId) {
     if (levelStartSnapshot && ['playing', 'paused', 'failed', 'gameover'].includes(gameState)) {
       for (const [mat, qty] of Object.entries(recipe.cost)) levelStartSnapshot[mat] = Math.max(0, levelStartSnapshot[mat] - qty);
       levelStartSnapshot.craftedItems[recipeId] = (levelStartSnapshot.craftedItems[recipeId] || 0) + 1;
+      advGuardWrite('dice-craft');
     }
   }
   // v0.3.35-fix-1：做出劍 / 槌後，結算頁與小V的家的「下一關」狀態要立刻解鎖（2-4 武器檢查）
@@ -33729,7 +33731,6 @@ function c34Start(sid, mode, section) {
   });
 }
 // 開發快捷入口共用獨立背包；網址入口仍須同時啟用訪客沙盒及開發工具。
-const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 const C34_TEST_BAG_MODES = ['cumulative', 'stocked', 'empty'];
 function c34BagMode() {
   const query = new URLSearchParams(location.search);
@@ -34124,3 +34125,5 @@ function c34Complete(sid) {
     trees: breakableTrees.map(t => ({ x: t.x, st: t.state, slopeTo: t.c41SlopeTo || null, slope: t.c41Slope || null })), log: c34.log.slice(-60) }) });
   console.log('[v0.4.13] 3-4 風之峽谷水域與地形整合已載入');
 })();
+
+if (typeof installChapter3TreasureItems === 'function') installChapter3TreasureItems();
