@@ -229,15 +229,25 @@ const c34Art = (() => {
     });
   }
 
-  function column(x, top, end, width, time, contact) {
+  function column(x, top, end, width, time, contact, fadeFrom = end) {
     const im = image('01_waterfall_main', time) || image('01_waterfall_base');
     if (!im || end <= top) return;
     // The opaque core of the approved 724 px texture spans about 270 px.
     const w = width * 724 / 270, h = width * catalog['01_waterfall_main'].size[1] / 270;
     const shoulder = contact ? Math.max(top, contact.y - width) : end;
-    clip(x - width / 2, top, width, shoulder - top, () => {
+    const drawColumn = () => {
       for (let y = end - h; y + h > top; y -= h) ctx.drawImage(im, x - w / 2, y, w, h + 0.35);
-    });
+    };
+    clip(x - width / 2, top, width, Math.min(shoulder, fadeFrom) - top, drawColumn);
+    if (fadeFrom < end) {
+      ctx.save();
+      const alpha = ctx.globalAlpha, step = (end - fadeFrom) / 8;
+      for (let i = 0; i < 8; i++) {
+        ctx.globalAlpha = alpha * (7.5 - i) / 8;
+        clip(x - width / 2, fadeFrom + step * i, width, step, drawColumn);
+      }
+      ctx.restore();
+    }
     if (!contact) return;
     ctx.save();
     ctx.beginPath();
@@ -307,10 +317,11 @@ const c34Art = (() => {
 
   function landPose() {
     const idle = getAdventureImage('idle');
-    if (!idle) return { top: player.y, headWidth: player.w * 0.75 };
+    if (!idle) return { top: player.y, headWidth: player.w * 0.75, footOffset: 0 };
     const rect = getHeroDrawRect(idle, 1);
     const ratio = rect.dW / idle.naturalWidth;
-    return { top: player.y + rect.dY + landHead.top * ratio, headWidth: landHead.width * ratio };
+    return { top: player.y + rect.dY + landHead.top * ratio, headWidth: landHead.width * ratio,
+      footOffset: rect.dY + 399 * ratio - player.h };
   }
 
   function swimPose(x, surface, time, facingRight) {

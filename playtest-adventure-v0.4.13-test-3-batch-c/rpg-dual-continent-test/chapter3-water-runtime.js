@@ -26,7 +26,7 @@ function c34LeaveSurface() {
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
     swim: false, swimTime: 0, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
-    falls: new Map() });
+    falls: new Map(), shower: null });
 }
 
 function c34PlatformSurface(p, x = player.x + player.w / 2) {
@@ -163,6 +163,11 @@ function c34DrawFall(f, cx) {
   const { canopy, streams, touching } = c34.falls?.get(f.id) ?? c34ResolveFall(f);
   const top = c34FallTop(), end = c34FallBase(f);
   const splashScale = 0.047 * f.w / 36;
+  const shower = touching && c34HeroWater.shower();
+  if (shower?.fall === f) {
+    c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
+    return;
+  }
   if (canopy) {
     c34Art.column(x, top, canopy.outY, f.w, time, {
       x: canopy.x - cx, y: canopy.y, surfaceAt: atX => canopy.surfaceAt(atX + cx),
@@ -210,8 +215,8 @@ function c34SwimPose(cx) {
 }
 
 function c34DrawWetStatus(cx) {
-  if (!c34Is() || c34.wet <= 0) return;
-  const head = c34.swim ? c34SwimPose(cx).headTop : c34Art.landPose().top;
+  if (!c34Is() || !c34.swim || c34.wet <= 0) return;
+  const head = c34SwimPose(cx).headTop;
   c34Art.drop(player.x + player.w / 2 - cx, head - 5, c34.wet / C34.water.steps);
 }
 
@@ -298,7 +303,7 @@ function c34Step() {
     wd.wdVx = 0;
     if (++c34.wallHits % 30 === 1) c34L({ ev: 'wall', mesa: m.x, side: fromLeft ? 'L' : 'R' });
   }
-  let fills = false, touching = false;
+  let fills = false, showerFall = null;
   // Advance the umbrella pose before resolving water so draw and wetness use the same frame.
   if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++;
   else c2Umb.runStep = 0;
@@ -307,7 +312,7 @@ function c34Step() {
   for (const fall of c34Falls()) {
     const interaction = c34ResolveFall(fall);
     c34.falls.set(fall.id, interaction);
-    touching ||= interaction.touching;
+    if (interaction.touching) showerFall ??= fall;
     if (interaction.canopy) c34.stream = interaction.canopy.direction;
     fills ||= interaction.streams.some(stream => stream.fills);
   }
@@ -321,7 +326,11 @@ function c34Step() {
   }
   c34StepPad(platforms.find(p => p.c34Pad));
   c34StepSwim();
-  c34StepWet(touching || c34.swim);
+  if (!showerFall || c34.swim) c34.shower = null;
+  else if (c34.shower?.fall !== showerFall) {
+    c34.shower = { fall: showerFall, tick: c34.waterTick, mirror: !player.facingRight };
+  }
+  c34StepWet(!!showerFall || c34.swim);
   const target = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
   c34.camY += (target - c34.camY) * C34.cam.ease;
   if (Math.abs(c34.camY) < 0.05) c34.camY = 0;
