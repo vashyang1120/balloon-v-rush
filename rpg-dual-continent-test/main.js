@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch A Revision 2';
+const GAME_BUILD_REVISION = 'Batch C1';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -26458,7 +26458,9 @@ function c2CompleteField() {
     }
     const r = o.apply(this, arguments);
     if (gameState === 'playing') {
-      if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++; else c2Umb.runStep = 0;
+      if (!c34Is()) {
+        if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++; else c2Umb.runStep = 0;
+      }
       if (activeSlot === 'hammer' || activeSlot === 'umbrella') c2Tool.last = activeSlot;
       try { c2TreeSoundStep(); } catch (e) {}
     }
@@ -33573,6 +33575,8 @@ function c34Pool() { const lv = c34Lv(); return (lv && lv.c34) ? (lv.c34PoolDef 
 function c34SurfaceY() { const P = C34.pool, D = c34Pool(); return (D ? D.baseY : GROUND_Y) + P.surf0 + (P.surf1 - P.surf0) * c34.level; }
 
 const C34_G = GROUND_Y;
+// 18A entrance median (201 px) × standing hero scale (120 × 387 / 410 / 490).
+const C34_FALL_WIDTH = 46.46;
 var C34_LAY = (function () {
   const G = C34_G, L = {};
   L.devX = C34.wd.deviceX;                 // 導風裝置底座左緣
@@ -33623,8 +33627,8 @@ const C2_STAGE_34 = (function () {
       { id: 'A3', x: L.p2.x, w: L.ct.x - L.p2.x, resetX: L.p2.x + 60, c34: 'abyss' },                       // P2 右邊的深淵 → 受傷一次＋回到 P2
     ],
     c34Falls: [
-      { id: 'WA', x: 620, w: 34, vx: 4, vy: 2, split: true },                    // 入口景觀瀑布（只是環境互動）
-      { id: 'WB', x: L.fallX, w: 36, vx: 6, vy: 2, baseY: ct },                  // 水池瀑布（雨傘導流 → 水位）
+      { id: 'WA', x: 620, w: C34_FALL_WIDTH, vx: 4, vy: 2, split: true },        // 入口景觀瀑布（只是環境互動）
+      { id: 'WB', x: L.fallX, w: C34_FALL_WIDTH, vx: 6, vy: 2, baseY: ct },      // 水池瀑布（雨傘導流 → 水位）
     ],
     cameraZones: [
       { id: 'A1', x0: 0, x1: L.p1.x, camMin: 0, camMax: L.length - CANVAS_W, lead: 0.23, ease: 0.12 },

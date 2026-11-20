@@ -229,25 +229,67 @@ const c34Art = (() => {
     });
   }
 
-  function column(x, top, end, width, time) {
+  function column(x, top, end, width, time, contact) {
     const im = image('01_waterfall_main', time) || image('01_waterfall_base');
     if (!im || end <= top) return;
-    const w = width * 1.33, h = w * catalog['01_waterfall_main'].size[1] / 724;
-    clip(x - w / 2, top, w, end - top, () => {
+    // The opaque core of the approved 724 px texture spans about 270 px.
+    const w = width * 724 / 270, h = width * catalog['01_waterfall_main'].size[1] / 270;
+    const shoulder = contact ? Math.max(top, contact.y - width) : end;
+    clip(x - width / 2, top, width, shoulder - top, () => {
       for (let y = end - h; y + h > top; y -= h) ctx.drawImage(im, x - w / 2, y, w, h + 0.35);
     });
+    if (!contact) return;
+    ctx.save();
+    ctx.beginPath();
+    const left = Math.min(x, contact.x) - width / 2;
+    const right = Math.max(x, contact.x) + width / 2;
+    ctx.moveTo(left, shoulder);
+    ctx.lineTo(right, shoulder);
+    for (let i = 24; i >= 0; i--) {
+      const px = left + (right - left) * i / 24;
+      ctx.lineTo(px, contact.surfaceAt(px));
+    }
+    ctx.closePath();
+    ctx.clip();
+    // Draw the final approach in shallow slices so an edge catch stays attached to the canopy.
+    for (let y = shoulder; y < end; y += 2) {
+      const t = Math.min(1, (y - shoulder) / Math.max(1, contact.y - shoulder));
+      const cx = x + (contact.x - x) * t * t;
+      const core = width * (1 - 0.6 * t);
+      const sy = ((y - end + h) % h + h) % h * im.naturalHeight / h;
+      const sh = Math.min(2.4 * im.naturalHeight / h, im.naturalHeight - sy);
+      ctx.drawImage(im, 227, sy, 270, sh, cx - core / 2, y, core, 2.4);
+    }
+    ctx.restore();
   }
 
-  function guide(side, hitX, hitY, outX, outY, landX, landY, time) {
-    at('02_umbrella_split', time, hitX, hitY, 0.036);
-    const dx = landX - outX, dy = landY - outY;
-    if (side === 'split' || Math.hypot(dx, dy) < 14) return;
-    const id = '02_umbrella_' + side;
-    const length = Math.hypot(dx, dy);
-    ctx.save(); ctx.translate(outX, outY);
-    ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
-    at(id, time, 0, 0, Math.min(0.19, length / 1640));
-    ctx.restore();
+  function guide(canopy, stream, cx, width, time) {
+    const { side, outX, outY, x, y } = stream;
+    // Crop the descending leg of the directional art. Its baked bend is upstream of this crop.
+    const im = image('02_umbrella_' + side, time);
+    if (!im) return;
+    const sourceX = side === 'right' ? 1360 : 240;
+    const points = [{ x: canopy.x, y: canopy.y }];
+    for (let i = 1; i <= 8; i++) {
+      const px = canopy.x + (outX - canopy.x) * i / 8;
+      points.push({ x: px, y: Math.max(canopy.y, canopy.surfaceAt(px)) });
+    }
+    for (let i = 1; i <= 16; i++) {
+      const t = i / 16;
+      points.push({ x: outX + (x - outX) * t, y: outY + (y - outY) * (0.4 * t + 0.6 * t * t) });
+    }
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 0.01) continue;
+      const thickness = width * (i <= 8 ? 0.40 : 0.43);
+      ctx.save();
+      ctx.translate(a.x - cx, a.y);
+      ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
+      ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50, -thickness / 2, -0.75, thickness, length + 1.5);
+      ctx.restore();
+    }
   }
 
   function platform(p, cx) {
