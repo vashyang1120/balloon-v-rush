@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch A Revision 1';
+const GAME_BUILD_REVISION = 'Batch A Revision 2';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -29098,10 +29098,12 @@ function wdApplyForce() {
     player.onGround = false;
     if (!wd.attempt) wdStartAttempt();
   }
-  if (wd.wdVx) {
-    const rightBound = Math.min(cameraX + CANVAS_W - 60, LEVEL_LENGTH - 20);
-    player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + wd.wdVx));
-  }
+  wdMovePlayer();
+}
+function wdMovePlayer() {
+  if (!wd.wdVx) return;
+  const rightBound = Math.min(cameraX + CANVAS_W - 60, LEVEL_LENGTH - 20);
+  player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + wd.wdVx));
 }
 function wdStartAttempt() {
   wd.attempt = { ang: wd.dispAng, idx: wd.idx, startX: Math.round(player.x + player.w / 2), startFrame: frameCount, maxH: 0, maxX: 0, frames: 0, umbrella: false, airborne: false, trail: [], result: null };
@@ -33545,12 +33547,14 @@ var C34 = {
   wallTol: 8,                  // 高台側面：腳低於高台頂面 8px 以上才算撞牆（站在頂面邊緣不會被推開）
   cam: { top: 110, max: 430, ease: 0.12 },
   // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度為 30°／45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
-  // 三個角度共用風速、有效風柱和滑翔慣性。向上限速等於風速，風速分量不受限速裁切。
+  // 三個角度從同一發射區接收一次拋射，使用同一風速與水平慣性。
   wd: {
     deviceX: 1040,
     angles: [30, 45, 60],
     noUmbThrust: 0.35,
-    tuning: { windSpeed: 18, maxUp: 18, range: 82, nozzleH: 38, airDrag: 1, offThrust: 1 },
+    launchStart: 66,
+    launchDepth: 22,
+    tuning: { windSpeed: 19.35, maxUp: 19.35, range: 82, nozzleH: 38, airDrag: 0.9895, offThrust: 1 },
   },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
@@ -33868,6 +33872,26 @@ function c34Complete(sid) {
   wrapFn('wdThrust', o => function (ang) {
     if (c34WdOn && c34Is('3-4')) return umbEquipped() ? 1 : C34.wd.noUmbThrust;
     return o.call(this, ang);
+  });
+  wrapFn('wdApplyForce', o => function () {
+    if (!c34WdOn || !c34Is('3-4')) return o.call(this);
+    if (gameState !== 'playing') return;
+
+    const offset = player.x + player.w / 2 - wdPivot().x;
+    const atNozzle = offset >= C34.wd.launchStart &&
+      offset < C34.wd.launchStart + C34.wd.launchDepth;
+    const atGround = player.onGround && Math.abs(player.y + player.h - GROUND_Y) < 1;
+    if (!wd.attempt && atNozzle && atGround && wd.mech?.state === 'idle') {
+      const direction = wd.dispAng * Math.PI / 180;
+      const speed = WD_TUNING.windSpeed * wdThrust(wd.dispAng);
+      wdStartAttempt();
+      wd.wdVx = speed * Math.cos(direction);
+      player.vx = 0;
+      // 重力已於 updatePlayer 先執行。新初速仍以同一個重力步開始移動。
+      player.vy = -speed * Math.sin(direction) + GRAVITY;
+      player.onGround = false;
+    }
+    wdMovePlayer();
   });
   wrapFn('loadLevel', o => function (idx) {
     const lv = LEVELS[idx];

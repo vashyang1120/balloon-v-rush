@@ -135,7 +135,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         if (rpgActive) rpgClose('skipped');
         rpgQueue.length = 0;
         Object.assign(player, { x, y: GROUND_Y - player.h, vx: 0, vy: 0,
-          onGround: true, facingRight: true, invincible: 0 });
+          onGround: true, facingRight: true, invincible: 0, hp: 3, fallingIntoPit: false });
         cameraX = x - 220;
         gameState = 'playing';
         activeSlot = umbrella ? 'umbrella' : 'sword';
@@ -144,9 +144,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         wd.idx = WD_TUNING.angles.indexOf(angle);
         wdResetState(false);
         wd.history.length = 0;
-        keys.ArrowRight = true;
         try {
           for (let i = 0; i < 280 && !wd.history.length; i++) {
+            keys.ArrowRight = true;
             update(1);
             if (rpgActive && !wd.history.length) rpgClose('skipped');
           }
@@ -159,15 +159,6 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           hint: [...rpgQueue.map(q => q.scene), rpgActive].find(s => s?.id === 'c34_canyon_umbrella')?.pages[0].text };
       }
 
-      const thrust = {};
-      for (const [label, slot] of [['umbrella', 'umbrella'], ['bare', 'sword']]) {
-        activeSlot = slot;
-        thrust[label] = WD_TUNING.angles.map(angle => {
-          const speed = WD_TUNING.windSpeed * wdThrust(angle);
-          const rad = angle * Math.PI / 180;
-          return Math.hypot(speed * Math.cos(rad), Math.min(speed * Math.sin(rad), WD_TUNING.maxUp));
-        });
-      }
       const before = localStorage.getItem('balloonV_c41WindFail_v1');
       const trials = [run(30, false), run(30, true), run(45, false),
         run(45, true), run(60, false), run(60, true)];
@@ -176,16 +167,12 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       wdPitHit(ordinaryFall);
       const withoutWindAttempt = c34.noUmbrellaFalls;
       const hintTrials = [run(45, false), run(60, false), run(45, false)];
-      return { trials, wet, hintTrials, withoutWindAttempt, thrust,
+      return { trials, wet, hintTrials, withoutWindAttempt,
         legacy: before === localStorage.getItem('balloonV_c41WindFail_v1') };
     });
     caseTest.diagnostic(JSON.stringify({ routes: report.trials, wetRoutes: report.wet }));
     assert.deepEqual(report.trials.map(r => r.land), ['pit', 'pit', 'pit', 'pit', 'pit', 'far'], JSON.stringify(report));
     assert.equal(report.trials[5].onPlatform, true);
-    for (const speeds of Object.values(report.thrust)) {
-      assert.ok(speeds[0] > 0);
-      assert.ok(speeds.every(speed => Math.abs(speed - speeds[0]) < 1e-9));
-    }
     assert.ok(report.trials[3].high < composition.high);
     assert.ok(report.trials[5].high > composition.high);
     assert.ok(report.wet.every(r => r.land === 'far' && r.onPlatform));
@@ -205,7 +192,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         screenFreezeForTest = true;
         const mesa = C34_LAY.p1;
         const top = C34_LAY.y(mesa.h);
-        return [45, 60].map(angle => {
+        return [[30, true], [45, true], [60, false]].map(([angle, jump]) => {
           if (rpgActive) rpgClose('skipped');
           rpgQueue.length = 0;
           Object.assign(player, { x: 950, y: GROUND_Y - player.h, vx: 0, vy: 0,
@@ -220,7 +207,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
             for (let tick = 0; tick < 245 && !landed && !wd.pitRecovers; tick++) {
               if (rpgActive) rpgClose('skipped');
               keys.ArrowRight = player.x < mesa.x + 110;
-              keys.Space = tick === 14;
+              keys.Space = jump && tick === 14;
               update(1);
               landed = player.onGround && player.x + player.w > mesa.x &&
                 player.x < mesa.x + mesa.w && Math.abs(player.y + player.h - top) < 2;
@@ -229,8 +216,67 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           return { landed, fell: wd.pitRecovers > 0 };
         });
       });
-      assert.deepEqual(outcomes, [{ landed: false, fell: true }, { landed: true, fell: false }]);
+      assert.deepEqual(outcomes, [
+        { landed: false, fell: true }, { landed: false, fell: true }, { landed: true, fell: false },
+      ]);
     } finally { await flight.close(); }
+  });
+
+  await t.test('same launch point and measured velocity satisfy the equal-height flight target', async () => {
+    const bench = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+    try {
+      await boot(bench, origin, 'start');
+      const groups = await bench.evaluate(() => {
+        screenFreezeForTest = true;
+        const savedPlatforms = platforms.slice();
+        // Compare ranges at the launch height without the canyon stopping any arc.
+        platforms.splice(0, platforms.length, ...platforms.filter(p => !p.c34Mesa));
+        try {
+          return [true, false].map(umbrella => [30, 45, 60].map(angle => {
+            if (rpgActive) rpgClose('skipped');
+            rpgQueue.length = 0;
+            const origin = wdPivot().x + C34.wd.launchStart + 1;
+            const x = origin - player.w / 2;
+            Object.assign(player, { x, y: GROUND_Y - player.h, vx: 0, vy: 0, hp: 3,
+              onGround: true, facingRight: true, invincible: 0, fallingIntoPit: false });
+            cameraX = x - 280;
+            gameState = 'playing';
+            c34.wet = 0;
+            c34.swim = false;
+            activeSlot = umbrella ? 'umbrella' : 'sword';
+            wdSetAngleIndex(WD_TUNING.angles.indexOf(angle));
+            wdResetState(false);
+            update(1);
+            const vx = player.x + player.w / 2 - origin;
+            const vy = -player.vy + GRAVITY;
+            let previous = { x: player.x + player.w / 2, h: GROUND_Y - player.y - player.h };
+            let height = previous.h;
+            for (let i = 0; i < 240; i++) {
+              if (rpgActive) rpgClose('skipped');
+              update(1);
+              const current = { x: player.x + player.w / 2, h: GROUND_Y - player.y - player.h };
+              height = Math.max(height, current.h);
+              if (current.h <= 0 && previous.h > 0) {
+                const fraction = previous.h / (previous.h - current.h);
+                const range = previous.x + (current.x - previous.x) * fraction - origin;
+                return { angle, vx, vy, height, range };
+              }
+              previous = current;
+            }
+            throw Error('No return to launch height');
+          }));
+        } finally { platforms.splice(0, platforms.length, ...savedPlatforms); }
+      });
+      for (const runs of groups) {
+        const speeds = runs.map(r => Math.hypot(r.vx, r.vy));
+        assert.ok(speeds[0] > 0 && speeds.every(v => Math.abs(v - speeds[0]) < 1e-6));
+        for (const r of runs) assert.ok(Math.abs(Math.atan2(r.vy, r.vx) * 180 / Math.PI - r.angle) < 1e-6);
+        assert.ok(runs[2].height > runs[1].height && runs[1].height > runs[0].height);
+      }
+      const [low, middle, high] = groups[0];
+      assert.ok(middle.range > Math.max(low.range, high.range));
+      assert.ok(Math.abs(low.range - high.range) / ((low.range + high.range) / 2) <= 0.05);
+    } finally { await bench.close(); }
   });
 
   await t.test('3-4 uses the approved cliff tree and one-piece rock pillar', async () => {
