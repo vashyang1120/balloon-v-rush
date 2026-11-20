@@ -150,7 +150,7 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
         });
         assert.deepEqual(guardResult, [true, true, true, true]);
         assert.ok(requests.every(req => req.origin === origin && req.pathname.startsWith(prefix) &&
-          ['GET', 'HEAD'].includes(req.method)));
+          ['GET', 'HEAD'].includes(req.method)), JSON.stringify(requests.filter(req => req.origin !== origin || !req.pathname.startsWith(prefix) || !['GET', 'HEAD'].includes(req.method))));
         await page.goto(origin + '/formal-fixture');
         const storage = await page.evaluate(({ keys, namespace, bagKey }) => ({
           preserved: keys.every(key => localStorage.getItem(key) === 'formal' &&
