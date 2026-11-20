@@ -7,11 +7,11 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-3/';
+const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-b/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-3:';
+const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-3-batch-b:';
 const mime = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
@@ -73,7 +73,7 @@ async function fixture(context, guard, requests) {
 
 test('test-3 in the isolated Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-adventure-v0.4.13/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-adventure-v0.4.13-test-3-batch-b/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
