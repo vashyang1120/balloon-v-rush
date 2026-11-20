@@ -483,11 +483,11 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     const stored = await page.evaluate(() => ({
       mode: c34.devBagMode,
       base: localStorage.getItem(SAVE_KEY),
-      persisted: JSON.parse(localStorage.getItem(c34BagKey('cumulative'))),
+      persisted: JSON.parse(localStorage.getItem(c34BagKey('3-4', 'cumulative'))),
       current: playerInventory.coins,
       cumulative: c34CumulativeResources().totals,
-      stocked: c34CreateInventory('stocked'),
-      empty: c34CreateInventory('empty'),
+      stocked: c34CreateInventory('3-4', 'stocked'),
+      empty: c34CreateInventory('3-4', 'empty'),
     }));
     assert.equal(stored.mode, 'cumulative');
     assert.equal(stored.persisted.coins, stored.current);
@@ -687,7 +687,10 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       checkChapter3Treasure();
       if (rpgActive) throw Error('claimed chest reopened');
       restoreLevelStartSnapshot();
-      if (playerInventory.chapter3Chests[id]) throw Error('claim survived an adventure rollback');
+      if (!playerInventory.chapter3Chests[id] || playerInventory.coins !== levelStartSnapshot.coins) throw Error('committed claim was lost during an adventure rollback');
+      // Separate deterministic roll fixture after verifying the committed refusal survives rollback.
+      delete playerInventory.chapter3Chests[id];
+      delete levelStartSnapshot.chapter3Chests[id];
       player.x = chest.x - player.w / 2;
       player.y = chest.y - player.h / 2;
       bringBalloonDog = true;
@@ -702,7 +705,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(await page.evaluate(id => {
       window.restoreTestRollFace();
       delete window.restoreTestRollFace;
-      const saved = JSON.parse(localStorage.getItem(c34BagKey('cumulative')));
+      const saved = JSON.parse(localStorage.getItem(c34BagKey('3-4', 'cumulative')));
       return [saved?.craftedItems?.balloonDice, saved?.coins, saved?.chapter3Chests?.[id]?.outcome];
     }, setup.chest), [1, beforeRoll + 100, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
