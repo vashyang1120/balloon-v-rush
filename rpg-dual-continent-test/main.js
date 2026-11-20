@@ -29936,7 +29936,7 @@ function v395Inv() {
   return inv;
 }
 function v395BagLevel() { return v395Inv().bagLevel; }
-function v395Cap(id) { if (id === 'balloonDice') return v395BagLevel(); const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
+function v395Cap(id) { const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
 function v395Count(id) { const inv = v395Inv(); if (id === 'basicSword' || id === 'basicHammer' || id === 'balloonDice') return Math.max(0, Math.floor(Number((inv.craftedItems || {})[id]) || 0)); return Math.max(0, Math.floor(Number(inv.items[id]) || 0)); }
 function v395Over() { return Object.keys(V395_BAG.caps).filter(id => v395Count(id) > v395Cap(id)).map(id => ({ id, have: v395Count(id), cap: v395Cap(id) })); }
 // 繃帶、急救包的攜帶上限改由背包等級決定（LV1 和原本一樣 5／1）；商店、暫停背包等所有讀 maxCarry 的地方自動跟著
@@ -30159,7 +30159,7 @@ function v395EquipHtml() {
   return parts;
 }
 function v395CapHtml() {
-  const L = v395BagLevel(), name = { basicSword: '氣球劍', basicHammer: '氣球槌', bandage: '繃帶', firstAidKit: '急救包', invincibleStar: '無敵星星' };
+  const L = v395BagLevel(), name = { basicSword: '氣球劍', basicHammer: '氣球槌', balloonDice: '氣球骰子', bandage: '繃帶', firstAidKit: '急救包', invincibleStar: '無敵星星' };
   return '<div class="h2-sub" data-v395-cap="1">🎒 背包 LV' + L + '　' + Object.keys(V395_BAG.caps).map(id => name[id] + ' ' + v395Count(id) + '/' + v395Cap(id) + (v395Count(id) > v395Cap(id) ? '（舊存檔超過上限，保留）' : '')).join('・')
     + '<br>金幣、260 氣球、圓氣球不限量；' + v395EquipHtml().join('　') + '</div>';
 }
@@ -30182,10 +30182,16 @@ function v395CapHtml() {
     }
     return o.apply(this, arguments);
   });
-  // ── 秘笈製作：氣球劍、氣球槌的背包上限 ──
+  // ── 秘笈製作：道具的背包上限 ──
   wrapFn('craftItem', o => function (recipeId) {
     const cap = v395Cap(recipeId);
-    if (isFinite(cap) && v395Count(recipeId) >= cap) { showHint('🎒 背包 LV' + v395BagLevel() + '：' + (recipeId === 'basicSword' ? '氣球劍' : '氣球槌') + '最多 ' + cap + ' 把', 170); v395L({ ev: 'craftRefused', id: recipeId, have: v395Count(recipeId), cap }); return false; }
+    if (isFinite(cap) && v395Count(recipeId) >= cap) {
+      const name = RECIPES.find(recipe => recipe.id === recipeId)?.name || recipeId;
+      const unit = recipeId === 'balloonDice' ? '顆' : '把';
+      showHint('🎒 背包 LV' + v395BagLevel() + '：' + name + '最多 ' + cap + ' ' + unit, 170);
+      v395L({ ev: 'craftRefused', id: recipeId, have: v395Count(recipeId), cap });
+      return false;
+    }
     return o.apply(this, arguments);
   });
   // ── 無敵星星：沿用暫停背包的「使用」按鈕（useHealingItem）──
