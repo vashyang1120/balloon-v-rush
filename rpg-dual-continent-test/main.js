@@ -17461,7 +17461,7 @@ function renderHomeNextStage() {
     return;
   }
 
-  const nextIdx = getNextLevelIndex(currentLevelIndex);
+  const nextIdx = homeTreasureStageIndex();
   if (nextIdx >= LEVELS.length) {
     // v0.3.35：2-4 橘子王擊敗 = 第二章完成
     if (getChapter2FlowStep(currentLevelIndex) === CHAPTER2_FLOW_STAGE_IDS.length - 1) {
@@ -17525,10 +17525,7 @@ function renderHomeNextStage() {
   // v0.3.31：下一關有隱藏寶物時，提示帶氣球小狗（不強制，只是建議）
   let secretHtml = '';
   const chapterChest = unclaimedChapter3Treasure(lv.stageId);
-  const dogTreasure = isHiddenTreasureAvailable(lv.hiddenTreasure) || chapterChest?.requiresDog;
-  if (chapterChest && !dogTreasure) {
-    secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物，小V也可以自己找找！</div>';
-  }
+  const dogTreasure = homeHasDogTreasure(lv, chapterChest);
   if (dogTreasure) {
     const dog    = playerInventory.balloonDog || {};
     const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
@@ -17559,6 +17556,9 @@ function renderHomeNextStage() {
         + 'onclick="homeBringDog(); renderHomeNextStage();">'
         + (canBring ? '🐾 帶狗出發 -1 🎈' : '🐾 帶狗出發（260 氣球不足）') + '</button>';
     }
+  }
+  if (chapterChest && !dogTreasure) {
+    secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物，小V也可以自己找找！</div>' + secretHtml;
   }
   el.innerHTML =
     '<div class="hns-stage-id">' + nextDisplayInfo.subtitle + '</div>'
@@ -22360,14 +22360,25 @@ function h2PlaceDog() {
     }
   }
 }
-// v0.3.68：小狗尋寶提醒（原本小V之家的文案；判斷沿用 isHiddenTreasureAvailable；只說「好像有」，不說在哪裡）
+function homeTreasureStageIndex() {
+  if (gameState !== 'clear' || homeEntryMode === 'failed') return currentLevelIndex;
+  if (c2At24Clear()) return getLevelIndexByStageId('3-1');
+  if (c34Is()) return currentLevelIndex;
+  return getNextLevelIndex(currentLevelIndex);
+}
+
+function homeHasDogTreasure(level, chest) {
+  return isHiddenTreasureAvailable(level?.hiddenTreasure) ||
+    (level?.extraHiddenTreasures || []).some(treasure => vbExtraAvailable(level, treasure)) ||
+    chest?.requiresDog === true;
+}
+
+// 只提示附近藏有寶物，讓玩家自己找到位置。
 function h2SniffInfo() {
   if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return null;
-  const idx = (gameState === 'clear' && homeEntryMode !== 'failed') ? getNextLevelIndex(currentLevelIndex) : currentLevelIndex;
-  const stageId = gameState === 'clear' && c2At24Clear() ? '3-1' : gameState === 'clear' && c34Is() ? '3-4' : LEVELS[idx]?.stageId;
-  const lv = LEVELS[getLevelIndexByStageId(stageId)];
-  const chest = unclaimedChapter3Treasure(stageId);
-  const needsDog = isHiddenTreasureAvailable(lv?.hiddenTreasure) || chest?.requiresDog;
+  const lv = LEVELS[homeTreasureStageIndex()];
+  const chest = unclaimedChapter3Treasure(lv?.stageId);
+  const needsDog = homeHasDogTreasure(lv, chest);
   if (!needsDog && !chest) return null;
   const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0);
   if (!hasDog) return { dog: false, text: needsDog
@@ -29023,22 +29034,6 @@ function v390HeldHtml(id, style) {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v390) return; const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v390 = true; globalThis[name] = w; };
   // #15：每次進關 → 風口除錯資訊恢復隱藏
   wrapFn('loadLevel', o => function () { c3VentDebugHidden = true; return o.apply(this, arguments); });
-  // #14：出發前的小狗尋寶提醒
-  wrapFn('h2SniffInfo', o => function () {
-    try {
-      if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return o.apply(this, arguments);
-      let idx;
-      if ((typeof c2Is31Clear === 'function' && c2Is31Clear()) || (typeof c2Is32Clear === 'function' && c2Is32Clear())) idx = getLevelIndexByStageId('3-2');   // 小V的家「出發」實際會進入 3-2
-      else idx = (gameState === 'clear' && homeEntryMode !== 'failed') ? getNextLevelIndex(currentLevelIndex) : currentLevelIndex;
-      const lv = LEVELS[idx]; if (!lv) return o.apply(this, arguments);
-      const extra = (lv.extraHiddenTreasures || []).some(t => typeof vbExtraAvailable === 'function' && vbExtraAvailable(lv, t));
-      if (!extra) return o.apply(this, arguments);                        // 沒有額外寶物 → 完全照原本判斷（主要寶物）
-      const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0);   // v0.3.96：正式流程只看玩家自己的小狗（不再當作 3-2 一定有測試用小狗）
-      if (!hasDog) return { dog: false, text: '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！' };
-      if (nextBringDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪汪！一起去找隱藏寶物！' };
-      return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
-    } catch (e) { return o.apply(this, arguments); }
-  });
   window.debugAdventureFixes = () => ({ ventDebugHidden: c3VentDebugHidden, sniff: (function () { try { return h2SniffInfo(); } catch (e) { return String(e); } })(),
     held: ['basicSword', 'basicHammer', 'balloonUmbrella'].map(id => Object.assign({ id }, v390HeldInfo(id) || {})), fireSfx: { status: SFX.status.orangeProjectileFly, url: (SFX.urls.orangeProjectileFly || '').replace(/\?.*$/, '') } });
 })();
