@@ -1,0 +1,37 @@
+name: Batch B Recovery verification
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/batch-b-recovery.yml'
+      - 'rpg-dual-continent-test/**'
+      - 'docs/development/v0.4.13-test-3/batch-b/**'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax and rules
+        run: |
+          node --check rpg-dual-continent-test/main.js
+          node --check rpg-dual-continent-test/chapter3-treasure-interaction.js
+          node --test tests/entry-reliability.test.cjs rpg-continent1-universe/tests/title-sync.test.cjs rpg-dual-continent-test/tests/chapter3-treasure-dice.test.cjs
+          node minigames/whack-a-mole/tests/rules.test.js
+      - name: Prepare Chromium
+        run: npm install --prefix "$RUNNER_TEMP/entry" --no-save playwright@1.51.1
+      - name: Browser regression
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
+          CH3_SCREENSHOTS: entry-screenshots/chapter3
+        run: node --test tests/entry-reliability.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs rpg-dual-continent-test/tests/chapter3-pages-isolation.browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: batch-b-recovery-regression
+          path: entry-screenshots/
+          if-no-files-found: ignore
