@@ -16,7 +16,8 @@ try{
 await page.goto('http://127.0.0.1:'+server.address().port+'/playtest-adventure-v0.4.13-test-3-batch-b/');
 await page.getByRole('link',{name:'3-4 出發前的小V之家',exact:true}).click();
 await page.waitForURL('**/rpg-dual-continent-test/**');
-await page.waitForFunction(()=>typeof assetBootReady !== 'undefined' && assetBootReady,undefined,{timeout:120000});
+const bootDeadline=Date.now()+120000;
+while(!await page.evaluate(()=>typeof assetBootReady !== 'undefined' && assetBootReady)){if(Date.now()>bootDeadline)throw Error('Asset boot timeout');await page.waitForTimeout(100);}
 await page.locator('#btn-start-gate-go').click();
 await page.locator('#h2-nav-go').waitFor({timeout:120000});
 await snap('01-home');
