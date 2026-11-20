@@ -1,5 +1,10 @@
 name: Batch B Recovery verification
 on:
+  push:
+    branches: [dev/ch3-water-terrain-batch-b]
+    paths:
+      - '.github/workflows/batch-b-recovery.yml'
+      - 'rpg-dual-continent-test/**'
   pull_request:
     paths:
       - '.github/workflows/batch-b-recovery.yml'
