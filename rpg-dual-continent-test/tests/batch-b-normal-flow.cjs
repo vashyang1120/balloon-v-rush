@@ -1,6 +1,6 @@
 'use strict';
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE);
-const {createPreview}=require('../../../tests/preview-entry.cjs');
+const {createPreview}=require('../../tests/preview-entry.cjs');
 const {mkdir,writeFile}=require('node:fs/promises');
 const assert=require('node:assert/strict');
 (async()=>{
