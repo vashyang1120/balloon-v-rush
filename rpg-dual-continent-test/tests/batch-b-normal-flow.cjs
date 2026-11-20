@@ -31,12 +31,14 @@ await page.locator('#h2-panel-close').click();
 await page.locator('#h2-nav-go').click();
 await snap('03-depart');
 
-const state=()=>page.evaluate(()=>({x:player.x,y:player.y,w:player.w,h:player.h,ground:player.onGround,hp:player.hp,state:gameState,dialog:!!rpgActive,done:c2Proto.done,tree:breakableTrees[0]?.state,coins:playerInventory.coins,dice:v395Count('balloonDice'),chest:playerInventory.chapter3Chests,pool:c34.level,angle:wd.ang,mech:wd.mech?.state,layout:C34_LAY,pad:platforms.find(p=>p.c34Pad),padHit:wdPadHitRect(),groundY:GROUND_Y}));
+const state=()=>page.evaluate(()=>({slot:activeSlot,hammer:equippedHammer,hammerTimer:player.hammerAnimTimer,hitBoxes:wd.hitBoxes,x:player.x,y:player.y,w:player.w,h:player.h,ground:player.onGround,hp:player.hp,state:gameState,dialog:!!rpgActive,done:c2Proto.done,tree:breakableTrees[0]?.state,coins:playerInventory.coins,dice:v395Count('balloonDice'),chest:playerInventory.chapter3Chests,pool:c34.level,angle:wd.ang,mech:wd.mech?.state,layout:C34_LAY,pad:platforms.find(p=>p.c34Pad),padHit:wdPadHitRect(),groundY:GROUND_Y}));
 const held=new Set();
 async function input(keys){for(const k of [...held])if(!keys.includes(k)){await page.keyboard.up(k);held.delete(k);}for(const k of keys)if(!held.has(k)){await page.keyboard.down(k);held.add(k);}}
 async function advance(name,predicate,keys,seconds=20){
 const end=Date.now()+seconds*1000;let s;
 while(Date.now()<end){s=await state(); if(s.dialog){await input([]);await page.keyboard.press('Enter');await page.waitForTimeout(180);continue;}
+const phaseSlot=({'04-launcher':'hammer','04-angle-60':'hammer','05-first-mesa':'umbrella','06-first-edge':'umbrella','07-second-mesa':'umbrella','08-tree':'hammer','09-pillar':'hammer','10-canyon-top':'umbrella','11-upper-path':'sword','12-waterfall':'umbrella','13-filled':'umbrella','14-pool-edge':'umbrella','15-pad':'umbrella','16-pad-edge':'umbrella','17-bank':'umbrella','18-chest-approach':'sword'})[name];
+if(phaseSlot&&s.slot!==phaseSlot){await input([]);await page.keyboard.press({sword:'Digit1',hammer:'Digit2',umbrella:'Digit3'}[phaseSlot]);await page.waitForTimeout(100);continue;}
 if(predicate(s)){await input([]);log.push({checkpoint:name,...s});await snap(name);return s;}
 if(['failed','gameover'].includes(s.state))throw Error(name+': '+s.state);
 await input(typeof keys==='function'?keys(s):keys);await page.waitForTimeout(50);}
