@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch A Revision 1';
+const GAME_BUILD_REVISION = 'Batch B';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -2152,7 +2152,6 @@ function applyAdventureTestLoadout() {
   // v0.3.96（#37）：999 測試裝備只在開發者模式（?devtools=1）的開發測試入口使用；一般遊玩一律用背包裡的正式武器與耐久
   if (!advDevMode()) { adventureTestLoadoutActive = false; console.log('[AdventureTest] 一般遊玩：不配發 999 測試裝備'); return; }
   adventureTestLoadoutActive = true;
-  if (/^3-[1-4]$/.test(advCurrentStageId())) playerInventory.unlockedRecipes.balloonDice = true;
   equippedSword.id         = 'basicSword';
   equippedSword.name       = '基礎氣球劍（測試）';
   equippedSword.maxDur     = 999;
@@ -3157,18 +3156,21 @@ function inp(action) {
 // =============================================
 
 // ── Inventory & Save ──────────────────────────
+const BALLOON_DICE_UNLOCK_STAGE = '1-2b';
 const INVENTORY_DEFAULTS = {
   coins:         0,
   balloon260:    0,
   roundBalloon:  0,        // MVP 1.0B：圓氣球材料
   // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12 ...
   craftedItems: {
+    balloonDice:      0,
     basicSword:       0,
     basicHammer:      0,
     balloonLollipop:  0,   // 氣球棒棒糖
     // 未來可在此擴充更多道具
   },
   unlockedRecipes: {
+    balloonDice:      false,
     basicHammer:      false,   // 第 3 關通關後解鎖
     balloonLollipop:  false,   // 第 3 關隱藏秘笈（棒棒糖）
     // 未來可在此擴充更多解鎖狀態
@@ -3397,7 +3399,18 @@ function craftItem(recipeId) {
   playerInventory.craftedItems[recipeId] =
     (playerInventory.craftedItems[recipeId] || 0) + 1;
 
-  saveInventory();
+  const saved = saveInventory();
+  if (recipeId === 'balloonDice') {
+    if (!saved) {
+      for (const [mat, qty] of Object.entries(recipe.cost)) playerInventory[mat] += qty;
+      playerInventory.craftedItems[recipeId]--;
+      return false;
+    }
+    if (levelStartSnapshot && ['playing', 'paused', 'failed', 'gameover'].includes(gameState)) {
+      for (const [mat, qty] of Object.entries(recipe.cost)) levelStartSnapshot[mat] = Math.max(0, levelStartSnapshot[mat] - qty);
+      levelStartSnapshot.craftedItems[recipeId] = (levelStartSnapshot.craftedItems[recipeId] || 0) + 1;
+    }
+  }
   // v0.3.35-fix-1：做出劍 / 槌後，結算頁與小V的家的「下一關」狀態要立刻解鎖（2-4 武器檢查）
   if (recipeId === 'basicSword' || recipeId === 'basicHammer') refreshAdventureProgressAfterCraft();
   // v0.3.70：氣球槌教學（rpg011）改在「冒險畫面中」播（第 4 頁要圈出右上角武器 HUD）：冒險中做的 → 回到遊戲就播；在小V的家／結算做的 → 下一關開始後播
@@ -7745,17 +7758,21 @@ function isInSafeZone(px, py, pw, ph) {
 
 
 // ── 狗鼻子亮度 ──────────────────────────────
+function dogScentTarget() {
+  const legacy = currentHiddenTreasure && !currentHiddenTreasure.found && typeof currentHiddenTreasure.x === 'number' ? currentHiddenTreasure : null;
+  const chest = unclaimedChapter3Treasure(advCurrentStageId());
+  if (!legacy || !chest) return legacy || chest;
+  return Math.abs(player.x - chest.x) < Math.abs(player.x - legacy.x) ? chest : legacy;
+}
 function updateDogNose() {
   try {
-    if (!bringBalloonDog
-        || !currentHiddenTreasure
-        || currentHiddenTreasure.found
-        || typeof currentHiddenTreasure.x !== 'number') {
+    const treasure = dogScentTarget();
+    if (!bringBalloonDog || !treasure) {
       dogNoseGlow  = 0;
       dogNoseLevel = 0;
       return;
     }
-    const dist = Math.abs(player.x - currentHiddenTreasure.x);
+    const dist = Math.abs(player.x - treasure.x);
     if      (dist > 400) { dogNoseLevel = 0; dogNoseGlow = 0;    }
     else if (dist > 250) { dogNoseLevel = 1; dogNoseGlow = 0.25; }
     else if (dist > 120) { dogNoseLevel = 2; dogNoseGlow = 0.65; }
@@ -11076,10 +11093,10 @@ function startAdventureFromGate() {
     advIntroChecked = true;
     advBootHomePending = null;
     advResumePromptDeferred = null;
-    if (chapter3Preview === '3-1') c2Start31();
-    else if (chapter3Preview === '3-2') c2Start32('dev');
-    else if (chapter3Preview === '3-3') c2Start33('dev');
-    else c34Start('3-4', 'dev', chapter3Preview);
+    const stageId = chapter3Preview.startsWith('3-') ? chapter3Preview : '3-4';
+    c34DevBegin(stageId);
+    if (chapter3Preview === 'start' || chapter3Preview === 'pool') c34Start(stageId, 'dev', chapter3Preview);
+    else c34OpenTestHome(stageId);
     return;
   }
   // v0.3.79：開機時已經判斷好的去向，等玩家按下開始才顯示（下一個事件迴圈再做 → 同一次按鍵／點擊不會順便按到新出現的按鈕）
@@ -11214,7 +11231,7 @@ function triggerGameOver() {
 }
 
 function triggerClear() {
-  if (advCurrentStageId() === '1-2b') playerInventory.unlockedRecipes.balloonDice = true;
+  if (advCurrentStageId() === BALLOON_DICE_UNLOCK_STAGE) playerInventory.unlockedRecipes.balloonDice = true;
   try { advOnAttemptCleared(); } catch (e) { console.warn('[Score] 通關提交失敗', e); } // v0.3.63：本關有效成果
   try { sfxOnLevelClear(); } catch (e) {} // v0.3.65：每一次正式過關播一次（不延遲結算畫面）
   try { rpgHideDogFloat(true); } catch (e) {} // v0.3.59
@@ -17458,7 +17475,6 @@ function renderHomeNextStage() {
     return;
   }
   const lv = LEVELS[nextIdx];
-  const hasSecret = lv.hiddenTreasure && playerInventory.balloonDog?.present;
 
   // v0.3.35-fix-1：下一關是 2-4 Boss 關但沒有武器 → 鎖住「出發冒險」，引導去氣球秘笈
   if (isBossWeaponGateBlocked(nextIdx)) {
@@ -17508,7 +17524,12 @@ function renderHomeNextStage() {
   const nextDisplayInfo = getChapterDisplayInfo(nextIdx);
   // v0.3.31：下一關有隱藏寶物時，提示帶氣球小狗（不強制，只是建議）
   let secretHtml = '';
-  if (isHiddenTreasureAvailable(lv.hiddenTreasure)) { // v0.3.33：已取得的重要物品不再提示
+  const chapterChest = unclaimedChapter3Treasure(lv.stageId);
+  const dogTreasure = isHiddenTreasureAvailable(lv.hiddenTreasure) || chapterChest?.requiresDog;
+  if (chapterChest && !dogTreasure) {
+    secretHtml = '<div class="hns-hint hns-hint--secret">🔮 這一關似乎藏著神秘寶物，小V也可以自己找找！</div>';
+  }
+  if (dogTreasure) {
     const dog    = playerInventory.balloonDog || {};
     const hasDog = dog.present && (dog.turnsLeft || 0) > 0;
     if (!hasDog) {
@@ -20181,10 +20202,10 @@ function rpgUpdate() {
         { target: () => orangeNemeses.filter(o => rpgEntityAheadOnScreen(o.x, o.w, 640)).sort((a, b) => a.x - b.x)[0] });
   }
   // 006：小狗尋寶（沿用 dogNoseLevel：L1 = 400px 內就觸發）
-  const sensing = bringBalloonDog && dogNoseLevel >= 1 && !!currentHiddenTreasure && !currentHiddenTreasure.found;
+  const sensing = bringBalloonDog && dogNoseLevel >= 1 && !!dogScentTarget();
   if (sensing && !rpgAttempt.dogInRange) {
     rpgAttempt.dogInRange = true; // 進入感應範圍（同一次停留只觸發一次）
-    const stillSensing = () => bringBalloonDog && dogNoseLevel >= 1 && !!currentHiddenTreasure && !currentHiddenTreasure.found;
+    const stillSensing = () => bringBalloonDog && dogNoseLevel >= 1 && !!dogScentTarget();
     const willTutorial = !rpgWasShownThisAttempt('rpg006a_dog_treasure') && rpgRequest('rpg006a_dog_treasure', stillSensing);
     // v0.3.60：之後的感應 → 完整對話框的狗狗汪汪一頁（取代 v0.3.59 的小型浮動提示；不受顯示模式限制）
     if (!willTutorial) rpgRequest('rpg006b_dog_woof', stillSensing);
@@ -20699,7 +20720,10 @@ function advRankFor(total) { return ADV_SCORE_RULES.ranks.find(r => total >= r.m
 
 // ── 存檔 ──
 function advPlayerKey() { try { return (getPlayerIdentityForResult() || {}).playerKey || 'guest'; } catch (e) { return 'guest'; } }
-function advStorageKey(pk) { return ADV_STORE_PREFIX + (pk || advPlayerKey()); }
+function advStorageKey(pk) {
+  const scope = c34?.devBagMode ? ':' + c34BagKey(c34.devBagStage, c34.devBagMode) : '';
+  return ADV_STORE_PREFIX + (pk || advPlayerKey()) + scope;
+}
 function advEmptyData() { return { v: ADV_STORE_DATA_V, active: null, best: {}, recent: [], archived: [] }; }
 // v0.3.64：進行中的 v1 挑戰 → v2。v1 每一筆失敗本來就記錄了類型，直接依類型轉換（不從合併次數猜測）：
 //   death → 戰敗、timeout → 時間到（戰敗）、abandon（v1 只在暫停選單重試 / 返回整備或測試捷徑時產生）→ 主動重試、interrupted → 不扣分
@@ -22340,9 +22364,15 @@ function h2PlaceDog() {
 function h2SniffInfo() {
   if (gameState !== 'clear' && gameState !== 'failed' && gameState !== 'gameover') return null;
   const idx = (gameState === 'clear' && homeEntryMode !== 'failed') ? getNextLevelIndex(currentLevelIndex) : currentLevelIndex;
-  const lv = LEVELS[idx]; if (!lv || !lv.hiddenTreasure || !isHiddenTreasureAvailable(lv.hiddenTreasure)) return null;
+  const stageId = gameState === 'clear' && c2At24Clear() ? '3-1' : gameState === 'clear' && c34Is() ? '3-4' : LEVELS[idx]?.stageId;
+  const lv = LEVELS[getLevelIndexByStageId(stageId)];
+  const chest = unclaimedChapter3Treasure(stageId);
+  const needsDog = isHiddenTreasureAvailable(lv?.hiddenTreasure) || chest?.requiresDog;
+  if (!needsDog && !chest) return null;
   const dog = playerInventory.balloonDog || {}, hasDog = !!(dog.present && (dog.turnsLeft || 0) > 0);
-  if (!hasDog) return { dog: false, text: '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！' };
+  if (!hasDog) return { dog: false, text: needsDog
+    ? '這一關似乎藏著神秘寶物……需要氣球小狗才找得到！'
+    : '這一關似乎藏著神秘寶物……可以自己探索，也能帶氣球小狗一起找！' };
   if (nextBringDog || (gameState !== 'clear' && levelStartBringDog)) return { dog: true, text: '汪汪！一起去找隱藏寶物！' };
   return { dog: true, text: '汪！好像聞到了什麼……下一關也許有隱藏寶物！' };
 }
@@ -29906,7 +29936,7 @@ function v395Inv() {
   return inv;
 }
 function v395BagLevel() { return v395Inv().bagLevel; }
-function v395Cap(id) { const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
+function v395Cap(id) { if (id === 'balloonDice') return v395BagLevel(); const b = V395_BAG.caps[id]; return b == null ? Infinity : b * (v395BagLevel() >= 2 ? 2 : 1); }
 function v395Count(id) { const inv = v395Inv(); if (id === 'basicSword' || id === 'basicHammer' || id === 'balloonDice') return Math.max(0, Math.floor(Number((inv.craftedItems || {})[id]) || 0)); return Math.max(0, Math.floor(Number(inv.items[id]) || 0)); }
 function v395Over() { return Object.keys(V395_BAG.caps).filter(id => v395Count(id) > v395Cap(id)).map(id => ({ id, have: v395Count(id), cap: v395Cap(id) })); }
 // 繃帶、急救包的攜帶上限改由背包等級決定（LV1 和原本一樣 5／1）；商店、暫停背包等所有讀 maxCarry 的地方自動跟著
@@ -33674,7 +33704,7 @@ function c34PreviewSection() {
   const query = new URLSearchParams(location.search);
   if (query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
   const section = query.get('ch3test');
-  return ['start', 'pool', '3-1', '3-2', '3-3'].includes(section) ? section : null;
+  return ['start', 'pool', ...CH3_TEST_STAGES].includes(section) ? section : null;
 }
 // v0.4.11：3-4 只有一個關卡。section：'start'（起點）／'pool'（開發用：直接放到峽谷頂部的水池區段；同一個關卡、同一套通關狀態）
 //   開發者入口（?devtools=1）：測試用氣球劍＋氣球槌（999）＋測試雨傘（只在記憶體，6／6 ×9）→ 不寫進正式背包、存檔
@@ -33692,7 +33722,8 @@ function c34Start(sid, mode, section) {
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
   bringBalloonDog = dog; levelStartBringDog = dog; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
-    if (dev) c34DevBegin(); else c34DevEnd('normal-start');
+    if (dev) c34DevBegin(sid); else c34DevEnd('normal-start');
+    if (c34.devBagMode) saveInventory();
     advMarkTestEntry('c2-stage-' + sid.toLowerCase());
     c34.dev = dev;   // 第二大陸既有規則（test_only）
     currentLevelIndex = idx;
@@ -33714,6 +33745,7 @@ function c34Start(sid, mode, section) {
   });
 }
 // 只有同時啟用訪客沙盒及開發工具，才建立獨立的 3-4 測試背包。
+const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 const C34_TEST_BAG_MODES = ['cumulative', 'stocked', 'empty'];
 function c34BagMode() {
   const query = new URLSearchParams(location.search);
@@ -33721,7 +33753,7 @@ function c34BagMode() {
   const mode = query.get('ch3bag');
   return C34_TEST_BAG_MODES.includes(mode) ? mode : 'cumulative';
 }
-function c34BagKey(mode) { return 'balloonV_dev_c34_inventory_v2:' + mode; }
+function c34BagKey(stageId, mode) { return 'balloonV_dev_ch3_inventory:' + stageId + ':' + mode; }
 
 function adventureLevelResourceConfig(lv) {
   const coins = lv.buildCoins();
@@ -33745,59 +33777,83 @@ function adventureLevelResourceConfig(lv) {
       x, y, coins: type === 'goldChest' ? (rewardCoins || 30) : 0,
     }));
   for (const chest of chapter3TreasureSpots(lv.stageId)) {
-    hidden.push({ type: 'goldChest', name: '隱藏金幣寶箱', x: chest.x, y: chest.y, coins: chapter3TreasureDice.tiers[chest.tier], tier: chest.tier });
+    hidden.push({ type: 'goldChest', name: '隱藏金幣寶箱', x: chest.x, y: chest.y, coins: chapter3TreasureDice.tiers[chest.tier], tier: chest.tier, requiresDog: chest.requiresDog });
   }
   return { fixed, specials, hidden };
 }
 
-function c34CumulativeResources() {
-  const stages = [...OFFICIAL_ADVENTURE_STAGE_IDS, '3-1', '3-2', '3-3'];
+function c34CumulativeResources(stageId = '3-4') {
+  const stages = OFFICIAL_ADVENTURE_STAGE_IDS.concat(CH3_TEST_STAGES.slice(0, CH3_TEST_STAGES.indexOf(stageId)));
   const totals = { coins: 0, balloon260: 0, roundBalloon: 0 };
   const recipes = new Set();
   for (const id of stages) {
-    const level = LEVELS[getLevelIndexByStageId(id)];
-    const { fixed, hidden } = adventureLevelResourceConfig(level);
+    const { fixed, hidden } = adventureLevelResourceConfig(LEVELS[getLevelIndexByStageId(id)]);
     for (const key of Object.keys(totals)) totals[key] += fixed[key];
+    if (id === BALLOON_DICE_UNLOCK_STAGE) recipes.add('balloonDice');
     for (const item of hidden) {
       totals.coins += item.coins;
       if (item.recipeKey) recipes.add(item.recipeKey);
     }
   }
-  return { totals, recipes: [...recipes] };
+  return { totals, recipes, stages };
 }
 
-function c34CreateInventory(mode) {
-  const { totals, recipes } = c34CumulativeResources();
+function c34CreateInventory(stageId, mode) {
+  const { totals, recipes, stages } = c34CumulativeResources(stageId);
   const resources = mode === 'cumulative' ? totals : mode === 'stocked'
     ? { coins: 1000, balloon260: 100, roundBalloon: 50 }
     : { coins: 0, balloon260: 0, roundBalloon: 0 };
-  const inventory = structuredClone(INVENTORY_DEFAULTS);
-  Object.assign(inventory, resources);
-  inventory.unlockedRecipes = Object.assign(inventory.unlockedRecipes, Object.fromEntries(recipes.map(id => [id, true])),
-    { balloonDice: true });
+  const inventory = Object.assign(structuredClone(INVENTORY_DEFAULTS), resources);
+  for (const id of recipes) inventory.unlockedRecipes[id] = true;
+  inventory.tutorialSwordGranted = inventory.tutorialDogGranted = true;
+  inventory.c2Flow = {};
+  for (const id of CH3_TEST_STAGES.filter(id => stages.includes(id))) {
+    const key = 'stage' + id.replace('-', '');
+    inventory.c2Flow[key] = { claimed: true, dev: true };
+    inventory.c2Flow[key + 'Clears'] = 1;
+    if (mode === 'cumulative') {
+      for (const chest of chapter3TreasureSpots(id)) {
+        const result = chapter3TreasureDice.prepareClaim(inventory.chapter3Chests || {}, chest.id, chest.tier);
+        inventory.chapter3Chests = result.ledger;
+      }
+    }
+  }
   return inventory;
 }
 
-function c34DevBegin() {
-  if (c34.devSnap) return;
-  c34.devSnap = JSON.stringify(playerInventory);
-  c34.devBagMode = c34BagMode();
-  if (c34.devBagMode) {
-    const key = c34BagKey(c34.devBagMode);
+function c34DevBegin(stageId) {
+  const mode = c34BagMode();
+  if (c34.devSnap && (!mode || c34.devBagStage === stageId)) return;
+  c34.devSnap ??= JSON.stringify(playerInventory);
+  c34.devBagMode = mode;
+  c34.devBagStage = mode ? stageId : null;
+  if (mode) {
     let inventory;
-    try { inventory = JSON.parse(localStorage.getItem(key)); } catch {}
-    if (!inventory || typeof inventory.coins !== 'number') inventory = c34CreateInventory(c34.devBagMode);
-    playerInventory = inventory;
+    try { inventory = JSON.parse(localStorage.getItem(c34BagKey(stageId, mode))); } catch {}
+    playerInventory = inventory && typeof inventory.coins === 'number' ? inventory : c34CreateInventory(stageId, mode);
+    nextBringDog = playerInventory.ch3TestDogPlanned === true;
+    const data = advLoad();
+    data.progress = { ...advProgressEnsure(data), cleared: OFFICIAL_ADVENTURE_STAGE_IDS.slice() };
+    advSave(data);
     saveInventory();
   }
-  c34L({ ev: 'devBegin', bagMode: c34.devBagMode });
+  c34L({ ev: 'devBegin', bagMode: mode });
 }
+
+function c34OpenTestHome(stageId) {
+  const flow = playerInventory.c2Flow || {};
+  const cleared = CH3_TEST_STAGES.slice(CH3_TEST_STAGES.indexOf(stageId))
+    .filter(id => flow['stage' + id.replace('-', '')]?.claimed).at(-1);
+  const previous = CH3_TEST_STAGES[CH3_TEST_STAGES.indexOf(stageId) - 1] || '2-4';
+  advBootOpenHome({ ctx: { stageId: cleared || previous, gameState: 'clear', entry: 'normal', mode: 'official' } });
+}
+
 function c34DevEnd(why) {
   if (!c34.devSnap) return;
+  c34.dev = false;
+  if (c34.devBagMode) return;
   playerInventory = JSON.parse(c34.devSnap);
   c34.devSnap = null;
-  c34.devBagMode = null;
-  c34.dev = false;
   c34L({ ev: 'devRestore', why });
 }
 // 開發測試雨傘：沿用雨傘測試場的記憶體雨傘（c2UmbTest），不碰背包
@@ -33900,12 +33956,17 @@ function c34Complete(sid) {
     if (!c34.devSnap) return o.apply(this, arguments);
     if (!c34.devBagMode) return true;
     try {
-      localStorage.setItem(c34BagKey(c34.devBagMode), JSON.stringify(playerInventory));
+      localStorage.setItem(c34BagKey(c34.devBagStage, c34.devBagMode), JSON.stringify({ ...playerInventory, ch3TestDogPlanned: nextBringDog }));
       return true;
     } catch { return false; }
   });
   wrapFn('openHomeScreen', o => function () {
     if (!c34.devBagMode) c34DevEnd('home');
+    if (!playerInventory.unlockedRecipes.balloonDice &&
+        advProgressEnsure(advLoad()).cleared.includes(BALLOON_DICE_UNLOCK_STAGE)) {
+      playerInventory.unlockedRecipes.balloonDice = true;
+      saveInventory();
+    }
     return o.apply(this, arguments);
   });
   wrapFn('restart', o => function () {
@@ -34037,10 +34098,10 @@ function c34Complete(sid) {
       button.id = 'btn-pause-reset-c34-bag';
       button.type = 'button';
       button.className = ref.className;
-      button.textContent = '重置目前的 3-4 測試背包';
+      button.textContent = '重置目前的第三章測試背包';
       button.addEventListener('click', () => {
-        if (!confirm('清除目前模式的 3-4 試玩背包並重新開始？')) return;
-        try { localStorage.removeItem(c34BagKey(c34BagMode())); }
+        if (!confirm('清除目前關卡與模式的試玩背包並重新開始？')) return;
+        try { localStorage.removeItem(c34BagKey(c34.devBagStage || '3-4', c34BagMode())); }
         catch { showHint('無法重置測試背包。', 180); return; }
         location.reload();
       });

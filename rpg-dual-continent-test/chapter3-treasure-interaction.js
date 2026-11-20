@@ -7,7 +7,7 @@ let ch3TreasureDialog = null;
 
 RECIPES.push({
   id: CH3_DICE_RECIPE, unlockKey: CH3_DICE_RECIPE, name: '氣球骰子',
-  effect: '帶著氣球骰子發現隱藏寶箱，星靈會邀請你比點數。',
+  effect: '帶著氣球骰子發現隱藏寶箱，星靈會邀請你比點數。接受會用掉一顆骰子，贏得兩倍金幣，輸了領一半，平手或婉拒可領原額。',
   cost: { balloon260: 3, roundBalloon: 1 }, emoji: '🎲',
 });
 V395_BAG.caps.balloonDice = 1;
@@ -15,11 +15,15 @@ H2_ICON.balloonDice = { path: CH3_TREASURE_ART + 'item_balloon_dice.png', emoji:
 
 function chapter3TreasureSpots(stageId) {
   switch (stageId) {
-    case '3-1': return [{ id: '3-1:wind-ledge', tier: 'normal', x: 1020, y: GROUND_Y - 222 }];
-    case '3-3': return [{ id: '3-3:high-ledge', tier: 'rare', x: 3580, y: GROUND_Y - 297 }];
-    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', x: C34_LAY.bank.x + 565, y: C34_LAY.y(C34_LAY.bank.h) - 27 }];
+    case '3-1': return [{ id: '3-1:wind-ledge', tier: 'normal', requiresDog: true, x: 1020, y: GROUND_Y - 222 }];
+    case '3-3': return [{ id: '3-3:high-ledge', tier: 'rare', requiresDog: true, x: 3580, y: GROUND_Y - 297 }];
+    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', requiresDog: false, x: C34_LAY.bank.x + 565, y: C34_LAY.y(C34_LAY.bank.h) - 27 }];
     default: return [];
   }
+}
+
+function unclaimedChapter3Treasure(stageId) {
+  return chapter3TreasureSpots(stageId).find(chest => !Object.hasOwn(playerInventory.chapter3Chests || {}, chest.id));
 }
 
 function ch3TreasureImage(name) {
@@ -33,17 +37,16 @@ function ch3TreasureImage(name) {
 }
 
 function drawChapter3Treasure(cx) {
-  if (!bringBalloonDog) return;
-  for (const chest of chapter3TreasureSpots(advCurrentStageId())) {
-    const dist = Math.abs(player.x + player.w / 2 - chest.x);
-    if (dist > 230 || playerInventory.chapter3Chests?.[chest.id]) continue;
-    const art = ch3TreasureImage('item_treasure_chest_' + chest.tier + '.png');
-    ctx.save();
-    ctx.globalAlpha *= Math.min(1, (230 - dist) / 126);
-    if (art) ctx.drawImage(art, chest.x - cx - 44, chest.y - 48, 88, 88);
-    else if (advDevMode()) { ctx.font = '32px sans-serif'; ctx.fillText('📦', chest.x - cx - 15, chest.y + 8); }
-    ctx.restore();
-  }
+  const chest = unclaimedChapter3Treasure(advCurrentStageId());
+  if (!chest || (chest.requiresDog && !bringBalloonDog)) return;
+  const dist = Math.abs(player.x + player.w / 2 - chest.x);
+  if (dist > 230) return;
+  const art = ch3TreasureImage('item_treasure_chest_' + chest.tier + '.png');
+  ctx.save();
+  ctx.globalAlpha *= Math.min(1, (230 - dist) / 126);
+  if (art) ctx.drawImage(art, chest.x - cx - 44, chest.y - 48, 88, 88);
+  else { ctx.font = '32px sans-serif'; ctx.fillText('📦', chest.x - cx - 15, chest.y + 8); }
+  ctx.restore();
 }
 
 function ch3TreasureClaim(chest, rolls) {
@@ -61,6 +64,12 @@ function ch3TreasureClaim(chest, rolls) {
     playerInventory.coins = priorCoins;
     playerInventory.chapter3Chests = priorLedger;
     return null;
+  }
+  // Keep the committed claim when the rest of the attempt rolls back.
+  if (levelStartSnapshot) {
+    levelStartSnapshot.coins += result.coins;
+    levelStartSnapshot.chapter3Chests = { ...result.ledger };
+    if (rolls) levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] = Math.max(0, (levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] || 0) - 1);
   }
   currentRunStats.coins += result.coins;
   player.coinsCollected += result.coins;
@@ -82,11 +91,10 @@ function ch3TreasureScene() {
 }
 
 function checkChapter3Treasure() {
-  if (gameState !== 'playing' || assetGateActive || !bringBalloonDog || rpgActive || ch3TreasureDialog) return;
-  const chest = chapter3TreasureSpots(advCurrentStageId()).find(t =>
-    !playerInventory.chapter3Chests?.[t.id] &&
-    rectsOverlap(player.x, player.y, player.w, player.h, t.x - 37, t.y - 34, 74, 68));
-  if (!chest) return;
+  if (gameState !== 'playing' || assetGateActive || rpgActive || ch3TreasureDialog) return;
+  const chest = unclaimedChapter3Treasure(advCurrentStageId());
+  if (!chest || (chest.requiresDog && !bringBalloonDog) ||
+      !rectsOverlap(player.x, player.y, player.w, player.h, chest.x - 37, chest.y - 34, 74, 68)) return;
   if (v395Count(CH3_DICE_RECIPE) < 1) {
     if (ch3TreasureClaim(chest, null)) sfxPlay('secretDiscovered');
     return;
@@ -132,11 +140,13 @@ function ch3TreasureChoose(chest) {
     const face = ch3TreasureImage('dice_face_blank.png');
     if (face) {
       board.hidden = false;
-      chapter3TreasureDice.drawFace(g, face, { x: 78, y: 53, w: 154, h: 154 }, { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 }, faces.player, motion);
-      chapter3TreasureDice.drawFace(g, face, { x: 368, y: 53, w: 154, h: 154 }, { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 }, faces.spirit, motion);
+      const still = { y: 0, angle: 0, scaleX: 1, scaleY: 1 };
+      const pips = { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 };
+      chapter3TreasureDice.drawFace(g, face, { x: 78, y: 53, w: 154, h: 154 }, pips, faces.player, motion.die === 'player' ? motion : still);
+      if (faces.spirit) chapter3TreasureDice.drawFace(g, face, { x: 368, y: 53, w: 154, h: 154 }, pips, faces.spirit, motion);
     }
     scores.children[0].textContent = '小V　' + faces.player;
-    scores.children[1].textContent = '星靈　' + faces.spirit;
+    scores.children[1].textContent = '星靈　' + (faces.spirit ?? '—');
   });
   function resume() {
     closeChapter3TreasureChoice();
