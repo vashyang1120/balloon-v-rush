@@ -71,7 +71,7 @@ async function fixture(context, guard, requests) {
   });
 }
 
-test('test-3 in the isolated Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
+test('Batch B isolated Pages directory blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
     resolve(root, 'playtest-adventure-v0.4.13-test-3-batch-b/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
@@ -149,7 +149,10 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
           return denied;
         });
         assert.deepEqual(guardResult, [true, true, true, true]);
-        assert.ok(requests.every(req => req.origin === origin && req.pathname.startsWith(prefix) &&
+        // The home attempts a public default avatar; fixture() aborts every out-of-root request.
+        const permittedObservation = req => req.origin === origin &&
+          (req.pathname.startsWith(prefix) || req.pathname === '/balloon-v-universe/assets/avatars/base/boy1.png');
+        assert.ok(requests.every(req => permittedObservation(req) &&
           ['GET', 'HEAD'].includes(req.method)), JSON.stringify(requests.filter(req => req.origin !== origin || !req.pathname.startsWith(prefix) || !['GET', 'HEAD'].includes(req.method))));
         await page.goto(origin + '/formal-fixture');
         const storage = await page.evaluate(({ keys, namespace, bagKey }) => ({
