@@ -32120,35 +32120,16 @@ function c1dHeroSole(img) {
 }
 var c1dFootLog = { lastLift: 0, frames: 0 };
 // 開發者快速測試：依「這一關之前正常會完成的主線」準備秘笈與基本資源（只寫在開發者副本；正式玩家完全不受影響）
-const C1D_DEV_RECIPES = {
-  '1-1': [], '1-2b': [], '1-3': ['basicHammer'], '2-1': ['basicHammer', 'balloonLollipop'], '2-2': ['basicHammer', 'balloonLollipop'],
-  '2-3': ['basicHammer', 'balloonLollipop', 'balloonVolleyball'], '2-4': ['basicHammer', 'balloonLollipop', 'balloonVolleyball'],
-  '3-1': ['basicHammer', 'balloonLollipop', 'balloonVolleyball'], '3-2': ['basicHammer', 'balloonLollipop', 'balloonVolleyball', 'balloonUmbrella'],
-  '3-3': ['basicHammer', 'balloonLollipop', 'balloonVolleyball', 'balloonUmbrella'],
-};
-function c1dDevPrep(sid) {
+function c1dDevPrep(stageId) {
   if (!advDevMode()) return false;
-  const inv = playerInventory, rec = C1D_DEV_RECIPES[sid] || [];
-  inv.unlockedRecipes = inv.unlockedRecipes || {}; rec.forEach(k => { inv.unlockedRecipes[k] = true; });
-  inv.craftedItems = inv.craftedItems || {};
-  inv.coins = Math.max(inv.coins || 0, 150); inv.balloon260 = Math.max(inv.balloon260 || 0, 30); inv.roundBalloon = Math.max(inv.roundBalloon || 0, 4);
-  inv.craftedItems.basicSword = Math.max(inv.craftedItems.basicSword || 0, 1);
-  if (rec.includes('basicHammer')) { inv.craftedItems.basicHammer = Math.max(inv.craftedItems.basicHammer || 0, 1); try { whUnlock('devPrep'); } catch (e) {} }
-  if (rec.includes('balloonUmbrella')) inv.craftedItems.balloonUmbrella = Math.max(inv.craftedItems.balloonUmbrella || 0, 1);
-  inv.balloonDog = Object.assign({}, inv.balloonDog || {}, { present: true, turnsLeft: Math.max((inv.balloonDog || {}).turnsLeft || 0, 3) });
-  const f = c2Flow();
-  if (sid === '3-2' || sid === '3-3') { f.stage31 = f.stage31 || { claimed: true, claimedAt: Date.now(), dev: true }; f.stage31Clears = Math.max(f.stage31Clears || 0, 1); f.umbrellaFirstCraft = f.umbrellaFirstCraft || { at: Date.now(), dev: true }; }
-  if (sid === '3-3') { f.stage32 = f.stage32 || { claimed: true, claimedAt: Date.now(), dev: true }; f.stage32Clears = Math.max(f.stage32Clears || 0, 1); }
-  try { saveInventory(); } catch (e) {}
-  if (/^3-/.test(sid)) { try { const d = advLoad(); const pr = advProgressEnsure(d); OFFICIAL_ADVENTURE_STAGE_IDS.forEach(i => { if (!pr.cleared.includes(i)) pr.cleared.push(i); }); d.progress = pr; advSave(d); } catch (e) {} }
-  console.log('[DevPrep] ' + sid + ' 之前的正常進度：秘笈 ' + (rec.join('、') || '（無）') + '；寫在開發者副本 ' + ADV_DEVPLAY_SUFFIX);
+  c34DevBegin(stageId);
   return true;
 }
 function c1dDevJump(what) {
   if (!advDevMode()) return;
   try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
   if (what === 'final') { c1dDevPrep('2-4'); startOrangeKingBossTestLevel(); return; }
-  if (what === 'c2entry') { c1dDevPrep('3-1'); advBootOpenHome({ ctx: { stageId: '2-4', gameState: 'clear', entry: 'normal', mode: 'official' } }); return; }
+  if (what === 'c2entry') { c1dDevPrep('3-1'); c34OpenTestHome('3-1'); return; }
   if (what === '3-1') { c1dDevPrep('3-1'); c2Start31(); return; }
   if (what === '3-2') { c1dDevPrep('3-2'); nextBringDog = true; c2Start32(); return; }
   const place = { swift: 760, armored: 1680 }[what];
@@ -33712,17 +33693,19 @@ function c34Start(sid, mode, section) {
   if (!ADV_WORKSPACE) return;
   if (sid === '3-4A' || sid === '3-4B' || !sid) sid = '3-4';   // 舊名稱（v0.4.10）一律進 3-4
   const dev = mode === 'dev' && advDevMode();
-  const dog = nextBringDog === true;
   v396DevDog = false;
   if ((typeof advIntroActive !== 'undefined' && advIntroActive) || (typeof ocActive !== 'undefined' && ocActive) || (typeof gameStartGateActive !== 'undefined' && gameStartGateActive)) return;
   const idx = getLevelIndexByStageId(sid); if (idx < 0) return;
+  if (dev) c34DevBegin(sid);
+  const dog = nextBringDog === true;
   c2HideDone();
   try { const pe = document.getElementById('pause-overlay'); if (pe) { pe.style.display = 'none'; pe.classList.remove('active'); } } catch (e) {}
   try { if (typeof h2IsOpen === 'function' && h2IsOpen()) { h2MapClose(); h2ClosePanel(); closeHomeScreen(); } } catch (e) {}
   try { const res = document.getElementById('result-overlay'); if (res) res.style.display = 'none'; hideResultButtons(); hideFailedOverlay(); } catch (e) {}
   bringBalloonDog = dog; levelStartBringDog = dog; nextBringDog = false;
   runWithAssetGate(getAssetGroupsForLevel(idx), '風之峽谷準備中...', () => {
-    if (dev) c34DevBegin(sid); else c34DevEnd('normal-start');
+    if (!dev) c34DevEnd('normal-start');
+    nextBringDog = false;
     if (c34.devBagMode) saveInventory();
     advMarkTestEntry('c2-stage-' + sid.toLowerCase());
     c34.dev = dev;   // 第二大陸既有規則（test_only）
@@ -33744,12 +33727,12 @@ function c34Start(sid, mode, section) {
     console.log('[3-4] 進入 ' + sid + (c34.section === 'pool' ? '（水池區段）' : '') + (dev ? '（開發測試裝備）' : ''));
   });
 }
-// 只有同時啟用訪客沙盒及開發工具，才建立獨立的 3-4 測試背包。
+// 開發快捷入口共用獨立背包；網址入口仍須同時啟用訪客沙盒及開發工具。
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 const C34_TEST_BAG_MODES = ['cumulative', 'stocked', 'empty'];
 function c34BagMode() {
   const query = new URLSearchParams(location.search);
-  if (!advDevMode() || query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
+  if (!advDevMode()) return null;
   const mode = query.get('ch3bag');
   return C34_TEST_BAG_MODES.includes(mode) ? mode : 'cumulative';
 }
@@ -33783,13 +33766,17 @@ function adventureLevelResourceConfig(lv) {
 }
 
 function c34CumulativeResources(stageId = '3-4') {
-  const stages = OFFICIAL_ADVENTURE_STAGE_IDS.concat(CH3_TEST_STAGES.slice(0, CH3_TEST_STAGES.indexOf(stageId)));
+  const route = OFFICIAL_ADVENTURE_STAGE_IDS.concat(CH3_TEST_STAGES);
+  const stages = route.slice(0, route.indexOf(stageId));
   const totals = { coins: 0, balloon260: 0, roundBalloon: 0 };
   const recipes = new Set();
   for (const id of stages) {
     const { fixed, hidden } = adventureLevelResourceConfig(LEVELS[getLevelIndexByStageId(id)]);
     for (const key of Object.keys(totals)) totals[key] += fixed[key];
-    if (id === BALLOON_DICE_UNLOCK_STAGE) recipes.add('balloonDice');
+    if (id === BALLOON_DICE_UNLOCK_STAGE) {
+      recipes.add('balloonDice');
+      recipes.add('basicHammer');
+    }
     for (const item of hidden) {
       totals.coins += item.coins;
       if (item.recipeKey) recipes.add(item.recipeKey);
@@ -33805,8 +33792,23 @@ function c34CreateInventory(stageId, mode) {
     : { coins: 0, balloon260: 0, roundBalloon: 0 };
   const inventory = Object.assign(structuredClone(INVENTORY_DEFAULTS), resources);
   for (const id of recipes) inventory.unlockedRecipes[id] = true;
-  inventory.tutorialSwordGranted = inventory.tutorialDogGranted = true;
+  if (stages.includes('1-1')) {
+    inventory.tutorialSwordGranted = inventory.tutorialDogGranted = true;
+    inventory.craftedItems.basicSword = 1;
+  }
+  if (stages.includes(BALLOON_DICE_UNLOCK_STAGE)) {
+    inventory.chapter1Flow.dogIntroDone = true;
+    inventory.chapter1Flow.dogCraftIntroDone = true;
+    inventory.chapter1Flow.forcedDogTripDone = true;
+    inventory.chapter1Flow.hammerRecipeGranted = true;
+    inventory.balloonDog = { present: true, turnsLeft: CONFIG.DOG_INITIAL_TURNS || 3 };
+  }
+  if (stages.includes('2-4')) inventory.craftedItems.basicHammer = 1;
   inventory.c2Flow = {};
+  if (stages.includes('3-2')) {
+    inventory.craftedItems.balloonUmbrella = 1;
+    inventory.c2Flow.umbrellaFirstCraft = { how: 'craft', dev: true };
+  }
   for (const id of CH3_TEST_STAGES.filter(id => stages.includes(id))) {
     const key = 'stage' + id.replace('-', '');
     inventory.c2Flow[key] = { claimed: true, dev: true };
@@ -33833,7 +33835,12 @@ function c34DevBegin(stageId) {
     playerInventory = inventory && typeof inventory.coins === 'number' ? inventory : c34CreateInventory(stageId, mode);
     nextBringDog = playerInventory.ch3TestDogPlanned === true;
     const data = advLoad();
-    data.progress = { ...advProgressEnsure(data), cleared: OFFICIAL_ADVENTURE_STAGE_IDS.slice() };
+    const { stages, recipes } = c34CumulativeResources(stageId);
+    playerInventory.unlockedRecipes = { ...INVENTORY_DEFAULTS.unlockedRecipes, ...playerInventory.unlockedRecipes };
+    for (const id of recipes) playerInventory.unlockedRecipes[id] = true;
+    const progress = advProgressEnsure(data);
+    const prior = new Set([...progress.cleared, ...stages]);
+    data.progress = { ...progress, cleared: OFFICIAL_ADVENTURE_STAGE_IDS.filter(id => prior.has(id)) };
     advSave(data);
     saveInventory();
   }
