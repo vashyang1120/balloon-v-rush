@@ -78,4 +78,4 @@ await advance('22-clear',s=>s.done||s.state==='clear',['ArrowRight','z'],20);
 await page.locator('#h2-nav-go').waitFor({timeout:15000});await snap('23-clear-home');console.log('NORMAL_FLOW_PASS');
 
 }finally{await writeFile(out+'/normal-flow-log.json',JSON.stringify(log,null,2));await context.close();await browser.close();server.close();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+})().catch(e=>{console.error(e);process.exit(1);});
