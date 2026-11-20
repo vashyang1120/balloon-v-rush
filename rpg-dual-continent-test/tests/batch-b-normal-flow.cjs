@@ -47,7 +47,7 @@ const L=s0.layout;const top=h=>s0.groundY-h;
 const onMesa=(s,m)=>s.ground&&s.x+s.w>m.x&&s.x<m.x+m.w&&Math.abs(s.y+s.h-top(m.h))<3;
 await page.keyboard.press('Digit2');
 await advance('04-launcher',s=>s.x>=s.padHit.x+s.padHit.w/2-90,['ArrowRight'],15);
-for(let n=0;n<5;n++){const s=await state();if(s.angle===60)break;await input(['z']);await page.waitForTimeout(1100);await input([]);await page.waitForTimeout(100);}
+await advance('04-angle-60',s=>s.angle===60,['z'],15);
 assert.equal((await state()).angle,60);
 await page.keyboard.press('Digit3');
 await advance('05-first-mesa',s=>onMesa(s,L.p1),s=>s.x<1780?['ArrowRight']:[],20);
