@@ -189,7 +189,7 @@ function c34ResolveFall(f) {
   const head = c34Art.landPose().top + 6;
   const sheltered = canopy && right > left && left >= canopy.reach0 && right <= canopy.reach1 &&
     Math.max(canopy.surfaceAt(left), canopy.surfaceAt(right)) <= head;
-  return { canopy, streams: c34FallStreams(f, canopy), touching: !sheltered && c34UnderFall(f) };
+  return { canopy, streams: c34FallStreams(f, canopy), touching: right > left && !sheltered && c34UnderFall(f) };
 }
 
 const C34_IMPACT_FADE_STEPS = 24;

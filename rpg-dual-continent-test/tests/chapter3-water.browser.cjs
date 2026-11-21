@@ -462,6 +462,74 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       timings: [1200, 300, 600, 150], mixed: 1050, wind: true, soaked: { wet: 1200, wind: false },
     });
   });
+  await t.test('both waterfalls use the current canopy geometry for shelter and partial runoff', async () => {
+    const result = await page.evaluate(() => {
+      const before = { ...player }, slot = activeSlot;
+      const outcomes = c34Falls().map(fall => {
+        function sample(offset, facingRight, block, tool, vx = 0) {
+          Object.assign(player, { x: fall.x + offset - player.w / 2, y: c34FallBase(fall) - player.h,
+            onGround: true, facingRight, c2Block: block, vx, vy: 0, invincible: 0, popScare: 0 });
+          activeSlot = tool;
+          const interaction = c34ResolveFall(fall);
+          return { wet: interaction.touching, cut: interaction.canopy?.width || 0, streams: interaction.streams.length };
+        }
+        return {
+          none: sample(0, true, false, 'sword'),
+          overhead: [sample(0, true, false, 'umbrella'), sample(0, false, false, 'umbrella')],
+          side: [sample(0, true, true, 'umbrella'), sample(0, false, true, 'umbrella')],
+          partial: [sample(-29, true, true, 'umbrella'), sample(29, false, true, 'umbrella')],
+          moving: [sample(0, true, false, 'umbrella', 2), sample(0, false, false, 'umbrella', -2)],
+          restored: sample(0, true, false, 'umbrella'),
+          width: fall.w,
+        };
+      });
+      Object.assign(player, before);
+      activeSlot = slot;
+      return outcomes;
+    });
+    for (const { none, overhead, side, partial, moving, restored, width } of result) {
+      assert.ok(Math.abs(width - 46.46) < 0.015);
+      assert.deepEqual(none, { wet: true, cut: 0, streams: 0 });
+      assert.ok(overhead.every(pose => !pose.wet && pose.cut > 0));
+      assert.ok(side.every(pose => pose.wet && pose.cut === 0));
+      assert.ok(partial.every(pose => pose.wet && pose.cut > 0 && pose.cut < width && pose.streams > 0));
+      assert.ok(moving.every(pose => !pose.wet && pose.cut > 0));
+      assert.deepEqual(restored, overhead[0]);
+    }
+  });
+
+  await t.test('08 changes both arm and leg pixels across its loop without moving the head or waterline', async () => {
+    const result = await page.evaluate(() => {
+      const pose = c34Art.swimPose(200, 300, 0, true, false, 0);
+      const frame = time => {
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        c34Art.swimmer({ ...pose, bobTime: time });
+        return ctx.getImageData(100, 128, 220, 280).data;
+      };
+      const a = frame(0), b = frame(375), loop = frame(1200);
+      const changes = (first, second, top, bottom) => {
+        let count = 0;
+        for (let y = top; y < bottom; y++) {
+          for (let x = 0; x < 220; x++) {
+            const offset = (y * 220 + x) * 4;
+            if (Math.abs(first[offset + 3] - second[offset + 3]) > 25) count++;
+          }
+        }
+        return count;
+      };
+      const row = sourceY => Math.round(pose.y + (sourceY - 914) * pose.factor - 128);
+      return {
+        head: changes(a, b, row(150), row(570)),
+        arms: changes(a, b, row(640), row(900)),
+        legs: changes(a, b, row(970), row(1410)),
+        closedLoop: changes(a, loop, row(150), row(1410)),
+      };
+    });
+    assert.equal(result.head, 0);
+    assert.ok(result.arms > 20, JSON.stringify(result));
+    assert.ok(result.legs > 20, JSON.stringify(result));
+    assert.equal(result.closedLoop, 0);
+  });
   await t.test('climb reach uses the left-bank geometry and the approved six frames', async () => {
     const result = await page.evaluate(() => {
       const pool = c34Pool();
@@ -676,6 +744,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           if (rpgActive) rpgClose('finished');
           rpgQueue.length = 0;
           c34.taught.add('c34_first_wet');
+          activeSlot = 'sword';
           Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
             vx: 0, vy: 0, onGround: true });
           cameraX = player.x - 380;
@@ -823,7 +892,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         const onMesa = mesa => onTop(mesa.x, mesa.w, layout.y(mesa.h));
 
         activeSlot = 'umbrella';
-        const launcher = advance(240, () => player.x >= 960);
+        const launcher = advance(360, () => player.x >= 960);
         wdSetAngleIndex(WD_TUNING.angles.indexOf(60));
         const firstMesa = advance(280, () => onMesa(layout.p1), { right: () => player.x < 1780 });
         advance(90, () => player.x >= layout.p1.x + layout.p1.w - player.w - 8);
@@ -843,6 +912,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         activeSlot = 'umbrella';
         advance(100, () => player.x + player.w / 2 >= layout.fallX);
         const filled = advance(430, () => c34.level === 1, { right: () => false });
+        advance(1240, () => c34.wet === 0, { right: () => false });
         const pad = platforms.find(p => p.c34Pad);
         advance(70, () => player.x >= layout.pool.x - player.w / 2 - 4);
         const reachedPad = advance(120, () => onTop(pad.x, pad.w, c34PlatformSurface(pad)),
