@@ -102,10 +102,10 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     }));
     assert.equal(wet.line, '啊！！我全身都溼了...身體變好重好難動...');
     assert.equal(wet.face, 'balloonv_surprised');
-    assert.equal(wet.t, 1800);
+    assert.equal(wet.t, 1200);
     assert.equal(wet.level, 0);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.evaluate(() => c34.wet), 1800);
+    assert.equal(await page.evaluate(() => c34.wet), 1200);
     await record(page, 'desktop-first-wet');
   });
 
@@ -329,7 +329,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   });
 
   await openSection(page, 'pool');
-  await t.test('pool fills only on rightward diversion, follows water level and drains wetness per wind entry', async () => {
+  await t.test('pool fills only on rightward diversion, follows water level and dries continuously while in wind', async () => {
     const actual = await page.evaluate(() => {
       const { x, baseY } = c34Pool();
       const f = c34Falls()[1], pad = platforms.find(p => p.c34Pad);
@@ -342,15 +342,21 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       c34Step();
       const left = { stream: c34.stream, level: c34.level, wet: c34.wet };
       put(f.x, baseY, true, 'umbrella');
-      for (let i = 0; i < 180; i++) c34Step();
+      let clearsPad = true;
+      const fillStep = () => {
+        c34Step();
+        const stream = c34.falls.get(f.id).streams[0];
+        clearsPad &&= !!stream?.fills && Math.max(stream.outX, stream.x) <= pad.x - 44;
+      };
+      for (let i = 0; i < 180; i++) fillStep();
       const half = { stream: c34.stream, level: c34.level, surface: c34SurfaceY(), pad: pad.y, wet: c34.wet };
       put(f.x - 160, baseY, true, 'umbrella');
       const awayFromCanopy = c34FallCanopy(f) === null;
       for (let i = 0; i < 60; i++) c34Step();
       const stop = { stream: c34.stream, level: c34.level, surface: c34SurfaceY(), awayFromCanopy };
       put(f.x, baseY, true, 'umbrella');
-      for (let i = 0; i < 240; i++) c34Step();
-      const full = { level: c34.level, surface: c34SurfaceY(), pad: pad.y };
+      for (let i = 0; i < 240; i++) fillStep();
+      const full = { level: c34.level, surface: c34SurfaceY(), pad: pad.y, clearsPad };
       put(pad.x + pad.w * 0.8, pad.y, true, 'sword');
       for (let i = 0; i < 80; i++) c34Step();
       const stood = { sink: pad.c34Sink, angle: pad.c34Angle, occupied: pad.c34Occupied,
@@ -368,7 +374,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       let windValues, dryLine, dryFace;
       try {
         wdFlowAt = () => wind ? 1 : 0;
-        c34.inWind = false;
+        c34.dryingWindStart = null;
         c34StepWet(false);
         const dry = rpgQueue.find(q => q.scene.id === 'c34_first_dry_wind')?.scene.pages[0];
         dryLine = dry?.text; dryFace = dry?.face;
@@ -376,7 +382,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         c34StepWet(false); windValues.push(c34.wet);
         wind = false; c34StepWet(false); windValues.push(c34.wet);
         wind = true; c34StepWet(false); windValues.push(c34.wet);
-        c34.wet = 2; c34.inWind = false; c34StepWet(false); windValues.push(c34.wet);
+        c34.wet = 2; c34.dryingWindStart = null; c34StepWet(false); windValues.push(c34.wet);
       } finally { wdFlowAt = priorWdFlow; }
       const taught = rpgQueue.filter(q => q.scene.id === 'c34_first_dry_wind').length;
       return { x, baseY, initial, left, half, stop, full, stood, released, wet, windValues, dryLine, dryFace, taught };
@@ -397,6 +403,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(stop.level, half.level);
     assert.equal(stop.surface, half.surface);
     assert.equal(full.level, 1);
+    assert.equal(full.clearsPad, true);
     assert.equal(full.surface - actual.baseY, 8);
     assert.ok(full.pad < half.pad);
     assert.ok(stood.sink > 2 && stood.sink < 5);
@@ -407,7 +414,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.ok(Math.abs(released.angle) < 0.001);
     assert.equal(released.occupied, false);
     assert.deepEqual(wet, { move: 0.7, height: 0.7, swim: false });
-    assert.deepEqual(actual.windValues, [1620, 1619, 1618, 1438, 0]);
+    assert.deepEqual(actual.windValues, [1196, 1192, 1191, 1187, 0]);
     assert.equal(actual.dryLine, '哇！這裡的風讓我身體乾了一些！！');
     assert.equal(actual.dryFace, 'balloonv_happy');
     assert.equal(actual.taught, 1);
@@ -415,6 +422,46 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await record(page, 'desktop-3-4-full-pool');
   });
 
+  await t.test('C3 full and half wetness, mixed rates and repeated wind crossings', async () => {
+    const result = await page.evaluate(() => {
+      const vent = windVents.find(v => v.id === '3-4-left-bank');
+      const original = { x: player.x, y: player.y, wet: c34.wet, start: c34.dryingWindStart };
+      const move = intoWind => {
+        player.x = vent.x + (intoWind ? (vent.w - player.w) / 2 : -player.w - 1);
+        player.y = vent.y - player.h;
+      };
+      const dryTicks = (wet, inWind) => {
+        c34.wet = wet;
+        move(inWind);
+        let ticks = 0;
+        while (c34.wet > 0 && ticks < 1300) {
+          c34StepWet(false);
+          ticks++;
+        }
+        return ticks;
+      };
+      const timings = [dryTicks(1200, false), dryTicks(1200, true),
+        dryTicks(600, false), dryTicks(600, true)];
+      c34.wet = 1200;
+      for (let i = 0; i < 60; i++) {
+        move(i % 2 === 0);
+        c34StepWet(false);
+      }
+      const mixed = c34.wet;
+      move(true);
+      c34StepWet(false);
+      const wind = c34.dryingWindStart !== null;
+      c34StepWet(true);
+      const soaked = { wet: c34.wet, wind: c34.dryingWindStart !== null };
+      Object.assign(player, { x: original.x, y: original.y });
+      c34.wet = original.wet;
+      c34.dryingWindStart = original.start;
+      return { timings, mixed, wind, soaked };
+    });
+    assert.deepEqual(result, {
+      timings: [1200, 300, 600, 150], mixed: 1050, wind: true, soaked: { wet: 1200, wind: false },
+    });
+  });
   await t.test('swimming, jump ratios, exit route and test-save isolation', async () => {
     const actual = await page.evaluate(() => {
       if (rpgActive) rpgClose('skipped');
@@ -475,7 +522,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(actual.onWater.swim, true);
     assert.equal(actual.onWater.hp, true);
     assert.equal(actual.onWater.feet, 20);
-    assert.equal(actual.onWater.wet, 1800);
+    assert.equal(actual.onWater.wet, 1200);
     assert.ok(actual.onWater.count > 0);
     assert.equal(actual.onWater.motion.move, 0.5);
     assert.equal(actual.onWater.motion.height, 0.4);

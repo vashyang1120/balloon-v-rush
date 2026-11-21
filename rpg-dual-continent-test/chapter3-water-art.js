@@ -229,25 +229,119 @@ const c34Art = (() => {
     });
   }
 
-  function column(x, top, end, width, time) {
+  function column(x, top, end, width, time, contact, fadeFrom = end) {
     const im = image('01_waterfall_main', time) || image('01_waterfall_base');
     if (!im || end <= top) return;
-    const w = width * 1.33, h = w * catalog['01_waterfall_main'].size[1] / 724;
-    clip(x - w / 2, top, w, end - top, () => {
+    // The opaque core of the approved 724 px texture spans about 270 px.
+    const w = width * 724 / 270, h = width * catalog['01_waterfall_main'].size[1] / 270;
+    const drawColumn = () => {
       for (let y = end - h; y + h > top; y -= h) ctx.drawImage(im, x - w / 2, y, w, h + 0.35);
-    });
+    };
+    if (contact) {
+      ctx.save();
+      ctx.beginPath();
+      const left = x - width / 2, right = x + width / 2;
+      ctx.moveTo(left, top);
+      ctx.lineTo(right, top);
+      for (let i = 24; i >= 0; i--) {
+        const px = left + width * i / 24;
+        ctx.lineTo(px, Math.max(top, contact.surfaceAt(px)));
+      }
+      ctx.closePath();
+      ctx.clip();
+      drawColumn();
+      ctx.restore();
+      return;
+    }
+    clip(x - width / 2, top, width, fadeFrom - top, drawColumn);
+    if (fadeFrom < end) {
+      ctx.save();
+      const alpha = ctx.globalAlpha, step = (end - fadeFrom) / 8;
+      for (let i = 0; i < 8; i++) {
+        ctx.globalAlpha = alpha * (7.5 - i) / 8;
+        clip(x - width / 2, fadeFrom + step * i, width, step, drawColumn);
+      }
+      ctx.restore();
+    }
   }
 
-  function guide(side, hitX, hitY, outX, outY, landX, landY, time) {
-    at('02_umbrella_split', time, hitX, hitY, 0.036);
-    const dx = landX - outX, dy = landY - outY;
-    if (side === 'split' || Math.hypot(dx, dy) < 14) return;
-    const id = '02_umbrella_' + side;
-    const length = Math.hypot(dx, dy);
-    ctx.save(); ctx.translate(outX, outY);
-    ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
-    at(id, time, 0, 0, Math.min(0.19, length / 1640));
-    ctx.restore();
+  function guideThickness(width, i) {
+    return 1.75 * width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+  }
+
+  function clipCanopyGuide(points, cx, width) {
+    // Join the edges along the canopy before painting the individual texture strips.
+    const edge = side => points.slice(0, 10).map((point, i) => {
+      const before = points[Math.max(0, i - 1)], after = points[i + 1];
+      const dx = after.x - before.x, dy = after.y - before.y;
+      const halfWidth = (guideThickness(width, i) + guideThickness(width, i + 1)) / 4;
+      const offset = side * halfWidth / Math.hypot(dx, dy);
+      return { x: point.x - cx - offset * dy, y: point.y + offset * dx };
+    });
+    const left = edge(1), right = edge(-1).reverse();
+    const trace = edge => {
+      ctx.lineTo(edge[0].x, edge[0].y);
+      for (let i = 1; i < edge.length - 1; i++) {
+        const point = edge[i], next = edge[i + 1];
+        ctx.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
+      }
+      ctx.lineTo(edge.at(-1).x, edge.at(-1).y);
+    };
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    trace(left);
+    trace(right);
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  function guide(canopy, stream, cx, width, time) {
+    const { side, outX, outY, x, y } = stream;
+    // Crop the descending leg of the directional art. Its baked bend is upstream of this crop.
+    const im = image('02_umbrella_' + side, time);
+    if (!im) return;
+    const sourceX = side === 'right' ? 1360 : 240;
+    const points = [{ x: canopy.x, y: canopy.y }];
+    for (let i = 1; i <= 8; i++) {
+      const px = canopy.x + (outX - canopy.x) * i / 8;
+      points.push({ x: px, y: Math.max(canopy.y, canopy.surfaceAt(px)) });
+    }
+    for (let i = 1; i <= 16; i++) {
+      const t = i / 16;
+      points.push({ x: outX + (x - outX) * t, y: outY + (y - outY) * (0.4 * t + 0.6 * t * t) });
+    }
+    ctx.save();
+    clipCanopyGuide(points, cx, width);
+    for (let i = 1; i < points.length; i++) {
+      if (i === 10) ctx.restore();
+      const a = points[i - 1], b = points[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 0.01) continue;
+      const thickness = guideThickness(width, i);
+      ctx.save();
+      ctx.translate(a.x - cx, a.y);
+      ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
+      ctx.globalAlpha *= 0.90;
+      // Extend the corner strips under the shared mask so their rotated ends cannot leave gaps.
+      const bleed = i <= 9 ? 3 : 0;
+      ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50,
+        -thickness / 2 - bleed, -0.75 - bleed, thickness + 2 * bleed, length + 1.5 + 2 * bleed);
+      ctx.restore();
+    }
+  }
+
+  function platformSpan(p) {
+    const spec = catalog['06_balloon_platform'];
+    const [x0] = spec.standing_surface.start, [x1] = spec.standing_surface.end;
+    const factor = p.w / (x1 - x0);
+    const [ax, ay] = spec.anchor, [w, h] = spec.size;
+    const angle = p.c34Angle || 0;
+    const center = p.x + p.w / 2;
+    // Project the four corners of the rotated sprite onto the horizontal axis.
+    const xs = [-ax, w - ax].flatMap(x => [-ay, h - ay].map(y =>
+      center + factor * (x * Math.cos(angle) - y * Math.sin(angle))));
+    return [Math.min(...xs), Math.max(...xs)];
   }
 
   function platform(p, cx) {
@@ -265,10 +359,11 @@ const c34Art = (() => {
 
   function landPose() {
     const idle = getAdventureImage('idle');
-    if (!idle) return { top: player.y, headWidth: player.w * 0.75 };
+    if (!idle) return { top: player.y, headWidth: player.w * 0.75, footOffset: 0 };
     const rect = getHeroDrawRect(idle, 1);
     const ratio = rect.dW / idle.naturalWidth;
-    return { top: player.y + rect.dY + landHead.top * ratio, headWidth: landHead.width * ratio };
+    return { top: player.y + rect.dY + landHead.top * ratio, headWidth: landHead.width * ratio,
+      footOffset: rect.dY + 399 * ratio - player.h };
   }
 
   function swimPose(x, surface, time, facingRight) {
@@ -325,6 +420,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, landPose, swimPose, swimmer, drop,
+  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();

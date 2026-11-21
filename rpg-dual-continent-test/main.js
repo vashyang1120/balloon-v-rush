@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch A Revision 2';
+const GAME_BUILD_REVISION = 'Batch C3';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -13497,7 +13497,10 @@ function drawWorldInner() {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
   try { drawHealFx(cx, 'front'); } catch (e) {}
-  if (c34Is()) c34Falls().forEach(f => c34DrawFall(f, cx));
+  if (c34Is()) {
+    c34Falls().forEach(f => c34DrawFall(f, cx));
+    c34DrawPoolImpact(cx);
+  }
   c34DrawWetStatus(cx);
 
   // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
@@ -13586,6 +13589,7 @@ function drawPlayer(cx) {
       ctx.imageSmoothingQuality = 'high';
       const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
       ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (c34Is()) c34HeroWater.heroDrips(heroImg, hr);
       if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
         const gr = getHeroDrawRect(ghostImg, 1, 0);
         ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
@@ -13603,6 +13607,7 @@ function drawPlayer(cx) {
       ctx.imageSmoothingQuality = 'high';
       const hr = getHeroDrawRect(heroImg, effectiveScale, royalN); // v0.3.46：hammer 補償倍率 / 王權劍定位
       ctx.drawImage(heroImg, hr.dX, hr.dY, hr.dW, hr.dH);
+      if (c34Is()) c34HeroWater.heroDrips(heroImg, hr);
       if (ghostImg) { // F4：原本氣球劍 frame 半透明對照
         const gr = getHeroDrawRect(ghostImg, 1, 0);
         ctx.save(); ctx.globalAlpha = 0.4; ctx.drawImage(ghostImg, gr.dX, gr.dY, gr.dW, gr.dH); ctx.restore();
@@ -18787,6 +18792,11 @@ function loadImageRecord(r) {
   if (r.promise) return r.promise;
   r.status = 'loading';
   const cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
+  if (window.adventurePlaytestReady && r.groups.some(group => group === 'c34canyon' || group === 'chapter3vertical')) {
+    // The isolated playtest serves its own assets. Retry there instead of attempting the blocked raw origin.
+    const primary = cands[0];
+    cands.splice(1, cands.length - 1, { ...primary, url: primary.url + '&asset-retry=1' });
+  }
   r.promise = new Promise(resolve => {
     const tryAt = (i) => {
       if (i >= cands.length) {
@@ -18851,9 +18861,11 @@ function preloadAssetGroup(groupName, options) {
   st.settled = false;
   const loadOne = ({ r, e }) => (e.type === 'audio' ? loadAudioRecord(r, e) : loadImageRecord(r)).then(() => { if (opts.onProgress) opts.onProgress(groupName); });
   // v0.3.61：RPG 立繪群組一張一張依序載入（避免手機上同時下載太多張而逾時）
-  const allDone = (groupName === 'rpg')
-    ? recs.reduce((p, x) => p.then(() => loadOne(x)), Promise.resolve())
-    : Promise.all(recs.map(loadOne));
+  const workers = groupName === 'rpg' ? 1 : groupName === 'c34canyon' ? 6 : 0;
+  let next = 0;
+  const allDone = workers ? Promise.all(Array.from({ length: workers }, async () => {
+    while (next < recs.length) await loadOne(recs[next++]);
+  })) : Promise.all(recs.map(loadOne));
   st.promise = allDone.then(() => {
     const sum = summarizeAssetGroup(groupName);
     st.settled = true; st.summary = sum;
@@ -26112,6 +26124,7 @@ function c2DrawUmbFrame(key, cx, bob, fxX, alpha) {
   ctx.translate(P.dx || 0, 0);                                   // 水平微調（翻轉後一起左右對稱）
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, -f.ax * k, -f.gy * k, img.naturalWidth * k, img.naturalHeight * k);
+  if (alpha === 1 && c34Is()) c34HeroWater.drips(0, 0);
   ctx.restore();
 }
 // ── ⑦-3 格擋：按住攻擊鍵（Z／手機攻擊鍵）＋站在地上 → 站定、不能移動／跳／轉向；前方碰到蠍子 → 擋下（蠍子轉向、不扣血；雨傘 −1）──
@@ -26458,7 +26471,9 @@ function c2CompleteField() {
     }
     const r = o.apply(this, arguments);
     if (gameState === 'playing') {
-      if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++; else c2Umb.runStep = 0;
+      if (!c34Is()) {
+        if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++; else c2Umb.runStep = 0;
+      }
       if (activeSlot === 'hammer' || activeSlot === 'umbrella') c2Tool.last = activeSlot;
       try { c2TreeSoundStep(); } catch (e) {}
     }
@@ -33558,10 +33573,10 @@ var C34 = {
   },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
-  water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
+  water: { steps: 20 * 60, windDryRate: 4, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
 };
 var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits: 0, bagGot: false,
-  swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true, noUmbrellaFalls: 0 };
+  swim: false, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true, noUmbrellaFalls: 0 };
 function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }
@@ -33573,6 +33588,8 @@ function c34Pool() { const lv = c34Lv(); return (lv && lv.c34) ? (lv.c34PoolDef 
 function c34SurfaceY() { const P = C34.pool, D = c34Pool(); return (D ? D.baseY : GROUND_Y) + P.surf0 + (P.surf1 - P.surf0) * c34.level; }
 
 const C34_G = GROUND_Y;
+// 18A entrance median (201 px) × standing hero scale (120 × 387 / 410 / 490).
+const C34_FALL_WIDTH = 46.46;
 var C34_LAY = (function () {
   const G = C34_G, L = {};
   L.devX = C34.wd.deviceX;                 // 導風裝置底座左緣
@@ -33623,8 +33640,8 @@ const C2_STAGE_34 = (function () {
       { id: 'A3', x: L.p2.x, w: L.ct.x - L.p2.x, resetX: L.p2.x + 60, c34: 'abyss' },                       // P2 右邊的深淵 → 受傷一次＋回到 P2
     ],
     c34Falls: [
-      { id: 'WA', x: 620, w: 34, vx: 4, vy: 2, split: true },                    // 入口景觀瀑布（只是環境互動）
-      { id: 'WB', x: L.fallX, w: 36, vx: 6, vy: 2, baseY: ct },                  // 水池瀑布（雨傘導流 → 水位）
+      { id: 'WA', x: 620, w: C34_FALL_WIDTH, vx: 4, vy: 2, split: true },        // 入口景觀瀑布（只是環境互動）
+      { id: 'WB', x: L.fallX, w: C34_FALL_WIDTH, vx: 6, vy: 2, baseY: ct },      // 水池瀑布（雨傘導流 → 水位）
     ],
     cameraZones: [
       { id: 'A1', x0: 0, x1: L.p1.x, camMin: 0, camMax: L.length - CANVAS_W, lead: 0.23, ease: 0.12 },
@@ -33847,8 +33864,8 @@ function c34Complete(sid) {
   const G = 'c34canyon';
   const BG = 'chapter3vertical';
   const addGroup = M => {
-    if (M && !M[G]) M[G] = c34Art.entries(false);
-    if (M && !M[BG]) M[BG] = c34Art.entries(true);
+    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries()].map(entry => ({ ...entry, timeoutMs: 30000 }));
+    if (M && !M[BG]) M[BG] = c34Art.entries(true).map(entry => ({ ...entry, timeoutMs: 30000 }));
     return M;
   };
   try { addGroup(getAssetManifest()); } catch (e) {}
@@ -33987,6 +34004,7 @@ function c34Complete(sid) {
   });
   wrapFn('drawPlayer', o => function (cx) {
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
+    if (c34Is() && c34HeroWater.drawShower(cx)) return;
     return o.apply(this, arguments);
   });
   wrapFn('rpgBuildScene', o => function (id) {
