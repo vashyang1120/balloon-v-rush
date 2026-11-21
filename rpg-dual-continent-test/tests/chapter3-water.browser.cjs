@@ -655,7 +655,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   });
 
   for (const [mode, viewport] of [['desktop', { width: 1280, height: 820 }], ['mobile', { width: 844, height: 390 }]]) {
-    await t.test(mode + ' low-water rescue dialog, persistence and re-approach warning', async () => {
+    await t.test(mode + ' pool rescue, swim, climb and full-water exit', async () => {
       const mobile = mode === 'mobile';
       const videoDir = process.env.CH3_VIDEO_DIR;
       const context = await browser.newContext({
@@ -663,9 +663,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         ...(videoDir ? { recordVideo: { dir: videoDir, size: viewport } } : {}),
       });
       const rescuePage = await context.newPage();
-      const moveRight = pressed => mobile
-        ? rescuePage.locator('#btn-right').dispatchEvent(pressed ? 'touchstart' : 'touchend')
-        : rescuePage.keyboard[pressed ? 'down' : 'up']('ArrowRight');
+      const control = (button, pressed) => mobile
+        ? rescuePage.locator('#btn-' + button).dispatchEvent(pressed ? 'touchstart' : 'touchend')
+        : rescuePage.keyboard[pressed ? 'down' : 'up']({ left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space' }[button]);
       const advanceDialog = () => mobile
         ? rescuePage.locator('.rpg-next').tap({ force: true })
         : rescuePage.locator('.rpg-next').click({ force: true });
@@ -685,9 +685,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         });
         assert.equal(before.portrait, 'loaded');
         assert.equal(before.reachable, false);
-        await moveRight(true);
+        await control('right', true);
         await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_rescue');
-        await moveRight(false);
+        await control('right', false);
         assert.deepEqual(await rescuePage.evaluate(() => ({
           face: rpgCurLeft, right: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text,
           stillInPool: player.x >= c34Pool().x,
@@ -707,19 +707,62 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         }));
         assert.deepEqual(after, { hp: before.hp, bag: before.bag, level: before.level,
           stats: before.stats, save: before.save, safety: 72, warned: false });
-        await moveRight(true);
+        await control('right', true);
         await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_warning');
-        await moveRight(false);
+        await control('right', false);
         assert.equal(await rescuePage.evaluate(() => rpgActive.pages[0].text), '小V，小心！現在水位還太低，掉下去就爬不上來囉！');
         await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
         await advanceDialog();
-        await moveRight(true);
+        await control('right', true);
         await rescuePage.waitForFunction(() => c34.log.filter(e => e.ev === 'poolRescue').length === 2);
-        await moveRight(false);
+        await control('right', false);
         assert.equal(await rescuePage.evaluate(() => !!rpgActive), false);
+
+        await rescuePage.evaluate(() => {
+          const pool = c34Pool();
+          c34.fillFrames = C34.pool.fillFrames / 2;
+          c34.level = 0.5;
+          Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h, vx: 0, vy: 0, onGround: true });
+        });
+        await control('right', true);
+        await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '09_v_water_move');
+        await control('right', false);
+        await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '08_v_water_idle');
+        await control('left', true);
+        await rescuePage.waitForFunction(() => c34.swim && !player.facingRight && player.x <= c34Pool().x + 12);
+        await control('jump', true);
+        await rescuePage.waitForFunction(() => !!c34.climb);
+        await control('jump', false);
+        await control('left', false);
+        await rescuePage.waitForFunction(() => !c34.climb && player.onGround && player.x + player.w < c34Pool().x);
+        assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 2);
+
+        await rescuePage.evaluate(() => {
+          c34.fillFrames = C34.pool.fillFrames;
+          c34.level = 1;
+          c34.wet = 0;
+          activeSlot = 'sword';
+          const pad = platforms.find(p => p.c34Pad);
+          c34StepPad(pad);
+          player.x = pad.x + pad.w - 16;
+          player.y = c34PlatformSurface(pad) - player.h;
+          player.vx = player.vy = 0;
+          player.onGround = true;
+          cameraX = player.x - 380;
+        });
+        await control('right', true);
+        await control('jump', true);
+        await rescuePage.waitForFunction(() => player.vy < 0);
+        await control('jump', false);
+        await rescuePage.waitForFunction(() => {
+          const bank = platforms.find(p => p.c34Id === 'BANK');
+          return player.onGround && player.x + player.w > bank.x && player.y + player.h === bank.y;
+        });
+        await control('right', false);
+        assert.equal(await rescuePage.evaluate(() => c34.level), 1);
       } finally {
         await context.close();
-        if (videoDir) await rescuePage.video().saveAs(videoDir + '/Batch-D-rescue-' + mode + '.webm');
+        if (videoDir) await rescuePage.video().saveAs(videoDir + '/Batch-D-pool-' + mode + '.webm');
       }
     });
   }
