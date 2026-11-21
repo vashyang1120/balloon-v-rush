@@ -27,3 +27,11 @@
 本機執行 `node tests/preview-entry.cjs`，用 `/rpg-dual-continent-test/?guest=1&sandbox=1&devtools=1&ch3test=pool` 開啟水池捷徑，或將 `pool` 改成 `start` 從第三章 3-4 起點遊玩。Chrome 自動回歸包含首次載入、美術、蓄水、浮墊承重、跳上右岸、20 秒自然風乾／5 秒風口、救援時序與存檔。救援個案從近岸測試起點以鍵盤或觸控事件操作。水位與幾何邊界另由固定場景測試。
 
 [Draft PR #40](https://github.com/vashyang1120/balloon-v-rush/pull/40)
+
+## 驗證與隔離發布
+
+- 51 項入口、章節、稱號、骰子和瀏覽器回歸通過，另有打地鼠內部 92 項規則通過。加強水池操作錄影後另重跑 19 項 Chapter 3 瀏覽器檢查，全部通過。
+- 桌機與 844×390 的 Chromium 手機橫向模式各跑一次。兩支錄影用測試座標與水位設定切換場景，各段使用相應鍵盤或觸控操作驗證落水、對話、安全回岸、再次靠岸提醒、中水位游泳攀爬，以及滿水浮墊跳上右岸。裝置驗證使用瀏覽器模擬。
+- Pages 精確目錄的隔離瀏覽器測試 7 項通過。測試涵蓋一般入口、3-4 起點、3-4 水池、3-1 至 3-3、測試背包持久化、正式存檔探針和寫入網路封鎖。
+- Pages 提交 `cc73dacbaf821fe472f378ef1c7013918704dabb` 是獨立快轉提交。差異僅新增 `playtest-adventure-v0.4.13-test-3-batch-d/` 內 765 個檔案，使用 `balloon-v-rush:adventure-playtest:v0.4.13-test-3-batch-d:` 存檔前綴。遊戲工程 Draft PR #40 仍以 Batch C 為基準。
+- [Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44894735813) · [試玩首頁](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/) · [3-4 起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool)。
