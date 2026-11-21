@@ -17,3 +17,7 @@
 - 遊戲提交 `73e08b7ef9904554334b8db9f34efff03574e813`，位於既有 `dev/ch3-water-terrain-batch-c` 分支。預備部署提交 `d88c75998389148f4ae7a7ef5580bd3d3aa807e5` 以 C1 的 Pages 部署為父提交，差異限於 `playtest-adventure-v0.4.13-test-3-batch-c/`。
 - 四段正常操作錄影與 50 項測試完成。動畫時間、腳底錨點與濕度比例見 [PROGRESS.md](PROGRESS.md)，驗收詳情與錄影檔名見 [ACCEPTANCE.md](ACCEPTANCE.md)。
 - 自動審查擋下包含 C2 程式與 72 張 18A／18B PNG 的 GitHub 推送，要求補充本批素材的公開發布授權。[Draft PR #39](https://github.com/vashyang1120/balloon-v-rush/pull/39) 已接收 C2 施工規格提交 `04d09ba`。[現有試玩入口](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/) 仍提供 C1。C2 的 Pages Actions、HTTPS 查驗及發布待授權後續辦。
+
+## Batch C2 Revision 1
+
+施工基準為 `402b5daa21110a3d8033f563ba29c83f1dd52185`。依現有分支及 Draft PR #39 交接。18A／18B 素材與動畫節奏沿用 C2，風乾規格保留至 C3。

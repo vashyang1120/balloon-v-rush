@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch C2';
+const GAME_BUILD_REVISION = 'Batch C2 Revision 1';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -18789,6 +18789,11 @@ function loadImageRecord(r) {
   if (r.promise) return r.promise;
   r.status = 'loading';
   const cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
+  if (window.adventurePlaytestReady && r.groups.some(group => group === 'c34canyon' || group === 'chapter3vertical')) {
+    // The isolated playtest serves its own assets. Retry there instead of attempting the blocked raw origin.
+    const primary = cands[0];
+    cands.splice(1, cands.length - 1, { ...primary, url: primary.url + '&asset-retry=1' });
+  }
   r.promise = new Promise(resolve => {
     const tryAt = (i) => {
       if (i >= cands.length) {
@@ -18853,9 +18858,11 @@ function preloadAssetGroup(groupName, options) {
   st.settled = false;
   const loadOne = ({ r, e }) => (e.type === 'audio' ? loadAudioRecord(r, e) : loadImageRecord(r)).then(() => { if (opts.onProgress) opts.onProgress(groupName); });
   // v0.3.61：RPG 立繪群組一張一張依序載入（避免手機上同時下載太多張而逾時）
-  const allDone = (groupName === 'rpg')
-    ? recs.reduce((p, x) => p.then(() => loadOne(x)), Promise.resolve())
-    : Promise.all(recs.map(loadOne));
+  const workers = groupName === 'rpg' ? 1 : groupName === 'c34canyon' ? 6 : 0;
+  let next = 0;
+  const allDone = workers ? Promise.all(Array.from({ length: workers }, async () => {
+    while (next < recs.length) await loadOne(recs[next++]);
+  })) : Promise.all(recs.map(loadOne));
   st.promise = allDone.then(() => {
     const sum = summarizeAssetGroup(groupName);
     st.settled = true; st.summary = sum;
@@ -33854,8 +33861,8 @@ function c34Complete(sid) {
   const G = 'c34canyon';
   const BG = 'chapter3vertical';
   const addGroup = M => {
-    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries()];
-    if (M && !M[BG]) M[BG] = c34Art.entries(true);
+    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries()].map(entry => ({ ...entry, timeoutMs: 30000 }));
+    if (M && !M[BG]) M[BG] = c34Art.entries(true).map(entry => ({ ...entry, timeoutMs: 30000 }));
     return M;
   };
   try { addGroup(getAssetManifest()); } catch (e) {}

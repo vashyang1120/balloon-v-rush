@@ -28,3 +28,7 @@
 共 50 項測試通過，其中關卡及隔離包 22 項，入口、稱號與骰子 28 項。實體手機待驗收。
 
 錄影交付檔名為 `C2-desktop-start.webm`、`C2-desktop-pool.webm`、`C2-mobile-landscape-start.webm` 和 `C2-mobile-landscape-pool.webm`。
+
+## Batch C2 Revision 1
+
+桌機與手機橫向模擬均錄製雙瀑布下的橫移、跳躍和離開水柱，確認固定垂直、傘面裁切、較厚分流、水池水位 100%、持傘耐久 6/6、潮溼圖示和 18A／18B 動畫。桌機驗證全乾時水滴圖示消失。錄影前綴為 `C2R1-`。正式 Pages 首次載入與隔離包回歸結果另記於交接。
