@@ -242,7 +242,8 @@ function c34DrawRipples(cx) {
 }
 
 function c34SwimPose(cx) {
-  return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime, player.facingRight);
+  return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime,
+    player.facingRight, c34.paddling, c34.waterTick * 1000 / 60);
 }
 
 function c34DrawWetStatus(cx) {
@@ -294,8 +295,8 @@ function c34StepSwim() {
     player.y = surface + C34.water.feetDepth - player.h;
     player.vy = 0;
     const paddling = Math.abs(player.vx) > 0.35;
-    if (!wasSwimming) c34.swimTime = 0;
-    c34.swimTime += (paddling ? 1 : 0.7) * 1000 / 60;
+    c34.swimTime = wasSwimming && c34.paddling && paddling ? c34.swimTime + 1000 / 60 : 0;
+    c34.paddling = paddling;
     c34Ripple(x + (player.facingRight ? 1 : -1) * (paddling ? 17 : 7), paddling ? 14 : 25, paddling ? 0.018 : 0.012);
   }
 }

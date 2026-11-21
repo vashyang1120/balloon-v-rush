@@ -100,7 +100,7 @@ const c34Art = (() => {
     const end = innerRight ? layer.width : 0;
     const mask = g.createLinearGradient(start, 0, end, 0);
     mask.addColorStop(0, '#000');
-    mask.addColorStop(1, 'transparent');
+    mask.addColorStop(1, 'rgba(0,0,0,0.45)');
     g.globalCompositeOperation = 'destination-in';
     g.fillStyle = mask;
     g.fillRect(0, 0, layer.width, layer.height);
@@ -366,11 +366,11 @@ const c34Art = (() => {
       footOffset: rect.dY + 399 * ratio - player.h };
   }
 
-  function swimPose(x, surface, time, facingRight) {
-    const id = image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
+  function swimPose(x, surface, time, facingRight, paddling, bobTime) {
+    const id = paddling && image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
     const spec = catalog[id];
     const factor = landPose().headWidth / waterHead.width;
-    const bob = Math.sin(time / 350) * 1.4;
+    const bob = Math.sin(bobTime / 350) * 1.4;
     const y = surface + (spec.anchor[1] - palmWaterline) * factor + bob;
     return { id, x, y, surface, factor, mirror: !facingRight, time, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
   }
@@ -381,8 +381,9 @@ const c34Art = (() => {
     if (!im) return false;
     clip(0, surface - 180, CANVAS_W, 180, () => at(id, time, x, y, factor, mirror));
 
-    // Refract only the submerged pixels and hide them gradually in the deeper water.
-    const width = Math.ceil(spec.size[0] * factor) + 2, depth = 26;
+    // Allocate the submerged layer to the full sprite bounds so kicks remain visible.
+    const width = Math.ceil(spec.size[0] * factor) + 2;
+    const depth = Math.ceil(y - surface + (spec.size[1] - spec.anchor[1]) * factor) + 1;
     if (swimmerLayer.width !== width) swimmerLayer.width = width;
     if (swimmerLayer.height !== depth) swimmerLayer.height = depth;
     const g = swimmerLayer.getContext('2d');
