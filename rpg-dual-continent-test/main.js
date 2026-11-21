@@ -34009,6 +34009,11 @@ function c34Complete(sid) {
   wrapFn('drawPlayer', o => function (cx) {
     if (c34Is() && c34.climb && c34Art.climb(c34.climb, cx)) return;
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
+    if (c34Is() && umbEquipped() && c2UmbArtKey() === 'block' && c34HeroWater.shower()) {
+      o.apply(this, arguments);
+      c34HeroWater.drawShower(cx, undefined, true);
+      return;
+    }
     if (c34Is() && c34HeroWater.drawShower(cx)) return;
     return o.apply(this, arguments);
   });
