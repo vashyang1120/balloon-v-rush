@@ -5861,6 +5861,7 @@ function updatePlayer(dt) {
   if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
   if (!moving) player.vx *= 0.75; // friction
 
+  const xBeforeMove = player.x;
   // Right edge: can't go past FINISH_X + some buffer
   const rightBound = Math.min(cameraX + CANVAS_W - 60, LEVEL_LENGTH - 20);
   player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + player.vx));
@@ -5912,14 +5913,15 @@ function updatePlayer(dt) {
     player.onGround = true;
   }
 
-  // Platform collisions (top only)
+  // Static platforms are top-only. The floating pad also has sides and an underside.
   platforms.forEach(p => {
+    if (p.c34Pad) { c34ResolvePadContact(p, xBeforeMove, feetBeforeFall); return; }
     const top = c34PlatformSurface(p);
     if (
       player.vy >= 0 &&
       player.x + player.w > p.x && player.x < p.x + p.w &&
       player.y + player.h >= top && player.y + player.h <= top + 24 &&
-      (!(p.c34Pad || p.c34Escape) || feetBeforeFall <= top + 2)
+      (!p.c34Escape || feetBeforeFall <= top + 2)
     ) {
       player.y = top - player.h;
       player.vy = 0;

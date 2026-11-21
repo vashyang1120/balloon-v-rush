@@ -260,6 +260,33 @@ function c34Ripple(x, interval = 14, scale = 0.018) {
   c34.ripples.push({ start: c34.waterTick, x, scale });
 }
 
+function c34ResolvePadContact(pad, previousX, previousFeet) {
+  const right = pad.x + pad.w;
+  if (player.x >= right || player.x + player.w <= pad.x) return;
+  const top = c34PlatformSurface(pad);
+  const feet = player.y + player.h;
+  if (player.vy >= 0 && previousFeet <= top + 2 && feet >= top) {
+    player.y = top - player.h;
+    player.vy = 0;
+    player.onGround = true;
+    return;
+  }
+  const bottom = top + pad.h;
+  if (feet <= top || player.y >= bottom) return;
+  if (player.vy < 0 && previousFeet - player.h >= bottom) {
+    player.y = bottom;
+    player.vy = 0;
+    return;
+  }
+  const cameFromLeft = previousX + player.w <= pad.x;
+  const cameFromRight = previousX >= right;
+  if (cameFromLeft || cameFromRight || c34.swim) {
+    const left = cameFromLeft || (!cameFromRight && player.x + player.w / 2 < pad.x + pad.w / 2);
+    player.x = left ? pad.x - player.w : right;
+    player.vx = 0;
+  }
+}
+
 function c34StepPad(pad) {
   if (!pad) return;
   const F = C34.float, center = player.x + player.w / 2;
