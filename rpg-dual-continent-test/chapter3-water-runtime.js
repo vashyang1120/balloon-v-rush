@@ -371,7 +371,8 @@ function c34AdvanceClimb() {
     const pad = platforms.find(p => p.c34Pad);
     const fromLeft = pad && inp('right') && Math.abs(player.x + player.w - pad.x) <= 2;
     const fromRight = pad && inp('left') && Math.abs(player.x - (pad.x + pad.w)) <= 2;
-    if (fromLeft || fromRight) {
+    // A low-water landing that still strands the player must go through rescue.
+    if ((fromLeft || fromRight) && c34CanReturnLeft(pad)) {
       const edge = fromLeft ? pad.x : pad.x + pad.w;
       c34.climb = { pad, edge, top: c34PlatformSurface(pad, edge), tick: 0, facingRight: !!fromLeft };
     } else {
