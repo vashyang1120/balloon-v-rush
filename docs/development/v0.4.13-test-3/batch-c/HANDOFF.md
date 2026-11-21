@@ -25,3 +25,15 @@
 遊戲提交 `65d83168ffbf54115be2050b82e340a93fe5f6fb`；部署提交 `ef2bd9021b073ff312f69fd7cee78a4ba0f0ba84`，差異僅五個 Batch C 試玩目錄內的檔案。[Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44841310141) 建置及部署成功。[Revision 1 試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/)。
 
 最終回歸 50 項通過。桌機 Chrome 起點與手機橫向觸控模擬水池均從公開 HTTPS 首次進關，載入全部 72 張正式 18A／18B PNG，未重新整理或按重試。起點另記錄四張既有導風裝置圖請求中止及外站備援被隔離政策阻擋，仍成功進關；水池未見請求失敗。完整原始紀錄為 `C2R1-HTTPS-verification.log`。
+
+## Batch C2 Revision 3｜第二道瀑布落水水花
+
+施工前核對 Draft PR #39 的 HEAD 為 `f1ce43aedc76b876fc65e4b3a104646f97f24d09`。[水花修正提交](https://github.com/vashyang1120/balloon-v-rush/commit/13a99b073ddb2e761bcc899b5237ac81415edc42) 位於 `dev/ch3-water-terrain-batch-c`。[Pages 部署提交](https://github.com/vashyang1120/balloon-v-rush/commit/6821e4b990b3ad2bc9c4cf1a005cfddee3335ff4) 僅更新 `main` 上 `playtest-adventure-v0.4.13-test-3-batch-c/` 內五個檔案。[Draft PR #39](https://github.com/vashyang1120/balloon-v-rush/pull/39) 保持開啟。
+
+- 沿用正式 `waterfall_splash_01～06.png`。持續入水時的圖像縮放倍率為 Revision 2 的 2.25 倍，錨點在導流水落點及當前水面。畫面依浮墊旋轉後的圖像範圍留出至少 2 世界單位。停止入水後縮小並淡出，24 個更新步結束，約 0.4 秒。
+- 鎖定 175% 分流可見厚度、46.46 世界單位垂直瀑布、雨傘防水及裁切、浮墊左側落水、100% 蓄水、18A／18B 與頭頂水滴。維持既有地形、浮墊位置及其他批次機制。
+- Chrome 桌機鍵盤與 844 × 390 手機橫向觸控模擬均以正常操作驗證低水位（約 6%）、50% 和 100%。兩端的水花水平錨點皆與分流水落點相符，更新水位時與水柱末端的垂直差不超過 0.16 世界單位。三個水位的實測錨點距浮墊圖像左界約 11.75 世界單位。兩端均觀察到淡出第 23 步，接著清除效果。
+- 原有回歸 50/50 通過。以 Revision 3 的 Batch C Pages 封裝另驗證六個入口及存檔隔離，共 7/7 通過。正式存檔值保留，試玩使用 `balloon-v-rush:adventure-playtest:v0.4.13-test-3-batch-c:`。
+- 隨施工交付 `C2R3-comparison.png`、`C2R3-desktop-pool.webm` 和 `C2R3-mobile-landscape-pool.webm`。實體手機及使用者目視驗收待確認。
+- [Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44848927586) · [HTTPS 試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)。
+- 線上 Pages 建置及部署成功。公開 HTTPS 桌機起點和手機橫向模擬水池均回應 HTTP 200，來源標記與水花修正提交相符，首次按下開始即可進關，兩端均載入 72 張 18A／18B PNG。兩端均記錄既有導風裝置的 `wind_redirector_wind_flow.png` 請求中止及外站備援被隔離政策擋下，進關成功。
