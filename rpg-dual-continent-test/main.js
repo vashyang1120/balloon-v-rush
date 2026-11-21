@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch C3';
+const GAME_BUILD_REVISION = 'Batch D Revision 1';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -5861,6 +5861,7 @@ function updatePlayer(dt) {
   if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
   if (!moving) player.vx *= 0.75; // friction
 
+  const xBeforeMove = player.x;
   // Right edge: can't go past FINISH_X + some buffer
   const rightBound = Math.min(cameraX + CANVAS_W - 60, LEVEL_LENGTH - 20);
   player.x = Math.max(cameraX + 30, Math.min(rightBound, player.x + player.vx));
@@ -5912,14 +5913,14 @@ function updatePlayer(dt) {
     player.onGround = true;
   }
 
-  // Platform collisions (top only)
+  // Static platforms are top-only. The floating pad also has sides and an underside.
   platforms.forEach(p => {
+    if (p.c34Pad) { c34ResolvePadContact(p, xBeforeMove, feetBeforeFall); return; }
     const top = c34PlatformSurface(p);
     if (
       player.vy >= 0 &&
       player.x + player.w > p.x && player.x < p.x + p.w &&
-      player.y + player.h >= top && player.y + player.h <= top + 24 &&
-      (!(p.c34Pad || p.c34Escape) || feetBeforeFall <= top + 2)
+      player.y + player.h >= top && player.y + player.h <= top + 24
     ) {
       player.y = top - player.h;
       player.vy = 0;
@@ -19670,6 +19671,7 @@ const RPG_TEXT_CPS = 40;          // 逐字速度：每秒 40 個字（規格 35
 const RPG_HISTORY_MAX = 60;
 const RPG_ASSETS = {
   balloonv_thinking:  'assets/adventure/rpg/portraits/balloonv/balloonv_thinking.png',
+  balloonv_panic: 'rpg-dual-continent-test/chapter3-art/balloonv_panic_v3.png',
   balloonv_surprised: 'assets/adventure/rpg/portraits/balloonv/balloonv_surprised.png',
   balloonv_shocked:   'assets/adventure/rpg/portraits/balloonv/balloonv_shocked.png',
   balloonv_confused:  'assets/adventure/rpg/portraits/balloonv/balloonv_confused.png',
@@ -19701,7 +19703,7 @@ const RPG_BOSS_PORTRAIT = {
 };
 // 目前素材使用雙副檔名，先走已存在的路徑，單副檔名保留為改名後的備援。
 const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png'] };
-const RPG_EXTERNAL_ASSET_KEYS = []; // 由其他素材群組載入的立繪（目前沒有）
+const RPG_EXTERNAL_ASSET_KEYS = ['balloonv_panic'];
 // v0.3.61：RPG 立繪改成「一張一張依序載入」（手機上 13 張同時下載容易逾時失敗），常用的先載；每個來源最多等 30 秒
 const RPG_ASSET_LOAD_ORDER = ['balloonv_surprised', 'balloonv_thinking', 'balloonv_shocked', 'balloonv_confused', 'balloonv_happy', 'dog_treasure_alert',
   'star_spirit_happy', 'star_spirit_mysterious',   // v0.4.0
@@ -20396,6 +20398,7 @@ function rpgOpen(scene, opts) {
   ov.classList.toggle('rpg--dog-paw', !!scene.dogPaw);
   rpgSetTargetHighlight(scene.targetFn ? (() => { try { return scene.targetFn(); } catch (e) { return null; } })() : null);
   ov.querySelector('.rpg-log').style.display = 'none';
+  ov.querySelector('[data-act="skip"]').hidden = !!scene.requirePages;
   ov.classList.toggle('rpg--dog-alert', !!scene.dogAlert);
   const sides = ov.querySelectorAll('.rpg-side');
   sides.forEach(s => { s.dataset.key = ''; s.querySelectorAll('.rpg-pimg').forEach(i => i.classList.remove('rpg-pimg--on')); });
@@ -20463,7 +20466,8 @@ function rpgHandleAction(act) {
   if (act === 'logclose') { document.querySelector('#rpg-overlay .rpg-log').style.display = 'none'; return; }
   if (document.querySelector('#rpg-overlay .rpg-log').style.display !== 'none') return; // 紀錄開著時點背景不前進
   if (rpgNotesOpen()) return; // 提示筆記開著時，點擊不讓對話前進
-  if (act === 'skip') { rpgClose('skipped'); return; }
+  if (act === 'skip' && !rpgActive.requirePages) { rpgClose('skipped'); return; }
+  if (act === 'skip') act = 'advance';
   if (rpgActive.showcase && (act === 'showcasedone' || act === 'key')) { rpgClose('finished'); return; }
   if (performance.now() - rpgOpenedAt < 250 && !rpgActive.showcase) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
   if (rpgActive.dogAlert && rpgActive.oneClick && performance.now() - rpgOpenedAt < V390_DOG_GUARD_MS) { try { v390DogGuardLog.push({ act, ms: Math.round(performance.now() - rpgOpenedAt), id: rpgActive.id }); } catch (e) {} return; }   // v0.3.90 #14：小狗提醒 1.2 秒內不被跳躍／移動鍵或連點關掉（略過鈕、Esc 在上面已處理）
@@ -33571,7 +33575,7 @@ var C34 = {
     launchDepth: 22,
     tuning: { windSpeed: 19.35, maxUp: 19.35, range: 82, nozzleH: 38, airDrag: 0.9895, offThrust: 1 },
   },
-  pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
+  pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, inflowMinOffset: 94 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
   water: { steps: 20 * 60, windDryRate: 4, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
 };
@@ -33580,7 +33584,7 @@ var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits:
 function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }
-function c34ArtReady() { const status = c34Art.status(); return status.loaded === 76 && !status.failed.length; }
+function c34ArtReady() { const status = c34Art.status(); return status.loaded === c34Art.expected && !status.failed.length; }
 
 function c34Mesas() { return (platforms || []).filter(p => p.c34Mesa); }
 function c34Gaps(kind) { return (c2Pits || []).filter(p => p.c34 && (!kind || p.c34 === kind)); }
@@ -33629,7 +33633,6 @@ const C2_STAGE_34 = (function () {
       { x: L.p2.x, y: L.y(L.p2.h), w: L.p2.w, h: 22, c34Mesa: true, c34Id: 'P2' },     // 中間更高平台（樹）
       { x: L.p3.x, y: L.y(L.p3.h), w: L.p3.w, h: 22, c34Id: 'P3' },                    // 岩棚（第三章平台；倒樹斜橋的終點）
       { x: L.ct.x, y: ct, w: L.ct.w, h: 22, c34Mesa: true, c34Id: 'CT' },              // 峽谷頂部（水池左岸）
-      { x: L.pool.x, y: ct + C34.pool.escapeY, w: C34.pool.escapeWidth, h: 14, c34Escape: true }, // Left-bank return ledge, below the bank lip.
       { x: L.pool.x + 145, y: ct + C34.pool.surf0 - C34.pool.padClear, w: C34.pool.padW, h: 14, c34Pad: true },   // 充氣浮墊（跟著水面）
       { x: L.bank.x, y: L.y(L.bank.h), w: L.bank.w, h: 22, c34Mesa: true, c34Id: 'BANK' },   // 對岸（水位夠高才跳得上去）
     ],
@@ -33864,7 +33867,8 @@ function c34Complete(sid) {
   const G = 'c34canyon';
   const BG = 'chapter3vertical';
   const addGroup = M => {
-    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries()].map(entry => ({ ...entry, timeoutMs: 30000 }));
+    if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries(),
+      { path: RPG_ASSETS.balloonv_panic, type: 'image', critical: true, label: '小V慌張立繪' }].map(entry => ({ ...entry, timeoutMs: 30000 }));
     if (M && !M[BG]) M[BG] = c34Art.entries(true).map(entry => ({ ...entry, timeoutMs: 30000 }));
     return M;
   };
@@ -33985,7 +33989,7 @@ function c34Complete(sid) {
   // 畫面：地形（取代第三章一般地面圖）、深淵不畫尖刺、瀑布與水池、高台與浮墊不畫成一般平台
   wrapFn('drawChapter3Ground', o => function (cx) { if (c34Is() && c34ArtReady()) { c34DrawTerrain(cx); return true; } return o.apply(this, arguments); });
   wrapFn('drawChapter3PlatformArt', o => function (p, cx) {
-    if (c34Is() && p && (p.c34Mesa || p.c34Id === 'P3' || p.c34Pad || p.c34Escape)) return true;
+    if (c34Is() && p && (p.c34Mesa || p.c34Id === 'P3' || p.c34Pad)) return true;
     return o.apply(this, arguments);
   });
   wrapFn('drawC2SpikePits', o => function (cx) {
@@ -34003,8 +34007,12 @@ function c34Complete(sid) {
     return isChapter3ParallaxStage() && c34Art.background(c34Is() ? Math.round(c34.camY) : 0) || o.apply(this, arguments);
   });
   wrapFn('drawPlayer', o => function (cx) {
+    if (c34Is() && c34.climb && c34Art.climb(c34.climb, cx)) return;
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
-    if (c34Is() && c34HeroWater.drawShower(cx)) return;
+    if (c34Is()) {
+      const sideUmbrella = umbEquipped() && c2UmbArtKey() === 'block' && c2UmbArtReady('block');
+      if (c34HeroWater.drawShower(cx, undefined, sideUmbrella ? c34DrawShowerUmbrella : null)) return;
+    }
     return o.apply(this, arguments);
   });
   wrapFn('rpgBuildScene', o => function (id) {
@@ -34014,6 +34022,7 @@ function c34Complete(sid) {
       pages: [{ sp: 'balloonv', face: line.face, text: line.text }] };
   });
   wrapFn('updatePlayer', o => function () {
+    if (c34Is() && gameState === 'playing' && !rpgActive && c34AdvanceClimb()) return;
     const result = o.apply(this, arguments);
     if (c34Is() && gameState === 'playing' && !rpgActive) {
       if (player.x >= 900 && player.x < C34_LAY.a1) c34Teach('c34_canyon_arrival');

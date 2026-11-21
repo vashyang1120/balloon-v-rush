@@ -231,6 +231,91 @@ const chapter3ArtCatalog = {
     ],
     "ms": 160
   },
+  "17_v_water_climb": {
+    "files": [
+      "17_v_water_climb/17_v_water_climb_01.png",
+      "17_v_water_climb/17_v_water_climb_02.png",
+      "17_v_water_climb/17_v_water_climb_03.png",
+      "17_v_water_climb/17_v_water_climb_04.png",
+      "17_v_water_climb/17_v_water_climb_05.png",
+      "17_v_water_climb/17_v_water_climb_06.png"
+    ],
+    "ms": 110,
+    "frames": [
+      {
+        "size": [
+          1086,
+          1448
+        ],
+        "anchor": [
+          902,
+          579
+        ],
+        "offset": 0,
+        "scale": 0.21268
+      },
+      {
+        "size": [
+          1024,
+          1536
+        ],
+        "anchor": [
+          819,
+          598
+        ],
+        "offset": 0,
+        "scale": 0.21702
+      },
+      {
+        "size": [
+          1024,
+          1536
+        ],
+        "anchor": [
+          869,
+          595
+        ],
+        "offset": 0,
+        "scale": 0.19246
+      },
+      {
+        "size": [
+          1024,
+          1536
+        ],
+        "anchor": [
+          846,
+          702
+        ],
+        "offset": 0,
+        "scale": 0.20611
+      },
+      {
+        "size": [
+          1024,
+          1536
+        ],
+        "anchor": [
+          690,
+          1127
+        ],
+        "offset": 46,
+        "scale": 0.2065
+      },
+      {
+        "size": [
+          1024,
+          1536
+        ],
+        "anchor": [
+          543,
+          1457
+        ],
+        "offset": 85,
+        "scale": 0.21415
+      }
+    ]
+  },
   "10_wetness_drop": {
     "size": [
       254,

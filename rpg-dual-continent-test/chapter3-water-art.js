@@ -2,6 +2,7 @@
 
 const c34Art = (() => {
   const catalog = chapter3ArtCatalog;
+  const expected = Object.values(catalog).reduce((count, spec) => count + spec.files.length, 0);
   const images = new Map();
   const failures = new Set();
   const pathPrefix = 'rpg-dual-continent-test/chapter3-art/';
@@ -9,6 +10,8 @@ const c34Art = (() => {
   const waterSurfaceFrames = new WeakMap();
   const fadedRockEdges = new Map();
   const swimmerLayer = document.createElement('canvas');
+  const idleWaterFrames = [];
+  let idleWaterSource;
 
   // Visible head widths measured in the approved art, excluding the transparent canvas.
   const landHead = { width: 153, top: 14 };
@@ -100,7 +103,7 @@ const c34Art = (() => {
     const end = innerRight ? layer.width : 0;
     const mask = g.createLinearGradient(start, 0, end, 0);
     mask.addColorStop(0, '#000');
-    mask.addColorStop(1, 'transparent');
+    mask.addColorStop(1, 'rgba(0,0,0,0.45)');
     g.globalCompositeOperation = 'destination-in';
     g.fillStyle = mask;
     g.fillRect(0, 0, layer.width, layer.height);
@@ -366,23 +369,67 @@ const c34Art = (() => {
       footOffset: rect.dY + 399 * ratio - player.h };
   }
 
-  function swimPose(x, surface, time, facingRight) {
-    const id = image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
+  function swimPose(x, surface, time, facingRight, paddling, bobTime) {
+    const id = paddling && image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
     const spec = catalog[id];
     const factor = landPose().headWidth / waterHead.width;
-    const bob = Math.sin(time / 350) * 1.4;
+    const bob = Math.sin(bobTime / 350) * 1.4;
     const y = surface + (spec.anchor[1] - palmWaterline) * factor + bob;
-    return { id, x, y, surface, factor, mirror: !facingRight, time, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
+    return { id, x, y, surface, factor, mirror: !facingRight, time, bobTime, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
+  }
+
+  function idleWaterFrame(im, time) {
+    const phase = Math.floor(time / 75) % 16;
+    if (idleWaterFrames[phase]) return idleWaterFrames[phase];
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 400;
+    if (!idleWaterSource) {
+      idleWaterSource = document.createElement('canvas');
+      idleWaterSource.width = canvas.width;
+      idleWaterSource.height = canvas.height;
+      idleWaterSource.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
+    }
+    const g = canvas.getContext('2d');
+    const stroke = Math.sin(phase * Math.PI / 8);
+    const kick = Math.sin(phase * Math.PI / 8 + Math.PI / 3);
+    // Keep the head, torso, and canvas anchor fixed. Only fan out the hands and feet.
+    g.drawImage(idleWaterSource, 0, 0, 320, 156, 0, 0, 320, 156);
+    const strip = (y, x, width, destX, destWidth) =>
+      g.drawImage(idleWaterSource, x, y, width, 4, destX, y, destWidth, 4);
+    for (let y = 156; y < 400; y += 4) {
+      const arms = y < 228;
+      const left = arms ? 124 : 146;
+      const right = arms ? 190 : 151;
+      const flex = arms ? Math.sin(Math.PI * (y + 2 - 156) / 72)
+        : Math.sin(Math.PI * (y + 2 - 228) / 172);
+      const openLeft = (arms ? 34 * stroke : 36 * kick) * flex;
+      const openRight = (arms ? -34 * stroke : -36 * kick) * flex;
+      strip(y, 0, left, -openLeft, left + openLeft);
+      strip(y, left, right - left, left, right - left);
+      strip(y, right, 320 - right, right, 320 - right + openRight);
+    }
+    idleWaterFrames[phase] = canvas;
+    return canvas;
   }
 
   function swimmer(pose) {
-    const { id, x, y, surface, factor, mirror, time } = pose;
-    const im = image(id, time), spec = catalog[id];
-    if (!im) return false;
-    clip(0, surface - 180, CANVAS_W, 180, () => at(id, time, x, y, factor, mirror));
+    const { id, x, y, surface, factor, mirror, time, bobTime } = pose;
+    const source = image(id, time), spec = catalog[id];
+    if (!source) return false;
+    const im = id === '08_v_water_idle' ? idleWaterFrame(source, bobTime) : source;
+    const [sourceW, sourceH] = spec.size, [anchorX, anchorY] = spec.anchor;
+    clip(0, surface - 180, CANVAS_W, 180, () => {
+      ctx.save();
+      ctx.translate(x, y);
+      if (mirror) ctx.scale(-1, 1);
+      ctx.drawImage(im, -anchorX * factor, -anchorY * factor, sourceW * factor, sourceH * factor);
+      ctx.restore();
+    });
 
-    // Refract only the submerged pixels and hide them gradually in the deeper water.
-    const width = Math.ceil(spec.size[0] * factor) + 2, depth = 26;
+    // Allocate the submerged layer to the full sprite bounds so kicks remain visible.
+    const width = Math.ceil(spec.size[0] * factor) + 2;
+    const depth = Math.ceil(y - surface + (spec.size[1] - spec.anchor[1]) * factor) + 1;
     if (swimmerLayer.width !== width) swimmerLayer.width = width;
     if (swimmerLayer.height !== depth) swimmerLayer.height = depth;
     const g = swimmerLayer.getContext('2d');
@@ -406,6 +453,25 @@ const c34Art = (() => {
     return true;
   }
 
+  function climb(pose, cx) {
+    const id = '17_v_water_climb';
+    const spec = catalog[id], time = pose.tick * 1000 / 60;
+    const frame = Math.floor(time / spec.ms);
+    const im = image(id, time);
+    if (!im || !spec.frames[frame]) return false;
+    const { size: [w, h], anchor: [ax, ay], offset, scale } = spec.frames[frame];
+    const ratio = landPose().headWidth / 105;
+    const factor = scale * ratio;
+    const x = pose.edge - cx - offset * ratio;
+    const y = pose.top + pose.reachOffset * Math.max(0, 1 - time / (2 * spec.ms));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(im, -ax * factor, -ay * factor, w * factor, h * factor);
+    ctx.restore();
+    return true;
+  }
+
   function drop(x, y, fraction) {
     const id = '10_wetness_drop', spec = catalog[id];
     if (!image(id) || fraction <= 0) return;
@@ -420,6 +486,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, drop,
+  return { entries, expected, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, climb, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();

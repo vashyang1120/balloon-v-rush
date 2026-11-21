@@ -25,7 +25,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
-    swim: false, swimTime: 0, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
+    swim: false, swimTime: 0, climb: null, rescue: { stuck: 0, seen: false, warned: false, flash: 0 }, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
     falls: new Map(), poolImpact: null, shower: null });
 }
 
@@ -92,22 +92,38 @@ const C34_UMBRELLA_CANOPY = {
   run4: [587, 1190, 23, 347], run5: [618, 1213, 13, 331],
 };
 
-function c34FallCanopy(f) {
-  if (!umbEquipped() || c34.swim) return null;
-  const key = c2UmbArtKey();
+// Upper edge of the sideways balloon cluster measured along the block sprite.
+const C34_SIDE_CANOPY = [[835, 395], [861, 315], [891, 295], [930, 312],
+  [985, 367], [1033, 437], [1088, 517], [1114, 558]];
+
+function c34UmbrellaTransform(key) {
   const frame = UMBRELLA_ART.frames[key], pose = c2UmbPoseOf(key);
-  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
   const k = c2UmbFrameScale(pose);
   const sign = player.facingRight ? 1 : -1;
   const originX = Math.round(player.x + player.w / 2 + c2BlockFxHeroDx()) + sign * (pose.dx || 0);
   const originY = player.y + player.h + frame.feet + (pose.dy || 0) + c2HoverBobY();
-  const toX = u => originX + sign * (u - frame.ax) * k;
-  const toY = v => originY + (v - frame.gy) * k;
+  return { k, sign, toX: u => originX + sign * (u - frame.ax) * k, toY: v => originY + (v - frame.gy) * k };
+}
+
+function c34DrawShowerUmbrella(cx) {
+  const { k, sign, toX, toY } = c34UmbrellaTransform('block');
+  // The side canopy and exposed shaft occupy this strip of the existing block sprite.
+  const x = 800, y = 292, width = 326, height = 645;
+  ctx.save();
+  ctx.translate(toX(x) - cx, toY(y));
+  ctx.scale(sign, 1);
+  ctx.drawImage(umbImgs.block, x, y, width, height, 0, 0, width * k, height * k);
+  ctx.restore();
+}
+
+function c34FallCanopy(f) {
+  if (!umbEquipped() || c34.swim) return null;
+  const key = c2UmbArtKey();
+  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
+  const { k, sign, toX, toY } = c34UmbrellaTransform(key);
   const x0 = Math.min(toX(left), toX(right)), x1 = Math.max(toX(left), toX(right));
   const reach0 = Math.max(x0, f.x - f.w / 2), reach1 = Math.min(x1, f.x + f.w / 2);
-  // Running and blocking sprites can move the canopy ahead of the contact band in one frame.
-  // An equipped umbrella still catches a fall that reaches the player's body band.
-  if (reach1 <= reach0 && !c34UnderFall(f)) return null;
+  if (reach1 <= reach0 || !c2UmbArtReady(key)) return null;
   const crownX = (x0 + x1) / 2;
   const direction = f.split ? 'split' : (sign > 0 ? 'right' : 'left');
   const overlapX = Math.min(x1, Math.max(x0, Math.max(f.x - f.w / 2, Math.min(f.x + f.w / 2, crownX))));
@@ -115,12 +131,19 @@ function c34FallCanopy(f) {
   const x = direction === 'split' ? crownX
     : direction === 'right' ? Math.max(crownX, overlapX) : Math.min(crownX, overlapX);
   const surfaceAt = atX => {
+    if (key === 'block') {
+      const sourceX = Math.max(left, Math.min(right, left + (atX - toX(left)) * sign / k));
+      const nextIndex = C34_SIDE_CANOPY.findIndex(([x], i) => i > 0 && x >= sourceX);
+      const [x0, y0] = C34_SIDE_CANOPY[nextIndex - 1], [x1, y1] = C34_SIDE_CANOPY[nextIndex];
+      return toY(y0 + (y1 - y0) * (sourceX - x0) / (x1 - x0));
+    }
     const u = Math.min(1, Math.abs(2 * (atX - crownX) / (x1 - x0)));
     return toY(edge - Math.sqrt(1 - u * u) * (edge - crown));
   };
   const y = surfaceAt(x);
   if (y > c34FallBase(f) || y < c34FallTop()) return null;
-  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt, overlaps: reach1 > reach0 };
+  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt,
+    reach0, reach1, width: reach1 - reach0, overlaps: true };
 }
 
 function c34ArcLand(f, dir, surface, outX, outY) {
@@ -145,7 +168,7 @@ function c34FallStreams(f, canopy) {
         // Land in the open strip between the left wall and the floating pad.
         // A monotone descent to this point also keeps the stream clear of its face.
         x = pad && dir > 0 && outX < pad.x - 44
-          ? Math.max(pool.x + C34.pool.escapeWidth + 12, Math.min(poolX, pad.x - 44)) : poolX;
+          ? Math.max(pool.x + C34.pool.inflowMinOffset, Math.min(poolX, pad.x - 44)) : poolX;
         y = surface; fills = true;
       } else if (x >= pool.x && x < pool.x + pool.w) {
         x = dir > 0 ? pool.x + pool.w : pool.x;
@@ -158,7 +181,15 @@ function c34FallStreams(f, canopy) {
 
 function c34ResolveFall(f) {
   const canopy = c34FallCanopy(f);
-  return { canopy, streams: c34FallStreams(f, canopy), touching: !canopy && c34UnderFall(f) };
+  const center = player.x + player.w / 2;
+  // Ignore the thin spray fringe when testing whether the head takes a direct hit.
+  const bodyRadius = Math.min(8, player.w / 2);
+  const left = Math.max(f.x - f.w / 2, center - bodyRadius);
+  const right = Math.min(f.x + f.w / 2, center + bodyRadius);
+  const head = c34Art.landPose().top + 6;
+  const sheltered = canopy && right > left && left >= canopy.reach0 && right <= canopy.reach1 &&
+    Math.max(canopy.surfaceAt(left), canopy.surfaceAt(right)) <= head;
+  return { canopy, streams: c34FallStreams(f, canopy), touching: right > left && !sheltered && c34UnderFall(f) };
 }
 
 const C34_IMPACT_FADE_STEPS = 24;
@@ -193,25 +224,33 @@ function c34DrawFall(f, cx) {
   const top = c34FallTop(), end = c34FallBase(f);
   const splashScale = 0.047 * f.w / 36;
   const shower = touching && c34HeroWater.shower();
-  if (shower?.fall === f) {
-    c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
-    return;
-  }
-  if (canopy?.overlaps) {
-    c34Art.column(x, top, canopy.outY, f.w, time, {
-      surfaceAt: atX => canopy.surfaceAt(atX + cx),
+  const columnLeft = x - f.w / 2, columnRight = x + f.w / 2;
+  const openColumn = (left, right) => {
+    if (right <= left) return;
+    c34Art.clip(left, top, right - left, end - top + 16, () => {
+      if (shower?.fall === f) c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
+      else c34Art.column(x, top, end, f.w, time);
     });
+  };
+  if (canopy) {
+    const left = canopy.reach0 - cx, right = canopy.reach1 - cx;
+    openColumn(columnLeft, left);
+    openColumn(right, columnRight);
+    c34Art.clip(left, top, right - left, canopy.outY - top, () =>
+      c34Art.column(x, top, canopy.outY, f.w, time, {
+        surfaceAt: atX => canopy.surfaceAt(atX + cx),
+      }));
     for (const stream of streams) {
-      c34Art.guide(canopy, stream, cx, f.w / streams.length, time);
+      c34Art.guide(canopy, stream, cx, canopy.width / streams.length, time);
       if (!stream.fills) {
-        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale / streams.length);
+        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * canopy.width / f.w / streams.length);
       }
     }
-  } else {
-    c34Art.column(x, top, end, f.w, time);
-    c34Art.at('03_waterfall_splash', time, x, end, splashScale);
-    if (touching) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
+  } else openColumn(columnLeft, columnRight);
+  if ((!canopy || canopy.width < f.w) && shower?.fall !== f) {
+    c34Art.at('03_waterfall_splash', time, x, end, splashScale * (1 - (canopy?.width || 0) / f.w));
   }
+  if (touching && shower?.fall !== f) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
 }
 
 function c34DrawPool(cx) {
@@ -221,13 +260,20 @@ function c34DrawPool(cx) {
   const time = c34.waterTick * 1000 / 60;
   c34Art.poolWater(x, pool.w, y, floor, time);
   c34Art.poolWalls(x, pool.w, pool.baseY, C34_LAY.y(C34_LAY.bank.h), floor);
-  const ledge = platforms.find(p => p.c34Escape);
-  if (ledge) c34Art.tile('15_pool_bottom', ledge.x - cx, ledge.y, ledge.w, 14, 0.16, false);
   const pad = platforms.find(p => p.c34Pad);
   if (pad) c34Art.platform(pad, cx);
 }
 
 function c34DrawRipples(cx) {
+  const flash = c34.rescue?.flash || 0;
+  if (flash) {
+    const radius = 10 + (1 - flash / 30) * 25;
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 2 / 5;
+      drawDogSparkle(player.x + player.w / 2 - cx + Math.cos(angle) * radius,
+        player.y + player.h / 2 + Math.sin(angle) * radius, 5, angle, flash / 30);
+    }
+  }
   const pool = c34Pool();
   if (!pool) return;
   const x = pool.x - cx, y = c34SurfaceY();
@@ -242,7 +288,8 @@ function c34DrawRipples(cx) {
 }
 
 function c34SwimPose(cx) {
-  return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime, player.facingRight);
+  return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime,
+    player.facingRight, c34.paddling, c34.waterTick * 1000 / 60);
 }
 
 function c34DrawWetStatus(cx) {
@@ -257,6 +304,33 @@ function c34Ripple(x, interval = 14, scale = 0.018) {
   if (c34.waterTick < c34.rippleAt) return;
   c34.rippleAt = c34.waterTick + interval;
   c34.ripples.push({ start: c34.waterTick, x, scale });
+}
+
+function c34ResolvePadContact(pad, previousX, previousFeet) {
+  const right = pad.x + pad.w;
+  if (player.x >= right || player.x + player.w <= pad.x) return;
+  const top = c34PlatformSurface(pad);
+  const feet = player.y + player.h;
+  if (player.vy >= 0 && previousFeet <= top + 2 && feet >= top) {
+    player.y = top - player.h;
+    player.vy = 0;
+    player.onGround = true;
+    return;
+  }
+  const bottom = top + pad.h;
+  if (feet <= top || player.y >= bottom) return;
+  if (player.vy < 0 && previousFeet - player.h >= bottom) {
+    player.y = bottom;
+    player.vy = 0;
+    return;
+  }
+  const cameFromLeft = previousX + player.w <= pad.x;
+  const cameFromRight = previousX >= right;
+  if (cameFromLeft || cameFromRight || c34.swim) {
+    const left = cameFromLeft || (!cameFromRight && player.x + player.w / 2 < pad.x + pad.w / 2);
+    player.x = left ? pad.x - player.w : right;
+    player.vx = 0;
+  }
 }
 
 function c34StepPad(pad) {
@@ -283,6 +357,35 @@ function c34StepPad(pad) {
   pad.c34Occupied = onPad;
 }
 
+function c34CanClimbLeft() {
+  const pool = c34Pool();
+  if (!pool) return false;
+  const speed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
+  const jumpRise = speed * speed / (2 * GRAVITY);
+  return c34SurfaceY() + C34.water.feetDepth - pool.baseY <= jumpRise + 12;
+}
+
+function c34AdvanceClimb() {
+  const pool = c34Pool();
+  if (!pool) return false;
+  if (!c34.climb) {
+    if (!c34.swim || !c34.jumpReleased || !inp('jump') || !inp('left') ||
+        player.x > pool.x + 12 || !c34CanClimbLeft()) return false;
+    c34.climb = { edge: pool.x, top: pool.baseY, tick: 0,
+      reachOffset: Math.max(0, c34SurfaceY() - pool.baseY - 8) };
+    player.facingRight = false;
+    player.vx = player.vy = 0;
+    c34LeaveSurface();
+  }
+  if (++c34.climb.tick >= Math.ceil(6 * 110 * 60 / 1000)) {
+    player.x = pool.x - player.w - 8;
+    player.y = pool.baseY - player.h;
+    player.onGround = true;
+    c34.climb = null;
+  }
+  return true;
+}
+
 function c34StepSwim() {
   const pool = c34Pool(), x = player.x + player.w / 2, feet = player.y + player.h;
   const wasSwimming = c34.swim;
@@ -294,9 +397,63 @@ function c34StepSwim() {
     player.y = surface + C34.water.feetDepth - player.h;
     player.vy = 0;
     const paddling = Math.abs(player.vx) > 0.35;
-    if (!wasSwimming) c34.swimTime = 0;
-    c34.swimTime += (paddling ? 1 : 0.7) * 1000 / 60;
+    c34.swimTime = wasSwimming && c34.paddling && paddling ? c34.swimTime + 1000 / 60 : 0;
+    c34.paddling = paddling;
     c34Ripple(x + (player.facingRight ? 1 : -1) * (paddling ? 17 : 7), paddling ? 14 : 25, paddling ? 0.018 : 0.012);
+  }
+}
+
+function c34CanReturnLeft(pad) {
+  if (c34CanClimbLeft()) return true;
+  const pool = c34Pool();
+  if (!pool || !pad) return false;
+  const swimSpeed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
+  const padTop = c34PlatformSurface(pad, pad.x);
+  if (c34SurfaceY() + C34.water.feetDepth - padTop > swimSpeed ** 2 / (2 * GRAVITY)) return false;
+  const takeoff = c34JumpSpeed(JUMP_FORCE, C34.water.wetHeight) - GRAVITY / 2;
+  const clearance = takeoff ** 2 - 2 * GRAVITY * (padTop - pool.baseY);
+  if (clearance < 0) return false;
+  const span = PLAYER_SPEED * C34.water.wetSpeed * (takeoff + Math.sqrt(clearance)) / GRAVITY;
+  return pad.x - pool.x - player.w / 2 <= span;
+}
+
+function c34StepRescue(pad) {
+  const pool = c34Pool(), rescue = c34.rescue;
+  if (!pool || !rescue) return;
+  rescue.flash = Math.max(0, rescue.flash - 1);
+  const canReturn = c34CanReturnLeft(pad);
+  rescue.stuck = c34.swim && !canReturn ? rescue.stuck + 1 : 0;
+  const spirit = 'star_spirit_normal';
+  if (rescue.stuck >= 24) {
+    const returnToBank = () => {
+      player.x = pool.x - player.w - 72;
+      player.y = pool.baseY - player.h;
+      player.vx = player.vy = 0;
+      player.onGround = true;
+      cameraX = Math.max(0, Math.min(LEVEL_LENGTH - CANVAS_W, player.x - 380));
+      c34LeaveSurface();
+      rescue.seen = true;
+      rescue.stuck = 0;
+      rescue.flash = 30;
+      c34L({ ev: 'poolRescue' });
+    };
+    if (rescue.seen) returnToBank();
+    else if (rpgAssetState('balloonv_panic') === 'loaded' && rpgAssetState(spirit) === 'loaded') {
+      rpgOpen({ id: 'c34_pool_rescue', title: '水池救援', left: 'balloonv_panic', requirePages: true, pages: [
+        { sp: 'balloonv', face: 'balloonv_panic', text: '糟糕！爬不上去了……怎麼辦？' },
+        { sp: 'spirit', face: spirit, text: '別擔心！我帶你回岸上！' },
+      ], onEnd: how => { if (how === 'finished' && c34.rescue === rescue) returnToBank(); } });
+    }
+    return;
+  }
+
+  const feet = player.y + player.h;
+  const edge = pool.x - (player.x + player.w);
+  if (rescue.seen && !rescue.warned && !canReturn && player.onGround && feet === pool.baseY &&
+      edge >= 0 && edge <= 30 && inp('right') && player.vx > 0) {
+    rescue.warned = rpgOpen({ id: 'c34_pool_warning', title: '水池提醒', right: spirit, pages: [
+      { sp: 'spirit', face: spirit, text: '小V，小心！現在水位還太低，掉下去就爬不上來囉！' },
+    ] });
   }
 }
 
@@ -314,7 +471,7 @@ function c34StepWet(touching) {
   if (touching) {
     c34.dryingWindStart = null;
     c34.wet = C34.water.steps;
-    if (!wasWet) c34Teach('c34_first_wet');
+    if (!wasWet && !c34.rescue?.stuck) c34Teach('c34_first_wet');
     return;
   }
   if (!wasWet) return;
@@ -369,8 +526,10 @@ function c34Step() {
     c34._filling = fills;
     c34L({ ev: fills ? 'fillOn' : 'fillOff', level: c34.level });
   }
-  c34StepPad(platforms.find(p => p.c34Pad));
+  const pad = platforms.find(p => p.c34Pad);
+  c34StepPad(pad);
   c34StepSwim();
+  c34StepRescue(pad);
   if (!showerFall || c34.swim) c34.shower = null;
   else if (c34.shower?.fall !== showerFall) {
     c34.shower = { fall: showerFall, tick: c34.waterTick, mirror: !player.facingRight };

@@ -76,9 +76,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(report.dev, true);
     assert.match(report.version, /v0\.4\.13-ch3-water-terrain/);
     assert.ok(report.x < 620);
-    assert.deepEqual(report.art, { loaded: 76, failed: [] });
-    assert.equal(report.frames, 58);
-    assert.equal(report.folders, 16);
+    assert.deepEqual(report.art, { loaded: 82, failed: [] });
+    assert.equal(report.frames, 64);
+    assert.equal(report.folders, 17);
     assert.equal(report.p3, true);
     assert.ok(report.gaps > 0);
     assert.ok(report.pits.some(p => p.c34 === 'abyss' && p.wd));
@@ -462,6 +462,99 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       timings: [1200, 300, 600, 150], mixed: 1050, wind: true, soaked: { wet: 1200, wind: false },
     });
   });
+  await t.test('both waterfalls use the current canopy geometry for shelter and partial runoff', async () => {
+    const result = await page.evaluate(() => {
+      const before = { ...player }, slot = activeSlot;
+      const outcomes = c34Falls().map(fall => {
+        function sample(offset, facingRight, block, tool, vx = 0) {
+          Object.assign(player, { x: fall.x + offset - player.w / 2, y: c34FallBase(fall) - player.h,
+            onGround: true, facingRight, c2Block: block, vx, vy: 0, invincible: 0, popScare: 0 });
+          activeSlot = tool;
+          const interaction = c34ResolveFall(fall);
+          return { wet: interaction.touching, cut: interaction.canopy?.width || 0, streams: interaction.streams.length };
+        }
+        return {
+          none: sample(0, true, false, 'sword'),
+          overhead: [sample(0, true, false, 'umbrella'), sample(0, false, false, 'umbrella')],
+          side: [sample(0, true, true, 'umbrella'), sample(0, false, true, 'umbrella')],
+          partial: [sample(-29, true, true, 'umbrella'), sample(29, false, true, 'umbrella')],
+          moving: [sample(0, true, false, 'umbrella', 2), sample(0, false, false, 'umbrella', -2)],
+          restored: sample(0, true, false, 'umbrella'),
+          width: fall.w,
+        };
+      });
+      Object.assign(player, before);
+      activeSlot = slot;
+      return outcomes;
+    });
+    for (const { none, overhead, side, partial, moving, restored, width } of result) {
+      assert.ok(Math.abs(width - 46.46) < 0.015);
+      assert.deepEqual(none, { wet: true, cut: 0, streams: 0 });
+      assert.ok(overhead.every(pose => !pose.wet && pose.cut > 0));
+      assert.ok(side.every(pose => pose.wet && pose.cut === 0));
+      assert.ok(partial.every(pose => pose.wet && pose.cut > 0 && pose.cut < width && pose.streams > 0));
+      assert.ok(moving.every(pose => !pose.wet && pose.cut > 0));
+      assert.deepEqual(restored, overhead[0]);
+    }
+  });
+
+  await t.test('08 changes both arm and leg pixels across its loop without moving the head or waterline', async () => {
+    const result = await page.evaluate(() => {
+      const pose = c34Art.swimPose(200, 300, 0, true, false, 0);
+      const frame = time => {
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        c34Art.swimmer({ ...pose, bobTime: time });
+        return ctx.getImageData(100, 128, 220, 280).data;
+      };
+      const a = frame(0), b = frame(375), loop = frame(1200);
+      const changes = (first, second, top, bottom) => {
+        let count = 0;
+        for (let y = top; y < bottom; y++) {
+          for (let x = 0; x < 220; x++) {
+            const offset = (y * 220 + x) * 4;
+            if (Math.abs(first[offset + 3] - second[offset + 3]) > 25) count++;
+          }
+        }
+        return count;
+      };
+      const row = sourceY => Math.round(pose.y + (sourceY - 914) * pose.factor - 128);
+      return {
+        head: changes(a, b, row(150), row(570)),
+        arms: changes(a, b, row(640), row(900)),
+        legs: changes(a, b, row(970), row(1410)),
+        closedLoop: changes(a, loop, row(150), row(1410)),
+      };
+    });
+    assert.equal(result.head, 0);
+    assert.ok(result.arms > 20, JSON.stringify(result));
+    assert.ok(result.legs > 20, JSON.stringify(result));
+    assert.equal(result.closedLoop, 0);
+  });
+  await t.test('climb reach uses the left-bank geometry and the approved six frames', async () => {
+    const result = await page.evaluate(() => {
+      const pool = c34Pool();
+      const before = { ...player };
+      const state = { level: c34.level, swim: c34.swim, jumpReleased: c34.jumpReleased };
+      const images = Array.from({ length: 6 }, (_, frame) => c34Art.image('17_v_water_climb', frame * 110));
+      const usable = [0, 0.5, 1].map(level => {
+        c34.level = level;
+        return c34CanClimbLeft();
+      });
+      Object.assign(player, { x: pool.x + 1, y: c34SurfaceY() + C34.water.feetDepth - player.h,
+        vx: 0, vy: 0, onGround: false });
+      Object.assign(c34, { swim: true, jumpReleased: true });
+      keys.ArrowLeft = keys.Space = true;
+      const started = c34AdvanceClimb();
+      keys.ArrowLeft = keys.Space = false;
+      for (let frame = 0; frame < 42 && c34.climb; frame++) c34AdvanceClimb();
+      const landed = !c34.climb && player.onGround && player.x + player.w < pool.x &&
+        player.y + player.h === pool.baseY && player.hp === before.hp;
+      Object.assign(player, before);
+      Object.assign(c34, state);
+      return { usable, started, landed, frames: images.every(image => image?.naturalWidth > 0) };
+    });
+    assert.deepEqual(result, { usable: [false, true, true], started: true, landed: true, frames: true });
+  });
   await t.test('swimming, jump ratios, exit route and test-save isolation', async () => {
     const actual = await page.evaluate(() => {
       if (rpgActive) rpgClose('skipped');
@@ -629,6 +722,131 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.ok(stages[3].enemies.every(enemy => enemy.id.startsWith('P2-') || enemy.id.startsWith('CT-') || enemy.id.startsWith('BANK-')));
   });
 
+  for (const [mode, viewport] of [['desktop', { width: 1280, height: 820 }], ['mobile', { width: 844, height: 390 }]]) {
+    await t.test(mode + ' pool rescue, swim, climb and full-water exit', async () => {
+      const mobile = mode === 'mobile';
+      const videoDir = process.env.CH3_VIDEO_DIR;
+      const context = await browser.newContext({
+        viewport, isMobile: mobile, hasTouch: mobile,
+        ...(videoDir ? { recordVideo: { dir: videoDir, size: viewport } } : {}),
+      });
+      const rescuePage = await context.newPage();
+      const control = (button, pressed) => mobile
+        ? rescuePage.locator('#btn-' + button).dispatchEvent(pressed ? 'touchstart' : 'touchend')
+        : rescuePage.keyboard[pressed ? 'down' : 'up']({ left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space' }[button]);
+      const advanceDialog = () => mobile
+        ? rescuePage.locator('.rpg-next').tap({ force: true })
+        : rescuePage.locator('.rpg-next').click({ force: true });
+      try {
+        await boot(rescuePage, origin, 'pool');
+        const before = await rescuePage.evaluate(() => {
+          const pool = c34Pool(), pad = platforms.find(p => p.c34Pad);
+          if (rpgActive) rpgClose('finished');
+          rpgQueue.length = 0;
+          c34.taught.add('c34_first_wet');
+          activeSlot = 'sword';
+          Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
+            vx: 0, vy: 0, onGround: true });
+          cameraX = player.x - 380;
+          return { hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
+            stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
+            reachable: c34CanReturnLeft(pad), portrait: rpgAssetState('balloonv_panic') };
+        });
+        assert.equal(before.portrait, 'loaded');
+        assert.equal(before.reachable, false);
+        await control('right', true);
+        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_rescue');
+        await control('right', false);
+        assert.deepEqual(await rescuePage.evaluate(() => ({
+          face: rpgCurLeft, right: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text,
+          stillInPool: player.x >= c34Pool().x,
+        })), { face: 'balloonv_panic', right: null, text: '糟糕！爬不上去了……怎麼辦？', stillInPool: true });
+        await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+        await advanceDialog();
+        assert.deepEqual(await rescuePage.evaluate(() => ({
+          face: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text, stillInPool: player.x >= c34Pool().x,
+        })), { face: 'star_spirit_normal', text: '別擔心！我帶你回岸上！', stillInPool: true });
+        await rescuePage.waitForFunction(() => rpgTypeDone);
+        await advanceDialog();
+        await rescuePage.waitForFunction(() => !rpgActive && c34.rescue.seen);
+        const after = await rescuePage.evaluate(() => ({
+          hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
+          stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
+          safety: c34Pool().x - player.x - player.w, warned: c34.rescue.warned,
+        }));
+        assert.deepEqual(after, { hp: before.hp, bag: before.bag, level: before.level,
+          stats: before.stats, save: before.save, safety: 72, warned: false });
+        await control('right', true);
+        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_warning');
+        await control('right', false);
+        assert.equal(await rescuePage.evaluate(() => rpgActive.pages[0].text), '小V，小心！現在水位還太低，掉下去就爬不上來囉！');
+        await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+        await advanceDialog();
+        await control('right', true);
+        await rescuePage.waitForFunction(() => c34.log.filter(e => e.ev === 'poolRescue').length === 2);
+        await control('right', false);
+        assert.equal(await rescuePage.evaluate(() => !!rpgActive), false);
+
+        await rescuePage.evaluate(() => {
+          const pool = c34Pool();
+          c34.fillFrames = C34.pool.fillFrames / 2;
+          c34.level = 0.5;
+          Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h, vx: 0, vy: 0, onGround: true });
+        });
+        await control('right', true);
+        await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '09_v_water_move');
+        await control('right', false);
+        await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '08_v_water_idle');
+        await control('left', true);
+        await rescuePage.waitForFunction(() => c34.swim && !player.facingRight && player.x <= c34Pool().x + 12);
+        await control('jump', true);
+        await rescuePage.waitForFunction(() => !!c34.climb);
+        await control('jump', false);
+        await control('left', false);
+        await rescuePage.waitForFunction(() => !c34.climb && player.onGround && player.x + player.w < c34Pool().x);
+        assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 2);
+
+        await rescuePage.evaluate(() => {
+          c34.fillFrames = C34.pool.fillFrames;
+          c34.level = 1;
+          c34.wet = 0;
+          activeSlot = 'sword';
+          const pad = platforms.find(p => p.c34Pad);
+          c34StepPad(pad);
+          player.x = pad.x + pad.w - 16;
+          player.y = c34PlatformSurface(pad) - player.h;
+          player.vx = player.vy = 0;
+          player.onGround = true;
+          cameraX = player.x - 380;
+        });
+        await control('right', true);
+        await control('jump', true);
+        await rescuePage.waitForFunction(() => player.vy < 0);
+        await control('jump', false);
+        const reachedBank = () => {
+          const bank = platforms.find(p => p.c34Id === 'BANK');
+          return player.onGround && player.x + player.w > bank.x && player.y + player.h === bank.y;
+        };
+        while (!await rescuePage.evaluate(reachedBank)) {
+          await rescuePage.waitForFunction(() => !!rpgActive || player.onGround);
+          if (!await rescuePage.evaluate(() => !!rpgActive)) break;
+          await control('right', false);
+          while (await rescuePage.evaluate(() => !!rpgActive)) {
+            await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+            await advanceDialog();
+          }
+          await control('right', true);
+        }
+        await control('right', false);
+        assert.equal(await rescuePage.evaluate(reachedBank), true);
+        assert.equal(await rescuePage.evaluate(() => c34.level), 1);
+      } finally {
+        await context.close();
+        if (videoDir) await rescuePage.video().saveAs(videoDir + '/Batch-D-pool-' + mode + '.webm');
+      }
+    });
+  }
+
   await t.test('mobile-size pool entry and stage-specific assets', async () => {
     const mobile = await browser.newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
     mobile.on('pageerror', error => errors.push(error.message));
@@ -674,7 +892,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         const onMesa = mesa => onTop(mesa.x, mesa.w, layout.y(mesa.h));
 
         activeSlot = 'umbrella';
-        const launcher = advance(240, () => player.x >= 960);
+        const launcher = advance(360, () => player.x >= 960);
         wdSetAngleIndex(WD_TUNING.angles.indexOf(60));
         const firstMesa = advance(280, () => onMesa(layout.p1), { right: () => player.x < 1780 });
         advance(90, () => player.x >= layout.p1.x + layout.p1.w - player.w - 8);
@@ -694,6 +912,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         activeSlot = 'umbrella';
         advance(100, () => player.x + player.w / 2 >= layout.fallX);
         const filled = advance(430, () => c34.level === 1, { right: () => false });
+        advance(1240, () => c34.wet === 0, { right: () => false });
         const pad = platforms.find(p => p.c34Pad);
         advance(70, () => player.x >= layout.pool.x - player.w / 2 - 4);
         const reachedPad = advance(120, () => onTop(pad.x, pad.w, c34PlatformSurface(pad)),
