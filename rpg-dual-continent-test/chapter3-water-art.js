@@ -265,6 +265,36 @@ const c34Art = (() => {
     }
   }
 
+  function guideThickness(width, i) {
+    return 1.75 * width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+  }
+
+  function clipCanopyGuide(points, cx, width) {
+    // Join the edges along the canopy before painting the individual texture strips.
+    const edge = side => points.slice(0, 10).map((point, i) => {
+      const before = points[Math.max(0, i - 1)], after = points[i + 1];
+      const dx = after.x - before.x, dy = after.y - before.y;
+      const halfWidth = (guideThickness(width, i) + guideThickness(width, i + 1)) / 4;
+      const offset = side * halfWidth / Math.hypot(dx, dy);
+      return { x: point.x - cx - offset * dy, y: point.y + offset * dx };
+    });
+    const left = edge(1), right = edge(-1).reverse();
+    const trace = edge => {
+      ctx.lineTo(edge[0].x, edge[0].y);
+      for (let i = 1; i < edge.length - 1; i++) {
+        const point = edge[i], next = edge[i + 1];
+        ctx.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
+      }
+      ctx.lineTo(edge.at(-1).x, edge.at(-1).y);
+    };
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    trace(left);
+    trace(right);
+    ctx.closePath();
+    ctx.clip();
+  }
+
   function guide(canopy, stream, cx, width, time) {
     const { side, outX, outY, x, y } = stream;
     // Crop the descending leg of the directional art. Its baked bend is upstream of this crop.
@@ -280,17 +310,23 @@ const c34Art = (() => {
       const t = i / 16;
       points.push({ x: outX + (x - outX) * t, y: outY + (y - outY) * (0.4 * t + 0.6 * t * t) });
     }
+    ctx.save();
+    clipCanopyGuide(points, cx, width);
     for (let i = 1; i < points.length; i++) {
+      if (i === 10) ctx.restore();
       const a = points[i - 1], b = points[i];
       const dx = b.x - a.x, dy = b.y - a.y;
       const length = Math.hypot(dx, dy);
       if (length < 0.01) continue;
-      const thickness = 1.75 * width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+      const thickness = guideThickness(width, i);
       ctx.save();
       ctx.translate(a.x - cx, a.y);
       ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
       ctx.globalAlpha *= 0.90;
-      ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50, -thickness / 2, -0.75, thickness, length + 1.5);
+      // Extend the corner strips under the shared mask so their rotated ends cannot leave gaps.
+      const bleed = i <= 9 ? 3 : 0;
+      ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50,
+        -thickness / 2 - bleed, -0.75 - bleed, thickness + 2 * bleed, length + 1.5 + 2 * bleed);
       ctx.restore();
     }
   }
