@@ -76,9 +76,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(report.dev, true);
     assert.match(report.version, /v0\.4\.13-ch3-water-terrain/);
     assert.ok(report.x < 620);
-    assert.deepEqual(report.art, { loaded: 76, failed: [] });
-    assert.equal(report.frames, 58);
-    assert.equal(report.folders, 16);
+    assert.deepEqual(report.art, { loaded: 82, failed: [] });
+    assert.equal(report.frames, 64);
+    assert.equal(report.folders, 17);
     assert.equal(report.p3, true);
     assert.ok(report.gaps > 0);
     assert.ok(report.pits.some(p => p.c34 === 'abyss' && p.wd));

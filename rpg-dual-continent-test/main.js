@@ -34005,6 +34005,7 @@ function c34Complete(sid) {
     return isChapter3ParallaxStage() && c34Art.background(c34Is() ? Math.round(c34.camY) : 0) || o.apply(this, arguments);
   });
   wrapFn('drawPlayer', o => function (cx) {
+    if (c34Is() && c34.climb && c34Art.climb(c34.climb, cx)) return;
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
     if (c34Is() && c34HeroWater.drawShower(cx)) return;
     return o.apply(this, arguments);
@@ -34016,6 +34017,7 @@ function c34Complete(sid) {
       pages: [{ sp: 'balloonv', face: line.face, text: line.text }] };
   });
   wrapFn('updatePlayer', o => function () {
+    if (c34Is() && gameState === 'playing' && !rpgActive && c34AdvanceClimb()) return;
     const result = o.apply(this, arguments);
     if (c34Is() && gameState === 'playing' && !rpgActive) {
       if (player.x >= 900 && player.x < C34_LAY.a1) c34Teach('c34_canyon_arrival');

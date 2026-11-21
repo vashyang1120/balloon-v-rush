@@ -25,7 +25,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
-    swim: false, swimTime: 0, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
+    swim: false, swimTime: 0, climb: null, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
     falls: new Map(), poolImpact: null, shower: null });
 }
 
@@ -309,6 +309,35 @@ function c34StepPad(pad) {
     bag.y = c34PlatformSurface(pad, bag.x) - 32;
   }
   pad.c34Occupied = onPad;
+}
+
+function c34CanClimbLeft() {
+  const pool = c34Pool();
+  if (!pool) return false;
+  const speed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
+  const jumpRise = speed * speed / (2 * GRAVITY);
+  return c34SurfaceY() + C34.water.feetDepth - pool.baseY <= jumpRise + 12;
+}
+
+function c34AdvanceClimb() {
+  const pool = c34Pool();
+  if (!pool) return false;
+  if (!c34.climb) {
+    if (!c34.swim || !c34.jumpReleased || !inp('jump') || !inp('left') ||
+        player.x > pool.x + 12 || !c34CanClimbLeft()) return false;
+    c34.climb = { edge: pool.x, top: pool.baseY, tick: 0,
+      reachOffset: Math.max(0, c34SurfaceY() - pool.baseY - 8) };
+    player.facingRight = false;
+    player.vx = player.vy = 0;
+    c34LeaveSurface();
+  }
+  if (++c34.climb.tick >= Math.ceil(6 * 110 * 60 / 1000)) {
+    player.x = pool.x - player.w - 8;
+    player.y = pool.baseY - player.h;
+    player.onGround = true;
+    c34.climb = null;
+  }
+  return true;
 }
 
 function c34StepSwim() {

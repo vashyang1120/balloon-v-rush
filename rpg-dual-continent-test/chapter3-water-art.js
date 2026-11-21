@@ -407,6 +407,25 @@ const c34Art = (() => {
     return true;
   }
 
+  function climb(pose, cx) {
+    const id = '17_v_water_climb';
+    const spec = catalog[id], time = pose.tick * 1000 / 60;
+    const frame = Math.floor(time / spec.ms);
+    const im = image(id, time);
+    if (!im || !spec.frames[frame]) return false;
+    const { size: [w, h], anchor: [ax, ay], offset, scale } = spec.frames[frame];
+    const ratio = landPose().headWidth / 105;
+    const factor = scale * ratio;
+    const x = pose.edge - cx - offset * ratio;
+    const y = pose.top + pose.reachOffset * Math.max(0, 1 - time / (2 * spec.ms));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(im, -ax * factor, -ay * factor, w * factor, h * factor);
+    ctx.restore();
+    return true;
+  }
+
   function drop(x, y, fraction) {
     const id = '10_wetness_drop', spec = catalog[id];
     if (!image(id) || fraction <= 0) return;
@@ -421,6 +440,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, drop,
+  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, climb, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();
