@@ -432,7 +432,7 @@ function c34StepWet(touching) {
   if (touching) {
     c34.dryingWindStart = null;
     c34.wet = C34.water.steps;
-    if (!wasWet) c34Teach('c34_first_wet');
+    if (!wasWet && !c34.rescue?.stuck) c34Teach('c34_first_wet');
     return;
   }
   if (!wasWet) return;
