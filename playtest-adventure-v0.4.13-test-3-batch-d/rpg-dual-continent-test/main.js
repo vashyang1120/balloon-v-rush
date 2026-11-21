@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch D';
+const GAME_BUILD_REVISION = 'Batch D Revision 1';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -34009,7 +34009,10 @@ function c34Complete(sid) {
   wrapFn('drawPlayer', o => function (cx) {
     if (c34Is() && c34.climb && c34Art.climb(c34.climb, cx)) return;
     if (c34Is() && c34.swim && c34Art.swimmer(c34SwimPose(cx))) return;
-    if (c34Is() && c34HeroWater.drawShower(cx)) return;
+    if (c34Is()) {
+      const sideUmbrella = umbEquipped() && c2UmbArtKey() === 'block' && c2UmbArtReady('block');
+      if (c34HeroWater.drawShower(cx, undefined, sideUmbrella ? c34DrawShowerUmbrella : null)) return;
+    }
     return o.apply(this, arguments);
   });
   wrapFn('rpgBuildScene', o => function (id) {

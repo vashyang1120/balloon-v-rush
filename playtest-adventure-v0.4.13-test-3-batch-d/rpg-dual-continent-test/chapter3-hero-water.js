@@ -54,12 +54,13 @@ const c34HeroWater = (() => {
     ctx.restore();
   }
 
-  function drawShower(cx, pose = shower()) {
+  function drawShower(cx, pose = shower(), drawUmbrella = null) {
     if (!pose) return false;
     const [body, water, eyes, hands, splash] = pose.frame.files;
     const x = player.x + player.w / 2 - cx;
     const { feet, factor, mirror, fall } = pose;
     layer(body, x, feet, factor, art.feet, mirror);
+    if (drawUmbrella) drawUmbrella(cx);
     layer(water, fall.x - cx, feet, factor, [art.entry[0], art.feet[1]]);
     layer(eyes, x, feet, factor, art.feet, mirror);
     layer(hands, x, feet, factor, art.feet, mirror);

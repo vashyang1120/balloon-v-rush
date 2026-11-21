@@ -92,22 +92,38 @@ const C34_UMBRELLA_CANOPY = {
   run4: [587, 1190, 23, 347], run5: [618, 1213, 13, 331],
 };
 
-function c34FallCanopy(f) {
-  if (!umbEquipped() || c34.swim) return null;
-  const key = c2UmbArtKey();
+// Upper edge of the sideways balloon cluster measured along the block sprite.
+const C34_SIDE_CANOPY = [[835, 395], [861, 315], [891, 295], [930, 312],
+  [985, 367], [1033, 437], [1088, 517], [1114, 558]];
+
+function c34UmbrellaTransform(key) {
   const frame = UMBRELLA_ART.frames[key], pose = c2UmbPoseOf(key);
-  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
   const k = c2UmbFrameScale(pose);
   const sign = player.facingRight ? 1 : -1;
   const originX = Math.round(player.x + player.w / 2 + c2BlockFxHeroDx()) + sign * (pose.dx || 0);
   const originY = player.y + player.h + frame.feet + (pose.dy || 0) + c2HoverBobY();
-  const toX = u => originX + sign * (u - frame.ax) * k;
-  const toY = v => originY + (v - frame.gy) * k;
+  return { k, sign, toX: u => originX + sign * (u - frame.ax) * k, toY: v => originY + (v - frame.gy) * k };
+}
+
+function c34DrawShowerUmbrella(cx) {
+  const { k, sign, toX, toY } = c34UmbrellaTransform('block');
+  // The side canopy and exposed shaft occupy this strip of the existing block sprite.
+  const x = 800, y = 292, width = 326, height = 645;
+  ctx.save();
+  ctx.translate(toX(x) - cx, toY(y));
+  ctx.scale(sign, 1);
+  ctx.drawImage(umbImgs.block, x, y, width, height, 0, 0, width * k, height * k);
+  ctx.restore();
+}
+
+function c34FallCanopy(f) {
+  if (!umbEquipped() || c34.swim) return null;
+  const key = c2UmbArtKey();
+  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
+  const { k, sign, toX, toY } = c34UmbrellaTransform(key);
   const x0 = Math.min(toX(left), toX(right)), x1 = Math.max(toX(left), toX(right));
   const reach0 = Math.max(x0, f.x - f.w / 2), reach1 = Math.min(x1, f.x + f.w / 2);
-  // Running and blocking sprites can move the canopy ahead of the contact band in one frame.
-  // An equipped umbrella still catches a fall that reaches the player's body band.
-  if (reach1 <= reach0 && !c34UnderFall(f)) return null;
+  if (reach1 <= reach0 || !c2UmbArtReady(key)) return null;
   const crownX = (x0 + x1) / 2;
   const direction = f.split ? 'split' : (sign > 0 ? 'right' : 'left');
   const overlapX = Math.min(x1, Math.max(x0, Math.max(f.x - f.w / 2, Math.min(f.x + f.w / 2, crownX))));
@@ -115,12 +131,19 @@ function c34FallCanopy(f) {
   const x = direction === 'split' ? crownX
     : direction === 'right' ? Math.max(crownX, overlapX) : Math.min(crownX, overlapX);
   const surfaceAt = atX => {
+    if (key === 'block') {
+      const sourceX = Math.max(left, Math.min(right, left + (atX - toX(left)) * sign / k));
+      const nextIndex = C34_SIDE_CANOPY.findIndex(([x], i) => i > 0 && x >= sourceX);
+      const [x0, y0] = C34_SIDE_CANOPY[nextIndex - 1], [x1, y1] = C34_SIDE_CANOPY[nextIndex];
+      return toY(y0 + (y1 - y0) * (sourceX - x0) / (x1 - x0));
+    }
     const u = Math.min(1, Math.abs(2 * (atX - crownX) / (x1 - x0)));
     return toY(edge - Math.sqrt(1 - u * u) * (edge - crown));
   };
   const y = surfaceAt(x);
   if (y > c34FallBase(f) || y < c34FallTop()) return null;
-  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt, overlaps: reach1 > reach0 };
+  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt,
+    reach0, reach1, width: reach1 - reach0, overlaps: true };
 }
 
 function c34ArcLand(f, dir, surface, outX, outY) {
@@ -158,7 +181,15 @@ function c34FallStreams(f, canopy) {
 
 function c34ResolveFall(f) {
   const canopy = c34FallCanopy(f);
-  return { canopy, streams: c34FallStreams(f, canopy), touching: !canopy && c34UnderFall(f) };
+  const center = player.x + player.w / 2;
+  // Ignore the thin spray fringe when testing whether the head takes a direct hit.
+  const bodyRadius = Math.min(8, player.w / 2);
+  const left = Math.max(f.x - f.w / 2, center - bodyRadius);
+  const right = Math.min(f.x + f.w / 2, center + bodyRadius);
+  const head = c34Art.landPose().top + 6;
+  const sheltered = canopy && right > left && left >= canopy.reach0 && right <= canopy.reach1 &&
+    Math.max(canopy.surfaceAt(left), canopy.surfaceAt(right)) <= head;
+  return { canopy, streams: c34FallStreams(f, canopy), touching: right > left && !sheltered && c34UnderFall(f) };
 }
 
 const C34_IMPACT_FADE_STEPS = 24;
@@ -193,25 +224,33 @@ function c34DrawFall(f, cx) {
   const top = c34FallTop(), end = c34FallBase(f);
   const splashScale = 0.047 * f.w / 36;
   const shower = touching && c34HeroWater.shower();
-  if (shower?.fall === f) {
-    c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
-    return;
-  }
-  if (canopy?.overlaps) {
-    c34Art.column(x, top, canopy.outY, f.w, time, {
-      surfaceAt: atX => canopy.surfaceAt(atX + cx),
+  const columnLeft = x - f.w / 2, columnRight = x + f.w / 2;
+  const openColumn = (left, right) => {
+    if (right <= left) return;
+    c34Art.clip(left, top, right - left, end - top + 16, () => {
+      if (shower?.fall === f) c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
+      else c34Art.column(x, top, end, f.w, time);
     });
+  };
+  if (canopy) {
+    const left = canopy.reach0 - cx, right = canopy.reach1 - cx;
+    openColumn(columnLeft, left);
+    openColumn(right, columnRight);
+    c34Art.clip(left, top, right - left, canopy.outY - top, () =>
+      c34Art.column(x, top, canopy.outY, f.w, time, {
+        surfaceAt: atX => canopy.surfaceAt(atX + cx),
+      }));
     for (const stream of streams) {
-      c34Art.guide(canopy, stream, cx, f.w / streams.length, time);
+      c34Art.guide(canopy, stream, cx, canopy.width / streams.length, time);
       if (!stream.fills) {
-        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale / streams.length);
+        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * canopy.width / f.w / streams.length);
       }
     }
-  } else {
-    c34Art.column(x, top, end, f.w, time);
-    c34Art.at('03_waterfall_splash', time, x, end, splashScale);
-    if (touching) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
+  } else openColumn(columnLeft, columnRight);
+  if ((!canopy || canopy.width < f.w) && shower?.fall !== f) {
+    c34Art.at('03_waterfall_splash', time, x, end, splashScale * (1 - (canopy?.width || 0) / f.w));
   }
+  if (touching && shower?.fall !== f) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
 }
 
 function c34DrawPool(cx) {
