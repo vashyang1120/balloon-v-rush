@@ -92,17 +92,35 @@ const C34_UMBRELLA_CANOPY = {
   run4: [587, 1190, 23, 347], run5: [618, 1213, 13, 331],
 };
 
-function c34FallCanopy(f) {
-  if (!umbEquipped() || c34.swim) return null;
-  const key = c2UmbArtKey();
+// Upper edge of the sideways balloon cluster measured along the block sprite.
+const C34_SIDE_CANOPY = [[835, 395], [861, 315], [891, 295], [930, 312],
+  [985, 367], [1033, 437], [1088, 517], [1114, 558]];
+
+function c34UmbrellaTransform(key) {
   const frame = UMBRELLA_ART.frames[key], pose = c2UmbPoseOf(key);
-  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
   const k = c2UmbFrameScale(pose);
   const sign = player.facingRight ? 1 : -1;
   const originX = Math.round(player.x + player.w / 2 + c2BlockFxHeroDx()) + sign * (pose.dx || 0);
   const originY = player.y + player.h + frame.feet + (pose.dy || 0) + c2HoverBobY();
-  const toX = u => originX + sign * (u - frame.ax) * k;
-  const toY = v => originY + (v - frame.gy) * k;
+  return { k, sign, toX: u => originX + sign * (u - frame.ax) * k, toY: v => originY + (v - frame.gy) * k };
+}
+
+function c34DrawShowerUmbrella(cx) {
+  const { k, sign, toX, toY } = c34UmbrellaTransform('block');
+  // The side canopy and exposed shaft occupy this strip of the existing block sprite.
+  const x = 800, y = 292, width = 326, height = 645;
+  ctx.save();
+  ctx.translate(toX(x) - cx, toY(y));
+  ctx.scale(sign, 1);
+  ctx.drawImage(umbImgs.block, x, y, width, height, 0, 0, width * k, height * k);
+  ctx.restore();
+}
+
+function c34FallCanopy(f) {
+  if (!umbEquipped() || c34.swim) return null;
+  const key = c2UmbArtKey();
+  const [left, right, crown, edge] = C34_UMBRELLA_CANOPY[key];
+  const { k, sign, toX, toY } = c34UmbrellaTransform(key);
   const x0 = Math.min(toX(left), toX(right)), x1 = Math.max(toX(left), toX(right));
   const reach0 = Math.max(x0, f.x - f.w / 2), reach1 = Math.min(x1, f.x + f.w / 2);
   if (reach1 <= reach0 || !c2UmbArtReady(key)) return null;
@@ -113,6 +131,12 @@ function c34FallCanopy(f) {
   const x = direction === 'split' ? crownX
     : direction === 'right' ? Math.max(crownX, overlapX) : Math.min(crownX, overlapX);
   const surfaceAt = atX => {
+    if (key === 'block') {
+      const sourceX = Math.max(left, Math.min(right, left + (atX - toX(left)) * sign / k));
+      const nextIndex = C34_SIDE_CANOPY.findIndex(([x], i) => i > 0 && x >= sourceX);
+      const [x0, y0] = C34_SIDE_CANOPY[nextIndex - 1], [x1, y1] = C34_SIDE_CANOPY[nextIndex];
+      return toY(y0 + (y1 - y0) * (sourceX - x0) / (x1 - x0));
+    }
     const u = Math.min(1, Math.abs(2 * (atX - crownX) / (x1 - x0)));
     return toY(edge - Math.sqrt(1 - u * u) * (edge - crown));
   };
