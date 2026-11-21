@@ -21,3 +21,7 @@
 ## Batch C2 Revision 1
 
 施工基準為 `402b5daa21110a3d8033f563ba29c83f1dd52185`。依現有分支及 Draft PR #39 交接。18A／18B 素材與動畫節奏沿用 C2，風乾規格保留至 C3。
+
+遊戲提交 `65d83168ffbf54115be2050b82e340a93fe5f6fb`；部署提交 `ef2bd9021b073ff312f69fd7cee78a4ba0f0ba84`，差異僅五個 Batch C 試玩目錄內的檔案。[Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44841310141) 建置及部署成功。[Revision 1 試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/)。
+
+最終回歸 50 項通過。桌機 Chrome 起點與手機橫向觸控模擬水池均從公開 HTTPS 首次進關，載入全部 72 張正式 18A／18B PNG，未重新整理或按重試。起點另記錄四張既有導風裝置圖請求中止及外站備援被隔離政策阻擋，仍成功進關；水池未見請求失敗。完整原始紀錄為 `C2R1-HTTPS-verification.log`。
