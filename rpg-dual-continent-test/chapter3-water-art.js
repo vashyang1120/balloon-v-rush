@@ -266,67 +266,71 @@ const c34Art = (() => {
     }
   }
 
-  function guideThickness(width, i) {
-    return width * (0.82 - 0.13 * i / 24);
-  }
-
-  function clipCanopyGuide(points, cx, width) {
-    // Join the edges along the canopy before painting the individual texture strips.
-    const edge = side => points.map((point, i) => {
-      const before = points[Math.max(0, i - 1)], after = points[Math.min(points.length - 1, i + 1)];
-      const dx = after.x - before.x, dy = after.y - before.y;
-      const halfWidth = (guideThickness(width, i) + guideThickness(width, i + 1)) / 4;
-      const offset = side * halfWidth / Math.hypot(dx, dy);
-      return { x: point.x - cx - offset * dy, y: point.y + offset * dx };
+  function guideProfile(canopy, streams) {
+    const root = { x: canopy.x, y: canopy.y - 4 };
+    const branches = streams.map(stream => {
+      const dx = stream.x - root.x;
+      const dy = Math.max(0, stream.y - root.y);
+      return { ...stream, dx, dy };
     });
-    const left = edge(1), right = edge(-1).reverse();
-    const trace = edge => {
-      ctx.lineTo(edge[0].x, edge[0].y);
-      for (let i = 1; i < edge.length - 1; i++) {
-        const point = edge[i], next = edge[i + 1];
-        ctx.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
-      }
-      ctx.lineTo(edge.at(-1).x, edge.at(-1).y);
-    };
-    ctx.beginPath();
-    ctx.moveTo(left[0].x, left[0].y);
-    trace(left);
-    trace(right);
-    ctx.closePath();
-    ctx.clip();
+    const [left, right] = branches;
+    const at = (branch, t) => ({
+      x: root.x + branch.dx * t,
+      y: root.y + branch.dy * t * t,
+    });
+    return { left, right, at, root, surfaceAt(x) {
+      const branch = x < root.x ? left : right;
+      const t = Math.min(1, Math.max(0, (x - root.x) / (branch.dx || 1)));
+      return at(branch, t).y;
+    } };
   }
 
-  function guide(canopy, stream, cx, width, time) {
-    const { side, outX, outY, x, y } = stream;
-    // Crop the descending leg of the directional art. Its baked bend is upstream of this crop.
-    const im = image('02_umbrella_' + side, time);
-    if (!im) return;
-    const sourceX = side === 'right' ? 1360 : 240;
-    const points = [{ x: canopy.x, y: canopy.y }];
-    for (let i = 1; i <= 8; i++) {
-      const px = canopy.x + (outX - canopy.x) * i / 8;
-      points.push({ x: px, y: Math.max(canopy.y, canopy.surfaceAt(px)) });
+  function guide(profile, cx, time) {
+    const { left, right, at, root } = profile;
+    const crownWidth = (left.width + right.width) / 2;
+    const nodes = [];
+    for (const branch of [left, right]) {
+      for (let i = 0; i <= 24; i++) {
+        if (branch === right && i === 0) continue;
+        const t = branch === left ? 1 - i / 24 : i / 24;
+        const point = at(branch, t);
+        const blend = Math.min(1, t * 5);
+        const width = (crownWidth + (branch.width - crownWidth) * blend) * (0.78 - 0.09 * t);
+        const angle = Math.atan2(branch.dy * 2 * t * Math.sign(branch.dx), Math.abs(branch.dx));
+        nodes.push({ x: point.x - cx, y: point.y, dx: Math.sin(angle) * width / 2, dy: Math.cos(angle) * width / 2 });
+      }
     }
-    for (let i = 1; i <= 16; i++) {
-      const t = i / 16;
-      points.push({ x: outX + (x - outX) * t, y: outY + (y - outY) * (0.4 * t + 0.6 * t * t) });
-    }
+    const trace = (items, side) => {
+      for (const point of items) ctx.lineTo(point.x + side * point.dx, point.y - side * point.dy);
+    };
     ctx.save();
-    clipCanopyGuide(points, cx, width);
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1], b = points[i];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const length = Math.hypot(dx, dy);
-      if (length < 0.01) continue;
-      const thickness = guideThickness(width, i);
-      ctx.save();
-      ctx.translate(a.x - cx, a.y);
-      ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
-      // Extend the corner strips under the shared mask so their rotated ends cannot leave gaps.
-      const bleed = Math.max(4, thickness * 0.22);
-      ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50,
-        -thickness / 2 - bleed, -0.75 - bleed, thickness + 2 * bleed, length + 1.5 + 2 * bleed);
-      ctx.restore();
+    ctx.beginPath();
+    const first = nodes[0];
+    ctx.moveTo(first.x + first.dx, first.y - first.dy);
+    trace(nodes, 1);
+    trace([...nodes].reverse(), -1);
+    ctx.closePath();
+    const gradient = ctx.createLinearGradient(0, root.y - crownWidth, 0, Math.max(left.y, right.y) + 1);
+    gradient.addColorStop(0, 'rgba(161,227,241,0.98)');
+    gradient.addColorStop(0.35, 'rgba(129,216,239,0.94)');
+    gradient.addColorStop(1, 'rgba(159,230,247,0.89)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    ctx.clip();
+
+    // Curved translucent filaments carry the water texture through the join.
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const [index, lane] of [-0.77, -0.47, -0.18, 0.1, 0.37, 0.65, 0.84].entries()) {
+      ctx.beginPath();
+      for (const [i, point] of nodes.entries()) {
+        const drift = 0.055 * Math.sin(i * 0.37 - time / 210 + index * 1.4);
+        const offset = lane + drift;
+        ctx.lineTo(point.x + offset * point.dx, point.y - offset * point.dy);
+      }
+      ctx.lineWidth = index % 3 === 0 ? 2.6 : 1.1;
+      ctx.strokeStyle = index % 3 === 0 ? 'rgba(230,250,255,0.46)' : 'rgba(230,250,255,0.23)';
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -447,6 +451,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, expected, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, climb, drop,
+  return { entries, expected, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, guideProfile, landPose, swimPose, swimmer, climb, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();

@@ -462,6 +462,31 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       timings: [1200, 300, 600, 150], mixed: 1050, wind: true, soaked: { wet: 1200, wind: false },
     });
   });
+  await t.test('umbrella descent dries like wind without stacking or overriding a new shower', async () => {
+    const actual = await page.evaluate(() => {
+      const before = { ...player }, slot = activeSlot, wet = c34.wet, start = c34.dryingWindStart;
+      try {
+        player.x = c34Pool().x + 80;
+        player.y = c34Pool().baseY - 240;
+        function sample(tool, grounded, vy, touching = false) {
+          activeSlot = tool;
+          Object.assign(player, { onGround: grounded, vy });
+          c34.wet = 1200;
+          c34StepWet(touching);
+          return c34.wet;
+        }
+        return [sample('umbrella', false, 2), sample('umbrella', false, -2),
+          sample('umbrella', true, 0), sample('sword', false, 2), sample('umbrella', false, 2, true)];
+      } finally {
+        Object.assign(player, before);
+        activeSlot = slot;
+        c34.wet = wet;
+        c34.dryingWindStart = start;
+      }
+    });
+    assert.deepEqual(actual, [1196, 1199, 1199, 1199, 1200]);
+  });
+
   await t.test('both waterfalls use the current canopy geometry for shelter and partial runoff', async () => {
     const result = await page.evaluate(() => {
       const before = { ...player }, slot = activeSlot;
@@ -512,7 +537,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           c34.falls = new Map([[fall.id, interaction]]);
           const columns = [], branches = [];
           c34Art.column = (_x, _top, _end, width, _time, contact) => columns.push({ width, clipped: !!contact });
-          c34Art.guide = (_canopy, stream) => branches.push(stream.side);
+          c34Art.guide = profile => branches.push(profile.left.side, profile.right.side);
           c34DrawFall(fall, fall.x - 200);
           return { width: fall.w, wet: interaction.touching, cut: interaction.canopy?.width, columns, branches };
         }));

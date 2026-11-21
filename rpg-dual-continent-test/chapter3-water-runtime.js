@@ -237,14 +237,15 @@ function c34DrawFall(f, cx) {
       openColumn(columnLeft, left);
       openColumn(right, columnRight);
     }
+    const profile = c34Art.guideProfile(canopy, streams);
     const stopLeft = canopy.overhead ? columnLeft : left;
     const stopRight = canopy.overhead ? columnRight : right;
     c34Art.clip(stopLeft, top, stopRight - stopLeft, canopy.outY - top, () =>
       c34Art.column(x, top, canopy.outY, f.w, time, {
-        surfaceAt: atX => canopy.surfaceAt(Math.min(canopy.reach1, Math.max(canopy.reach0, atX + cx))),
+        surfaceAt: atX => profile.surfaceAt(atX + cx),
       }));
+    c34Art.guide(profile, cx, time);
     for (const stream of streams) {
-      c34Art.guide(canopy, stream, cx, stream.width, time);
       if (!stream.fills) {
         c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * stream.width / (f.w * 1.05));
       }
@@ -496,14 +497,16 @@ function c34StepWet(touching) {
   }
   if (!wasWet) return;
 
-  const rate = inWind ? C34.water.windDryRate : 1;
+  const gliding = umbEquipped() && !player.onGround && !c34.swim && !c34.climb && player.vy > 0;
+  const accelerated = inWind || gliding;
+  const rate = accelerated ? C34.water.windDryRate : 1;
   c34.wet = Math.max(0, c34.wet - rate);
-  if (!inWind || c34.wet === 0) {
+  if (!accelerated || c34.wet === 0) {
     c34.dryingWindStart = null;
   } else if (c34.dryingWindStart === null) {
     c34.dryingWindStart = c34.waterTick;
-    c34Teach('c34_first_dry_wind');
   }
+  if (inWind && c34.wet > 0) c34Teach('c34_first_dry_wind');
 }
 
 function c34Step() {
