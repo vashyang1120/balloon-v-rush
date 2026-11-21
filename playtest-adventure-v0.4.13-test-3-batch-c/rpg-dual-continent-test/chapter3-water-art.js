@@ -285,7 +285,7 @@ const c34Art = (() => {
       const dx = b.x - a.x, dy = b.y - a.y;
       const length = Math.hypot(dx, dy);
       if (length < 0.01) continue;
-      const thickness = width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+      const thickness = 1.75 * width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
       ctx.save();
       ctx.translate(a.x - cx, a.y);
       ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
