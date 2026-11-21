@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch D Revision 1';
+const GAME_BUILD_REVISION = 'Batch D Revision 2';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -5859,7 +5859,7 @@ function updatePlayer(dt) {
   const _spd = waterMotion.move * PLAYER_SPEED * ((typeof v396BootsMoveMul === 'function') ? v396BootsMoveMul() : 1);
   if (inp('left'))  { player.vx = -_spd; player.facingRight = false; moving = true; }
   if (inp('right')) { player.vx =  _spd; player.facingRight = true;  moving = true; }
-  if (!moving) player.vx *= 0.75; // friction
+  if (!moving) player.vx = waterMotion.swim ? 0 : player.vx * 0.75; // friction
 
   const xBeforeMove = player.x;
   // Right edge: can't go past FINISH_X + some buffer

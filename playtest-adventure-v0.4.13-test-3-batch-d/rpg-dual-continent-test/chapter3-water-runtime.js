@@ -125,11 +125,8 @@ function c34FallCanopy(f) {
   const reach0 = Math.max(x0, f.x - f.w / 2), reach1 = Math.min(x1, f.x + f.w / 2);
   if (reach1 <= reach0 || !c2UmbArtReady(key)) return null;
   const crownX = (x0 + x1) / 2;
-  const direction = f.split ? 'split' : (sign > 0 ? 'right' : 'left');
-  const overlapX = Math.min(x1, Math.max(x0, Math.max(f.x - f.w / 2, Math.min(f.x + f.w / 2, crownX))));
-  // Start at the crest whenever the outgoing path would otherwise cross it uphill.
-  const x = direction === 'split' ? crownX
-    : direction === 'right' ? Math.max(crownX, overlapX) : Math.min(crownX, overlapX);
+  const direction = sign > 0 ? 'right' : 'left';
+  const x = Math.min(reach1, Math.max(reach0, crownX));
   const surfaceAt = atX => {
     if (key === 'block') {
       const sourceX = Math.max(left, Math.min(right, left + (atX - toX(left)) * sign / k));
@@ -154,7 +151,7 @@ function c34ArcLand(f, dir, surface, outX, outY) {
 function c34FallStreams(f, canopy) {
   if (!canopy) return [];
   const pool = c34Pool();
-  const sides = canopy.direction === 'split' ? ['left', 'right'] : [canopy.direction];
+  const sides = ['left', 'right'];
   return sides.map(side => {
     const dir = side === 'right' ? 1 : -1;
     const outX = canopy[side], outY = canopy.outY;
@@ -175,7 +172,8 @@ function c34FallStreams(f, canopy) {
         y = Math.max(outY, c34FallBase(f));
       }
     }
-    return { side, outX, outY, x, y, fills };
+    const forward = side === canopy.direction;
+    return { side, outX, outY, x, y, fills, width: f.w * (forward ? 1.75 : 0.5), rate: forward ? 1 : 0.1 };
   });
 }
 
@@ -241,9 +239,9 @@ function c34DrawFall(f, cx) {
         surfaceAt: atX => canopy.surfaceAt(atX + cx),
       }));
     for (const stream of streams) {
-      c34Art.guide(canopy, stream, cx, canopy.width / streams.length, time);
+      c34Art.guide(canopy, stream, cx, stream.width, time);
       if (!stream.fills) {
-        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * canopy.width / f.w / streams.length);
+        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * stream.width / (f.w * 1.75));
       }
     }
   } else openColumn(columnLeft, columnRight);
@@ -289,7 +287,7 @@ function c34DrawRipples(cx) {
 
 function c34SwimPose(cx) {
   return c34Art.swimPose(player.x + player.w / 2 - cx, c34SurfaceY(), c34.swimTime,
-    player.facingRight, c34.paddling, c34.waterTick * 1000 / 60);
+    player.facingRight, c34.waterTick * 1000 / 60);
 }
 
 function c34DrawWetStatus(cx) {
@@ -369,17 +367,29 @@ function c34AdvanceClimb() {
   const pool = c34Pool();
   if (!pool) return false;
   if (!c34.climb) {
-    if (!c34.swim || !c34.jumpReleased || !inp('jump') || !inp('left') ||
-        player.x > pool.x + 12 || !c34CanClimbLeft()) return false;
-    c34.climb = { edge: pool.x, top: pool.baseY, tick: 0,
-      reachOffset: Math.max(0, c34SurfaceY() - pool.baseY - 8) };
-    player.facingRight = false;
+    if (!c34.swim) return false;
+    const pad = platforms.find(p => p.c34Pad);
+    const fromLeft = pad && inp('right') && Math.abs(player.x + player.w - pad.x) <= 2;
+    const fromRight = pad && inp('left') && Math.abs(player.x - (pad.x + pad.w)) <= 2;
+    // A low-water landing that still strands the player must go through rescue.
+    if ((fromLeft || fromRight) && c34CanReturnLeft(pad)) {
+      const edge = fromLeft ? pad.x : pad.x + pad.w;
+      c34.climb = { pad, edge, top: c34PlatformSurface(pad, edge), tick: 0, facingRight: !!fromLeft };
+    } else {
+      if (!c34.jumpReleased || !inp('jump') || !inp('left') ||
+          player.x > pool.x + 12 || !c34CanClimbLeft()) return false;
+      c34.climb = { edge: pool.x, top: pool.baseY, tick: 0, facingRight: false };
+    }
+    c34.climb.reachOffset = Math.max(0, c34SurfaceY() - c34.climb.top - 8);
+    player.facingRight = c34.climb.facingRight;
     player.vx = player.vy = 0;
     c34LeaveSurface();
   }
   if (++c34.climb.tick >= Math.ceil(6 * 110 * 60 / 1000)) {
-    player.x = pool.x - player.w - 8;
-    player.y = pool.baseY - player.h;
+    const { pad, edge, facingRight } = c34.climb;
+    player.x = facingRight ? edge + 8 : edge - player.w - 8;
+    const top = pad ? c34PlatformSurface(pad) : pool.baseY;
+    player.y = top - player.h;
     player.onGround = true;
     c34.climb = null;
   }
@@ -397,8 +407,7 @@ function c34StepSwim() {
     player.y = surface + C34.water.feetDepth - player.h;
     player.vy = 0;
     const paddling = Math.abs(player.vx) > 0.35;
-    c34.swimTime = wasSwimming && c34.paddling && paddling ? c34.swimTime + 1000 / 60 : 0;
-    c34.paddling = paddling;
+    c34.swimTime = wasSwimming ? c34.swimTime + 1000 / 60 : 0;
     c34Ripple(x + (player.facingRight ? 1 : -1) * (paddling ? 17 : 7), paddling ? 14 : 25, paddling ? 0.018 : 0.012);
   }
 }
@@ -496,7 +505,7 @@ function c34Step() {
     wd.wdVx = 0;
     if (++c34.wallHits % 30 === 1) c34L({ ev: 'wall', mesa: m.x, side: fromLeft ? 'L' : 'R' });
   }
-  let fills = false, showerFall = null;
+  let fillRate = 0, showerFall = null;
   // Advance the umbrella pose before resolving water so draw and wetness use the same frame.
   if (umbEquipped() && player.onGround && Math.abs(player.vx) > 0.5 && !player.c2Block) c2Umb.runStep++;
   else c2Umb.runStep = 0;
@@ -509,18 +518,21 @@ function c34Step() {
     if (interaction.touching) showerFall ??= fall;
     if (interaction.canopy) c34.stream = interaction.canopy.direction;
     const inflow = interaction.streams.find(stream => stream.fills);
-    fills ||= !!inflow;
+    if (inflow) fillRate += inflow.rate;
     if (inflow && interaction.canopy?.overlaps) {
-      poolImpact = { x: inflow.x, width: fall.w, tick: c34.waterTick,
+      poolImpact = { x: inflow.x, width: inflow.width / 1.75, tick: c34.waterTick,
         start: c34.poolImpact?.start ?? c34.waterTick };
     }
   }
   if (poolImpact || (c34.poolImpact && c34.waterTick - c34.poolImpact.tick >= C34_IMPACT_FADE_STEPS)) {
     c34.poolImpact = poolImpact;
   }
+  const fills = fillRate > 0;
   if (fills && c34.fillFrames < C34.pool.fillFrames) {
-    c34.level = ++c34.fillFrames / C34.pool.fillFrames;
-    if (c34.fillFrames === 1) showHint('💧 水流進水池了！水位慢慢上升中…', 150);
+    const first = c34.fillFrames === 0;
+    c34.fillFrames = Math.min(C34.pool.fillFrames, c34.fillFrames + fillRate);
+    c34.level = c34.fillFrames / C34.pool.fillFrames;
+    if (first) showHint('💧 水流進水池了！水位慢慢上升中…', 150);
   }
   if (fills !== c34._filling) {
     c34._filling = fills;
