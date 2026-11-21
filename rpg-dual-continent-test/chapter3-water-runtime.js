@@ -25,7 +25,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
-    swim: false, swimTime: 0, climb: null, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
+    swim: false, swimTime: 0, climb: null, rescue: { stuck: 0, seen: false, warned: false, flash: 0 }, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
     falls: new Map(), poolImpact: null, shower: null });
 }
 
@@ -145,7 +145,7 @@ function c34FallStreams(f, canopy) {
         // Land in the open strip between the left wall and the floating pad.
         // A monotone descent to this point also keeps the stream clear of its face.
         x = pad && dir > 0 && outX < pad.x - 44
-          ? Math.max(pool.x + C34.pool.escapeWidth + 12, Math.min(poolX, pad.x - 44)) : poolX;
+          ? Math.max(pool.x + C34.pool.inflowMinOffset, Math.min(poolX, pad.x - 44)) : poolX;
         y = surface; fills = true;
       } else if (x >= pool.x && x < pool.x + pool.w) {
         x = dir > 0 ? pool.x + pool.w : pool.x;
@@ -221,13 +221,20 @@ function c34DrawPool(cx) {
   const time = c34.waterTick * 1000 / 60;
   c34Art.poolWater(x, pool.w, y, floor, time);
   c34Art.poolWalls(x, pool.w, pool.baseY, C34_LAY.y(C34_LAY.bank.h), floor);
-  const ledge = platforms.find(p => p.c34Escape);
-  if (ledge) c34Art.tile('15_pool_bottom', ledge.x - cx, ledge.y, ledge.w, 14, 0.16, false);
   const pad = platforms.find(p => p.c34Pad);
   if (pad) c34Art.platform(pad, cx);
 }
 
 function c34DrawRipples(cx) {
+  const flash = c34.rescue?.flash || 0;
+  if (flash) {
+    const radius = 10 + (1 - flash / 30) * 25;
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 2 / 5;
+      drawDogSparkle(player.x + player.w / 2 - cx + Math.cos(angle) * radius,
+        player.y + player.h / 2 + Math.sin(angle) * radius, 5, angle, flash / 30);
+    }
+  }
   const pool = c34Pool();
   if (!pool) return;
   const x = pool.x - cx, y = c34SurfaceY();
@@ -357,6 +364,60 @@ function c34StepSwim() {
   }
 }
 
+function c34CanReturnLeft(pad) {
+  if (c34CanClimbLeft()) return true;
+  const pool = c34Pool();
+  if (!pool || !pad) return false;
+  const swimSpeed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
+  const padTop = c34PlatformSurface(pad, pad.x);
+  if (c34SurfaceY() + C34.water.feetDepth - padTop > swimSpeed ** 2 / (2 * GRAVITY)) return false;
+  const takeoff = c34JumpSpeed(JUMP_FORCE, C34.water.wetHeight) - GRAVITY / 2;
+  const clearance = takeoff ** 2 - 2 * GRAVITY * (padTop - pool.baseY);
+  if (clearance < 0) return false;
+  const span = PLAYER_SPEED * C34.water.wetSpeed * (takeoff + Math.sqrt(clearance)) / GRAVITY;
+  return pad.x - pool.x - player.w / 2 <= span;
+}
+
+function c34StepRescue(pad) {
+  const pool = c34Pool(), rescue = c34.rescue;
+  if (!pool || !rescue) return;
+  rescue.flash = Math.max(0, rescue.flash - 1);
+  const canReturn = c34CanReturnLeft(pad);
+  rescue.stuck = c34.swim && !canReturn ? rescue.stuck + 1 : 0;
+  const spirit = 'star_spirit_normal';
+  if (rescue.stuck >= 24) {
+    const returnToBank = () => {
+      player.x = pool.x - player.w - 72;
+      player.y = pool.baseY - player.h;
+      player.vx = player.vy = 0;
+      player.onGround = true;
+      cameraX = Math.max(0, Math.min(LEVEL_LENGTH - CANVAS_W, player.x - 380));
+      c34LeaveSurface();
+      rescue.seen = true;
+      rescue.stuck = 0;
+      rescue.flash = 30;
+      c34L({ ev: 'poolRescue' });
+    };
+    if (rescue.seen) returnToBank();
+    else if (rpgAssetState('balloonv_panic') === 'loaded' && rpgAssetState(spirit) === 'loaded') {
+      rpgOpen({ id: 'c34_pool_rescue', title: '水池救援', left: 'balloonv_panic', requirePages: true, pages: [
+        { sp: 'balloonv', face: 'balloonv_panic', text: '糟糕！爬不上去了……怎麼辦？' },
+        { sp: 'spirit', face: spirit, text: '別擔心！我帶你回岸上！' },
+      ], onEnd: how => { if (how === 'finished' && c34.rescue === rescue) returnToBank(); } });
+    }
+    return;
+  }
+
+  const feet = player.y + player.h;
+  const edge = pool.x - (player.x + player.w);
+  if (rescue.seen && !rescue.warned && !canReturn && player.onGround && feet === pool.baseY &&
+      edge >= 0 && edge <= 30 && inp('right') && player.vx > 0) {
+    rescue.warned = rpgOpen({ id: 'c34_pool_warning', title: '水池提醒', right: spirit, pages: [
+      { sp: 'spirit', face: spirit, text: '小V，小心！現在水位還太低，掉下去就爬不上來囉！' },
+    ] });
+  }
+}
+
 function c34Teach(id) {
   if (c34.taught.has(id)) return;
   c34.taught.add(id);
@@ -426,8 +487,10 @@ function c34Step() {
     c34._filling = fills;
     c34L({ ev: fills ? 'fillOn' : 'fillOff', level: c34.level });
   }
-  c34StepPad(platforms.find(p => p.c34Pad));
+  const pad = platforms.find(p => p.c34Pad);
+  c34StepPad(pad);
   c34StepSwim();
+  c34StepRescue(pad);
   if (!showerFall || c34.swim) c34.shower = null;
   else if (c34.shower?.fall !== showerFall) {
     c34.shower = { fall: showerFall, tick: c34.waterTick, mirror: !player.facingRight };
