@@ -33573,10 +33573,10 @@ var C34 = {
   },
   pool: { fillFrames: 360, surf0: 64, surf1: 8, floor: 130, padW: 170, padClear: 29, escapeWidth: 82, escapeY: 39 },
   float: { bob: 1.6, period: 126, sink: 3.5, spring: 0.075, damping: 0.76, maxTilt: 0.026, tiltEase: 0.12 },
-  water: { steps: 1800, windDry: 180, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
+  water: { steps: 20 * 60, windDryRate: 4, swimSpeed: 0.5, swimHeight: 0.4, wetSpeed: 0.7, wetHeight: 0.7, feetDepth: 20, rippleSteps: 32 },
 };
 var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits: 0, bagGot: false,
-  swim: false, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true, noUmbrellaFalls: 0 };
+  swim: false, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, taught: new Set(), jumpReleased: true, noUmbrellaFalls: 0 };
 function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }

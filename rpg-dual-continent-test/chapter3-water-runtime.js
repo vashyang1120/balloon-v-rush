@@ -25,7 +25,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
-    swim: false, swimTime: 0, wet: 0, inWind: false, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
+    swim: false, swimTime: 0, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
     falls: new Map(), poolImpact: null, shower: null });
 }
 
@@ -311,19 +311,22 @@ function c34StepWet(touching) {
   const windLift = c2UmbWindActive() ? c2UmbWindLiftAt : windLiftAt;
   const inWind = windVents.some(v => windLift(v, player) > 0) ||
     (wdActive() && wdFlowAt(player.x + player.w / 2, player.y + player.h / 2) > 0);
-  const entering = inWind && !c34.inWind;
-  c34.inWind = inWind;
   if (touching) {
+    c34.dryingWindStart = null;
     c34.wet = C34.water.steps;
     if (!wasWet) c34Teach('c34_first_wet');
     return;
   }
-  if (c34.wet <= 0) return;
-  if (entering) {
-    c34.wet = Math.max(0, c34.wet - C34.water.windDry);
-    c34L({ ev: 'windDry', wetSeconds: c34.wet / 60 });
+  if (!wasWet) return;
+
+  const rate = inWind ? C34.water.windDryRate : 1;
+  c34.wet = Math.max(0, c34.wet - rate);
+  if (!inWind || c34.wet === 0) {
+    c34.dryingWindStart = null;
+  } else if (c34.dryingWindStart === null) {
+    c34.dryingWindStart = c34.waterTick;
     c34Teach('c34_first_dry_wind');
-  } else c34.wet--;
+  }
 }
 
 function c34Step() {

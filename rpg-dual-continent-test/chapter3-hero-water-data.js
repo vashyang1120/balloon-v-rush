@@ -30,6 +30,14 @@ const chapter3HeroWaterData = {
     {"ms":80,"mirror":false,"entry":11,"files":["18A_v_water_splash_cover/character/reopen_eyes.png","18A_v_water_splash_cover/loop/water_07.png","18A_v_water_splash_cover/eye_overlay/reopen_eyes.png","18A_v_water_splash_cover/hand_overlay/reopen_eyes.png","18A_v_water_splash_cover/loop/splash_07.png"]},
     {"ms":160,"mirror":false,"entry":11,"files":["18A_v_water_splash_cover/character/open_relaxed.png","18A_v_water_splash_cover/loop/water_08.png","18A_v_water_splash_cover/eye_overlay/open_relaxed.png","18A_v_water_splash_cover/hand_overlay/open_relaxed.png","18A_v_water_splash_cover/loop/splash_08.png"]},
   ],
+  windDryFeet: [320,598],
+  windDry: [
+    {"ms":120,"files":["19_v_wind_dry_effect/v_wind_dry_effect_01.png"]},
+    {"ms":110,"files":["19_v_wind_dry_effect/v_wind_dry_effect_02.png"]},
+    {"ms":110,"files":["19_v_wind_dry_effect/v_wind_dry_effect_03.png"]},
+    {"ms":130,"files":["19_v_wind_dry_effect/v_wind_dry_effect_04.png"]},
+    {"ms":160,"files":["19_v_wind_dry_effect/v_wind_dry_effect_05.png"]},
+  ],
   drips: [
     {"ms":120,"files":["18B_v_wet_drip/v_wet_drip_01.png"]},
     {"ms":130,"files":["18B_v_wet_drip/v_wet_drip_02.png"]},

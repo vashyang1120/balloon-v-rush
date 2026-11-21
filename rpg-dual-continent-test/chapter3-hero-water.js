@@ -3,10 +3,11 @@
 const c34HeroWater = (() => {
   const art = chapter3HeroWaterData;
   const images = new Map();
-  const tracks = [art.intro, art.loop, art.drips];
+  const tracks = [art.intro, art.loop, art.drips, art.windDry];
   const duration = frames => frames.reduce((total, frame) => total + frame.ms, 0);
   const introMs = duration(art.intro), loopMs = duration(art.loop), dripMs = duration(art.drips);
   const files = [...new Set(tracks.flat().flatMap(frame => frame.files))];
+  const windDryMs = duration(art.windDry);
   const STEP_MS = 1000 / 60;
 
   function entries() {
@@ -69,6 +70,14 @@ const c34HeroWater = (() => {
   function drips(x, feet, factor = scale()) {
     const wet = c34.wet / C34.water.steps;
     if (wet <= 0) return;
+    if (c34.dryingWindStart !== null) {
+      const elapsed = (c34.waterTick - c34.dryingWindStart) * STEP_MS;
+      const [windFile] = frameAt(art.windDry, elapsed % windDryMs).files;
+      if (images.has(windFile)) {
+        layer(windFile, x, feet, factor, art.windDryFeet);
+        return;
+      }
+    }
     const frame = frameAt(art.drips, c34.waterTick * STEP_MS % dripMs);
     const [file] = frame.files;
     if (!images.has(file)) return;
