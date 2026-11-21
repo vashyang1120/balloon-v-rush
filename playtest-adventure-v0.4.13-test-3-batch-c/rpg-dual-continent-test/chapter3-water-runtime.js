@@ -120,7 +120,7 @@ function c34FallCanopy(f) {
   };
   const y = surfaceAt(x);
   if (y > c34FallBase(f) || y < c34FallTop()) return null;
-  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt };
+  return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt, overlaps: reach1 > reach0 };
 }
 
 function c34ArcLand(f, dir, surface, outX, outY) {
@@ -141,7 +141,12 @@ function c34FallStreams(f, canopy) {
     if (!f.split && pool && surface >= outY) {
       const poolX = c34ArcLand(f, dir, surface, outX, outY);
       if (poolX > pool.x + 4 && poolX < pool.x + pool.w - 4) {
-        x = poolX; y = surface; fills = true;
+        const pad = platforms.find(p => p.c34Pad);
+        // Land in the open strip between the left wall and the floating pad.
+        // A monotone descent to this point also keeps the stream clear of its face.
+        x = pad && dir > 0 && outX < pad.x - 44
+          ? Math.max(pool.x + C34.pool.escapeWidth + 12, Math.min(poolX, pad.x - 44)) : poolX;
+        y = surface; fills = true;
       } else if (x >= pool.x && x < pool.x + pool.w) {
         x = dir > 0 ? pool.x + pool.w : pool.x;
         y = Math.max(outY, c34FallBase(f));
@@ -168,13 +173,13 @@ function c34DrawFall(f, cx) {
     c34Art.column(x, top, shower.seam + 16, f.w, time, null, shower.seam);
     return;
   }
-  if (canopy) {
+  if (canopy?.overlaps) {
     c34Art.column(x, top, canopy.outY, f.w, time, {
-      x: canopy.x - cx, y: canopy.y, surfaceAt: atX => canopy.surfaceAt(atX + cx),
+      surfaceAt: atX => canopy.surfaceAt(atX + cx),
     });
     for (const stream of streams) {
       c34Art.guide(canopy, stream, cx, f.w / streams.length, time);
-      c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale / streams.length);
+      c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, (stream.fills ? 0.40 : 1) * splashScale / streams.length);
     }
   } else {
     c34Art.column(x, top, end, f.w, time);
@@ -215,8 +220,10 @@ function c34SwimPose(cx) {
 }
 
 function c34DrawWetStatus(cx) {
-  if (!c34Is() || !c34.swim || c34.wet <= 0) return;
-  const head = c34SwimPose(cx).headTop;
+  if (!c34Is() || c34.wet <= 0) return;
+  const shower = c34HeroWater.shower();
+  const head = c34.swim ? c34SwimPose(cx).headTop
+    : shower ? shower.feet - 490 * shower.factor : c34Art.landPose().top;
   c34Art.drop(player.x + player.w / 2 - cx, head - 5, c34.wet / C34.water.steps);
 }
 
