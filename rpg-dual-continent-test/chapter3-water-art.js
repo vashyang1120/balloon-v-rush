@@ -295,6 +295,19 @@ const c34Art = (() => {
     }
   }
 
+  function platformSpan(p) {
+    const spec = catalog['06_balloon_platform'];
+    const [x0] = spec.standing_surface.start, [x1] = spec.standing_surface.end;
+    const factor = p.w / (x1 - x0);
+    const [ax, ay] = spec.anchor, [w, h] = spec.size;
+    const angle = p.c34Angle || 0;
+    const center = p.x + p.w / 2;
+    // Project the four corners of the rotated sprite onto the horizontal axis.
+    const xs = [-ax, w - ax].flatMap(x => [-ay, h - ay].map(y =>
+      center + factor * (x * Math.cos(angle) - y * Math.sin(angle))));
+    return [Math.min(...xs), Math.max(...xs)];
+  }
+
   function platform(p, cx) {
     const id = '06_balloon_platform', spec = catalog[id];
     const [[x0, sy], [x1]] = [spec.standing_surface.start, spec.standing_surface.end];
@@ -371,6 +384,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, landPose, swimPose, swimmer, drop,
+  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();
