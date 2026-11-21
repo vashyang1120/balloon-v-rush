@@ -49,3 +49,5 @@
 
 - 第一道：`C3-desktop-start.webm`、`C3-mobile-landscape-start.webm`
 - 第二道及風口：`C3-desktop-pool.webm`、`C3-mobile-landscape-pool.webm`
+
+2026-11-21，使用者確認 Batch C3 驗收通過。
