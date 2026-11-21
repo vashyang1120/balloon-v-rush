@@ -329,7 +329,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   });
 
   await openSection(page, 'pool');
-  await t.test('pool fills only on rightward diversion, follows water level and dries continuously while in wind', async () => {
+  await t.test('pool catches the right-hand branch at the facing-dependent rate and dries continuously in wind', async () => {
     const actual = await page.evaluate(() => {
       const { x, baseY } = c34Pool();
       const f = c34Falls()[1], pad = platforms.find(p => p.c34Pad);
@@ -345,7 +345,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       let clearsPad = true;
       const fillStep = () => {
         c34Step();
-        const stream = c34.falls.get(f.id).streams[0];
+        const stream = c34.falls.get(f.id).streams.find(branch => branch.side === 'right');
         clearsPad &&= !!stream?.fills && Math.max(stream.outX, stream.x) <= pad.x - 44;
       };
       for (let i = 0; i < 180; i++) fillStep();
@@ -392,9 +392,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.ok(initial.x < actual.x);
     assert.equal(initial.surface - actual.baseY, 64);
     assert.equal(initial.wet, 0);
-    assert.deepEqual(left, { stream: 'left', level: 0, wet: 0 });
+    assert.deepEqual(left, { stream: 'left', level: 0.1 / 360, wet: 0 });
     assert.equal(half.stream, 'right');
-    assert.equal(half.level, 0.5);
+    assert.ok(Math.abs(half.level - (180.1 / 360)) < 1e-9);
     assert.equal(half.wet, 0);
     assert.ok(half.surface < initial.surface);
     assert.ok(half.pad < initial.pad);
@@ -498,37 +498,18 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     }
   });
 
-  await t.test('08 changes both arm and leg pixels across its loop without moving the head or waterline', async () => {
-    const result = await page.evaluate(() => {
-      const pose = c34Art.swimPose(200, 300, 0, true, false, 0);
-      const frame = time => {
-        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-        c34Art.swimmer({ ...pose, bobTime: time });
-        return ctx.getImageData(100, 128, 220, 280).data;
-      };
-      const a = frame(0), b = frame(375), loop = frame(1200);
-      const changes = (first, second, top, bottom) => {
-        let count = 0;
-        for (let y = top; y < bottom; y++) {
-          for (let x = 0; x < 220; x++) {
-            const offset = (y * 220 + x) * 4;
-            if (Math.abs(first[offset + 3] - second[offset + 3]) > 25) count++;
-          }
-        }
-        return count;
-      };
-      const row = sourceY => Math.round(pose.y + (sourceY - 914) * pose.factor - 128);
-      return {
-        head: changes(a, b, row(150), row(570)),
-        arms: changes(a, b, row(640), row(900)),
-        legs: changes(a, b, row(970), row(1410)),
-        closedLoop: changes(a, loop, row(150), row(1410)),
-      };
+  await t.test('09 keeps cycling in place and both runoff widths follow the player', async () => {
+    const actual = await page.evaluate(() => {
+      const right = c34Art.swimPose(200, 300, 0, true, 0);
+      const left = c34Art.swimPose(200, 300, 160, false, 0);
+      const f = c34Falls()[0];
+      const widths = ['left', 'right'].map(direction => c34FallStreams(f,
+        { direction, left: f.x - 10, right: f.x + 10, outY: GROUND_Y - 100 }).map(stream => +(stream.width / f.w).toFixed(2)));
+      return { ids: [right.id, left.id], mirror: [right.mirror, left.mirror], size: right.factor === left.factor,
+        frameChanges: c34Art.image(right.id, 0) !== c34Art.image(left.id, 160), widths };
     });
-    assert.equal(result.head, 0);
-    assert.ok(result.arms > 20, JSON.stringify(result));
-    assert.ok(result.legs > 20, JSON.stringify(result));
-    assert.equal(result.closedLoop, 0);
+    assert.deepEqual(actual, { ids: ['09_v_water_move', '09_v_water_move'], mirror: [false, true],
+      size: true, frameChanges: true, widths: [[1.75, 0.5], [0.5, 1.75]] });
   });
   await t.test('climb reach uses the left-bank geometry and the approved six frames', async () => {
     const result = await page.evaluate(() => {
@@ -796,7 +777,11 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         await control('right', true);
         await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '09_v_water_move');
         await control('right', false);
-        await rescuePage.waitForFunction(() => c34.swim && c34SwimPose(cameraX).id === '08_v_water_idle');
+        await rescuePage.waitForFunction(() => c34.swim && player.vx === 0);
+        const still = await rescuePage.evaluate(() => ({ x: player.x, time: c34.swimTime }));
+        await rescuePage.waitForFunction(start => c34.swimTime > start + 180, still.time);
+        assert.deepEqual(await rescuePage.evaluate(() => ({ x: player.x, art: c34SwimPose(cameraX).id })),
+          { x: still.x, art: '09_v_water_move' });
         await control('left', true);
         await rescuePage.waitForFunction(() => c34.swim && !player.facingRight && player.x <= c34Pool().x + 12);
         await control('jump', true);
@@ -805,6 +790,18 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         await control('left', false);
         await rescuePage.waitForFunction(() => !c34.climb && player.onGround && player.x + player.w < c34Pool().x);
         assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 2);
+        await rescuePage.evaluate(() => {
+          const pad = platforms.find(p => p.c34Pad);
+          Object.assign(player, { x: pad.x - player.w - 12, y: c34SurfaceY() + C34.water.feetDepth - player.h,
+            vx: 0, vy: 0, onGround: false });
+          c34.swim = true;
+        });
+        await control('right', true);
+        await rescuePage.waitForFunction(() => !!c34.climb?.pad);
+        await control('right', false);
+        await rescuePage.waitForFunction(() => !c34.climb && !c34.swim && player.onGround &&
+          platforms.some(p => p.c34Pad && player.x >= p.x && player.x + player.w <= p.x + p.w));
+
 
         await rescuePage.evaluate(() => {
           c34.fillFrames = C34.pool.fillFrames;

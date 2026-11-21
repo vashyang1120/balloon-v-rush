@@ -10,8 +10,6 @@ const c34Art = (() => {
   const waterSurfaceFrames = new WeakMap();
   const fadedRockEdges = new Map();
   const swimmerLayer = document.createElement('canvas');
-  const idleWaterFrames = [];
-  let idleWaterSource;
 
   // Visible head widths measured in the approved art, excluding the transparent canvas.
   const landHead = { width: 153, top: 14 };
@@ -269,7 +267,7 @@ const c34Art = (() => {
   }
 
   function guideThickness(width, i) {
-    return 1.75 * width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+    return width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
   }
 
   function clipCanopyGuide(points, cx, width) {
@@ -369,8 +367,8 @@ const c34Art = (() => {
       footOffset: rect.dY + 399 * ratio - player.h };
   }
 
-  function swimPose(x, surface, time, facingRight, paddling, bobTime) {
-    const id = paddling && image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
+  function swimPose(x, surface, time, facingRight, bobTime) {
+    const id = image('09_v_water_move', time) ? '09_v_water_move' : '08_v_water_idle';
     const spec = catalog[id];
     const factor = landPose().headWidth / waterHead.width;
     const bob = Math.sin(bobTime / 350) * 1.4;
@@ -378,46 +376,10 @@ const c34Art = (() => {
     return { id, x, y, surface, factor, mirror: !facingRight, time, bobTime, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
   }
 
-  function idleWaterFrame(im, time) {
-    const phase = Math.floor(time / 75) % 16;
-    if (idleWaterFrames[phase]) return idleWaterFrames[phase];
-    const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 400;
-    if (!idleWaterSource) {
-      idleWaterSource = document.createElement('canvas');
-      idleWaterSource.width = canvas.width;
-      idleWaterSource.height = canvas.height;
-      idleWaterSource.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
-    }
-    const g = canvas.getContext('2d');
-    const stroke = Math.sin(phase * Math.PI / 8);
-    const kick = Math.sin(phase * Math.PI / 8 + Math.PI / 3);
-    // Keep the head, torso, and canvas anchor fixed. Only fan out the hands and feet.
-    g.drawImage(idleWaterSource, 0, 0, 320, 156, 0, 0, 320, 156);
-    const strip = (y, x, width, destX, destWidth) =>
-      g.drawImage(idleWaterSource, x, y, width, 4, destX, y, destWidth, 4);
-    for (let y = 156; y < 400; y += 4) {
-      const arms = y < 228;
-      const left = arms ? 124 : 146;
-      const right = arms ? 190 : 151;
-      const flex = arms ? Math.sin(Math.PI * (y + 2 - 156) / 72)
-        : Math.sin(Math.PI * (y + 2 - 228) / 172);
-      const openLeft = (arms ? 34 * stroke : 36 * kick) * flex;
-      const openRight = (arms ? -34 * stroke : -36 * kick) * flex;
-      strip(y, 0, left, -openLeft, left + openLeft);
-      strip(y, left, right - left, left, right - left);
-      strip(y, right, 320 - right, right, 320 - right + openRight);
-    }
-    idleWaterFrames[phase] = canvas;
-    return canvas;
-  }
-
   function swimmer(pose) {
-    const { id, x, y, surface, factor, mirror, time, bobTime } = pose;
-    const source = image(id, time), spec = catalog[id];
-    if (!source) return false;
-    const im = id === '08_v_water_idle' ? idleWaterFrame(source, bobTime) : source;
+    const { id, x, y, surface, factor, mirror, time } = pose;
+    const im = image(id, time), spec = catalog[id];
+    if (!im) return false;
     const [sourceW, sourceH] = spec.size, [anchorX, anchorY] = spec.anchor;
     clip(0, surface - 180, CANVAS_W, 180, () => {
       ctx.save();
@@ -462,11 +424,11 @@ const c34Art = (() => {
     const { size: [w, h], anchor: [ax, ay], offset, scale } = spec.frames[frame];
     const ratio = landPose().headWidth / 105;
     const factor = scale * ratio;
-    const x = pose.edge - cx - offset * ratio;
+    const x = pose.edge - cx + (pose.facingRight ? 1 : -1) * offset * ratio;
     const y = pose.top + pose.reachOffset * Math.max(0, 1 - time / (2 * spec.ms));
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(-1, 1);
+    ctx.scale(pose.facingRight ? 1 : -1, 1);
     ctx.drawImage(im, -ax * factor, -ay * factor, w * factor, h * factor);
     ctx.restore();
     return true;
