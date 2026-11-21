@@ -140,7 +140,8 @@ function c34FallCanopy(f) {
   const y = surfaceAt(x);
   if (y > c34FallBase(f) || y < c34FallTop()) return null;
   return { x, y, direction, left: x0, right: x1, outY: toY(edge), surfaceAt,
-    reach0, reach1, width: reach1 - reach0, overlaps: true };
+    reach0, reach1, width: reach1 - reach0, overlaps: true,
+    overhead: key !== 'block' && surfaceAt(crownX) <= c34Art.landPose().top + 6 };
 }
 
 function c34ArcLand(f, dir, surface, outX, outY) {
@@ -173,7 +174,7 @@ function c34FallStreams(f, canopy) {
       }
     }
     const forward = side === canopy.direction;
-    return { side, outX, outY, x, y, fills, width: f.w * (forward ? 1.75 : 0.5), rate: forward ? 1 : 0.1 };
+    return { side, outX, outY, x, y, fills, width: f.w * (forward ? 1.05 : 0.52), rate: forward ? 1 : 0.1 };
   });
 }
 
@@ -185,8 +186,8 @@ function c34ResolveFall(f) {
   const left = Math.max(f.x - f.w / 2, center - bodyRadius);
   const right = Math.min(f.x + f.w / 2, center + bodyRadius);
   const head = c34Art.landPose().top + 6;
-  const sheltered = canopy && right > left && left >= canopy.reach0 && right <= canopy.reach1 &&
-    Math.max(canopy.surfaceAt(left), canopy.surfaceAt(right)) <= head;
+  const sheltered = canopy?.overhead || (canopy && right > left && left >= canopy.reach0 && right <= canopy.reach1 &&
+    Math.max(canopy.surfaceAt(left), canopy.surfaceAt(right)) <= head);
   return { canopy, streams: c34FallStreams(f, canopy), touching: right > left && !sheltered && c34UnderFall(f) };
 }
 
@@ -232,20 +233,24 @@ function c34DrawFall(f, cx) {
   };
   if (canopy) {
     const left = canopy.reach0 - cx, right = canopy.reach1 - cx;
-    openColumn(columnLeft, left);
-    openColumn(right, columnRight);
-    c34Art.clip(left, top, right - left, canopy.outY - top, () =>
+    if (!canopy.overhead) {
+      openColumn(columnLeft, left);
+      openColumn(right, columnRight);
+    }
+    const stopLeft = canopy.overhead ? columnLeft : left;
+    const stopRight = canopy.overhead ? columnRight : right;
+    c34Art.clip(stopLeft, top, stopRight - stopLeft, canopy.outY - top, () =>
       c34Art.column(x, top, canopy.outY, f.w, time, {
-        surfaceAt: atX => canopy.surfaceAt(atX + cx),
+        surfaceAt: atX => canopy.surfaceAt(Math.min(canopy.reach1, Math.max(canopy.reach0, atX + cx))),
       }));
     for (const stream of streams) {
       c34Art.guide(canopy, stream, cx, stream.width, time);
       if (!stream.fills) {
-        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * stream.width / (f.w * 1.75));
+        c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * stream.width / (f.w * 1.05));
       }
     }
   } else openColumn(columnLeft, columnRight);
-  if ((!canopy || canopy.width < f.w) && shower?.fall !== f) {
+  if ((!canopy || (!canopy.overhead && canopy.width < f.w)) && shower?.fall !== f) {
     c34Art.at('03_waterfall_splash', time, x, end, splashScale * (1 - (canopy?.width || 0) / f.w));
   }
   if (touching && shower?.fall !== f) c34Art.at('03_waterfall_splash', time, x, player.y + player.h * 0.35, 0.012);
@@ -355,12 +360,15 @@ function c34StepPad(pad) {
   pad.c34Occupied = onPad;
 }
 
-function c34CanClimbLeft() {
-  const pool = c34Pool();
-  if (!pool) return false;
+function c34CanClimbRock(top) {
   const speed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
   const jumpRise = speed * speed / (2 * GRAVITY);
-  return c34SurfaceY() + C34.water.feetDepth - pool.baseY <= jumpRise + 12;
+  return c34SurfaceY() + C34.water.feetDepth - top <= jumpRise + 12;
+}
+
+function c34CanClimbLeft() {
+  const pool = c34Pool();
+  return !!pool && c34CanClimbRock(pool.baseY);
 }
 
 function c34AdvanceClimb() {
@@ -376,9 +384,12 @@ function c34AdvanceClimb() {
       const edge = fromLeft ? pad.x : pad.x + pad.w;
       c34.climb = { pad, edge, top: c34PlatformSurface(pad, edge), tick: 0, facingRight: !!fromLeft };
     } else {
-      if (!c34.jumpReleased || !inp('jump') || !inp('left') ||
-          player.x > pool.x + 12 || !c34CanClimbLeft()) return false;
-      c34.climb = { edge: pool.x, top: pool.baseY, tick: 0, facingRight: false };
+      const rightBank = platforms.find(p => p.c34Id === 'BANK');
+      if (inp('left') && player.x <= pool.x + 2 && c34CanClimbLeft()) {
+        c34.climb = { edge: pool.x, top: pool.baseY, tick: 0, facingRight: false };
+      } else if (rightBank && inp('right') && player.x + player.w >= rightBank.x - 2 && c34CanClimbRock(rightBank.y)) {
+        c34.climb = { edge: rightBank.x, top: rightBank.y, tick: 0, facingRight: true };
+      } else return false;
     }
     c34.climb.reachOffset = Math.max(0, c34SurfaceY() - c34.climb.top - 8);
     player.facingRight = c34.climb.facingRight;
@@ -388,7 +399,7 @@ function c34AdvanceClimb() {
   if (++c34.climb.tick >= Math.ceil(6 * 110 * 60 / 1000)) {
     const { pad, edge, facingRight } = c34.climb;
     player.x = facingRight ? edge + 8 : edge - player.w - 8;
-    const top = pad ? c34PlatformSurface(pad) : pool.baseY;
+    const top = pad ? c34PlatformSurface(pad) : c34.climb.top;
     player.y = top - player.h;
     player.onGround = true;
     c34.climb = null;
@@ -520,7 +531,7 @@ function c34Step() {
     const inflow = interaction.streams.find(stream => stream.fills);
     if (inflow) fillRate += inflow.rate;
     if (inflow && interaction.canopy?.overlaps) {
-      poolImpact = { x: inflow.x, width: inflow.width / 1.75, tick: c34.waterTick,
+      poolImpact = { x: inflow.x, width: inflow.width / 1.05, tick: c34.waterTick,
         start: c34.poolImpact?.start ?? c34.waterTick };
     }
   }

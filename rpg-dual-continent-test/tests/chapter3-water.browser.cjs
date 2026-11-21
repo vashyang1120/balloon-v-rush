@@ -498,6 +498,39 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     }
   });
 
+  await t.test('each overhead diversion stops the whole column at the canopy', async () => {
+    const results = await page.evaluate(() => {
+      const before = { ...player }, slot = activeSlot, falls = c34.falls;
+      const { column, guide } = c34Art;
+      try {
+        activeSlot = 'umbrella';
+        return c34Falls().flatMap(fall => [true, false].map(facingRight => {
+          Object.assign(player, { x: fall.x - player.w / 2 + (facingRight ? 12 : -12),
+            y: c34FallBase(fall) - player.h, vx: 0, onGround: true, facingRight,
+            c2Block: false, invincible: 0, popScare: 0 });
+          const interaction = c34ResolveFall(fall);
+          c34.falls = new Map([[fall.id, interaction]]);
+          const columns = [], branches = [];
+          c34Art.column = (_x, _top, _end, width, _time, contact) => columns.push({ width, clipped: !!contact });
+          c34Art.guide = (_canopy, stream) => branches.push(stream.side);
+          c34DrawFall(fall, fall.x - 200);
+          return { width: fall.w, wet: interaction.touching, cut: interaction.canopy?.width, columns, branches };
+        }));
+      } finally {
+        Object.assign(player, before);
+        activeSlot = slot;
+        c34.falls = falls;
+        Object.assign(c34Art, { column, guide });
+      }
+    });
+    for (const result of results) {
+      assert.ok(result.cut > 0 && result.cut < result.width);
+      assert.equal(result.wet, false);
+      assert.deepEqual(result.columns, [{ width: result.width, clipped: true }]);
+      assert.deepEqual(result.branches, ['left', 'right']);
+    }
+  });
+
   await t.test('09 keeps cycling in place and both runoff widths follow the player', async () => {
     const actual = await page.evaluate(() => {
       const right = c34Art.swimPose(200, 300, 0, true, 0);
@@ -509,7 +542,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         frameChanges: c34Art.image(right.id, 0) !== c34Art.image(left.id, 160), widths };
     });
     assert.deepEqual(actual, { ids: ['09_v_water_move', '09_v_water_move'], mirror: [false, true],
-      size: true, frameChanges: true, widths: [[1.75, 0.5], [0.5, 1.75]] });
+      size: true, frameChanges: true, widths: [[1.05, 0.52], [0.52, 1.05]] });
   });
   await t.test('climb reach uses the left-bank geometry and the approved six frames', async () => {
     const result = await page.evaluate(() => {
@@ -524,9 +557,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       Object.assign(player, { x: pool.x + 1, y: c34SurfaceY() + C34.water.feetDepth - player.h,
         vx: 0, vy: 0, onGround: false });
       Object.assign(c34, { swim: true, jumpReleased: true });
-      keys.ArrowLeft = keys.Space = true;
+      keys.ArrowLeft = true;
       const started = c34AdvanceClimb();
-      keys.ArrowLeft = keys.Space = false;
+      keys.ArrowLeft = false;
       for (let frame = 0; frame < 42 && c34.climb; frame++) c34AdvanceClimb();
       const landed = !c34.climb && player.onGround && player.x + player.w < pool.x &&
         player.y + player.h === pool.baseY && player.hp === before.hp;
@@ -783,10 +816,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         assert.deepEqual(await rescuePage.evaluate(() => ({ x: player.x, art: c34SwimPose(cameraX).id })),
           { x: still.x, art: '09_v_water_move' });
         await control('left', true);
-        await rescuePage.waitForFunction(() => c34.swim && !player.facingRight && player.x <= c34Pool().x + 12);
-        await control('jump', true);
-        await rescuePage.waitForFunction(() => !!c34.climb);
-        await control('jump', false);
+        await rescuePage.waitForFunction(() => !!c34.climb && !c34.climb.facingRight);
         await control('left', false);
         await rescuePage.waitForFunction(() => !c34.climb && player.onGround && player.x + player.w < c34Pool().x);
         assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 2);
