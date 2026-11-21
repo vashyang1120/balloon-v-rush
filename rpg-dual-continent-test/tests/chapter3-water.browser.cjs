@@ -346,7 +346,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       const fillStep = () => {
         c34Step();
         const stream = c34.falls.get(f.id).streams[0];
-        clearsPad &&= !!stream?.fills && Math.max(stream.outX, stream.x) <= pad.x - 36;
+        clearsPad &&= !!stream?.fills && Math.max(stream.outX, stream.x) <= pad.x - 44;
       };
       for (let i = 0; i < 180; i++) fillStep();
       const half = { stream: c34.stream, level: c34.level, surface: c34SurfaceY(), pad: pad.y, wet: c34.wet };

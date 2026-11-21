@@ -144,8 +144,8 @@ function c34FallStreams(f, canopy) {
         const pad = platforms.find(p => p.c34Pad);
         // Land in the open strip between the left wall and the floating pad.
         // A monotone descent to this point also keeps the stream clear of its face.
-        x = pad && dir > 0 && outX < pad.x - 36
-          ? Math.max(pool.x + C34.pool.escapeWidth + 12, Math.min(poolX, pad.x - 36)) : poolX;
+        x = pad && dir > 0 && outX < pad.x - 44
+          ? Math.max(pool.x + C34.pool.escapeWidth + 12, Math.min(poolX, pad.x - 44)) : poolX;
         y = surface; fills = true;
       } else if (x >= pool.x && x < pool.x + pool.w) {
         x = dir > 0 ? pool.x + pool.w : pool.x;
@@ -179,7 +179,7 @@ function c34DrawFall(f, cx) {
     });
     for (const stream of streams) {
       c34Art.guide(canopy, stream, cx, f.w / streams.length, time);
-      c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, (stream.fills ? 0.58 : 1) * splashScale / streams.length);
+      c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, (stream.fills ? 0.40 : 1) * splashScale / streams.length);
     }
   } else {
     c34Art.column(x, top, end, f.w, time);
