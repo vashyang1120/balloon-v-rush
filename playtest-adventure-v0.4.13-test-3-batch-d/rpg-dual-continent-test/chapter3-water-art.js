@@ -267,13 +267,13 @@ const c34Art = (() => {
   }
 
   function guideThickness(width, i) {
-    return width * (i <= 8 ? 0.72 : 0.80 - 0.13 * (i - 8) / 16);
+    return width * (0.82 - 0.13 * i / 24);
   }
 
   function clipCanopyGuide(points, cx, width) {
     // Join the edges along the canopy before painting the individual texture strips.
-    const edge = side => points.slice(0, 10).map((point, i) => {
-      const before = points[Math.max(0, i - 1)], after = points[i + 1];
+    const edge = side => points.map((point, i) => {
+      const before = points[Math.max(0, i - 1)], after = points[Math.min(points.length - 1, i + 1)];
       const dx = after.x - before.x, dy = after.y - before.y;
       const halfWidth = (guideThickness(width, i) + guideThickness(width, i + 1)) / 4;
       const offset = side * halfWidth / Math.hypot(dx, dy);
@@ -314,7 +314,6 @@ const c34Art = (() => {
     ctx.save();
     clipCanopyGuide(points, cx, width);
     for (let i = 1; i < points.length; i++) {
-      if (i === 10) ctx.restore();
       const a = points[i - 1], b = points[i];
       const dx = b.x - a.x, dy = b.y - a.y;
       const length = Math.hypot(dx, dy);
@@ -323,13 +322,13 @@ const c34Art = (() => {
       ctx.save();
       ctx.translate(a.x - cx, a.y);
       ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
-      ctx.globalAlpha *= 0.90;
       // Extend the corner strips under the shared mask so their rotated ends cannot leave gaps.
-      const bleed = i <= 9 ? 3 : 0;
+      const bleed = Math.max(4, thickness * 0.22);
       ctx.drawImage(im, sourceX, 470 + i * 50, 400, 50,
         -thickness / 2 - bleed, -0.75 - bleed, thickness + 2 * bleed, length + 1.5 + 2 * bleed);
       ctx.restore();
     }
+    ctx.restore();
   }
 
   function platformSpan(p) {
