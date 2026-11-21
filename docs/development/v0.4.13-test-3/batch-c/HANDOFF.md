@@ -37,3 +37,10 @@
 - 隨施工交付 `C2R3-comparison.png`、`C2R3-desktop-pool.webm` 和 `C2R3-mobile-landscape-pool.webm`。實體手機及使用者目視驗收待確認。
 - [Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44848927586) · [HTTPS 試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)。
 - 線上 Pages 建置及部署成功。公開 HTTPS 桌機起點和手機橫向模擬水池均回應 HTTP 200，來源標記與水花修正提交相符，首次按下開始即可進關，兩端均載入 72 張 18A／18B PNG。兩端均記錄既有導風裝置的 `wind_redirector_wind_flow.png` 請求中止及外站備援被隔離政策擋下，進關成功。
+
+### Revision 3｜傘頂導流水接縫
+
+- 實體手機截圖回報傘頂水流轉彎處出現鋸齒。[修正提交](https://github.com/vashyang1120/balloon-v-rush/commit/546673f770b20a694a40ce08f29b2906daa759e8) 以連續輪廓裁切傘頂及轉出傘面第一段的水流貼圖，讓旋轉後的貼圖邊緣平順銜接。175% 分流厚度、瀑布寬度、導流路徑與入池水花沿用 Revision 3。
+- 桌機鍵盤與手機橫向觸控模擬完成正常操作、低中滿水位及停流水花驗證。原有回歸 50/50、Batch C 試玩包隔離 7/7 通過。隨交付附 `C2R3-canopy-seam-comparison.png` 和 `C2R3-canopy-seam-mobile.webm`。修正後的實體手機觀感待驗收。
+- [部署提交](https://github.com/vashyang1120/balloon-v-rush/commit/7a44530f2681185607eedc22cb68deab687f75cf) 只更新 Batch C 試玩目錄的兩個檔案。[Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44853015824) · [HTTPS 水池試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)。
+- Pages 部署成功。公開 HTTPS 桌機起點與手機橫向模擬水池皆載入新提交及接縫繪圖版本，首次進關成功，各載入 72 張 18A／18B PNG，無請求失敗。
