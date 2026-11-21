@@ -33582,7 +33582,7 @@ var c34 = { camY: 0, level: 0, stream: 'none', fillFrames: 0, log: [], wallHits:
 function c34L(o) { o.frame = frameCount; c34.log.push(o); if (c34.log.length > 200) c34.log.shift(); }
 function c34Lv() { return LEVELS[currentLevelIndex]; }
 function c34Is(sid) { const lv = c34Lv(); return !!(lv && lv.c34 && (!sid || lv.stageId === sid)); }
-function c34ArtReady() { const status = c34Art.status(); return status.loaded === 76 && !status.failed.length; }
+function c34ArtReady() { const status = c34Art.status(); return status.loaded === c34Art.expected && !status.failed.length; }
 
 function c34Mesas() { return (platforms || []).filter(p => p.c34Mesa); }
 function c34Gaps(kind) { return (c2Pits || []).filter(p => p.c34 && (!kind || p.c34 === kind)); }

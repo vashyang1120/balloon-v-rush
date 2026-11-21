@@ -2,6 +2,7 @@
 
 const c34Art = (() => {
   const catalog = chapter3ArtCatalog;
+  const expected = Object.values(catalog).reduce((count, spec) => count + spec.files.length, 0);
   const images = new Map();
   const failures = new Set();
   const pathPrefix = 'rpg-dual-continent-test/chapter3-art/';
@@ -440,6 +441,6 @@ const c34Art = (() => {
     clip(x - 16, boundary, 32, y - boundary + 1, draw);
   }
 
-  return { entries, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, climb, drop,
+  return { entries, expected, image, at, clip, tile, background, terrain, poolFoundation, poolWalls, poolWater, column, guide, platform, platformSpan, landPose, swimPose, swimmer, climb, drop,
     status: () => ({ loaded: images.size, failed: [...failures] }) };
 })();
