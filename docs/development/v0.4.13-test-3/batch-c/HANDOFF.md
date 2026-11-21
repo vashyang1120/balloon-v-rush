@@ -44,3 +44,16 @@
 - 桌機鍵盤與手機橫向觸控模擬完成正常操作、低中滿水位及停流水花驗證。原有回歸 50/50、Batch C 試玩包隔離 7/7 通過。隨交付附 `C2R3-canopy-seam-comparison.png` 和 `C2R3-canopy-seam-mobile.webm`。修正後的實體手機觀感待驗收。
 - [部署提交](https://github.com/vashyang1120/balloon-v-rush/commit/7a44530f2681185607eedc22cb68deab687f75cf) 只更新 Batch C 試玩目錄的兩個檔案。[Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44853015824) · [HTTPS 水池試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)。
 - Pages 部署成功。公開 HTTPS 桌機起點與手機橫向模擬水池皆載入新提交及接縫繪圖版本，首次進關成功，各載入 72 張 18A／18B PNG，無請求失敗。
+
+## Batch C3｜交接
+
+施工基準 `af950f8`，風乾提交 `fa6f7dc`，C3 試玩版本標示提交 `8b70987`。遊戲版本為 `adventure-v0.4.13-ch3-water-terrain-integration-test-3`。[Draft PR #39](https://github.com/vashyang1120/balloon-v-rush/pull/39) 供本批驗收。
+
+Pages 提交 `136d389` 和 `562fcee` 的合計差異僅限 `playtest-adventure-v0.4.13-test-3-batch-c/`。存檔仍用專屬前綴 `balloon-v-rush:adventure-playtest:v0.4.13-test-3-batch-c:`。
+
+- [Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44868834464)
+- [隔離試玩首頁](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/)
+- [3-4 起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=start)
+- [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)
+
+正常遊玩錄影及測試範圍見 [ACCEPTANCE.md](ACCEPTANCE.md)。C3 交付後等待使用者驗收。
