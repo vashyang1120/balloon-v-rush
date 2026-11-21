@@ -57,3 +57,5 @@ Pages 提交 `136d389` 和 `562fcee` 的合計差異僅限 `playtest-adventure-v
 - [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-c/rpg-dual-continent-test/?ch3test=pool)
 
 正常遊玩錄影及測試範圍見 [ACCEPTANCE.md](ACCEPTANCE.md)。C3 交付後等待使用者驗收。
+
+2026-11-21 核對最終 Pages Actions 成功。首頁、3-4 起點、3-4 水池、隔離守衛與六張 19 號 PNG 均回應 HTTPS 200。兩個關卡入口的來源標記皆為 8b70987，守衛前綴與六張原圖的 SHA-256 驗證通過。
