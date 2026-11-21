@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch C2 Revision 2';
+const GAME_BUILD_REVISION = 'Batch C2 Revision 3';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -13497,7 +13497,10 @@ function drawWorldInner() {
     try { drawCompanionDog(cx); } catch (e) { console.warn('[DogArt] draw error', e); }
   }
   try { drawHealFx(cx, 'front'); } catch (e) {}
-  if (c34Is()) c34Falls().forEach(f => c34DrawFall(f, cx));
+  if (c34Is()) {
+    c34Falls().forEach(f => c34DrawFall(f, cx));
+    c34DrawPoolImpact(cx);
+  }
   c34DrawWetStatus(cx);
 
   // v0.3.14-test-2：oil sprite overlay — 畫在玩家上方，讓油圖覆蓋玩家
