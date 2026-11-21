@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-3';
-const GAME_BUILD_REVISION = 'Batch C3';
+const GAME_BUILD_REVISION = 'Batch D';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
@@ -20398,6 +20398,7 @@ function rpgOpen(scene, opts) {
   ov.classList.toggle('rpg--dog-paw', !!scene.dogPaw);
   rpgSetTargetHighlight(scene.targetFn ? (() => { try { return scene.targetFn(); } catch (e) { return null; } })() : null);
   ov.querySelector('.rpg-log').style.display = 'none';
+  ov.querySelector('[data-act="skip"]').hidden = !!scene.requirePages;
   ov.classList.toggle('rpg--dog-alert', !!scene.dogAlert);
   const sides = ov.querySelectorAll('.rpg-side');
   sides.forEach(s => { s.dataset.key = ''; s.querySelectorAll('.rpg-pimg').forEach(i => i.classList.remove('rpg-pimg--on')); });

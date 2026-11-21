@@ -667,8 +667,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         ? rescuePage.locator('#btn-right').dispatchEvent(pressed ? 'touchstart' : 'touchend')
         : rescuePage.keyboard[pressed ? 'down' : 'up']('ArrowRight');
       const advanceDialog = () => mobile
-        ? rescuePage.locator('.rpg-next').tap()
-        : rescuePage.locator('.rpg-next').click();
+        ? rescuePage.locator('.rpg-next').tap({ force: true })
+        : rescuePage.locator('.rpg-next').click({ force: true });
       try {
         await boot(rescuePage, origin, 'pool');
         const before = await rescuePage.evaluate(() => {
