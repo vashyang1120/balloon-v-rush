@@ -654,61 +654,75 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.ok(stages[3].enemies.every(enemy => enemy.id.startsWith('P2-') || enemy.id.startsWith('CT-') || enemy.id.startsWith('BANK-')));
   });
 
-  await t.test('low-water rescue uses the approved portrait, preserves state, and warns on re-approach', async () => {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
-    try {
-      const rescuePage = await context.newPage();
-      await boot(rescuePage, origin, 'pool');
-      const before = await rescuePage.evaluate(() => {
-        const pool = c34Pool(), pad = platforms.find(p => p.c34Pad);
-        if (rpgActive) rpgClose('finished');
-        rpgQueue.length = 0;
-        c34.taught.add('c34_first_wet');
-        Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
-          vx: 0, vy: 0, onGround: true });
-        cameraX = player.x - 380;
-        return { hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
-          stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
-          reachable: c34CanReturnLeft(pad), portrait: rpgAssetState('balloonv_panic') };
+  for (const [mode, viewport] of [['desktop', { width: 1280, height: 820 }], ['mobile', { width: 844, height: 390 }]]) {
+    await t.test(mode + ' low-water rescue dialog, persistence and re-approach warning', async () => {
+      const mobile = mode === 'mobile';
+      const videoDir = process.env.CH3_VIDEO_DIR;
+      const context = await browser.newContext({
+        viewport, isMobile: mobile, hasTouch: mobile,
+        ...(videoDir ? { recordVideo: { dir: videoDir, size: viewport } } : {}),
       });
-      assert.equal(before.portrait, 'loaded');
-      assert.equal(before.reachable, false);
-      await rescuePage.keyboard.down('ArrowRight');
-      await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_rescue');
-      await rescuePage.keyboard.up('ArrowRight');
-      assert.deepEqual(await rescuePage.evaluate(() => ({
-        face: rpgCurLeft, right: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text,
-        stillInPool: player.x >= c34Pool().x,
-      })), { face: 'balloonv_panic', right: null, text: '糟糕！爬不上去了……怎麼辦？', stillInPool: true });
-      await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
-      await rescuePage.locator('.rpg-next').click();
-      assert.deepEqual(await rescuePage.evaluate(() => ({
-        face: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text, stillInPool: player.x >= c34Pool().x,
-      })), { face: 'star_spirit_normal', text: '別擔心！我帶你回岸上！', stillInPool: true });
-      await rescuePage.waitForFunction(() => rpgTypeDone);
-      await rescuePage.locator('.rpg-next').click();
-      await rescuePage.waitForFunction(() => !rpgActive && c34.rescue.seen);
-      const after = await rescuePage.evaluate(() => ({
-        hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
-        stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
-        safety: c34Pool().x - player.x - player.w, warned: c34.rescue.warned,
-      }));
-      assert.deepEqual(after, { hp: before.hp, bag: before.bag, level: before.level,
-        stats: before.stats, save: before.save, safety: 72, warned: false });
-      await rescuePage.keyboard.down('ArrowRight');
-      await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_warning');
-      await rescuePage.keyboard.up('ArrowRight');
-      assert.equal(await rescuePage.evaluate(() => rpgActive.pages[0].text), '小V，小心！現在水位還太低，掉下去就爬不上來囉！');
-      await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
-      await rescuePage.locator('.rpg-next').click();
-      await rescuePage.keyboard.down('ArrowRight');
-      await rescuePage.waitForFunction(() => c34.log.filter(e => e.ev === 'poolRescue').length === 2);
-      await rescuePage.keyboard.up('ArrowRight');
-      assert.equal(await rescuePage.evaluate(() => !!rpgActive), false);
-    } finally {
-      await context.close();
-    }
-  });
+      const rescuePage = await context.newPage();
+      const moveRight = pressed => mobile
+        ? rescuePage.locator('#btn-right').dispatchEvent(pressed ? 'touchstart' : 'touchend')
+        : rescuePage.keyboard[pressed ? 'down' : 'up']('ArrowRight');
+      const advanceDialog = () => mobile
+        ? rescuePage.locator('.rpg-next').tap()
+        : rescuePage.locator('.rpg-next').click();
+      try {
+        await boot(rescuePage, origin, 'pool');
+        const before = await rescuePage.evaluate(() => {
+          const pool = c34Pool(), pad = platforms.find(p => p.c34Pad);
+          if (rpgActive) rpgClose('finished');
+          rpgQueue.length = 0;
+          c34.taught.add('c34_first_wet');
+          Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
+            vx: 0, vy: 0, onGround: true });
+          cameraX = player.x - 380;
+          return { hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
+            stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
+            reachable: c34CanReturnLeft(pad), portrait: rpgAssetState('balloonv_panic') };
+        });
+        assert.equal(before.portrait, 'loaded');
+        assert.equal(before.reachable, false);
+        await moveRight(true);
+        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_rescue');
+        await moveRight(false);
+        assert.deepEqual(await rescuePage.evaluate(() => ({
+          face: rpgCurLeft, right: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text,
+          stillInPool: player.x >= c34Pool().x,
+        })), { face: 'balloonv_panic', right: null, text: '糟糕！爬不上去了……怎麼辦？', stillInPool: true });
+        await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+        await advanceDialog();
+        assert.deepEqual(await rescuePage.evaluate(() => ({
+          face: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text, stillInPool: player.x >= c34Pool().x,
+        })), { face: 'star_spirit_normal', text: '別擔心！我帶你回岸上！', stillInPool: true });
+        await rescuePage.waitForFunction(() => rpgTypeDone);
+        await advanceDialog();
+        await rescuePage.waitForFunction(() => !rpgActive && c34.rescue.seen);
+        const after = await rescuePage.evaluate(() => ({
+          hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
+          stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
+          safety: c34Pool().x - player.x - player.w, warned: c34.rescue.warned,
+        }));
+        assert.deepEqual(after, { hp: before.hp, bag: before.bag, level: before.level,
+          stats: before.stats, save: before.save, safety: 72, warned: false });
+        await moveRight(true);
+        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_warning');
+        await moveRight(false);
+        assert.equal(await rescuePage.evaluate(() => rpgActive.pages[0].text), '小V，小心！現在水位還太低，掉下去就爬不上來囉！');
+        await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+        await advanceDialog();
+        await moveRight(true);
+        await rescuePage.waitForFunction(() => c34.log.filter(e => e.ev === 'poolRescue').length === 2);
+        await moveRight(false);
+        assert.equal(await rescuePage.evaluate(() => !!rpgActive), false);
+      } finally {
+        await context.close();
+        if (videoDir) await rescuePage.video().saveAs(videoDir + '/Batch-D-rescue-' + mode + '.webm');
+      }
+    });
+  }
 
   await t.test('mobile-size pool entry and stage-specific assets', async () => {
     const mobile = await browser.newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
