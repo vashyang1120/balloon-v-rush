@@ -754,11 +754,22 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         await control('jump', true);
         await rescuePage.waitForFunction(() => player.vy < 0);
         await control('jump', false);
-        await rescuePage.waitForFunction(() => {
+        const reachedBank = () => {
           const bank = platforms.find(p => p.c34Id === 'BANK');
           return player.onGround && player.x + player.w > bank.x && player.y + player.h === bank.y;
-        });
+        };
+        while (!await rescuePage.evaluate(reachedBank)) {
+          await rescuePage.waitForFunction(() => !!rpgActive || player.onGround);
+          if (!await rescuePage.evaluate(() => !!rpgActive)) break;
+          await control('right', false);
+          while (await rescuePage.evaluate(() => !!rpgActive)) {
+            await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+            await advanceDialog();
+          }
+          await control('right', true);
+        }
         await control('right', false);
+        assert.equal(await rescuePage.evaluate(reachedBank), true);
         assert.equal(await rescuePage.evaluate(() => c34.level), 1);
       } finally {
         await context.close();
