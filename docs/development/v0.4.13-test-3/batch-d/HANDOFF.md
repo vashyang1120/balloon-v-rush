@@ -35,3 +35,26 @@
 - Pages 精確目錄的隔離瀏覽器測試 7 項通過。測試涵蓋一般入口、3-4 起點、3-4 水池、3-1 至 3-3、測試背包持久化、正式存檔探針和寫入網路封鎖。
 - Pages 提交 `cc73dacbaf821fe472f378ef1c7013918704dabb` 是獨立快轉提交。差異僅新增 `playtest-adventure-v0.4.13-test-3-batch-d/` 內 765 個檔案，使用 `balloon-v-rush:adventure-playtest:v0.4.13-test-3-batch-d:` 存檔前綴。遊戲工程 Draft PR #40 仍以 Batch C 為基準。
 - [Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44894735813) · [試玩首頁](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/) · [3-4 起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool)。
+
+## Revision 1｜雨傘防水與水中待機
+
+以既有 `dev/ch3-water-terrain-batch-d` 的 `6c415aea490559c71bd112b6e88b84ae501b4d72` 續作，沿用 Draft PR #40 與原 Batch D 試玩目錄。開工時 main 的 Pages 基準為 `cc73dac`。版本維持 `adventure-v0.4.13-ch3-water-terrain-integration-test-3`。
+
+- **防水根因**　即使傘面完全沒有和水柱相交，原先仍以「已裝備雨傘且人在瀑布範圍」建立傘面判定，接著取消沖淋。修正以當前傘面幀、面向、縮放與錨點計算攔截。傘面完全遮住頭頂直接接觸的水柱範圍時才防水，部分攔截同時保有分流水與仍可沖淋的垂直水柱。最外緣薄水霧不算直接沖頭。
+- **防水與畫面**　兩道瀑布共用同一次接觸判定。照常計算潮溼與 18A，側擋淋溼時合成既有側向傘面及整套 18A。分流仍沿用 175% 厚度係數、核准傘沿接縫與水面撞擊水花。敵人格擋和耐久函式沒有修改。
+- **待機根因**　正式 08 原檔是一張 PNG，舊版切到 08 時只畫同一幀並整體浮動。修正以 08 原圖的手腳區域做 16 個循環相位，約 1.2 秒一輪，從遊戲時間取樣。保持頭部錨點、身形畫布尺寸、手掌水線與上下兩層的遮罩。09 四幀與方向翻轉沿用既有速度，停止回 08，離水後交回跳躍與攀爬。
+- **回歸**　53 項入口、章節與瀏覽器檢查通過，打地鼠內部 92 項規則通過。涵蓋雙瀑布幾何、08 手腳像素及循環閉合、自然 20 秒與風口 5 秒、浮墊、攀爬、救援、蓄水、敵人格擋與完整 3-4 通關。實際 Pages 目錄另通過 7 項隔離檢查。
+- **發布範圍**　Pages 提交 `1e58892e3ebb011d7c50c743ce3492b84fdd72d4` 只修改既有 Batch D 目錄內的六個檔案。存檔前綴沿用 Batch D，其他試玩目錄及正式入口不受變更。
+
+[Draft PR #40](https://github.com/vashyang1120/balloon-v-rush/pull/40) · [Revision 1 HTTPS 試玩](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/)
+
+### Revision 1 操作錄影
+
+各案例都有桌機鍵盤與 844×390 Chromium 橫向觸控版本。從既有 3-4 起點或水池捷徑開場，切換工具、走到瀑布、按住格擋、蓄水、游泳和攀爬皆使用可見按鈕或鍵盤。錄影腳本只讀取遊戲狀態以核對結果。
+
+1. `01-first-waterfall`　第一道瀑布頭頂撐傘、側擋、恢復頭頂撐傘及收傘，格擋前後讀取相同耐久。
+2. `02-second-waterfall`　第二道瀑布重複相同操作並確認潮溼與 18A。
+3. `03-idle-paddling`　由雨傘實際蓄水後走進水池，放開方向鍵，留在 08 划水超過兩個週期。
+4. `04-swim-and-climb`　蓄水後用左右操作切 09，放開回到 08，再用左與跳攀回岸上。
+
+[Revision 1 Pages Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/44912318174)
