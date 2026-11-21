@@ -462,6 +462,31 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       timings: [1200, 300, 600, 150], mixed: 1050, wind: true, soaked: { wet: 1200, wind: false },
     });
   });
+  await t.test('climb reach uses the left-bank geometry and the approved six frames', async () => {
+    const result = await page.evaluate(() => {
+      const pool = c34Pool();
+      const before = { ...player };
+      const state = { level: c34.level, swim: c34.swim, jumpReleased: c34.jumpReleased };
+      const images = Array.from({ length: 6 }, (_, frame) => c34Art.image('17_v_water_climb', frame * 110));
+      const usable = [0, 0.5, 1].map(level => {
+        c34.level = level;
+        return c34CanClimbLeft();
+      });
+      Object.assign(player, { x: pool.x + 1, y: c34SurfaceY() + C34.water.feetDepth - player.h,
+        vx: 0, vy: 0, onGround: false });
+      Object.assign(c34, { swim: true, jumpReleased: true });
+      keys.ArrowLeft = keys.Space = true;
+      const started = c34AdvanceClimb();
+      keys.ArrowLeft = keys.Space = false;
+      for (let frame = 0; frame < 42 && c34.climb; frame++) c34AdvanceClimb();
+      const landed = !c34.climb && player.onGround && player.x + player.w < pool.x &&
+        player.y + player.h === pool.baseY && player.hp === before.hp;
+      Object.assign(player, before);
+      Object.assign(c34, state);
+      return { usable, started, landed, frames: images.every(image => image?.naturalWidth > 0) };
+    });
+    assert.deepEqual(result, { usable: [false, true, true], started: true, landed: true, frames: true });
+  });
   await t.test('swimming, jump ratios, exit route and test-save isolation', async () => {
     const actual = await page.evaluate(() => {
       if (rpgActive) rpgClose('skipped');
