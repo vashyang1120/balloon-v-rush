@@ -1,0 +1,894 @@
+{
+  "version": "adventure-v0.4.13-ch3-water-terrain-integration-test-2",
+  "stages": [
+    {
+      "id": "1-1",
+      "scope": "continent1",
+      "length": 6400,
+      "fixed": {
+        "coins": 33,
+        "balloon260": 8,
+        "roundBalloon": 0
+      },
+      "specials": [],
+      "hidden": [],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1000,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1250,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1600,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 4400,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 3820,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "1-2",
+      "scope": "alternate",
+      "length": 6400,
+      "fixed": {
+        "coins": 38,
+        "balloon260": 8,
+        "roundBalloon": 0
+      },
+      "specials": [],
+      "hidden": [],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 2000,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 2350,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 4300,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 1280,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 3450,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 3700,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "1-3",
+      "scope": "continent1",
+      "length": 6400,
+      "fixed": {
+        "coins": 46,
+        "balloon260": 10,
+        "roundBalloon": 2
+      },
+      "specials": [],
+      "hidden": [
+        {
+          "type": "recipe",
+          "recipeKey": "balloonLollipop",
+          "name": "氣球棒棒糖秘笈",
+          "x": 2900,
+          "y": 285,
+          "coins": 0
+        }
+      ],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 3200,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 3700,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "heavyBody",
+          "x": 4400,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 5200,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "heavyBody",
+          "x": 5700,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 4600,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "1-4",
+      "scope": "alternate",
+      "length": 6400,
+      "fixed": {
+        "coins": 31,
+        "balloon260": 8,
+        "roundBalloon": 0
+      },
+      "specials": [],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "goldChest",
+          "x": 2400,
+          "y": 390,
+          "coins": 30
+        }
+      ],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 2300,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 2600,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 2900,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 4500,
+          "y": 410
+        }
+      ]
+    },
+    {
+      "id": "1-2b",
+      "scope": "continent1",
+      "length": 5200,
+      "fixed": {
+        "coins": 35,
+        "balloon260": 10,
+        "roundBalloon": 2
+      },
+      "specials": [],
+      "hidden": [
+        {
+          "type": "recipe",
+          "recipeKey": "basicHammer",
+          "name": "氣球槌秘笈",
+          "x": 2380,
+          "y": 310,
+          "coins": 0
+        }
+      ],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1300,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 3400,
+          "y": 410
+        }
+      ]
+    },
+    {
+      "id": "2-1",
+      "scope": "continent1",
+      "length": 5400,
+      "fixed": {
+        "coins": 47,
+        "balloon260": 4,
+        "roundBalloon": 1
+      },
+      "specials": [
+        {
+          "kind": "coinBag",
+          "x": 1480,
+          "y": 315,
+          "amount": 10
+        }
+      ],
+      "hidden": [],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 3800,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 850,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 1650,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 3400,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 2500,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 4300,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "2-2",
+      "scope": "continent1",
+      "length": 6400,
+      "fixed": {
+        "coins": 46,
+        "balloon260": 7,
+        "roundBalloon": 2
+      },
+      "specials": [
+        {
+          "kind": "b260Bundle",
+          "x": 4240,
+          "y": 260,
+          "amount": 3
+        }
+      ],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 3790,
+          "y": 474,
+          "coins": 40
+        },
+        {
+          "type": "recipe",
+          "recipeKey": "balloonVolleyball",
+          "name": "氣球排球秘笈",
+          "x": 580,
+          "y": 310,
+          "coins": 0
+        }
+      ],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "heavyBody",
+          "x": 4680,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 750,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 3300,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 1500,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 5150,
+          "y": 416
+        },
+        {
+          "type": "dualNozzleOrange",
+          "x": 2500,
+          "y": 416
+        },
+        {
+          "type": "dualNozzleOrange",
+          "x": 4200,
+          "y": 416
+        }
+      ]
+    },
+    {
+      "id": "2-3",
+      "scope": "continent1",
+      "length": 7200,
+      "fixed": {
+        "coins": 56,
+        "balloon260": 5,
+        "roundBalloon": 6
+      },
+      "specials": [
+        {
+          "kind": "roundBundle",
+          "x": 3420,
+          "y": 255,
+          "amount": 4
+        }
+      ],
+      "hidden": [
+        {
+          "type": "bossNote",
+          "name": "橘子王觀察筆記",
+          "x": 5200,
+          "y": 390,
+          "coins": 0
+        }
+      ],
+      "enemies": [
+        {
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 3050,
+          "y": 410
+        },
+        {
+          "type": "scorpion",
+          "variant": "heavyBody",
+          "x": 6600,
+          "y": 410
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 750,
+          "y": 416
+        },
+        {
+          "type": "balloonNemesis",
+          "variant": "straight",
+          "x": 5500,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 1450,
+          "y": 416
+        },
+        {
+          "type": "chimneyOrange",
+          "x": 6200,
+          "y": 416
+        },
+        {
+          "type": "dualNozzleOrange",
+          "x": 3400,
+          "y": 416
+        },
+        {
+          "type": "projectileOrange",
+          "x": 2520,
+          "y": 416
+        },
+        {
+          "type": "projectileOrange",
+          "x": 4700,
+          "y": 296
+        }
+      ]
+    },
+    {
+      "id": "2-4",
+      "scope": "continent1",
+      "length": 960,
+      "fixed": {
+        "coins": 0,
+        "balloon260": 0,
+        "roundBalloon": 0
+      },
+      "specials": [],
+      "hidden": [],
+      "enemies": [
+        {
+          "type": "orangeKing",
+          "x": null,
+          "y": null
+        }
+      ]
+    },
+    {
+      "id": "3-1",
+      "scope": "continent2",
+      "length": 4600,
+      "fixed": {
+        "coins": 36,
+        "balloon260": 9,
+        "roundBalloon": 2
+      },
+      "specials": [
+        {
+          "kind": "coinBag",
+          "x": 3800,
+          "y": 190,
+          "amount": 10
+        }
+      ],
+      "hidden": [
+        {
+          "type": "recipe",
+          "recipeKey": "balloonUmbrella",
+          "name": "氣球雨傘秘笈",
+          "x": 2900,
+          "y": 390,
+          "coins": 0
+        },
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 1020,
+          "y": 238,
+          "coins": 40,
+          "tier": "normal"
+        }
+      ],
+      "enemies": [
+        {
+          "id": "S1",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 900,
+          "y": 410
+        },
+        {
+          "id": "S2",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 1350,
+          "y": 410
+        },
+        {
+          "id": "S3",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 3140,
+          "y": 410
+        }
+      ]
+    },
+    {
+      "id": "3-2",
+      "scope": "continent2",
+      "length": 7300,
+      "fixed": {
+        "coins": 27,
+        "balloon260": 9,
+        "roundBalloon": 5
+      },
+      "specials": [
+        {
+          "kind": "b260Bundle",
+          "x": 1130,
+          "y": 200,
+          "amount": 3
+        },
+        {
+          "kind": "roundBundle",
+          "x": 3960,
+          "y": 110,
+          "amount": 4
+        }
+      ],
+      "hidden": [
+        {
+          "type": "recipe",
+          "recipeKey": "balloonVolleyball",
+          "name": "氣球排球秘笈",
+          "x": 1225,
+          "y": 225,
+          "coins": 0
+        }
+      ],
+      "enemies": [
+        {
+          "id": "C1",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 2190,
+          "y": 410
+        },
+        {
+          "id": "C2",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 2600,
+          "y": 410
+        },
+        {
+          "id": "E2",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 4300,
+          "y": 410
+        }
+      ]
+    },
+    {
+      "id": "3-3",
+      "scope": "continent2",
+      "length": 6400,
+      "fixed": {
+        "coins": 31,
+        "balloon260": 6,
+        "roundBalloon": 2
+      },
+      "specials": [],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 3580,
+          "y": 163,
+          "coins": 60,
+          "tier": "rare"
+        }
+      ],
+      "enemies": [
+        {
+          "id": "A-G1",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 1100,
+          "y": 410
+        },
+        {
+          "id": "B-R1",
+          "type": "scorpion",
+          "variant": "armored",
+          "x": 2000,
+          "y": 408
+        },
+        {
+          "id": "B-W1",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 2666,
+          "y": 230
+        },
+        {
+          "id": "C-G2",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 3250,
+          "y": 410
+        },
+        {
+          "id": "C-W2",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 3001,
+          "y": 140
+        },
+        {
+          "id": "D-R2",
+          "type": "scorpion",
+          "variant": "armored",
+          "x": 5000,
+          "y": 408
+        },
+        {
+          "id": "D-G3",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 5520,
+          "y": 410
+        },
+        {
+          "id": "D-W3",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 5930,
+          "y": 410
+        }
+      ]
+    },
+    {
+      "id": "3-4",
+      "scope": "continent2",
+      "length": 4622,
+      "fixed": {
+        "coins": 26,
+        "balloon260": 5,
+        "roundBalloon": 2
+      },
+      "specials": [
+        {
+          "kind": "coinBag",
+          "x": 3632,
+          "y": -320,
+          "amount": 10
+        }
+      ],
+      "hidden": [
+        {
+          "type": "goldChest",
+          "name": "隱藏金幣寶箱",
+          "x": 4427,
+          "y": -272,
+          "coins": 100,
+          "tier": "precious"
+        }
+      ],
+      "enemies": [
+        {
+          "id": "P2-W1",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 2196,
+          "y": 100
+        },
+        {
+          "id": "CT-G1",
+          "type": "scorpion",
+          "variant": "gale",
+          "x": 2887,
+          "y": -155
+        },
+        {
+          "id": "BANK-W1",
+          "type": "scorpion",
+          "variant": "windBlade",
+          "x": 4262,
+          "y": -295
+        }
+      ]
+    },
+    {
+      "id": "3-T",
+      "scope": "alternate",
+      "length": 2400,
+      "fixed": {
+        "coins": 0,
+        "balloon260": 0,
+        "roundBalloon": 0
+      },
+      "specials": [],
+      "hidden": [],
+      "enemies": [
+        {
+          "id": "T1",
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1350,
+          "y": 410
+        },
+        {
+          "id": "T2",
+          "type": "scorpion",
+          "variant": "normal",
+          "x": 1750,
+          "y": 410
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "continent1": {
+      "fixed": {
+        "coins": 263,
+        "balloon260": 44,
+        "roundBalloon": 13
+      },
+      "optionalCoins": 40
+    },
+    "continent2": {
+      "fixed": {
+        "coins": 120,
+        "balloon260": 29,
+        "roundBalloon": 11
+      },
+      "optionalCoins": 200
+    },
+    "both": {
+      "fixed": {
+        "coins": 383,
+        "balloon260": 73,
+        "roundBalloon": 24
+      },
+      "optionalCoins": 240
+    }
+  },
+  "opening34": {
+    "totals": {
+      "coins": 497,
+      "balloon260": 68,
+      "roundBalloon": 22
+    },
+    "recipes": [
+      "basicHammer",
+      "balloonLollipop",
+      "balloonVolleyball",
+      "balloonUmbrella"
+    ],
+    "afterRequiredKnown": {
+      "coins": 497,
+      "balloon260": 61,
+      "roundBalloon": 20
+    }
+  },
+  "minigames": {
+    "volleyball": {
+      "costPerCraft": {
+        "balloon260": 3
+      },
+      "maxMatches": 3,
+      "reward": {
+        "win": {
+          "scorpion": {
+            "balloon260": 6,
+            "roundBalloon": 2,
+            "coins": 42
+          },
+          "orange": {
+            "balloon260": 8,
+            "roundBalloon": 4,
+            "coins": 50
+          },
+          "orange_king": {
+            "balloon260": 12,
+            "roundBalloon": 8,
+            "coins": 80
+          }
+        },
+        "lose": {
+          "balloon260": 4,
+          "roundBalloon": 0
+        },
+        "loseCoinTiers": [
+          {
+            "min": 0,
+            "max": 0,
+            "perPoint": 0
+          },
+          {
+            "min": 1,
+            "max": 2,
+            "perPoint": 3
+          },
+          {
+            "min": 3,
+            "max": 5,
+            "perPoint": 5
+          },
+          {
+            "min": 6,
+            "max": 6,
+            "perPoint": 7
+          }
+        ]
+      }
+    },
+    "whack": {
+      "costCoins": 20,
+      "maxPlays": 1,
+      "rewards": [
+        {
+          "id": "basic",
+          "name": "初級",
+          "minScore": 0,
+          "coins": 20,
+          "balloon260": 2,
+          "roundBalloon": 0
+        },
+        {
+          "id": "mid",
+          "name": "中級",
+          "minScore": 200,
+          "coins": 50,
+          "balloon260": 4,
+          "roundBalloon": 2
+        },
+        {
+          "id": "high",
+          "name": "高級",
+          "minScore": 400,
+          "coins": 100,
+          "balloon260": 6,
+          "roundBalloon": 4
+        }
+      ]
+    }
+  },
+  "requiredKnown": [
+    {
+      "id": "basicHammer",
+      "cost": {
+        "roundBalloon": 2,
+        "balloon260": 1
+      }
+    },
+    {
+      "id": "balloonUmbrella",
+      "cost": {
+        "balloon260": 5
+      }
+    },
+    {
+      "id": "firstDogTrip",
+      "cost": {
+        "balloon260": 1
+      }
+    }
+  ],
+  "unknown": [
+    "enemyRandomDrops",
+    "conditionalClearRewards",
+    "fullRepeatRules",
+    "bossSpawn"
+  ]
+}
