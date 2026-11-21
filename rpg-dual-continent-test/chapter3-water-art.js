@@ -10,6 +10,8 @@ const c34Art = (() => {
   const waterSurfaceFrames = new WeakMap();
   const fadedRockEdges = new Map();
   const swimmerLayer = document.createElement('canvas');
+  const idleWaterFrames = [];
+  let idleWaterSource;
 
   // Visible head widths measured in the approved art, excluding the transparent canvas.
   const landHead = { width: 153, top: 14 };
@@ -373,14 +375,57 @@ const c34Art = (() => {
     const factor = landPose().headWidth / waterHead.width;
     const bob = Math.sin(bobTime / 350) * 1.4;
     const y = surface + (spec.anchor[1] - palmWaterline) * factor + bob;
-    return { id, x, y, surface, factor, mirror: !facingRight, time, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
+    return { id, x, y, surface, factor, mirror: !facingRight, time, bobTime, headTop: y + (waterHead.top - spec.anchor[1]) * factor };
+  }
+
+  function idleWaterFrame(im, time) {
+    const phase = Math.floor(time / 75) % 16;
+    if (idleWaterFrames[phase]) return idleWaterFrames[phase];
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 400;
+    if (!idleWaterSource) {
+      idleWaterSource = document.createElement('canvas');
+      idleWaterSource.width = canvas.width;
+      idleWaterSource.height = canvas.height;
+      idleWaterSource.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
+    }
+    const g = canvas.getContext('2d');
+    const stroke = Math.sin(phase * Math.PI / 8);
+    const kick = Math.sin(phase * Math.PI / 8 + Math.PI / 3);
+    // Keep the head, torso, and canvas anchor fixed. Only fan out the hands and feet.
+    g.drawImage(idleWaterSource, 0, 0, 320, 156, 0, 0, 320, 156);
+    const strip = (y, x, width, destX, destWidth) =>
+      g.drawImage(idleWaterSource, x, y, width, 4, destX, y, destWidth, 4);
+    for (let y = 156; y < 400; y += 4) {
+      const arms = y < 228;
+      const left = arms ? 124 : 146;
+      const right = arms ? 190 : 151;
+      const flex = arms ? Math.sin(Math.PI * (y + 2 - 156) / 72)
+        : Math.sin(Math.PI * (y + 2 - 228) / 172);
+      const openLeft = (arms ? 34 * stroke : 36 * kick) * flex;
+      const openRight = (arms ? -34 * stroke : -36 * kick) * flex;
+      strip(y, 0, left, -openLeft, left + openLeft);
+      strip(y, left, right - left, left, right - left);
+      strip(y, right, 320 - right, right, 320 - right + openRight);
+    }
+    idleWaterFrames[phase] = canvas;
+    return canvas;
   }
 
   function swimmer(pose) {
-    const { id, x, y, surface, factor, mirror, time } = pose;
-    const im = image(id, time), spec = catalog[id];
-    if (!im) return false;
-    clip(0, surface - 180, CANVAS_W, 180, () => at(id, time, x, y, factor, mirror));
+    const { id, x, y, surface, factor, mirror, time, bobTime } = pose;
+    const source = image(id, time), spec = catalog[id];
+    if (!source) return false;
+    const im = id === '08_v_water_idle' ? idleWaterFrame(source, bobTime) : source;
+    const [sourceW, sourceH] = spec.size, [anchorX, anchorY] = spec.anchor;
+    clip(0, surface - 180, CANVAS_W, 180, () => {
+      ctx.save();
+      ctx.translate(x, y);
+      if (mirror) ctx.scale(-1, 1);
+      ctx.drawImage(im, -anchorX * factor, -anchorY * factor, sourceW * factor, sourceH * factor);
+      ctx.restore();
+    });
 
     // Allocate the submerged layer to the full sprite bounds so kicks remain visible.
     const width = Math.ceil(spec.size[0] * factor) + 2;
