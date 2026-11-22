@@ -31904,7 +31904,7 @@ function c1uStarOrangeSeriesStep() {
     try {
       if (r && c && c.result && c.result.playerScore === VB_CONFIG.targetScore && c.result.cpuScore === 0) {
         const def = C1U_TITLES.find(t => t.vbOpponent === c.opponent);
-        if (def) { c.titleRes = achAwardTitle(def.titleKey, 'volleyball:' + c.opponent + ':7-0'); vbSave(); }
+        if (def) { c.titleRes = achAwardTitle(def.titleKey, 'volleyball:' + c.opponent + ':' + c.result.playerScore + '-0'); vbSave(); }
       }
     } catch (e) { console.warn('[C1U] 排球稱號', e); }
     return r;

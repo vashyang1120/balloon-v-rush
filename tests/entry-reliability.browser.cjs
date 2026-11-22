@@ -1,9 +1,74 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { mkdir } = require('node:fs/promises');
+const { mkdir, readFile } = require('node:fs/promises');
+const { join } = require('node:path');
 const { createPreview } = require('./preview-entry.cjs');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const test = require('node:test');
+
+
+const volleyballScript = '**/minigames/volleyball/main.js*';
+const volleyballCases = [
+  ['scorpion', 5, 0], ['orange', 5, 0], ['orange_king', 5, 0],
+  ['scorpion', 5, 1], ['orange', 5, 4], ['orange_king', 0, 5], ['scorpion', 4, 5],
+];
+
+async function completeVolleyball(page, opponent, playerScore, cpuScore, touch) {
+  const before = await page.evaluate(() => {
+    playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
+    vbData().matchesLeft = 1;
+    h2RenderPanel();
+    return [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon];
+  });
+  await page.locator('[data-vb-act="play"][data-op="' + opponent + '"]').click();
+  await page.waitForFunction(() => vbFrame.ready);
+  const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
+  await frame.locator('#btnEmbedStart').click();
+  await page.waitForFunction(() => vbCurrent()?.state === 'active');
+  const state = () => frame.evaluate(() => window.volleyballQA.state());
+  let points = [...Array(playerScore === 5 ? cpuScore : playerScore).fill(playerScore === 5 ? 'right' : 'left'),
+    ...Array(playerScore === 5 ? playerScore : cpuScore).fill(playerScore === 5 ? 'left' : 'right')];
+  for (const [i, winner] of points.entries()) {
+    await frame.waitForFunction(() => window.volleyballQA.canServe());
+    if ((await state()).server === 'left') {
+      if (touch) await frame.locator('[data-cmd="hit"]').tap();
+      else await page.keyboard.press('Space');
+    }
+    await frame.waitForFunction(() => window.volleyballQA.state().state === 'RALLY');
+    await frame.evaluate(winner => window.volleyballQA.land(winner), winner);
+    await frame.waitForFunction(() => window.volleyballQA.state().state === 'POINT_SCORED');
+    const scored = await state();
+    assert.equal(scored.left + scored.right, i + 1);
+    if (i < points.length - 1) assert.ok(scored.left < 5 && scored.right < 5);
+  }
+  await frame.locator('#overlayOver').waitFor();
+  assert.match(await frame.locator('#overScore').textContent(), new RegExp(playerScore + '\\s*:\\s*' + cpuScore));
+  const finished = await state();
+  assert.equal(finished.state, 'GAME_OVER');
+  await frame.evaluate(() => window.volleyballQA.land('left'));
+  assert.deepEqual(await state(), finished);
+  await page.waitForFunction(() => vbCurrent()?.state === 'done');
+  const settled = await page.evaluate(() => {
+    const c = vbCurrent();
+    const duplicate = vbSettle({ matchId: c.matchId }, c);
+    return {
+      duplicate, ticket: vbTickets(), left: vbData().matchesLeft, saved: vbData().settled[c.matchId] === c.id,
+      balance: [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon],
+      reward: [c.reward.coins, c.reward.balloon260, c.reward.roundBalloon], title: c.titleRes || null,
+    };
+  });
+  assert.equal(settled.duplicate, false);
+  assert.equal(settled.saved, true);
+  assert.equal(settled.ticket, 0);
+  assert.equal(settled.left, 0);
+  assert.deepEqual(settled.balance.map((v, i) => (v || 0) - (before[i] || 0)), settled.reward);
+  const titleSuffix = { scorpion: 'rookie', orange: 'expert', orange_king: 'king' };
+  assert.equal(settled.title?.key, playerScore === 5 && cpuScore === 0 ? 'adventure_volleyball_' + titleSuffix[opponent] : undefined);
+  if (settled.title) assert.equal(settled.title.reason, 'guest');
+  await frame.locator('#btnChange').click();
+  await page.locator('#vb-modal').waitFor();
+  await page.locator('#vb-modal [data-vb-close]').click();
+}
 
 const dirs = ['rpg-continent1-universe', 'rpg-dual-continent-test'];
 const artifacts = process.env.ENTRY_SCREENSHOTS || 'entry-screenshots';
@@ -200,5 +265,27 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       const tickets = await page.evaluate(() => ({ tickets: vbTickets(), matches: vbData().matchesLeft }));
       assert.deepEqual(tickets, { tickets: 1, matches: 1 });
       console.log(dir, 'volleyball opened, started and returned home');
+      const source = await readFile(join(__dirname, '..', 'minigames', 'volleyball', 'main.js'), 'utf8');
+      const end = source.lastIndexOf('})();');
+      assert.ok(end > 0);
+      const fixture = `
+        window.volleyballQA = {
+          state: () => ({ state: game.state, server: game.server, ...game.score }),
+          canServe: () => game.state === STATE.SERVE_READY || (game.state === STATE.RALLY && game.server === 'right'),
+          land: winner => {
+            const x = winner === 'left' ? CONFIG.WORLD_W - BR - 4 : BR + 4;
+            Object.assign(ball, { x, y: CONFIG.GROUND_Y - BR + 1, vx: 0, vy: 100, held: false });
+          },
+        };
+      `;
+      await page.route(volleyballScript, route => route.fulfill({
+        contentType: 'application/javascript',
+        body: source.slice(0, end) + fixture + source.slice(end),
+      }));
+      for (const [opponent, playerScore, cpuScore] of volleyballCases) {
+        await completeVolleyball(page, opponent, playerScore, cpuScore, index === 1);
+        console.log(dir, 'volleyball', opponent, playerScore + ':' + cpuScore, 'settled and returned home');
+      }
+
   })));
 });
