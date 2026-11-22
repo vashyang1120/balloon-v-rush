@@ -363,6 +363,7 @@ test('packaged volleyball playtest preserves and awards titles inside isolated s
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const outside = [];
+  const productionKey = 'balloonV_inventory';
   page.on('request', req => {
     if (!req.url().startsWith(origin + '/' + previewDir + '/')) outside.push(req.url());
   });
@@ -394,5 +395,5 @@ test('packaged volleyball playtest preserves and awards titles inside isolated s
   });
   assert.deepEqual(outside, []);
   await page.goto(origin + '/missing', { waitUntil: 'domcontentloaded' });
-  assert.equal(await page.evaluate(() => localStorage.getItem('balloonV_inventory')), 'production-sentinel');
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), productionKey), 'production-sentinel');
 });

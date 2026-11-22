@@ -22,7 +22,16 @@ async function build(outputRoot) {
       filter: entry => !['tests', 'editor'].includes(path.basename(entry)) && !entry.endsWith('.md'),
     });
   }
-  const home = path.join(output, 'rpg-continent1-universe', 'index.html');
+  const homeFolder = path.join(output, 'rpg-continent1-universe');
+  const avatars = path.join(output, 'avatars');
+  await fs.mkdir(avatars);
+  await fs.copyFile(path.join(output, 'minigames/volleyball/assets/characters/v/v_volleyball_idle.png'), path.join(avatars, 'boy1.png'));
+  const adventure = path.join(homeFolder, 'main.js');
+  const script = await fs.readFile(adventure, 'utf8');
+  const lobbyAvatars = 'https://vashyang1120.github.io/balloon-v-universe/assets/avatars/base/';
+  if (!script.includes(lobbyAvatars)) throw new Error('Missing avatar URL in adventure source');
+  await fs.writeFile(adventure, script.replaceAll(lobbyAvatars, '../avatars/'));
+  const home = path.join(homeFolder, 'index.html');
   const html = await fs.readFile(home, 'utf8');
   if (!html.includes('<head>')) throw new Error('Missing HTML head in adventure entry');
   await fs.writeFile(home, html
