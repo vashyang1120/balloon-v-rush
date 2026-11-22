@@ -526,7 +526,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   await t.test('each overhead diversion stops the whole column at the canopy', async () => {
     const results = await page.evaluate(() => {
       const before = { ...player }, slot = activeSlot, falls = c34.falls;
-      const { column, guide } = c34Art;
+      const { column } = c34Art;
+      const { draw } = c34PreviewWater;
       try {
         activeSlot = 'umbrella';
         return c34Falls().flatMap(fall => [true, false].map(facingRight => {
@@ -537,7 +538,11 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           c34.falls = new Map([[fall.id, interaction]]);
           const columns = [], branches = [];
           c34Art.column = (_x, _top, _end, width, _time, contact) => columns.push({ width, clipped: !!contact });
-          c34Art.guide = profile => branches.push(profile.left.side, profile.right.side);
+          c34PreviewWater.draw = (...args) => {
+            const profile = args[5];
+            if (draw(...args)) branches.push(profile.left.side, profile.right.side);
+            return branches.length === 2;
+          };
           c34DrawFall(fall, fall.x - 200);
           return { width: fall.w, wet: interaction.touching, cut: interaction.canopy?.width, columns, branches };
         }));
@@ -545,7 +550,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         Object.assign(player, before);
         activeSlot = slot;
         c34.falls = falls;
-        Object.assign(c34Art, { column, guide });
+        c34Art.column = column;
+        c34PreviewWater.draw = draw;
       }
     });
     for (const result of results) {

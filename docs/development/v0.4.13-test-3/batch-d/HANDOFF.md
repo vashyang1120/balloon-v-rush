@@ -77,3 +77,12 @@
 - 兩支水流共用一個由傘頂沿伸到兩個落點的輪廓。垂直瀑布裁到同一條曲線的中心，輪廓覆蓋接縫，不再用轉角貼片組出外形。面向側與背向側的寬度由朝向決定，與接觸面積無關。
 - 離地撐傘下降時使用風乾倍率 4×。同時有風也只套用一次。再淋溼仍優先補滿，站地或向上跳沿用原判定。
 - 攀爬已通過使用者驗收，沿用 Revision 3 操作。
+
+## Revision 5｜已驗收雨傘分流美術整合
+
+- 版本維持 `adventure-v0.4.13-ch3-water-terrain-integration-test-3`，遊戲畫面標示 Batch D Revision 5。工程由 `f98799009e50ec0cf72f9c32f50ee793c678dbbe` 續作。
+- 美術來源為 2026-11-22 使用者在獨立試玩版正式驗收的 Chapter 3 Water Art｜Umbrella Diversion Revision v2.0。核對交接包 `Umbrella_Diversion_canopy_seam_review_PNG.zip`（SHA-256 `1ec482e91fe88cc0e10ea8d3613a4ceff3dfd36b68a6730d764bac0b08fe0836`）。
+- 試玩時驗收的 `playtest-water.js` 原樣納入為 `chapter3-umbrella-diversion.js`（SHA-256 `cf9847df7bc838bc8443374ebb10c1f1beefbfdafe1aee6952e03cf5ce03f19ba`）。它即時取樣既有正式 `01_waterfall_main` PNG 序列、遮罩目前雨傘影格，並使用遊戲提供的路徑、粗細、接點與落點。ZIP 內的固定座標 PNG 保留作為驗收參考。
+- 變更限於繪製、載入及新版標示。蓄水、耐久、潮溼、18A／18B／19、游泳、攀爬、救援與存檔規則沿用原程式。
+- 測試涵蓋兩道瀑布截流、左右面向、第二道蓄水、18A／18B／19、桌機鍵盤、844 × 390 橫向觸控、游泳與攀爬、浮墊、救援及隔離存檔。
+- [Batch D 隔離關卡起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start&revision=5) · [水池捷徑](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool&revision=5)

@@ -238,13 +238,15 @@ function c34DrawFall(f, cx) {
       openColumn(right, columnRight);
     }
     const profile = c34Art.guideProfile(canopy, streams);
-    const stopLeft = canopy.overhead ? columnLeft : left;
-    const stopRight = canopy.overhead ? columnRight : right;
-    c34Art.clip(stopLeft, top, stopRight - stopLeft, canopy.outY - top, () =>
-      c34Art.column(x, top, canopy.outY, f.w, time, {
-        surfaceAt: atX => profile.surfaceAt(atX + cx),
-      }));
-    c34Art.guide(profile, cx, time);
+    if (!c34PreviewWater.draw(f, cx, time, top, canopy, profile)) {
+      const stopLeft = canopy.overhead ? columnLeft : left;
+      const stopRight = canopy.overhead ? columnRight : right;
+      c34Art.clip(stopLeft, top, stopRight - stopLeft, canopy.outY - top, () =>
+        c34Art.column(x, top, canopy.outY, f.w, time, {
+          surfaceAt: atX => profile.surfaceAt(atX + cx),
+        }));
+      c34Art.guide(profile, cx, time);
+    }
     for (const stream of streams) {
       if (!stream.fills) {
         c34Art.at('03_waterfall_splash', time, stream.x - cx, stream.y, splashScale * stream.width / (f.w * 1.05));
