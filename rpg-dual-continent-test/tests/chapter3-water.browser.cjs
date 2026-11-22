@@ -2,15 +2,14 @@
 const assert = require('node:assert/strict');
 const { mkdir } = require('node:fs/promises');
 const { test } = require('node:test');
-const { createPreview } = require('../../tests/preview-entry.cjs');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const dir = 'rpg-dual-continent-test';
 const screenshotDir = process.env.CH3_SCREENSHOTS;
 
 async function boot(page, origin, section, bagMode) {
-  await page.route(/^https?:\/\/[^/]+\//, route =>
-    route.request().url().startsWith(origin + '/') ? route.continue() : route.abort());
+  await page.route(/^https?:\/\/[^/]+\//, route => serveCheckout(route, origin));
   const bag = bagMode ? '&ch3bag=' + bagMode : '';
   await page.goto(origin + '/' + dir + '/?guest=1&sandbox=1&devtools=1&ch3test=' + section + bag);
   await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
@@ -40,10 +39,7 @@ async function record(page, name) {
 }
 
 test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 300000 }, async t => {
-  const server = createPreview();
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => server.close());
-  const origin = 'http://127.0.0.1:' + server.address().port;
+  const origin = 'http://127.0.0.1:8412';
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
@@ -714,11 +710,11 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     const stored = await page.evaluate(() => ({
       mode: c34.devBagMode,
       base: localStorage.getItem(SAVE_KEY),
-      persisted: JSON.parse(localStorage.getItem(c34BagKey('cumulative'))),
+      persisted: JSON.parse(localStorage.getItem(c34BagKey('3-4', 'cumulative'))),
       current: playerInventory.coins,
       cumulative: c34CumulativeResources().totals,
-      stocked: c34CreateInventory('stocked'),
-      empty: c34CreateInventory('empty'),
+      stocked: c34CreateInventory('3-4', 'stocked'),
+      empty: c34CreateInventory('3-4', 'empty'),
     }));
     assert.equal(stored.mode, 'cumulative');
     assert.equal(stored.persisted.coins, stored.current);
@@ -1075,7 +1071,10 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       checkChapter3Treasure();
       if (rpgActive) throw Error('claimed chest reopened');
       restoreLevelStartSnapshot();
-      if (playerInventory.chapter3Chests[id]) throw Error('claim survived an adventure rollback');
+      if (!playerInventory.chapter3Chests[id] || playerInventory.coins !== levelStartSnapshot.coins) throw Error('committed claim was lost during an adventure rollback');
+      // Separate deterministic roll fixture after verifying the committed refusal survives rollback.
+      delete playerInventory.chapter3Chests[id];
+      delete levelStartSnapshot.chapter3Chests[id];
       player.x = chest.x - player.w / 2;
       player.y = chest.y - player.h / 2;
       bringBalloonDog = true;
@@ -1090,7 +1089,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(await page.evaluate(id => {
       window.restoreTestRollFace();
       delete window.restoreTestRollFace;
-      const saved = JSON.parse(localStorage.getItem(c34BagKey('cumulative')));
+      const saved = JSON.parse(localStorage.getItem(c34BagKey('3-4', 'cumulative')));
       return [saved?.craftedItems?.balloonDice, saved?.coins, saved?.chapter3Chests?.[id]?.outcome];
     }, setup.chest), [1, beforeRoll + 100, 'tie']);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();

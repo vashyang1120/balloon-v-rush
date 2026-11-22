@@ -7,11 +7,11 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-3/';
+const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-3:';
+const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-4:';
 const mime = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
@@ -42,19 +42,13 @@ async function fixture(context, guard, requests) {
 
     let rel = decodeURIComponent(url.pathname.slice(prefix.length));
     if (rel.endsWith('/')) rel += 'index.html';
-    const file = resolve(root, rel);
+    const file = resolve(root, prefix.replace('/balloon-v-rush/', ''), rel);
     if (!file.startsWith(root + sep)) return route.abort();
     let body;
     try {
       body = rel === 'playtest-guard.js' ? guard : await readFile(file);
     } catch {
       return route.fulfill({ status: 404 });
-    }
-    if (rel === tree + 'index.html') {
-      body = Buffer.from(body.toString('utf8')
-        .replace('<head>', '<head><meta http-equiv="Content-Security-Policy" content="' + csp +
-          '"><script src="' + prefix + 'playtest-guard.js"></script>')
-        .replace(/<script[^>]+github\.io[^>]+><\/script>/g, ''));
     }
     const contentType = mime[extname(rel)] || 'application/octet-stream';
     const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/);
@@ -71,9 +65,9 @@ async function fixture(context, guard, requests) {
   });
 }
 
-test('test-3 in the isolated Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
+test('Chapter 3 Integration Test 4 Pages directory blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-adventure-v0.4.13/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-adventure-v0.4.13-test-4/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -82,7 +76,7 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
 
   const desktop = { width: 1280, height: 820 };
   for (const [section, viewport] of [['', desktop], ['start', desktop],
-    ['pool', { width: 844, height: 390 }], ['3-1', desktop], ['3-2', desktop], ['3-3', desktop]]) {
+    ['pool', { width: 844, height: 390 }], ['3-1', desktop], ['3-2', desktop], ['3-3', desktop], ['3-4', desktop]]) {
     await t.test(section || 'general', async () => {
       const mobile = section === 'pool';
       const context = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
@@ -102,7 +96,7 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-3');
+        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-4');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
@@ -112,13 +106,13 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
           const persisted = await page.evaluate(() => {
             playerInventory.coins += 10;
             const ok = saveInventory();
-            return ok && !!localStorage.getItem(c34BagKey('cumulative'));
+            return ok && !!localStorage.getItem(c34BagKey('3-4', 'cumulative'));
           });
           assert.equal(persisted, true);
-          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('cumulative')));
+          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('3-4', 'cumulative')));
         } else if (section) {
-          await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
-            advCurrentStageId() === s && playerInventory.unlockedRecipes.balloonDice === true, section);
+          await waitUntil(page, s => !assetGateActive && h2IsOpen() &&
+            c34.devBagStage === s && playerInventory.unlockedRecipes.balloonDice === true, section);
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }
@@ -149,8 +143,11 @@ test('test-3 in the isolated Pages directory can load without touching formal sa
           return denied;
         });
         assert.deepEqual(guardResult, [true, true, true, true]);
-        assert.ok(requests.every(req => req.origin === origin && req.pathname.startsWith(prefix) &&
-          ['GET', 'HEAD'].includes(req.method)));
+        // The home attempts a public default avatar; fixture() aborts every out-of-root request.
+        const permittedObservation = req => req.origin === origin &&
+          (req.pathname.startsWith(prefix) || req.pathname === '/balloon-v-universe/assets/avatars/base/boy1.png');
+        assert.ok(requests.every(req => permittedObservation(req) &&
+          ['GET', 'HEAD'].includes(req.method)), JSON.stringify(requests.filter(req => req.origin !== origin || !req.pathname.startsWith(prefix) || !['GET', 'HEAD'].includes(req.method))));
         await page.goto(origin + '/formal-fixture');
         const storage = await page.evaluate(({ keys, namespace, bagKey }) => ({
           preserved: keys.every(key => localStorage.getItem(key) === 'formal' &&
