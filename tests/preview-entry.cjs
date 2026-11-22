@@ -12,12 +12,12 @@ const types = {
   '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp4': 'video/mp4'
 };
 
-function createPreview() {
+function createPreview(contentRoot = root) {
   return createServer(async (req, res) => {
     try {
       const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-      const file = resolve(root, '.' + pathname, pathname.endsWith('/') ? 'index.html' : '');
-      if (!file.startsWith(root + sep)) throw Error('outside the checkout');
+      const file = resolve(contentRoot, '.' + pathname, pathname.endsWith('/') ? 'index.html' : '');
+      if (!file.startsWith(contentRoot + sep)) throw Error('outside the checkout');
       const { size } = await stat(file);
       const range = req.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
       const headers = { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Accept-Ranges': 'bytes' };

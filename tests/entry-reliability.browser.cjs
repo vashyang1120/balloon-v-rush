@@ -1,7 +1,9 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { mkdir, readFile } = require('node:fs/promises');
+const { mkdir, mkdtemp, readFile, rm } = require('node:fs/promises');
+const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+const { build, previewDir } = require('./build-volleyball-playtest.cjs');
 const { createPreview } = require('./preview-entry.cjs');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const test = require('node:test');
@@ -13,7 +15,7 @@ const volleyballCases = [
   ['scorpion', 5, 1], ['orange', 5, 4], ['orange_king', 0, 5], ['scorpion', 4, 5],
 ];
 
-async function completeVolleyball(page, opponent, playerScore, cpuScore, touch) {
+async function completeVolleyball(page, opponent, playerScore, cpuScore, touch, titleMode = 'guest') {
   const before = await page.evaluate(() => {
     playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
     vbData().matchesLeft = 1;
@@ -26,13 +28,16 @@ async function completeVolleyball(page, opponent, playerScore, cpuScore, touch) 
   await frame.locator('#btnEmbedStart').click();
   await page.waitForFunction(() => vbCurrent()?.state === 'active');
   const state = () => frame.evaluate(() => window.volleyballQA.state());
-  let points = [...Array(playerScore === 5 ? cpuScore : playerScore).fill(playerScore === 5 ? 'right' : 'left'),
+  const points = [...Array(playerScore === 5 ? cpuScore : playerScore).fill(playerScore === 5 ? 'right' : 'left'),
     ...Array(playerScore === 5 ? playerScore : cpuScore).fill(playerScore === 5 ? 'left' : 'right')];
   for (const [i, winner] of points.entries()) {
     await frame.waitForFunction(() => window.volleyballQA.canServe());
     if ((await state()).server === 'left') {
-      if (touch) await frame.locator('[data-cmd="hit"]').tap();
-      else await page.keyboard.press('Space');
+      if (touch) {
+        const button = await frame.locator('[data-cmd="hit"]').boundingBox();
+        assert.ok(button);
+        await page.touchscreen.tap(button.x + button.width / 2, button.y + button.height / 2);
+      } else await page.keyboard.press('Space');
     }
     await frame.waitForFunction(() => window.volleyballQA.state().state === 'RALLY');
     await frame.evaluate(winner => window.volleyballQA.land(winner), winner);
@@ -63,11 +68,35 @@ async function completeVolleyball(page, opponent, playerScore, cpuScore, touch) 
   assert.equal(settled.left, 0);
   assert.deepEqual(settled.balance.map((v, i) => (v || 0) - (before[i] || 0)), settled.reward);
   const titleSuffix = { scorpion: 'rookie', orange: 'expert', orange_king: 'king' };
-  assert.equal(settled.title?.key, playerScore === 5 && cpuScore === 0 ? 'adventure_volleyball_' + titleSuffix[opponent] : undefined);
-  if (settled.title) assert.equal(settled.title.reason, 'guest');
+  assert.equal(settled.title?.key, titleMode && playerScore === 5 && cpuScore === 0 ? 'adventure_volleyball_' + titleSuffix[opponent] : undefined);
+  if (settled.title) {
+    if (titleMode === 'guest') assert.equal(settled.title.reason, 'guest');
+    else assert.equal(settled.title.ok, true);
+  }
   await frame.locator('#btnChange').click();
   await page.locator('#vb-modal').waitFor();
   await page.locator('#vb-modal [data-vb-close]').click();
+  return settled.title;
+}
+
+async function installVolleyballFixture(page) {
+  const source = await readFile(join(__dirname, '..', 'minigames', 'volleyball', 'main.js'), 'utf8');
+  const end = source.lastIndexOf('})();');
+  assert.ok(end > 0);
+  const fixture = `
+    window.volleyballQA = {
+      state: () => ({ state: game.state, server: game.server, ...game.score }),
+      canServe: () => game.state === STATE.SERVE_READY || (game.state === STATE.RALLY && game.server === 'right'),
+      land: winner => {
+        const x = winner === 'left' ? CONFIG.WORLD_W - BR - 4 : BR + 4;
+        Object.assign(ball, { x, y: CONFIG.GROUND_Y - BR + 1, vx: 0, vy: 100, held: false });
+      },
+    };
+  `;
+  await page.route(volleyballScript, route => route.fulfill({
+    contentType: 'application/javascript',
+    body: source.slice(0, end) + fixture + source.slice(end),
+  }));
 }
 
 const dirs = ['rpg-continent1-universe', 'rpg-dual-continent-test'];
@@ -265,27 +294,77 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       const tickets = await page.evaluate(() => ({ tickets: vbTickets(), matches: vbData().matchesLeft }));
       assert.deepEqual(tickets, { tickets: 1, matches: 1 });
       console.log(dir, 'volleyball opened, started and returned home');
-      const source = await readFile(join(__dirname, '..', 'minigames', 'volleyball', 'main.js'), 'utf8');
-      const end = source.lastIndexOf('})();');
-      assert.ok(end > 0);
-      const fixture = `
-        window.volleyballQA = {
-          state: () => ({ state: game.state, server: game.server, ...game.score }),
-          canServe: () => game.state === STATE.SERVE_READY || (game.state === STATE.RALLY && game.server === 'right'),
-          land: winner => {
-            const x = winner === 'left' ? CONFIG.WORLD_W - BR - 4 : BR + 4;
-            Object.assign(ball, { x, y: CONFIG.GROUND_Y - BR + 1, vx: 0, vy: 100, held: false });
-          },
-        };
-      `;
-      await page.route(volleyballScript, route => route.fulfill({
-        contentType: 'application/javascript',
-        body: source.slice(0, end) + fixture + source.slice(end),
-      }));
+      await installVolleyballFixture(page);
       for (const [opponent, playerScore, cpuScore] of volleyballCases) {
         await completeVolleyball(page, opponent, playerScore, cpuScore, index === 1);
         console.log(dir, 'volleyball', opponent, playerScore + ':' + cpuScore, 'settled and returned home');
       }
 
   })));
+});
+
+test('second-continent volleyball completes and sends real rewards', { timeout: 120000 }, async t => {
+  const server = createPreview();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const origin = 'http://127.0.0.1:' + server.address().port;
+  const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await page.route(/^https?:\/\/[^/]+\//, route => route.request().url().startsWith(origin + '/') ? route.continue() : route.abort());
+  await installVolleyballFixture(page);
+  await page.goto(origin + '/rpg-continent2/?guest=1&sandbox=1', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
+  await page.evaluate(() => {
+    advBootOpenHome({ ctx: { stageId: '1-2', levelIndex: 1, gameState: 'clear' } });
+    playerInventory.unlockedRecipes[VB_CONFIG.recipeKey] = true;
+    h2OpenPanel('volleyball');
+  });
+  await completeVolleyball(page, 'orange_king', 5, 0, false, null);
+});
+
+test('packaged volleyball playtest preserves and awards titles inside isolated storage', { timeout: 180000 }, async t => {
+  const output = await mkdtemp(join(tmpdir(), 'volleyball-preview-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  await build(output);
+  const server = createPreview(output);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const origin = 'http://127.0.0.1:' + server.address().port;
+  const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const outside = [];
+  page.on('request', req => {
+    if (!req.url().startsWith(origin + '/' + previewDir + '/')) outside.push(req.url());
+  });
+  await installVolleyballFixture(page);
+  await page.addInitScript(() => {
+    if (window === window.top && location.pathname.endsWith('/playtest-volleyball-five-point-test-1/')) {
+      localStorage.setItem('balloonV_inventory', 'production-sentinel');
+    }
+  });
+  await page.goto(origin + '/' + previewDir + '/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('在小V之家試玩與結算').click();
+  await page.locator('[data-vb-act="play"][data-op="scorpion"]').waitFor({ timeout: 90000 });
+  await page.evaluate(() => {
+    const d = achLoad();
+    const def = C1U_TITLES.find(t => t.titleKey === 'adventure_volleyball_rookie');
+    d.titles[def.titleKey] = { ...achTitleRecord(def, null), via: 'volleyball:scorpion:7-0' };
+    achSave(d);
+  });
+  assert.equal((await completeVolleyball(page, 'scorpion', 5, 0, false, 'sandbox')).isNew, false);
+  assert.equal((await completeVolleyball(page, 'orange', 5, 0, false, 'sandbox')).isNew, true);
+  assert.equal((await completeVolleyball(page, 'orange_king', 5, 0, false, 'sandbox')).isNew, true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('[data-vb-act="play"][data-op="scorpion"]').waitFor({ timeout: 90000 });
+  const saved = await page.evaluate(() => Object.fromEntries(Object.entries(achLoad().titles).map(([key, record]) => [key, record.via])));
+  assert.deepEqual(saved, {
+    adventure_volleyball_rookie: 'volleyball:scorpion:7-0',
+    adventure_volleyball_expert: 'volleyball:orange:5-0',
+    adventure_volleyball_king: 'volleyball:orange_king:5-0',
+  });
+  assert.deepEqual(outside, []);
+  await page.goto(origin + '/missing', { waitUntil: 'domcontentloaded' });
+  assert.equal(await page.evaluate(() => localStorage.getItem('balloonV_inventory')), 'production-sentinel');
 });
