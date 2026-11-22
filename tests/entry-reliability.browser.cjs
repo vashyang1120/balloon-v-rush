@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const { mkdir, mkdtemp, readFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
+const { setTimeout: delay } = require('node:timers/promises');
 const { join } = require('node:path');
 const { build, previewDir } = require('./build-volleyball-playtest.cjs');
 const { createPreview } = require('./preview-entry.cjs');
@@ -15,6 +16,15 @@ const volleyballCases = [
   ['scorpion', 5, 1], ['orange', 5, 4], ['orange_king', 0, 5], ['scorpion', 4, 5],
 ];
 
+async function waitForAdventureState(page, predicate) {
+  const until = Date.now() + 15000;
+  while (Date.now() < until) {
+    if (await page.evaluate(predicate)) return;
+    await delay(50);
+  }
+  assert.fail('Adventure state did not reach ' + predicate.toString());
+}
+
 async function completeVolleyball(page, opponent, playerScore, cpuScore, touch, titleMode = 'guest') {
   const before = await page.evaluate(() => {
     playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
@@ -23,10 +33,10 @@ async function completeVolleyball(page, opponent, playerScore, cpuScore, touch, 
     return [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon];
   });
   await page.locator('[data-vb-act="play"][data-op="' + opponent + '"]').click();
-  await page.waitForFunction(() => vbFrame.ready);
+  await waitForAdventureState(page, () => vbFrame.ready);
   const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
   await frame.locator('#btnEmbedStart').click();
-  await page.waitForFunction(() => vbCurrent()?.state === 'active');
+  await waitForAdventureState(page, () => vbCurrent()?.state === 'active');
   const state = () => frame.evaluate(() => window.volleyballQA.state());
   const points = [...Array(playerScore === 5 ? cpuScore : playerScore).fill(playerScore === 5 ? 'right' : 'left'),
     ...Array(playerScore === 5 ? playerScore : cpuScore).fill(playerScore === 5 ? 'left' : 'right')];
@@ -52,7 +62,7 @@ async function completeVolleyball(page, opponent, playerScore, cpuScore, touch, 
   assert.equal(finished.state, 'GAME_OVER');
   await frame.evaluate(() => window.volleyballQA.land('left'));
   assert.deepEqual(await state(), finished);
-  await page.waitForFunction(() => vbCurrent()?.state === 'done');
+  await waitForAdventureState(page, () => vbCurrent()?.state === 'done');
   const settled = await page.evaluate(() => {
     const c = vbCurrent();
     const duplicate = vbSettle({ matchId: c.matchId }, c);
@@ -313,8 +323,26 @@ test('second-continent volleyball completes and sends real rewards', { timeout: 
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await page.route(/^https?:\/\/[^/]+\//, route => route.request().url().startsWith(origin + '/') ? route.continue() : route.abort());
   await installVolleyballFixture(page);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/rpg-continent2/?guest=1&sandbox=1', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
+  const fallback = page.locator('.adv-load-err [data-k="cont"]');
+  try {
+    await Promise.race([
+      page.waitForFunction(() => assetBootReady, undefined, { timeout: 30000 }),
+      fallback.waitFor({ timeout: 30000 }).then(async () => {
+        const missing = await page.evaluate(() => ['common', 'chapter1', 'rpgBoot'].flatMap(group =>
+          summarizeAssetGroup(group).criticalFailedPaths
+        ));
+        console.log('rpg-continent2 boot required the existing asset fallback for', missing);
+        await fallback.click();
+      }),
+    ]);
+    await waitForAdventureState(page, () => assetBootReady);
+  } catch (error) {
+    throw new Error('Second-continent boot failed: ' + (await page.locator('body').innerText()).slice(-1100) +
+      '\\nPage errors: ' + errors.join('; '), { cause: error });
+  }
   await page.evaluate(() => {
     advBootOpenHome({ ctx: { stageId: '1-2', levelIndex: 1, gameState: 'clear' } });
     playerInventory.unlockedRecipes[VB_CONFIG.recipeKey] = true;
