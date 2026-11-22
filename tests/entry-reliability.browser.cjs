@@ -394,6 +394,7 @@ test('packaged volleyball playtest preserves and awards titles inside isolated s
     adventure_volleyball_king: 'volleyball:orange_king:5-0',
   });
   assert.deepEqual(outside, []);
-  await page.goto(origin + '/missing', { waitUntil: 'domcontentloaded' });
+  await page.route(origin + '/storage-check', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Storage check</title>' }));
+  await page.goto(origin + '/storage-check', { waitUntil: 'domcontentloaded' });
   assert.equal(await page.evaluate(key => localStorage.getItem(key), productionKey), 'production-sentinel');
 });
