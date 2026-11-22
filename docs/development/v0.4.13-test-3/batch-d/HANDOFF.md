@@ -86,3 +86,10 @@
 - 變更限於繪製、載入及新版標示。蓄水、耐久、潮溼、18A／18B／19、游泳、攀爬、救援與存檔規則沿用原程式。
 - 測試涵蓋兩道瀑布截流、左右面向、第二道蓄水、18A／18B／19、桌機鍵盤、844 × 390 橫向觸控、游泳與攀爬、浮墊、救援及隔離存檔。
 - [Batch D 隔離關卡起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start&revision=5) · [水池捷徑](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool&revision=5)
+
+## Revision 6｜低水位首次慌張演出
+
+- 工程基準 `894038eec0d0cc66f531d425d8ca5bc9feb2fcee`。平行的 `dev/ch3-water-terrain-integration` 停在既有共同祖先 `adf8997`。
+- 低水位游泳以原左岸可攀判斷界定。使用既有關卡水域狀態記憶本次遊玩已演出，首次只在小V原立繪顯示一頁「糟糕！爬不上去了……怎麼辦？」。移除強制回岸、救援閃光及星靈警告。
+- 在 0% 水位，原浮墊方向攀爬門檻未達成，仍可用右＋跳從水中上浮墊。乾燥後自浮墊左緣以左＋跳回岸。左岸池邊 `x=3402`、岸面 `y=-105`、浮墊左緣 `x=3547`。維持原有浮墊碰撞、攀爬判斷、角色物理和 Revision 5 分流。
+- [3-4 起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start&revision=6) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool&revision=6)

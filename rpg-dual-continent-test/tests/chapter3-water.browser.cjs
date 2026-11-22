@@ -768,7 +768,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   });
 
   for (const [mode, viewport] of [['desktop', { width: 1280, height: 820 }], ['mobile', { width: 844, height: 390 }]]) {
-    await t.test(mode + ' pool rescue, swim, climb and full-water exit', async () => {
+    await t.test(mode + ' pool panic, repeated drops, swim, climb and full-water exit', async () => {
       const mobile = mode === 'mobile';
       const videoDir = process.env.CH3_VIDEO_DIR;
       const context = await browser.newContext({
@@ -784,53 +784,56 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         : rescuePage.locator('.rpg-next').click({ force: true });
       try {
         await boot(rescuePage, origin, 'pool');
-        const before = await rescuePage.evaluate(() => {
-          const pool = c34Pool(), pad = platforms.find(p => p.c34Pad);
+        const armLowWaterEntry = () => rescuePage.evaluate(() => {
+          const pool = c34Pool();
           if (rpgActive) rpgClose('finished');
           rpgQueue.length = 0;
           c34.taught.add('c34_first_wet');
           activeSlot = 'sword';
           Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
             vx: 0, vy: 0, onGround: true });
+          c34.swim = false;
           cameraX = player.x - 380;
-          return { hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
-            stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
-            reachable: c34CanReturnLeft(pad), portrait: rpgAssetState('balloonv_panic') };
+          return rpgAssetState('balloonv_panic');
         });
-        assert.equal(before.portrait, 'loaded');
-        assert.equal(before.reachable, false);
+        assert.equal(await armLowWaterEntry(), 'loaded');
         await control('right', true);
-        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_rescue');
+        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_panic');
         await control('right', false);
         assert.deepEqual(await rescuePage.evaluate(() => ({
-          face: rpgCurLeft, right: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text,
-          stillInPool: player.x >= c34Pool().x,
-        })), { face: 'balloonv_panic', right: null, text: '糟糕！爬不上去了……怎麼辦？', stillInPool: true });
+          face: rpgCurLeft, right: rpgCurRight, pages: rpgActive.pages, swimming: c34.swim,
+        })), { face: 'balloonv_panic', right: null,
+          pages: [{ sp: 'balloonv', face: 'balloonv_panic', text: '糟糕！爬不上去了……怎麼辦？' }],
+          swimming: true });
         await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
+        await rescuePage.evaluate(() => {
+          const snapshot = () => {
+            const pad = platforms.find(p => p.c34Pad);
+            return [player.x, player.y, c34.swim, c34.level, pad.x, pad.y, pad.c34Angle, pad.c34Sink];
+          };
+          const close = rpgClose;
+          rpgClose = (...args) => {
+            const before = snapshot();
+            close(...args);
+            window.c34PanicClose = { before, after: snapshot() };
+            rpgClose = close;
+          };
+        });
         await advanceDialog();
-        assert.deepEqual(await rescuePage.evaluate(() => ({
-          face: rpgCurRight, text: rpgActive.pages[rpgPageIdx].text, stillInPool: player.x >= c34Pool().x,
-        })), { face: 'star_spirit_normal', text: '別擔心！我帶你回岸上！', stillInPool: true });
-        await rescuePage.waitForFunction(() => rpgTypeDone);
-        await advanceDialog();
-        await rescuePage.waitForFunction(() => !rpgActive && c34.rescue.seen);
-        const after = await rescuePage.evaluate(() => ({
-          hp: player.hp, bag: JSON.stringify(playerInventory), level: c34.level,
-          stats: JSON.stringify(currentRunStats), save: localStorage.getItem(SAVE_KEY),
-          safety: c34Pool().x - player.x - player.w, warned: c34.rescue.warned,
-        }));
-        assert.deepEqual(after, { hp: before.hp, bag: before.bag, level: before.level,
-          stats: before.stats, save: before.save, safety: 72, warned: false });
-        await control('right', true);
-        await rescuePage.waitForFunction(() => rpgActive?.id === 'c34_pool_warning');
-        await control('right', false);
-        assert.equal(await rescuePage.evaluate(() => rpgActive.pages[0].text), '小V，小心！現在水位還太低，掉下去就爬不上來囉！');
-        await rescuePage.waitForFunction(() => rpgTypeDone && performance.now() - rpgOpenedAt >= 250);
-        await advanceDialog();
-        await control('right', true);
-        await rescuePage.waitForFunction(() => c34.log.filter(e => e.ev === 'poolRescue').length === 2);
-        await control('right', false);
-        assert.equal(await rescuePage.evaluate(() => !!rpgActive), false);
+        await rescuePage.waitForFunction(() => !rpgActive && c34.lowWaterPanicSeen && c34.swim);
+        const closed = await rescuePage.evaluate(() => window.c34PanicClose);
+        assert.deepEqual(closed.after, closed.before);
+        for (let repeat = 0; repeat < 2; repeat++) {
+          await armLowWaterEntry();
+          await control('right', true);
+          await rescuePage.waitForFunction(() => c34.swim || !!rpgActive);
+          await control('right', false);
+          const tick = await rescuePage.evaluate(() => c34.waterTick);
+          await rescuePage.waitForFunction(initial => c34.waterTick >= initial + 30 || !!rpgActive, tick);
+          assert.deepEqual(await rescuePage.evaluate(() => ({ swim: c34.swim, dialog: !!rpgActive,
+            level: c34.level, visits: c34.log.filter(e => e.ev === 'poolRescue').length })),
+          { swim: true, dialog: false, level: 0, visits: 0 });
+        }
 
         await rescuePage.evaluate(() => {
           const pool = c34Pool();
@@ -850,7 +853,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         await rescuePage.waitForFunction(() => !!c34.climb && !c34.climb.facingRight);
         await control('left', false);
         await rescuePage.waitForFunction(() => !c34.climb && player.onGround && player.x + player.w < c34Pool().x);
-        assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 2);
+        assert.equal(await rescuePage.evaluate(() => c34.log.filter(e => e.ev === 'poolRescue').length), 0);
         await rescuePage.evaluate(() => {
           const pad = platforms.find(p => p.c34Pad);
           Object.assign(player, { x: pad.x - player.w - 12, y: c34SurfaceY() + C34.water.feetDepth - player.h,
