@@ -61,7 +61,8 @@ const chapter3TreasureDice = (() => {
       if (active) return active;
       final ??= { player: rollFace(random), spirit: rollFace(random) };
       let firstTime, lastChange = -Infinity;
-      let faces = { player: rollFace(random), spirit: rollFace(random) };
+      let die = 'player';
+      let face = rollFace(random);
       let finish, fail;
       active = new Promise((resolve, reject) => { finish = resolve; fail = reject; });
       const pending = active;
@@ -73,18 +74,25 @@ const chapter3TreasureDice = (() => {
           const remaining = 1 - t;
           if (t < 1 && elapsed - lastChange >= 33 + 220 * t ** 2) {
             lastChange = elapsed;
-            faces = { player: rollFace(random), spirit: rollFace(random) };
+            face = rollFace(random);
           }
           const hop = Math.abs(Math.sin(t * 4 * Math.PI)) * remaining ** 2;
           const squash = Math.cos(t * 8 * Math.PI) * 0.10 * remaining;
-          draw(t === 1 ? final : faces, {
+          const rolling = t === 1 ? final[die] : face;
+          draw(die === 'player' ? { player: rolling, spirit: null } : { player: final.player, spirit: rolling }, {
+            die,
             y: -64 * hop,
             angle: Math.sin(t * 5 * Math.PI) * 0.72 * remaining,
             scaleX: 1 + squash,
             scaleY: 1 - squash,
           });
           if (t < 1) nextFrame(frame);
-          else { active = null; finish(final); }
+          else if (die === 'player') {
+            die = 'spirit';
+            firstTime = undefined;
+            lastChange = -Infinity;
+            nextFrame(frame);
+          } else { active = null; finish(final); }
         } catch (error) { active = null; fail(error); }
       }
       try { nextFrame(frame); } catch (error) { active = null; fail(error); }
