@@ -1,0 +1,8 @@
+{
+  "version": "adventure-v0.4.13-ch3-water-terrain-integration-test-4",
+  "integrationCommit": "ea09f609c80f6c790de7e870df5256f5718a2881",
+  "gameBlob": "05cc399c509353d729a853df2b50755e989267b0",
+  "start": "rpg-dual-continent-test/?ch3test=3-4",
+  "directStart": "rpg-dual-continent-test/?ch3test=start",
+  "pool": "rpg-dual-continent-test/?ch3test=pool"
+}
