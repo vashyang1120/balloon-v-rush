@@ -1,10 +1,11 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { readFile } = require('node:fs/promises');
-const { extname, resolve, sep } = require('node:path');
+const { resolve } = require('node:path');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
 const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4/';
@@ -12,15 +13,9 @@ const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
 const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-4:';
-const mime = {
-  '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
-  '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp3': 'audio/mpeg',
-  '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.webm': 'video/webm',
+const shortcutResources = {
+  '3-1': [303, 44, 13], '3-2': [379, 53, 15], '3-3': [406, 62, 20], '3-4': [497, 68, 22],
 };
-const csp = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; " +
-  "connect-src 'self' data: blob:; frame-src 'self'; base-uri 'self'; form-action 'none'";
 
 async function waitUntil(page, predicate, value, timeout = 30000) {
   const deadline = Date.now() + timeout;
@@ -37,31 +32,12 @@ async function fixture(context, guard, requests) {
     const url = new URL(request.url());
     requests.push({ origin: url.origin, pathname: url.pathname, method: request.method() });
     if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method())) return route.abort();
-    if (url.pathname === '/formal-fixture') return route.fulfill({ contentType: mime['.html'], body: '<title>Formal fixture</title>' });
+    if (url.pathname === '/formal-fixture') return route.fulfill({ contentType: 'text/html', body: '<title>Formal fixture</title>' });
     if (!url.pathname.startsWith(prefix)) return route.abort();
-
-    let rel = decodeURIComponent(url.pathname.slice(prefix.length));
-    if (rel.endsWith('/')) rel += 'index.html';
-    const file = resolve(root, prefix.replace('/balloon-v-rush/', ''), rel);
-    if (!file.startsWith(root + sep)) return route.abort();
-    let body;
-    try {
-      body = rel === 'playtest-guard.js' ? guard : await readFile(file);
-    } catch {
-      return route.fulfill({ status: 404 });
+    if (url.pathname === prefix + 'playtest-guard.js') {
+      return route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: guard });
     }
-    const contentType = mime[extname(rel)] || 'application/octet-stream';
-    const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/);
-    if (range) {
-      const first = Number(range[1]);
-      const last = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
-      if (first > last) return route.fulfill({ status: 416 });
-      return route.fulfill({ status: 206, contentType, headers: {
-        'content-range': 'bytes ' + first + '-' + last + '/' + body.length,
-        'accept-ranges': 'bytes',
-      }, body: body.subarray(first, last + 1) });
-    }
-    return route.fulfill({ status: 200, contentType, body: request.method() === 'HEAD' ? Buffer.alloc(0) : body });
+    return serveCheckout(route, origin, '/balloon-v-rush');
   });
 }
 
@@ -113,6 +89,9 @@ test('Chapter 3 Integration Test 4 Pages directory blocks writes and preserves f
         } else if (section) {
           await waitUntil(page, s => !assetGateActive && h2IsOpen() &&
             c34.devBagStage === s && playerInventory.unlockedRecipes.balloonDice === true, section);
+          assert.deepEqual(await page.evaluate(() =>
+            [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon]),
+          shortcutResources[section]);
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }
