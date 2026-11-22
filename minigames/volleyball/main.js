@@ -88,7 +88,7 @@ const CONFIG = {
 
   // ---- 比賽流程 ----
   POINT_PAUSE: 1.2,           // 得分後停頓時間
-  TARGET_SCORE: 7,            // MVP：先到 7 分獲勝（不需領先 2 分）
+  TARGET_SCORE: 5,            // 先到 5 分獲勝（不需領先 2 分）
 
   // ---- 系統 ----
   PHYSICS_HZ: 60,             // 固定物理更新頻率
