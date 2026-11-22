@@ -27646,7 +27646,7 @@ const VB_CONFIG = {
       { min: 6, max: 6, perPoint: 7 },
     ],
   },
-  targetScore: 7,
+  targetScore: 5,
   frameUrl: '../minigames/volleyball/index.html',
   loadTimeoutMs: 20000,
   // 主線關卡（首次完成才會補場次）：第一大陸正式七關＋第二大陸 3-1、3-2（開發用雨傘測試場不算）
@@ -27836,7 +27836,7 @@ function vbValidResult(d, c) {
   if (d.opponentId !== c.opponent) return '對手不符';
   if (!n(d.playerScore) || !n(d.cpuScore)) return '比分不合理';
   const T = VB_CONFIG.targetScore, pw = d.playerScore === T && d.cpuScore < T, cw = d.cpuScore === T && d.playerScore < T;
-  if (!pw && !cw) return '不是 7 分制的完成比分';
+  if (!pw && !cw) return '不是 5 分制的完成比分';
   if ((pw && d.winner !== 'player') || (cw && d.winner !== 'cpu')) return '勝負不符';
   if (!d.matchId || typeof d.matchId !== 'string') return '沒有 matchId';
   return '';
@@ -27935,7 +27935,7 @@ function vbPanelHtml() {
       + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>勝利獎勵：260 ×' + R.win[o.id].balloon260 + '<br>圓氣球 ×' + R.win[o.id].roundBalloon + '・金幣 ' + R.win[o.id].coins + '</small>'
       + '<button type="button" class="h2-pill ' + (left > 0 && t > 0 ? 'h2-pill--green' : 'h2-pill--yellow') + ' h2-pill--sm" data-vb-act="play" data-op="' + o.id + '">' + (left <= 0 ? '休息中' : t > 0 ? '開始比賽' : '先製作排球') + '</button></div>';
   });
-  h += '</div><div class="vb-note">先得 7 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
+  h += '</div><div class="vb-note">先得 5 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
   return h;
 }
 function vbEnsureNav() {
@@ -27957,7 +27957,7 @@ function vbEnsureNav() {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v385) { if (typeof o !== 'function') console.warn('[v0.3.85] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v385 = true; globalThis[name] = w; };
   // 秘笈與製作（沿用既有氣球秘笈）
   RECIPES.push({ id: 'balloonVolleyball', name: '氣球排球', minigame: true, durability: 0, cost: Object.assign({}, VB_CONFIG.cost), emoji: '🏐', unlockKey: 'balloonVolleyball',
-    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。比賽完成後可以獲得 260、金幣等比賽獎勵，打贏還有圓氣球。' });
+    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 5 分獲勝）。比賽完成後可以獲得 260、金幣等比賽獎勵，打贏還有圓氣球。' });
   H2_PANEL_TITLES.volleyball = '氣球排球';
   // v0.3.85 test-3：氣球排球秘笈 RPG 台詞（使用者確認的正式台詞，不得改寫）
   //   第一幕「咦！發現了氣球秘笈！」由既有共用場景 rpg020_find 播放；這裡是第二～四幕（和氣球槌、棒棒糖相同的資料格式）
@@ -31076,9 +31076,9 @@ const C1U_TITLES = [
   { titleKey: 'adventure_peace_ambassador', name: '和平大使',     gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有對任何怪物造成傷害（橘子王決戰不計）；同時獲得「善良冒險家」' },
   { titleKey: 'adventure_super_thrifty',    name: '超勤儉冒險家', gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有在商店成功購買任何東西（打地鼠入場費不算）' },
   // v0.4.1：小遊戲稱號（比賽／遊戲結算時取得）
-  { titleKey: 'adventure_volleyball_rookie', name: '排球新星',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'scorpion',    desc: '氣球排球 7：0 完封蠍子怪' },
-  { titleKey: 'adventure_volleyball_expert', name: '排球高手',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange',      desc: '氣球排球 7：0 完封橘子怪' },
-  { titleKey: 'adventure_volleyball_king',   name: '排球王者',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange_king', desc: '氣球排球 7：0 完封橘子王' },
+  { titleKey: 'adventure_volleyball_rookie', name: '排球新星',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'scorpion',    desc: '氣球排球 5：0 完封蠍子怪' },
+  { titleKey: 'adventure_volleyball_expert', name: '排球高手',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange',      desc: '氣球排球 5：0 完封橘子怪' },
+  { titleKey: 'adventure_volleyball_king',   name: '排球王者',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange_king', desc: '氣球排球 5：0 完封橘子王' },
   { titleKey: 'adventure_whack_legend',      name: '傳奇槌王',   gameId: 'adventure', category: 'adventure', group: 'minigame', whackScore: 660,           desc: '氣球槌打地鼠分數達到 660 分' },
   // v0.4.1：成績稱號（2-4 完整結算時，該分項拿到滿分）
   { titleKey: 'adventure_treasure_hunter',   name: '寶藏獵人',   gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'collect',    desc: '第一大陸完整結算時「收集」滿分' },
