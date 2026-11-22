@@ -835,6 +835,21 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           { swim: true, dialog: false, level: 0, visits: 0 });
         }
 
+        for (const [direction, side] of [['right', 1], ['left', -1]]) {
+          await rescuePage.evaluate(side => {
+            rpgAttempt.shown.add('rpg004_first_scorpion');
+            const pad = platforms.find(p => p.c34Pad);
+            Object.assign(player, { x: side > 0 ? pad.x - player.w - 8 : pad.x + pad.w + 8,
+              y: c34SurfaceY() + C34.water.feetDepth - player.h, vx: 0, vy: 0, onGround: false });
+            c34.swim = true;
+          }, side);
+          await control(direction, true);
+          await rescuePage.waitForFunction(() => !!c34.climb?.pad, null, { timeout: 5000 });
+          await control(direction, false);
+          await rescuePage.waitForFunction(() => !c34.climb && player.onGround && !c34.swim);
+          assert.deepEqual(await rescuePage.evaluate(() => [c34.level, c34CanClimbLeft()]), [0, false]);
+        }
+
         await rescuePage.evaluate(() => {
           const pool = c34Pool();
           c34.fillFrames = C34.pool.fillFrames / 2;

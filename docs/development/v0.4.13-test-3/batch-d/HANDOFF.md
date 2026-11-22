@@ -93,3 +93,7 @@
 - 低水位游泳以原左岸可攀判斷界定。使用既有關卡水域狀態記憶本次遊玩已演出，首次只在小V原立繪顯示一頁「糟糕！爬不上去了……怎麼辦？」。移除強制回岸、救援閃光及星靈警告。
 - 在 0% 水位，原浮墊方向攀爬門檻未達成，仍可用右＋跳從水中上浮墊。乾燥後自浮墊左緣以左＋跳回岸。左岸池邊 `x=3402`、岸面 `y=-105`、浮墊左緣 `x=3547`。維持原有浮墊碰撞、攀爬判斷、角色物理和 Revision 5 分流。
 - [3-4 起點](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=start&revision=6) · [3-4 水池](https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-3-batch-d/rpg-dual-continent-test/?ch3test=pool&revision=6)
+
+## Revision 7｜浮墊兩側可攀
+
+浮墊左右邊緣沿用原方向輸入與攀爬動畫，移除原左岸回程可達性限制。零水位也可攀浮墊，岩岸的高度判定及首次慌張事件照舊。

@@ -373,8 +373,7 @@ function c34AdvanceClimb() {
     const pad = platforms.find(p => p.c34Pad);
     const fromLeft = pad && inp('right') && Math.abs(player.x + player.w - pad.x) <= 2;
     const fromRight = pad && inp('left') && Math.abs(player.x - (pad.x + pad.w)) <= 2;
-    // Preserve the existing reach check for climbing onto the floating pad.
-    if ((fromLeft || fromRight) && c34CanReturnLeft(pad)) {
+    if (fromLeft || fromRight) {
       const edge = fromLeft ? pad.x : pad.x + pad.w;
       c34.climb = { pad, edge, top: c34PlatformSurface(pad, edge), tick: 0, facingRight: !!fromLeft };
     } else {
@@ -415,20 +414,6 @@ function c34StepSwim() {
     c34.swimTime = wasSwimming ? c34.swimTime + 1000 / 60 : 0;
     c34Ripple(x + (player.facingRight ? 1 : -1) * (paddling ? 17 : 7), paddling ? 14 : 25, paddling ? 0.018 : 0.012);
   }
-}
-
-function c34CanReturnLeft(pad) {
-  if (c34CanClimbLeft()) return true;
-  const pool = c34Pool();
-  if (!pool || !pad) return false;
-  const swimSpeed = c34JumpSpeed(JUMP_FORCE, C34.water.swimHeight) - GRAVITY / 2;
-  const padTop = c34PlatformSurface(pad, pad.x);
-  if (c34SurfaceY() + C34.water.feetDepth - padTop > swimSpeed ** 2 / (2 * GRAVITY)) return false;
-  const takeoff = c34JumpSpeed(JUMP_FORCE, C34.water.wetHeight) - GRAVITY / 2;
-  const clearance = takeoff ** 2 - 2 * GRAVITY * (padTop - pool.baseY);
-  if (clearance < 0) return false;
-  const span = PLAYER_SPEED * C34.water.wetSpeed * (takeoff + Math.sqrt(clearance)) / GRAVITY;
-  return pad.x - pool.x - player.w / 2 <= span;
 }
 
 function c34StepLowWaterPanic(lowWaterSwim) {
