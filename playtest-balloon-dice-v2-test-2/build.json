@@ -1,0 +1,8 @@
+{
+  "version": "adventure-v0.4.13-balloon-dice-v2-cross-continent-test-2",
+  "integrationCommit": "ea09f609c80f6c790de7e870df5256f5718a2881",
+  "gameBlob": "cfb31809bd3cb07a478c3aedcebcccdd30146f00",
+  "firstContinent": "rpg-dual-continent-test/index.html",
+  "secondContinent": "rpg-dual-continent-test/index.html?ch3test=3-1",
+  "baseline": "48a8b563c159339fa018b3406223c63e34cf47c8"
+}

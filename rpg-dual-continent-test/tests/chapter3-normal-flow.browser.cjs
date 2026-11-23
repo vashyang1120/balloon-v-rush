@@ -6,7 +6,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
-const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-1/rpg-dual-continent-test/?ch3test=3-4';
+const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-2/rpg-dual-continent-test/?ch3test=3-4';
 const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z' };
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
@@ -100,9 +100,9 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
         return state;
       }
       if (['failed', 'gameover'].includes(state.state)) break;
-      if (await page.locator('.ch3-treasure-dialog [data-choice="decline"]').isVisible()) {
+      if (await page.locator('#rpg-overlay [data-act="dice-decline"]').isVisible()) {
         await input([]);
-        await activate(page.locator('.ch3-treasure-dialog [data-choice="decline"]'));
+        await activate(page.locator('#rpg-overlay [data-act="dice-decline"]'));
       } else if (state.dialog) {
         await input([]);
         await nextDialogue();
@@ -184,7 +184,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await advance('bank enemy approach', s => s.x >= L.bank.x + 335, ['right'], 'sword');
   await advance('bank enemy defeated', s => !s.bankWind, ['attack'], 'sword');
 
-  const accept = page.locator('[data-choice="accept"]');
+  const accept = page.locator('#rpg-overlay [data-act="dice-accept"]');
   const deadline = Date.now() + 15000;
   while (!await accept.isVisible() && Date.now() < deadline) {
     if ((await read()).dialog) {

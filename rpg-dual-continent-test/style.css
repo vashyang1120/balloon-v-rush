@@ -4031,34 +4031,33 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 #pause-bag-panel .h2-row-slot { width: clamp(46px, 13vh, 72px); }
 #pause-bag-panel .pb2-note { margin-top: 0.5em; }
 
-.ch3-treasure-dialog {
-  box-sizing: border-box;
-  margin: auto;
-  width: min(30rem, 90vw);
-  max-height: 91dvh;
-  overflow-y: auto;
-  color: #fff7f9;
-  background: #312440;
-  border: 2px solid #bda0d3;
-  border-radius: 16px;
-  padding: clamp(.65rem, 2vmin, 1.2rem);
-  text-align: center;
+#rpg-overlay .rpg-options:not([hidden]) {
+  position: absolute;
+  right: calc(18px * var(--rk));
+  bottom: calc(10px * var(--rk));
+  display: flex;
+  gap: calc(14px * var(--rk));
+  z-index: 2;
 }
-.ch3-treasure-dialog::backdrop { background: #160c24b8; }
-.ch3-treasure-dialog h2 { margin: 0 0 .2rem; font-size: clamp(1rem, 4vmin, 1.5rem); }
-.ch3-treasure-dialog canvas { width: 100%; height: min(25dvh, 150px); object-fit: contain; }
-.ch3-treasure-portrait { display: grid; justify-items: center; gap: .2rem; }
-.ch3-treasure-portrait img { width: min(5.5rem, 18dvh); height: min(5.5rem, 18dvh); object-fit: contain; }
-.ch3-treasure-note { margin: .25rem 0; }
-.ch3-treasure-scores:not([hidden]) { display: flex; justify-content: space-around; padding: .35rem 0; }
-.ch3-treasure-actions { display: grid; gap: .45rem; padding-top: .5rem; }
-.ch3-treasure-actions button {
-  min-height: 40px;
-  color: inherit;
-  background: #493256;
-  border: 1px solid #cbb0dd;
-  border-radius: 8px;
-  font: inherit;
-  cursor: pointer;
+#rpg-overlay .rpg-options .rpg-next {
+  position: static;
+  min-width: calc(90px * var(--rk));
+  min-height: 32px;
+  opacity: 1;
+  animation: none;
 }
-.ch3-treasure-actions button:disabled { opacity: .6; }
+#rpg-overlay .rpg-options .rpg-next span {
+  display: inline-block;
+  animation: rpgNextBlink 0.9s ease-in-out infinite;
+}
+#rpg-overlay .rpg-dice-board:not([hidden]) {
+  position: absolute;
+  width: 63%;
+  left: 18.5%;
+  top: 12%;
+  z-index: 1;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #rpg-overlay .rpg-options .rpg-next span { animation: none; }
+}

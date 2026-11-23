@@ -8,7 +8,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
-const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-1/rpg-dual-continent-test/index.html';
+const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-2/rpg-dual-continent-test/index.html';
 const shots = process.env.CH3_SCREENSHOTS;
 
 test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 220000 }, async t => {
@@ -135,7 +135,8 @@ test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 2
   await page.keyboard.up('ArrowRight');
   const recipeResult = await page.evaluate(() => ({
     state: gameState, x: player.x, hasDice: playerInventory.unlockedRecipes.balloonDice,
-    hasHammer: playerInventory.unlockedRecipes.basicHammer
+    hasHammer: playerInventory.unlockedRecipes.basicHammer,
+    round: playerInventory.roundBalloon
   }));
   assert.deepEqual([recipeResult.state, recipeResult.hasDice, recipeResult.hasHammer], ['clear', true, true], JSON.stringify(recipeResult));
   assert.deepEqual([...introductions.values()].flat(), [
@@ -143,10 +144,14 @@ test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 2
     ['balloonv', '氣球骰子？原來用氣球也能做出骰子啊！'],
     ['balloonv', '可是氣球骰子可以做什麼呢？'],
   ]);
+  assert.ok(recipeResult.round >= 3, JSON.stringify(recipeResult));
+  assert.equal(await page.getByRole('button', { name: '查看本關詳細結算' }).count(), 0);
   await page.locator('#h2-sum-ok').click();
   await page.locator('#h2-title-recipes').click();
   await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
+  await page.locator('button[data-h2-act="craft"][data-key="basicHammer"]').click();
   await page.locator('button[data-h2-act="craft"][data-key="balloonDice"]').click();
+  assert.equal(await page.evaluate(() => v395Count('basicHammer')), 1);
   assert.equal(await page.evaluate(() => v395Count('balloonDice')), 1);
 
   assert.deepEqual(errors, []);

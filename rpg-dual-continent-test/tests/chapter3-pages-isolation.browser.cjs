@@ -8,13 +8,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-1/';
+const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-2/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-1:';
+const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-2:';
 const shortcutResources = {
-  '3-1': [313, 44, 13], '3-2': [389, 53, 15], '3-3': [416, 62, 20], '3-4': [507, 68, 22],
+  '3-1': [313, 44, 14], '3-2': [389, 53, 16], '3-3': [416, 62, 21], '3-4': [507, 68, 23],
 };
 
 async function waitUntil(page, predicate, value, timeout = 30000) {
@@ -43,7 +43,7 @@ async function fixture(context, guard, requests) {
 
 test('Balloon Dice v2 independent playtest blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-balloon-dice-v2-test-1/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-balloon-dice-v2-test-2/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -72,8 +72,15 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-1');
+        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-2');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
+        if (/^3-[1-4]$/.test(section)) {
+          // Reproduce a first-continent save asking to resume at boot, before its dialog is mounted.
+          assert.equal(await page.evaluate(() => {
+            advShowResumePrompt({ stageResults: {}, resume: {} });
+            return advIsBlockingGame() && !!advResumePromptDeferred;
+          }), true);
+        }
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
         if (section === 'start' || section === 'pool') {
@@ -92,6 +99,29 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           assert.deepEqual(await page.evaluate(() =>
             [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon]),
           shortcutResources[section]);
+          await page.locator('#h2-nav-go').click();
+          if (section === '3-1') {
+            await waitUntil(page, () => !h2IsOpen() && advCurrentStageId() === '3-1', null, 45000);
+          }
+          await waitUntil(page, s => !assetGateActive && advCurrentStageId() === s, section, 45000);
+          assert.equal(await page.evaluate(() => advIsBlockingGame()), false);
+          const dismiss = async () => {
+            const next = page.locator('#rpg-overlay [data-act="next"]');
+            for (let j = 0; j < 14 && await next.isVisible(); j++) {
+              await next.click();
+              await delay(90);
+            }
+          };
+          for (let j = 0; j < 3; j++) { await dismiss(); await delay(180); }
+          await waitUntil(page, () => gameState === 'playing' && player.onGround && elapsedSec > 0);
+          const start = await page.evaluate(() => ({ x: player.x, y: player.y }));
+          await page.keyboard.down('ArrowRight');
+          try { await waitUntil(page, x => player.x > x + 8, start.x, 3000); }
+          finally { await page.keyboard.up('ArrowRight'); }
+          await page.keyboard.down('Space');
+          try { await waitUntil(page, y => player.y < y - 12, start.y, 3000); }
+          finally { await page.keyboard.up('Space'); }
+          console.log(section + ' spawn grounded, clock advanced, ArrowRight and Space accepted');
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }

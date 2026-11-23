@@ -1058,11 +1058,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(setup.lv1, [true, false]);
     assert.deepEqual(setup.lv2, [true, false]);
     assert.deepEqual(setup.crafted, [6, 2, 2]);
-    assert.deepEqual(setup.pages.map(p => p[0]), ['star_spirit_mysterious', 'star_spirit_happy']);
-    assert.match(setup.pages[0][1], /誰的骰子點數比較大？/);
+    assert.deepEqual(setup.pages, [['balloonv_thinking', '要不要挑戰呢...']]);
 
-    await page.evaluate(() => rpgClose('finished'));
-    await page.getByRole('button', { name: '不用了，直接領取寶箱。' }).click();
+    await page.getByRole('button', { name: '否', exact: true }).click();
     assert.deepEqual(await page.evaluate(id => [
       playerInventory.coins, currentRunStats.coins, diceRewardAttempt.claims.has(id), v395Count('balloonDice'),
     ], setup.chest), [setup.coins, setup.before + 100, true, 2]);
@@ -1079,13 +1077,12 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       player.y = chest.y - player.h / 2;
       bringBalloonDog = true;
       checkChapter3Treasure();
-      rpgClose('finished');
       const rollFace = chapter3TreasureDice.rollFace;
       chapter3TreasureDice.rollFace = () => 4;
       window.restoreTestRollFace = () => { chapter3TreasureDice.rollFace = rollFace; };
       return playerInventory.coins;
     }, setup.chest);
-    await page.getByRole('button', { name: '好啊！來挑戰看看！' }).click();
+    await page.getByRole('button', { name: '是', exact: true }).click();
     assert.deepEqual(await page.evaluate(id => {
       window.restoreTestRollFace();
       delete window.restoreTestRollFace;
@@ -1093,11 +1090,11 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       return [saved?.craftedItems?.balloonDice, saved?.coins, diceRewardAttempt.claims.has(id)];
     }, setup.chest), [1, beforeRoll, true]);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
-    assert.equal(await page.locator('.ch3-treasure-dialog canvas').isVisible(), true);
-    const dialog = await page.locator('.ch3-treasure-dialog').boundingBox();
+    assert.equal(await page.locator('#rpg-overlay .rpg-dice-board').isVisible(), true);
+    const dialog = await page.locator('#rpg-overlay .rpg-dice-board').boundingBox();
     assert.ok(dialog && Math.abs(dialog.x + dialog.width / 2 - 640) < 2);
-    assert.deepEqual(await page.locator('.ch3-treasure-scores span').allTextContents(), ['小V　4', '星靈　4']);
-    assert.match(await page.locator('.ch3-treasure-note').textContent(), /獲得 100 金幣/);
+    assert.equal(await page.locator('.rpg-dice-board').getAttribute('data-points'), '4,4');
+    assert.match(await page.locator('#rpg-overlay .rpg-text').textContent(), /獲得 100 金幣/);
     assert.deepEqual(await page.evaluate(id => [
       playerInventory.coins, v395Count('balloonDice'), diceRewardAttempt.claims.has(id),
     ], setup.chest), [beforeRoll, 1, true]);
@@ -1115,17 +1112,16 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         player.x = chest.x - player.w / 2;
         player.y = chest.y - player.h / 2;
         checkChapter3Treasure();
-        rpgClose('finished');
       });
-      await mobile.locator('[data-choice="accept"]').tap();
+      await mobile.locator('#rpg-overlay [data-act="dice-accept"]').tap();
       const continueButton = mobile.getByRole('button', { name: '繼續冒險' });
       await continueButton.waitFor();
-      const dialog = await mobile.locator('.ch3-treasure-dialog').boundingBox();
+      const dialog = await mobile.locator('#rpg-overlay .rpg-dice-board').boundingBox();
       assert.ok(dialog && dialog.x > 0 && dialog.y > 0 && dialog.y + dialog.height < 390);
       assert.equal(await mobile.evaluate(() => v395Count('balloonDice')), 0);
       await record(mobile, 'mobile-3-4-balloon-dice-result');
       await continueButton.tap();
-      assert.equal(await mobile.locator('.ch3-treasure-dialog').count(), 0);
+      assert.equal(await mobile.locator('#rpg-overlay .rpg-dice-board').isVisible(), false);
     } finally { await mobile.close(); }
   });
   assert.deepEqual(errors, []);

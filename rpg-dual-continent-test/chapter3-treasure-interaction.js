@@ -3,7 +3,6 @@
 const CH3_TREASURE_ART = 'assets/adventure/ui/items/';
 const CH3_DICE_RECIPE = 'balloonDice';
 const ch3TreasureImages = new Map();
-let ch3TreasureDialog = null;
 let diceRewardAttempt = { claims: new Set(), coins: 0 };
 
 function installChapter3TreasureItems() {
@@ -113,28 +112,40 @@ function ch3TreasureClaim(source, rolls) {
   return result;
 }
 
-function ch3TreasureScene(source) {
-  return {
-    id: 'chapter3-treasure-invite', title: '氣球骰子', repeatable: true,
-    left: null, right: 'star_spirit_mysterious',
-    pages: [
-      { sp: 'spirit', face: 'star_spirit_mysterious', text: '哇！是一個' + (source.coin ? '金幣包' : '寶箱') + '耶！小V，要不要跟我比比看誰的骰子點數比較大？' },
-      { sp: 'spirit', face: 'star_spirit_happy', text: '你贏，我給你兩倍金幣。\n你輸，我給你一半金幣。\n如果平手，我給你原本的金幣。' },
-    ],
-  };
-}
+const DICE_CHOICE_ACTIONS = [{ action: 'dice-accept', label: '是' }, { action: 'dice-decline', label: '否' }];
+const DICE_RESULT_FACES = {
+  win: ['balloonv_happy', 'star_spirit_angry_02', '哇！你贏了！金幣加倍送給你！'],
+  loss: ['balloonv_panic', 'star_spirit_happy', '嘿嘿！這次是我贏了！'],
+  tie: ['balloonv_thinking', 'star_spirit_mysterious', '咦！居然一樣大耶！'],
+};
 
 function offerDiceReward(source) {
-  if (gameState !== 'playing' || assetGateActive || rpgActive || ch3TreasureDialog) return;
+  if (gameState !== 'playing' || assetGateActive || rpgActive) return;
   if (v395Count(CH3_DICE_RECIPE) < 1) {
     if (ch3TreasureClaim(source, null) && source.tier) sfxPlay('secretDiscovered');
     return;
   }
+  ch3TreasureImage('dice_face_blank.png');
   const attempt = diceRewardAttempt;
-  const scene = ch3TreasureScene(source);
-  scene.onEnd = how => {
-    if (how !== 'reset' && attempt === diceRewardAttempt &&
-        (gameState === 'playing' || gameState === 'paused')) ch3TreasureChoose(source);
+  const choice = { sp: 'balloonv', face: 'balloonv_thinking', text: '要不要挑戰呢...', instant: true, options: DICE_CHOICE_ACTIONS };
+  const scene = {
+    id: 'chapter3-treasure-invite', title: '氣球骰子', repeatable: true, requirePages: true,
+    pages: [choice],
+    onOption(action) {
+      if (attempt !== diceRewardAttempt) return;
+      if (action === 'dice-decline') {
+        if (ch3TreasureClaim(source, null)) rpgClose('finished');
+        return;
+      }
+      const rolls = { player: chapter3TreasureDice.rollFace(), spirit: chapter3TreasureDice.rollFace() };
+      const result = ch3TreasureClaim(source, rolls);
+      if (!result) {
+        choice.text = '未能儲存這次挑戰，請再試一次。';
+        rpgShowPage(0);
+        return;
+      }
+      showDiceDuel(scene, rolls, result);
+    },
   };
   if (rpgOpen(scene) && source.tier) sfxPlay('secretDiscovered');
 }
@@ -147,96 +158,49 @@ function checkChapter3Treasure() {
 }
 
 function closeChapter3TreasureChoice() {
-  const view = ch3TreasureDialog;
-  ch3TreasureDialog = null;
-  view?.close();
-  view?.remove();
+  if (rpgActive?.id === 'chapter3-treasure-invite') rpgClose('reset');
 }
 
-function ch3TreasureChoose(chest) {
-  if (ch3TreasureDialog) return;
-  gameState = 'paused';
-  const box = document.createElement('dialog');
-  ch3TreasureDialog = box;
-  box.className = 'ch3-treasure-dialog';
-  box.setAttribute('aria-labelledby', 'ch3-treasure-heading');
-  box.innerHTML = '<h2 id="ch3-treasure-heading">氣球骰子</h2><div class="ch3-treasure-portrait"><img alt="" /><span>小V</span></div>' +
-    '<canvas width="600" height="210" aria-label="小V與星靈的骰子" hidden></canvas><p class="ch3-treasure-note" aria-live="polite"></p>' +
-    '<div class="ch3-treasure-scores" hidden><span>小V</span><span>星靈</span></div><div class="ch3-treasure-actions">' +
-    '<button type="button" data-choice="accept">好啊！來挑戰看看！</button>' +
-    '<button type="button" data-choice="decline">不用了，直接領取' + (chest.coin ? '金幣包' : '寶箱') + '。</button></div>';
-  const portrait = box.querySelector('img');
-  portrait.src = rpgImgUrl('balloonv_thinking');
-  portrait.addEventListener('error', () => { portrait.hidden = true; });
-  const choices = box.querySelector('.ch3-treasure-actions');
-  const board = box.querySelector('canvas');
-  const note = box.querySelector('.ch3-treasure-note');
-  const scores = box.querySelector('.ch3-treasure-scores');
-  const accept = choices.querySelector('[data-choice="accept"]');
-  const decline = choices.querySelector('[data-choice="decline"]');
+async function showDiceDuel(scene, rolls, result) {
+  const overlay = document.getElementById('rpg-overlay');
+  const board = overlay.querySelector('.rpg-dice-board');
   const g = board.getContext('2d');
-  const attempt = diceRewardAttempt;
-  const roll = chapter3TreasureDice.animate((faces, motion) => {
+  scene.pages[0] = {
+    sp: 'balloonv', face: 'balloonv_heroic', right: 'star_spirit_mysterious', bothActive: true,
+    text: '來比比誰的骰子點數比較大！', options: [],
+  };
+  rpgShowPage(0);
+  board.hidden = false;
+  board.removeAttribute('data-points');
+  const still = { y: 0, angle: 0, scaleX: 1, scaleY: 1 };
+  const pips = { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 };
+  const render = (faces, motion) => {
+    if (rpgActive !== scene) return;
     g.clearRect(0, 0, board.width, board.height);
-    const face = ch3TreasureImage('dice_face_blank.png');
-    if (face) {
-      board.hidden = false;
-      const still = { y: 0, angle: 0, scaleX: 1, scaleY: 1 };
-      const pips = { cx: 0.50, cy: 0.52, spacing: 0.103, radius: 0.034 };
-      chapter3TreasureDice.drawFace(g, face, { x: 78, y: 53, w: 154, h: 154 }, pips, faces.player, motion.die === 'player' ? motion : still);
-      if (faces.spirit) chapter3TreasureDice.drawFace(g, face, { x: 368, y: 53, w: 154, h: 154 }, pips, faces.spirit, motion);
+    const art = ch3TreasureImage('dice_face_blank.png');
+    for (const [die, x] of [['player', 75], ['spirit', 395]]) {
+      if (!faces[die]) continue;
+      const pose = motion.die === die ? motion : still;
+      if (art) chapter3TreasureDice.drawFace(g, art, { x, y: 48, w: 190, h: 190 }, pips, faces[die], pose);
+      else {
+        g.font = 'bold 105px sans-serif';
+        g.textAlign = 'center';
+        g.fillStyle = '#ffe27a';
+        g.fillText(faces[die], x + 95, 168 + pose.y);
+      }
     }
-    scores.children[0].textContent = '小V　' + faces.player;
-    scores.children[1].textContent = '星靈　' + (faces.spirit ?? '—');
-  });
-  function resume() {
-    closeChapter3TreasureChoice();
-    if (gameState === 'paused') {
-      gameState = 'playing';
-      lastTime = 0;
-      fixedStepAccumulator = 0;
-      if (rpgPauseAfterClose) { rpgPauseAfterClose = false; pauseGame(); }
-    }
-  }
-  function showResult(result, rolls) {
-    scores.children[0].textContent = '小V　' + rolls.player;
-    scores.children[1].textContent = '星靈　' + rolls.spirit;
-    const copy = {
-      win: ['哇！你贏了！金幣加倍送給你！', 'star_spirit_surprised', 'star_spirit_happy'],
-      loss: ['嘿嘿！這次是我贏了！', 'star_spirit_happy', 'star_spirit_happy'],
-      tie: ['咦！居然一樣大耶！', 'star_spirit_surprised', 'star_spirit_mysterious'],
-    }[result.outcome];
-    note.textContent = copy[0] + '　獲得 ' + result.coins + ' 金幣';
-    portrait.src = rpgImgUrl(RPG_ASSETS[copy[1]] ? copy[1] : copy[2]);
-    box.querySelector('.ch3-treasure-portrait span').textContent = '星靈';
-    const done = document.createElement('button');
-    done.type = 'button';
-    done.textContent = '繼續冒險';
-    done.addEventListener('click', resume, { once: true });
-    choices.replaceChildren(done);
-    done.focus();
-  }
-  box.addEventListener('cancel', event => event.preventDefault());
-  decline.addEventListener('click', () => {
-    if (attempt !== diceRewardAttempt) return;
-    if (ch3TreasureClaim(chest, null)) resume();
-    else note.textContent = '未能儲存這次挑戰，請再試一次。';
-  });
-  accept.addEventListener('click', async () => {
-    if (accept.disabled || attempt !== diceRewardAttempt) return;
-    const rolls = { player: chapter3TreasureDice.rollFace(), spirit: chapter3TreasureDice.rollFace() };
-    const result = ch3TreasureClaim(chest, rolls);
-    if (!result) { note.textContent = '未能儲存這次挑戰，請再試一次。'; return; }
-    accept.disabled = decline.disabled = true;
-    scores.hidden = false;
-    try {
-      await roll(rolls);
-    } catch {
-      board.hidden = true;
-    }
-    if (ch3TreasureDialog === box) showResult(result, rolls);
-  });
-  document.body.append(box);
-  box.showModal();
-  ch3TreasureImage('dice_face_blank.png');
+  };
+  try { await chapter3TreasureDice.animate(render)(rolls); } catch { /* Keep the rolled result if animation fails. */ }
+  if (rpgActive !== scene) return;
+  render(rolls, still);
+  board.dataset.points = rolls.player + ',' + rolls.spirit;
+  const [left, face, text] = DICE_RESULT_FACES[result.outcome];
+  scene.pages[0] = {
+    sp: 'spirit', face, left, bothActive: true,
+    text: text + '\n小V ' + rolls.player + '　星靈 ' + rolls.spirit + '　獲得 ' + result.coins + ' 金幣',
+    instant: true,
+    options: [{ action: 'dice-done', label: '繼續冒險' }],
+  };
+  scene.onOption = () => rpgClose('finished');
+  rpgShowPage(0);
 }
