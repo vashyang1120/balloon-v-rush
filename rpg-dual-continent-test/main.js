@@ -681,7 +681,12 @@ function resolveAdventureAssetSrc(path) {
   // 已是完整 URL，直接回傳
   if (/^https?:\/\//.test(s)) return s;
   // 相對路徑：組完整 URL
-  return ADVENTURE_BASE_URL + s.replace(/^\//, '');
+  const relative = s.replace(/^\//, '');
+  const previewAssets = window.adventurePlaytestAssetRoot;
+  if (previewAssets && /^(assets\/|rpg-dual-continent-test\/chapter3-art\/)/.test(relative)) {
+    return new URL(relative, previewAssets).href;
+  }
+  return ADVENTURE_BASE_URL + relative;
 }
 
 function resolveAdventureAvatarSrc(avatarKey) {

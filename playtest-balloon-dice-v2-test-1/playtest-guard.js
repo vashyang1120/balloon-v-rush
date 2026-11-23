@@ -37,11 +37,19 @@
     sessionStorage: { value: session },
   });
 
+  const sourceAssets = previewRoot.hostname === 'rawcdn.githack.com'
+    ? new URL('https://vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-4/')
+    : null;
+  if (sourceAssets) Object.defineProperty(window, 'adventurePlaytestAssetRoot', { value: sourceAssets.href });
+
   function canRead(input, method) {
     const url = new URL(input, document.baseURI);
     const readOnly = ['GET', 'HEAD'].includes(String(method).toUpperCase());
     return readOnly && (url.protocol === 'data:' || url.protocol === 'blob:' ||
-      (url.origin === previewRoot.origin && url.pathname.startsWith(previewRoot.pathname)));
+      (url.origin === previewRoot.origin && url.pathname.startsWith(previewRoot.pathname)) ||
+      (sourceAssets && url.origin === sourceAssets.origin &&
+        ['assets/', 'rpg-dual-continent-test/chapter3-art/'].some(path =>
+          url.pathname.startsWith(sourceAssets.pathname + path))));
   }
 
   const download = window.fetch;

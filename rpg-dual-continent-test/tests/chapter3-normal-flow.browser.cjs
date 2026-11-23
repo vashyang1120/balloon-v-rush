@@ -153,7 +153,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await advance('rock pillar', s => onMesa(s, L.p3) && s.x >= L.p3.x + 70, ['right', 'attack'], 'hammer');
   await advance('canyon top', s => onMesa(s, L.ct), jumpRight(), 'umbrella');
   await advance('upper enemy path', s => s.x >= L.ct.x + 440, ['right', 'attack'], 'sword');
-  await advance('second waterfall', s => s.x + s.w / 2 >= L.fallX, ['right'], 'umbrella');
+  await advance('second waterfall', s => s.x + s.w / 2 >= L.fallX - 28, ['right'], 'umbrella');
   await advance('filled and dried', s => s.fill === 1 && s.wet === 0, [], 'umbrella', 28);
   await advance('swimming', s => s.swim, ['right'], 'umbrella');
   await advance('climbing the floating pad', s => s.climb, ['right'], 'umbrella');

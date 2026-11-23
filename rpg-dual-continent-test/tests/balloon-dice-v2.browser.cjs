@@ -23,6 +23,14 @@ test('isolated 1-1 start and official 1-3 / 2-2 art in the real renderer', { tim
     await page.goto(entry + (stage ? '?ch3test=' + stage : ''));
     await page.locator('#btn-start-gate-go').click({ timeout: 35000 });
   }
+  async function waitFor(predicate, timeout = 30000) {
+    const end = Date.now() + timeout;
+    while (Date.now() < end) {
+      if (await page.evaluate(predicate)) return;
+      await delay(80);
+    }
+    assert.fail('Timed out: ' + predicate);
+  }
   async function image(name) {
     if (!shots) return;
     await mkdir(shots, { recursive: true });
@@ -30,15 +38,17 @@ test('isolated 1-1 start and official 1-3 / 2-2 art in the real renderer', { tim
   }
 
   await open();
-  await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateActive && gameState === 'playing');
+  await waitFor(() => advCurrentStageId() === '1-1' && !assetGateActive && gameState === 'playing');
   assert.equal(await page.evaluate(() => !!playerInventory.unlockedRecipes.balloonDice), false);
 
   await open('1-3');
   await page.locator('#h2-nav-go').waitFor({ timeout: 30000 });
-  // Shortcut fixture supplies a hammer. The character still walks and jumps from the start.
-  await page.evaluate(() => { playerInventory.craftedItems.basicHammer = 1; h2RenderAll(); });
+  await page.locator('#h2-title-recipes').click();
+  await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
+  await page.locator('button[data-h2-act="craft"][data-key="basicHammer"]').click();
+  await page.locator('#h2-panel-close').click();
   await page.locator('#h2-nav-go').click();
-  await page.waitForFunction(() => advCurrentStageId() === '1-3' && !assetGateActive && gameState === 'playing');
+  await waitFor(() => advCurrentStageId() === '1-3' && !assetGateActive && gameState === 'playing');
   const bag = await page.evaluate(() => {
     const found = coins.find(c => c.v395Kind === 'coinBag');
     return [found.x, found.y];
@@ -54,13 +64,13 @@ test('isolated 1-1 start and official 1-3 / 2-2 art in the real renderer', { tim
     await delay(45);
   }
   await page.keyboard.up('ArrowRight');
-  await page.waitForFunction(() => !!v395Img('coinBag'));
+  await waitFor(() => !!v395Img('coinBag'));
   await image('1-3-coin-bag.png');
 
   await open('2-2');
   await page.locator('[data-h2-act="bringDog"]').click({ timeout: 30000 });
   await page.locator('#h2-nav-go').click();
-  await page.waitForFunction(() => advCurrentStageId() === '2-2' && !assetGateActive && gameState === 'playing');
+  await waitFor(() => advCurrentStageId() === '2-2' && !assetGateActive && gameState === 'playing');
   // Rendering/collision fixture only. This case deliberately positions the player
   // beside the chest for a reproducible screenshot and does not test this route.
   await page.evaluate(async () => {
@@ -70,10 +80,9 @@ test('isolated 1-1 start and official 1-3 / 2-2 art in the real renderer', { tim
     player.y = GROUND_Y - player.h;
     player.vx = 0;
     cameraX = chest.x - 560;
-    pauseGame();
+    gameState = 'paused';
     ch3TreasureImage('item_treasure_chest_normal.png');
     await ch3TreasureImages.get('item_treasure_chest_normal.png').decode();
-    resumeGame();
   });
   await image('2-2-normal-chest-render-fixture.png');
   assert.deepEqual(await page.evaluate(() => {
