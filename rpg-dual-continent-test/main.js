@@ -44,7 +44,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 // ── 版本資訊 ──────────────────────────────────
 const GAME_VERSION = 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-1';
-const GAME_BUILD_REVISION = 'Chapter 3 Integration Test 4';
+const GAME_BUILD_REVISION = 'Balloon Dice v2.0 Integration Test 1';
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -21237,6 +21237,7 @@ function advVerifyCatalog(quiet) {
     Object.keys(got).forEach(k => { if (got[k] !== c[k]) issues.push(sid + ' ' + k + '：目錄 ' + c[k] + ' / 關卡 ' + got[k]); });
     const t = lv.hiddenTreasure; const want = c.explore.map(x => x.id);
     const have = (t ? [sid + (t.type === 'recipe' ? '#recipe:' + t.recipeKey : t.type === 'goldChest' ? '#treasure:goldChest' : t.type === 'bossNote' ? '#note:' + t.id : '#hidden:' + t.type)] : [])
+      .concat(chapter3TreasureSpots(sid).map(() => sid + '#treasure:goldChest'))
       .concat((lv.extraHiddenTreasures || []).map(x => sid + '#recipe:' + x.recipeKey));   // v0.3.85：同一關的第二個隱藏寶物
     if (JSON.stringify(want) !== JSON.stringify(have)) issues.push(sid + ' 探索物：目錄 ' + want.join(',') + ' / 關卡 ' + have.join(','));
   });

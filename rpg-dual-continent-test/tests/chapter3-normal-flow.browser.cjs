@@ -70,6 +70,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
     x: player.x, y: player.y, w: player.w, h: player.h, ground: player.onGround,
     hp: player.hp, slot: activeSlot, state: gameState, dialog: rpgActive?.id || null,
     wet: c34.wet, fill: c34.level, swim: c34.swim, climb: !!c34.climb,
+    filling: !!c34.poolImpact, facingRight: player.facingRight,
     angle: wd.ang, hammer: equippedHammer.id, hit: wd.hitBoxes, anglePad: wdPadHitRect(),
     layout: C34_LAY, floor: GROUND_Y, tree: breakableTrees[0]?.state,
     pad: platforms.find(p => p.c34Pad), dog: bringBalloonDog,
@@ -153,15 +154,25 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await advance('rock pillar', s => onMesa(s, L.p3) && s.x >= L.p3.x + 70, ['right', 'attack'], 'hammer');
   await advance('canyon top', s => onMesa(s, L.ct), jumpRight(), 'umbrella');
   await advance('upper enemy path', s => s.x >= L.ct.x + 440, ['right', 'attack'], 'sword');
-  await advance('second waterfall', s => s.x + s.w / 2 >= L.fallX - 28, ['right'], 'umbrella');
-  await advance('filled and dried', s => s.fill === 1 && s.wet === 0, [], 'umbrella', 28);
+  await advance('second waterfall approach', s => s.x >= L.fallX - 77, ['right'], 'umbrella');
+  await advance('filled and dried', s => s.fill === 1 && s.wet === 0, s => {
+    if (s.filling) return [];
+    return s.x >= L.fallX - 40 ? ['left'] : ['right'];
+  }, 'umbrella', 42);
   await advance('swimming', s => s.swim, ['right'], 'umbrella');
   await advance('climbing the floating pad', s => s.climb, ['right'], 'umbrella');
   await advance('on the floating pad', s => s.pad && onTop(s, s.pad.x, s.pad.w, s.pad.y), [], 'umbrella');
   await advance('dried on the floating pad', s => s.wet === 0, [], 'umbrella', 25);
-  await advance('floating pad edge', s => s.x >= s.pad.x + s.pad.w - (mobile ? 26 : 9) && s.ground,
-    ['right'], 'umbrella');
-  await advance('right bank', s => onMesa(s, L.bank), jumpRight(), 'umbrella');
+  let hasJumped = false;
+  await advance('right bank', s => onMesa(s, L.bank), s => {
+    if (hasJumped && s.ground && !onTop(s, s.pad.x, s.pad.w, s.pad.y)) return ['right'];
+    if (s.swim) return ['left'];
+    if (s.climb) return [];
+    if (hasJumped && !s.ground) return ['right'];
+    const launch = s.ground && s.x >= s.pad.x + s.pad.w - 33;
+    if (launch) hasJumped = true;
+    return launch ? ['right', 'jump'] : ['right'];
+  }, 'umbrella', 30);
   await advance('wind blade blocked', s => s.reflected, ['attack'], 'umbrella', 20);
   await advance('bank enemy approach', s => s.x >= L.bank.x + 335, ['right'], 'sword');
   await advance('bank enemy defeated', s => !s.bankWind, ['attack'], 'sword');
