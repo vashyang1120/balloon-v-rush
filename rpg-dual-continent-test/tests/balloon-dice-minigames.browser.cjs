@@ -9,11 +9,13 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 9000
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
   const origin = 'https://vashyang1120.github.io';
-  await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush'));
+  const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
+  if (!publicUrl) await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush'));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/rpg-dual-continent-test/index.html?ch3test=3-1');
+  const base = publicUrl || origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
+  await page.goto(base + 'rpg-dual-continent-test/index.html?ch3test=3-1');
   await page.locator('#btn-start-gate-go').click({ timeout: 30000 });
   await page.locator('#h2-nav-go').waitFor();
   // The isolated fixture has already finished the unlock/recipe flow.
@@ -29,6 +31,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 9000
   await vb.locator('#btnEmbedStart').click({ timeout: 25000 });
   await vb.locator('#btnPause').click({ timeout: 10000 });
   await vb.locator('#btnPauseTitle').click();
+  await page.locator('#vb-frame-wrap').waitFor({ state: 'hidden' });
   await page.locator('#h2-nav-go').waitFor();
   assert.equal(await page.evaluate(() => vbData().matchesLeft), 0);
 
@@ -39,6 +42,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 9000
   await wh.locator('.spirit-btn').click({ timeout: 7000 });
   await wh.locator('#btnPause').click({ timeout: 10000 });
   await wh.locator('#c1uPauseHome').click();
+  await page.locator('#wam-frame').waitFor({ state: 'detached' });
   await page.locator('#h2-nav-go').waitFor();
   assert.deepEqual(errors, []);
 });

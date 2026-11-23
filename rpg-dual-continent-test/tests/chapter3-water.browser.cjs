@@ -1077,6 +1077,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(setup.pages[0][1], '哇！是一個寶箱耶！小V，要不要跟我比比看誰的骰子點數比較大？');
     assert.deepEqual(setup.pages.at(-1), ['balloonv_thinking', '要不要挑戰呢...']);
 
+    await page.locator('#rpg-overlay .rpg-box--done').waitFor({ timeout: 8000 });
     await record(page, 'desktop-dice-spirit-invite');
     await openDiceChoice(page);
     await record(page, 'desktop-dice-large-choices');

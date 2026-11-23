@@ -9,7 +9,8 @@ const origin = 'https://vashyang1120.github.io';
 const cdn = 'https://rawcdn.githack.com';
 const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture';
 const pagesPrefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4';
-const entry = cdn + cdnPath + '/playtest-balloon-dice-v2-test-3/rpg-dual-continent-test/?ch3test=3-4';
+const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
+const entry = (publicUrl || cdn + cdnPath + '/playtest-balloon-dice-v2-test-3/') + 'rpg-dual-continent-test/index.html?ch3test=3-4';
 const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z' };
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
@@ -21,7 +22,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const context = await browser.newContext(mobile
     ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
     : { viewport: { width: 1280, height: 820 } });
-  await context.route('**/*', route => {
+  if (!publicUrl) await context.route('**/*', route => {
     if (route.request().url().startsWith(cdn + cdnPath + '/')) return serveCheckout(route, cdn, cdnPath);
     return serveCheckout(route, origin, pagesPrefix, { 'access-control-allow-origin': '*' });
   });
