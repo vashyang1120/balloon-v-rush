@@ -26,11 +26,11 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
     if (!mobile) return page.keyboard.press('Enter');
     const next = page.locator('#rpg-overlay.rpg--show .rpg-next:visible');
     if (!await next.isVisible()) return;
-    try {
-      await next.tap({ timeout: 1800 });
-    } catch (error) {
-      if (await next.isVisible()) throw error;
-    }
+    const box = await next.boundingBox();
+    if (!box) return;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart',
+      touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   }
   async function choose(tool, current) {
     if (!mobile) return page.keyboard.press(weaponKeys[tool]);
