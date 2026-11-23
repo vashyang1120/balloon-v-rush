@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { serveCheckout } = require('./chapter3-static-fixture.cjs');
+const { serveCheckout, openHostedAdventure } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
 const cdn = 'https://rawcdn.githack.com';
@@ -15,7 +15,7 @@ const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
 for (const mode of ['keyboard', 'touch'].filter(mode => !process.env.CH3_INPUT || process.env.CH3_INPUT === mode)) {
-test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeout: 200000 }, async t => {
+test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeout: 250000 }, async t => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const mobile = mode === 'touch';
@@ -130,7 +130,8 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
     assert.fail(label + ': ' + JSON.stringify(state));
   }
 
-  await page.goto(entry);
+  if (publicUrl) await openHostedAdventure(page, entry);
+  else await page.goto(entry);
   await page.locator('#btn-start-gate-go').waitFor({ timeout: 30000 });
   await activate(page.locator('#btn-start-gate-go'));
   await page.locator('#h2-nav-go').waitFor({ timeout: 30000 });

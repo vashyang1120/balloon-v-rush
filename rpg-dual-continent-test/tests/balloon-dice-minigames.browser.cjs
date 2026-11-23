@@ -2,9 +2,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { serveCheckout } = require('./chapter3-static-fixture.cjs');
+const { serveCheckout, openHostedAdventure } = require('./chapter3-static-fixture.cjs');
 
-test('Test 3 guest home starts and returns from both minigames', { timeout: 90000 }, async t => {
+test('Test 3 guest home starts and returns from both minigames', { timeout: 145000 }, async t => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
@@ -15,7 +15,9 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 9000
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const base = publicUrl || origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
-  await page.goto(base + 'rpg-dual-continent-test/index.html?ch3test=3-1');
+  const entry = base + 'rpg-dual-continent-test/index.html?ch3test=3-1';
+  if (publicUrl) await openHostedAdventure(page, entry);
+  else await page.goto(entry);
   await page.locator('#btn-start-gate-go').click({ timeout: 30000 });
   await page.locator('#h2-nav-go').waitFor();
   // The isolated fixture has already finished the unlock/recipe flow.

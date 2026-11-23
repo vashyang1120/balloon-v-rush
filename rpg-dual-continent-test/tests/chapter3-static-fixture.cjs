@@ -33,4 +33,29 @@ async function serveCheckout(route, origin, stripPath = '', headers = {}) {
   return route.fulfill({ contentType, headers, body: request.method() === 'HEAD' ? Buffer.alloc(0) : body });
 }
 
-module.exports = { serveCheckout };
+async function openHostedAdventure(page, url) {
+  const failed = new Set();
+  const responseFailed = response => {
+    if (response.status() >= 400) failed.add(response.status() + ' ' + response.url());
+  };
+  const requestFailed = request => failed.add(request.failure()?.errorText + ' ' + request.url());
+  page.on('response', responseFailed);
+  page.on('requestfailed', requestFailed);
+  try {
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
+    if (!response?.ok()) throw new Error('Hosted document: HTTP ' + response?.status());
+    const open = page.getByRole('button', { name: 'Open the page', exact: true })
+      .or(page.getByRole('link', { name: 'Open the page', exact: true }));
+    if (await open.isVisible()) await open.click();
+    await page.locator('#btn-start-gate-go').waitFor({ timeout: 50000 });
+  } catch (error) {
+    const text = await page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+    throw new Error(error.message + '\nHosted URL: ' + page.url() + '\nPage: ' + text.slice(0, 1600) +
+      '\nFailed requests: ' + [...failed].slice(0, 24).join('\n'), { cause: error });
+  } finally {
+    page.off('response', responseFailed);
+    page.off('requestfailed', requestFailed);
+  }
+}
+
+module.exports = { serveCheckout, openHostedAdventure };
