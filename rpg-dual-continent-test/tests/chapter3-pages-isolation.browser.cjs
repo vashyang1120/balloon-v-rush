@@ -112,27 +112,35 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           }
           await waitUntil(page, s => !assetGateActive && advCurrentStageId() === s, section, 45000);
           assert.equal(await page.evaluate(() => advIsBlockingGame()), false);
-          const dismiss = async () => {
-            const next = page.locator('#rpg-overlay [data-act="next"]');
-            for (let j = 0; j < 14 && await next.isVisible(); j++) {
-              await next.click();
-              await delay(90);
-            }
-          };
-          for (let j = 0; j < 3; j++) { await dismiss(); await delay(180); }
-          await waitUntil(page, () => gameState === 'playing' && player.onGround && elapsedSec > 0);
-          const start = await page.evaluate(() => ({ x: player.x, y: player.y }));
-          await page.keyboard.down('ArrowRight');
-          try { await waitUntil(page, x => player.x > x + 8, start.x, 3000); }
-          finally { await page.keyboard.up('ArrowRight'); }
-          await page.keyboard.down('Space');
-          try { await waitUntil(page, y => player.y < y - 12, start.y, 3000); }
-          finally { await page.keyboard.up('Space'); }
-          await page.keyboard.press('1');
-          await page.keyboard.down('KeyZ');
-          try { await waitUntil(page, () => player.swordAnimTimer > 0 || player.meleeActive > 0, null, 3000); }
-          finally { await page.keyboard.up('KeyZ'); }
-          console.log(section + ' spawn grounded, clock advanced, ArrowRight, Space and sword accepted');
+          const next = page.locator('#rpg-overlay [data-act="next"]');
+          const skip = page.locator('#rpg-overlay [data-act="skip"]');
+          const read = () => page.evaluate(() => ({
+            x: player.x, y: player.y, grounded: player.onGround, seconds: elapsedSec,
+            dialogue: rpgActive?.id, state: gameState, weapon: activeSlot,
+            attacking: player.swordAnimTimer > 0 || player.meleeActive > 0 || !!player.c2Block,
+          }));
+          async function control(key, passes, hold = 130, grounded = true) {
+            const deadline = Date.now() + 12000;
+            let state;
+            do {
+              state = await read();
+              if (state.dialogue) {
+                const button = await skip.isVisible() ? skip : next;
+                if (await button.isVisible()) await button.click({ timeout: 1000 }).catch(() => {});
+              } else if (state.state === 'playing' && (!grounded || state.grounded)) {
+                await page.keyboard.press(key, { delay: hold });
+                const after = await read();
+                if (passes(state, after)) return;
+              }
+              await delay(65);
+            } while (Date.now() < deadline);
+            assert.fail(section + ' did not respond to ' + key + ': ' + JSON.stringify(state));
+          }
+          await control('ArrowRight', (before, after) => after.x > before.x + 8 && after.seconds > 0);
+          await control('ArrowLeft', (before, after) => after.x < before.x - 4, 190);
+          await control('ArrowUp', (before, after) => after.y < before.y - 12);
+          await control('z', (before, after) => after.attacking, 75);
+          console.log(section + ' spawn grounded, clock advanced, left/right, jump and weapon action accepted');
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }

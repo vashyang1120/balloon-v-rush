@@ -22910,6 +22910,7 @@ function h2PanelBody(kind, tab) {
       + h2RowHtml({ iconHtml: h2Icon('mapScroll'), name: '冒險提示筆記・劇情紀錄', desc: '學過的玩法提示與看過的對話', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="notes">打開</button>' })
       + h2RowHtml({ iconHtml: h2Icon('bossNote'), name: 'Boss 弱點筆記・重要物品', desc: '冒險中找到的重要物品', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="openPanel" data-key="bag" data-tab="key">打開</button>' })
       + h2RowHtml({ iconHtml: h2Icon('star'), name: '冒險紀錄', desc: '正式挑戰進度、本次統計與本關詳細結算', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="openPanel" data-key="challenge">打開</button>' })
+      + (gameState === 'clear' ? '<div style="margin-top:0.7em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="stageResult">查看本關詳細結算</button></div>' : '')
       + '</div><div class="h2-sub" style="margin-top:1em">版本：' + h2Esc(GAME_VERSION) + '</div>';
   }
   if (kind === 'next') {
@@ -22995,7 +22996,6 @@ function h2BindOnce() {
     }
     if (c('#h2-bulb')) { const b = h2$('h2-bulb-bubble'); if (b && b.style.display === 'block') h2HideBubble(); else h2ShowBubble(); return; }
     if (c('#h2-sum-ok')) { h2HideSummary(); return; }
-    if (c('#h2-sum-detail')) { h2ReopenSummary(); return; }
     if (t === h2$('h2-panel-wrap') || c('#h2-panel-close')) { h2ClosePanel(); return; }
     if (c('#h2-turn-l')) { h2SetDir(H2.dir - 1); return; }
     if (c('#h2-turn-r')) { h2SetDir(H2.dir + 1); return; }

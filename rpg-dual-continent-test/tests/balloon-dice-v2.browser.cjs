@@ -150,6 +150,8 @@ test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 2
   await page.locator('#h2-title-recipes').click();
   await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
   await page.locator('button[data-h2-act="craft"][data-key="basicHammer"]').click();
+  const tutorialSkip = page.locator('#rpg-overlay [data-act="skip"]');
+  if (await tutorialSkip.isVisible()) await tutorialSkip.click();
   await page.locator('button[data-h2-act="craft"][data-key="balloonDice"]').click();
   assert.equal(await page.evaluate(() => v395Count('basicHammer')), 1);
   assert.equal(await page.evaluate(() => v395Count('balloonDice')), 1);
