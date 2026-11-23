@@ -35,8 +35,22 @@
 - 1-3 圓氣球有舊 `uniqueCollectibles.level3RoundBalloon` 旗標。此基準內旗標有初始化、複製及通關寫入，未看到同名欄位被用來停止該關生出圓氣球。動態圓氣球配置另依背包與關卡既有規則。
 - 圖釘工坊仍在 `LEVELS` 原索引，正式主線、挑戰索引與試玩清單未列。部分正式判定仍用關卡陣列數字索引，而進關快照也保留 `levelIndex`。清理前宜盤點所有索引使用、歷史存檔和開發載入工具，先遷移至 stable stageId，再另案移出正式執行配置。本次保留原始資料及素材。
 
-## 驗證狀態
+## 發布與測試結果
 
-本地執行 JavaScript 語法檢查與 Node 測試，骰子原測試及 Cross-Continent 行為測試共 10 項通過。涵蓋包／箱獎金、四個包無狗碰撞規則、四個箱帶狗、舊旗標相容、重玩、單趟去重、寫入失敗及序號回滾、三句台詞。此為程式測試。瀏覽器腳本提供 PC／觸控和渲染驗證，2-2 截圖腳本明確使用固定位置測渲染。兩大陸完整玩家路線、實體手機驗收及線上入口可用性，須以當前測試運行及交付回報為準。
+- 線上試玩固定提交 `26df0719cf9848b7857da18b79a348fa8b7f18c9`，和成功 CI 的遊戲程式及試玩資產相同。後續提交 `ea24cbc6eb642cf9fce98be7db5098537fba39aa` 調整測試操作，遊戲來源 Git blob 保持一致。第三方試玩入口初次可能出現 External Content Notice，按 **Open the page** 即可進入。測試版只從既有 Test 4 讀取共用素材，進度與存檔保存在獨立訪客空間。 [試玩總入口](https://rawcdn.githack.com/vashyang1120/balloon-v-rush/26df0719cf9848b7857da18b79a348fa8b7f18c9/playtest-balloon-dice-v2-test-1/index.html)
+- [第一大陸完整出發入口](https://rawcdn.githack.com/vashyang1120/balloon-v-rush/26df0719cf9848b7857da18b79a348fa8b7f18c9/playtest-balloon-dice-v2-test-1/rpg-dual-continent-test/index.html) 由飛行屋與開場漫畫進 1-1。[第二大陸出發入口](https://rawcdn.githack.com/vashyang1120/balloon-v-rush/26df0719cf9848b7857da18b79a348fa8b7f18c9/playtest-balloon-dice-v2-test-1/rpg-dual-continent-test/index.html?ch3test=3-1) 從小V之家備妥氣球槌並安排小狗，由 3-1 開始。總入口另有 1-2、1-3、2-1、2-2、3-1～3-4 快捷。
+- 已確認發佈前 `main` 仍為 `40c77494bf24362c0fc87453a5c3b610abb8c130`，工程 PR 維持 Draft 並指向 PR #42 的分支。 [Draft PR #43](https://github.com/vashyang1120/balloon-v-rush/pull/43)
 
-建議按正常流程從 1-1 驗收秘笈、金幣包與 2-2，再從同一冒險進入 3-1 確認跨大陸背包。第二大陸專用入口提供獨立的前置資源測試槽。
+| 驗證 | 結果 |
+| --- | --- |
+| 純程式測試 | 10/10。包／箱規則、四種擲骰結果、舊旗標相容、狗條件、失敗寫入回復、骰子計數還原及當趟重領。 |
+| 1-1／1-2 | 已實際開線上開場並進 1-1。Chrome 從 1-2 前的小V之家安排小狗出發，以正常走跳通關 1-2，發現骰子秘笈，驗證三句台詞、原有槌子秘笈及回家後製作一顆骰子。 |
+| 1-3／2-2 截圖 | 1-3 為遊戲畫面，2-2 使用位置測試顯示新普通箱。截圖只佐證畫面與配置。 |
+| 3-4 完整單關 | PC 鍵盤與 844×390 Chrome 觸控模擬各一次：在家製作骰子、安排狗同行、走過瀑布與浮墊、右岸寶箱擲骰、回家通關、重載確認結算及骰子扣除。 |
+| 其他 Chromium 測試 | 通過隔離存檔、水域回歸、舊規則不能阻止當趟重玩、第三章獎勵暫存／回滾等測試。成功執行合計 34/34。 |
+| 重跑穩定性 | 同一提交的 push 執行為 32/34，有第一大陸測試逾時與 3-4 觸控腳本在右岸戰鬥失敗。PR 執行為 34/34。 |
+| 待驗收 | 尚未以不間斷新存檔完整走過 1-1→2-2→2-4→3-1～3-4，也尚未驗證實體手機。總 PM 與使用者須依試玩入口實際驗收。 |
+
+[通過的 GitHub Actions](https://github.com/vashyang1120/balloon-v-rush/actions/runs/45161444984)｜[同提交的 push 執行](https://github.com/vashyang1120/balloon-v-rush/actions/runs/45161426132)｜[1-3 與 2-2 截圖 ZIP](https://github.com/vashyang1120/balloon-v-rush/actions/runs/45161444984/artifacts/14812775154)
+
+截圖檔名為 `1-3-coin-bag.png` 與 `2-2-normal-chest-render-fixture.png`，壓縮檔也附第三章的測試圖。
