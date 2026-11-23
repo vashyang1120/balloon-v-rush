@@ -143,6 +143,7 @@ test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 2
     ['balloonv', '氣球骰子？原來用氣球也能做出骰子啊！'],
     ['balloonv', '可是氣球骰子可以做什麼呢？'],
   ]);
+  await page.locator('#h2-sum-ok').click();
   await page.locator('#h2-title-recipes').click();
   await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
   await page.locator('button[data-h2-act="craft"][data-key="balloonDice"]').click();

@@ -22,9 +22,16 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const page = await context.newPage();
   const cdp = mobile ? await context.newCDPSession(page) : null;
   const activate = locator => mobile ? locator.tap({ timeout: 5000 }) : locator.click({ timeout: 5000 });
-  const nextDialogue = () => mobile
-    ? page.locator('.rpg-next').tap({ force: true, timeout: 2500 })
-    : page.keyboard.press('Enter');
+  async function nextDialogue() {
+    if (!mobile) return page.keyboard.press('Enter');
+    const next = page.locator('#rpg-overlay.rpg--show .rpg-next:visible');
+    if (!await next.isVisible()) return;
+    try {
+      await next.tap({ timeout: 1800 });
+    } catch (error) {
+      if (await next.isVisible()) throw error;
+    }
+  }
   async function choose(tool, current) {
     if (!mobile) return page.keyboard.press(weaponKeys[tool]);
     const selector = tool === 'umbrella' || current === 'umbrella' ? '#btn-switch-tool' : '#btn-switch-weapon';
