@@ -99,6 +99,13 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           assert.deepEqual(await page.evaluate(() =>
             [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon]),
           shortcutResources[section]);
+          if (section === '3-1') await page.locator('[data-h2-act="bringDog"]').click();
+          if (section === '3-2') {
+            await page.locator('#h2-title-recipes').click();
+            await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
+            await page.locator('[data-h2-act="craft"][data-key="balloonUmbrella"]').click();
+            await page.locator('#h2-panel-close').click();
+          }
           await page.locator('#h2-nav-go').click();
           if (section === '3-1') {
             await waitUntil(page, () => !h2IsOpen() && advCurrentStageId() === '3-1', null, 45000);
@@ -121,7 +128,11 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           await page.keyboard.down('Space');
           try { await waitUntil(page, y => player.y < y - 12, start.y, 3000); }
           finally { await page.keyboard.up('Space'); }
-          console.log(section + ' spawn grounded, clock advanced, ArrowRight and Space accepted');
+          await page.keyboard.press('1');
+          await page.keyboard.down('KeyZ');
+          try { await waitUntil(page, () => player.swordAnimTimer > 0 || player.meleeActive > 0, null, 3000); }
+          finally { await page.keyboard.up('KeyZ'); }
+          console.log(section + ' spawn grounded, clock advanced, ArrowRight, Space and sword accepted');
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }

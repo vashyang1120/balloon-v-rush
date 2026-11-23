@@ -29,6 +29,7 @@ function game(stage = '3-4') {
     CONFIG: { COIN_R: 10 }, V395_BUNDLE: { coinBag: 10 }, bringBalloonDog: true,
     gameState: 'playing', rpgActive: null, writeFails: false, showHint() {}, spawnTreasurePickupEffect() {},
     advNoteExplore() {}, advNoteCollect() {}, sfxPlay() {}, advGuardWrite() {},
+    Image: class {}, resolveAdventureAssetSrc: path => path,
     rpgOpen(scene) { env.rpgActive = scene; return true; },
     advCurrentStageId: () => env.stage,
     v395Count: () => env.playerInventory.craftedItems.balloonDice,
@@ -68,7 +69,7 @@ test('all hidden chests require a dog, ignore legacy flags, and reappear on a ne
     assert.equal(e.ch3TreasureClaim(chest, null), null);
     e.bringBalloonDog = true;
     e.checkChapter3Treasure();
-    assert.match(e.rpgActive.pages[0].text, /寶箱/);
+    assert.equal(e.rpgActive.pages[0].text, '要不要挑戰呢...');
     e.rpgActive = null;
     e.playerInventory.craftedItems.balloonDice = 0;
     e.checkChapter3Treasure();
@@ -92,7 +93,7 @@ test('bags invite without dogs and ordinary coins still grant exactly one', () =
     const bag = { advId: stage + '#c-bag', v395Kind: 'coinBag', x: 10, y: 10 };
     e.coins = [bag, { x: 15, y: 15 }];
     e.v395PickupStep();
-    assert.match(e.rpgActive.pages[0].text, /金幣包/);
+    assert.equal(e.rpgActive.pages[0].text, '要不要挑戰呢...');
     e.checkCollectibles();
     assert.equal(e.currentRunStats.coins, 1);
     assert.equal(bag.collected, undefined);
@@ -152,4 +153,17 @@ test('the discovery scene contains only the three approved lines and is watched 
     ['balloonv','balloonv_thinking','氣球骰子？原來用氣球也能做出骰子啊！'],
     ['balloonv','balloonv_thinking','可是氣球骰子可以做什麼呢？'],
   ]);
+});
+
+test('600 unseeded pairs exercise all faces on both sides', () => {
+  const counts = { player: Array(6).fill(0), spirit: Array(6).fill(0) };
+  for (let pair = 0; pair < 600; pair++) {
+    counts.player[rules.rollFace() - 1]++;
+    counts.spirit[rules.rollFace() - 1]++;
+  }
+  for (const faces of Object.values(counts)) {
+    assert.equal(faces.reduce((sum, count) => sum + count, 0), 600);
+    assert.ok(faces.every(count => count > 0));
+  }
+  console.log('600 dice pairs:', counts);
 });

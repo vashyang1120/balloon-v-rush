@@ -24,7 +24,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const activate = locator => mobile ? locator.tap({ timeout: 5000 }) : locator.click({ timeout: 5000 });
   async function nextDialogue() {
     if (!mobile) return page.keyboard.press('Enter');
-    const next = page.locator('#rpg-overlay.rpg--show .rpg-next:visible');
+    const next = page.locator('#rpg-overlay.rpg--show [data-act="next"]:visible');
     if (!await next.isVisible()) return;
     const box = await next.boundingBox();
     if (!box) return;
