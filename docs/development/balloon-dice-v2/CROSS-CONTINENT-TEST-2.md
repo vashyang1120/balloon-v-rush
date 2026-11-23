@@ -2,7 +2,7 @@
 
 基準 `48a8b563c159339fa018b3406223c63e34cf47c8`。Draft PR #43，分支 `dev/balloon-dice-v2-cross-continent`。
 
-[獨立 Test 2 試玩入口](https://rawcdn.githack.com/vashyang1120/balloon-v-rush/09bb3bf55d43daf5c8fd8ea47d202bc86a1d52eb/playtest-balloon-dice-v2-test-2/index.html)
+[獨立 Test 2 試玩入口](https://rawcdn.githack.com/vashyang1120/balloon-v-rush/8867b846213c30dbaf2d349daa3ed72db9988bd1/playtest-balloon-dice-v2-test-2/index.html)
 
 ## 第二大陸進場
 
@@ -32,3 +32,5 @@ Test 2 在快捷分流解除提示旗標，保留正常入口的續玩流程。�
 ## 公開試玩檢查
 
 在公開 Test 2 入口，B 的 3-1 可由小V之家帶狗出發並走動，快捷 3-2、3-3、3-4 實測可移動與跳躍。1-3 經正常操作跳上中平台拾取金幣包，顯示小V思考的 RPG 選項，接受後骰面與文字同為小V 2、星靈 5，結算 5 金幣，畫面顯示小V抓髮和星靈開心的立繪。Chrome 的 3-4 正常路線以桌面鍵盤及手機橫向觸控模擬完成，涵蓋水池、浮墊、戰鬥、擲骰、通關與重新載入。
+
+2-1 由小V之家製作骰子出發，從正常路線跳到上路平台觸發金幣包。按「否」後重新載入，秘笈面板顯示背包仍達 LV1 的一顆骰子上限。

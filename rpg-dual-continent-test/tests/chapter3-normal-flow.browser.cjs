@@ -170,16 +170,13 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await advance('climbing the floating pad', s => s.climb, ['right'], 'umbrella');
   await advance('on the floating pad', s => s.pad && onTop(s, s.pad.x, s.pad.w, s.pad.y), [], 'umbrella');
   await advance('dried on the floating pad', s => s.wet === 0, [], 'umbrella', 25);
-  let hasJumped = false;
   await advance('right bank', s => onMesa(s, L.bank), s => {
-    if (hasJumped && s.ground && !onTop(s, s.pad.x, s.pad.w, s.pad.y)) return ['right'];
-    if (s.swim) return ['left'];
     if (s.climb) return [];
-    if (hasJumped && !s.ground) return ['right'];
-    const launch = s.ground && s.x >= s.pad.x + s.pad.w - 33;
-    if (launch) hasJumped = true;
-    return launch ? ['right', 'jump'] : ['right'];
-  }, 'umbrella', 30);
+    if (s.swim) return ['left'];
+    if (!s.ground || !onTop(s, s.pad.x, s.pad.w, s.pad.y)) return ['right'];
+    if (s.wet > 0) return []; // After a missed jump, wait for full jump height again.
+    return s.x >= s.pad.x + s.pad.w - 33 ? ['right', 'jump'] : ['right'];
+  }, 'umbrella', 50);
   await advance('wind blade blocked', s => s.reflected, ['attack'], 'umbrella', 20);
   await advance('bank enemy approach', s => s.x >= L.bank.x + 335, ['right'], 'sword');
   await advance('bank enemy defeated', s => !s.bankWind, ['attack'], 'sword');
