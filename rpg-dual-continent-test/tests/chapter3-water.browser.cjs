@@ -1017,6 +1017,22 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     } finally { await runPage.close(); }
   });
 
+    async function openDiceChoice(target) {
+      const choice = target.locator('#rpg-overlay .rpg-options--choice');
+      const next = target.locator('#rpg-overlay [data-act="next"]');
+      for (let step = 0; step < 12 && !await choice.isVisible(); step++) {
+        await next.click({ timeout: 2000 });
+        await target.waitForTimeout(110);
+      }
+      await choice.waitFor({ timeout: 3000 });
+      const [yes, no] = await choice.getByRole('button').all();
+      const [a, b, box] = await Promise.all([yes.boundingBox(), no.boundingBox(),
+        target.locator('#rpg-overlay .rpg-box').boundingBox()]);
+      assert.ok(a.width >= box.width * 0.4 && b.width >= box.width * 0.4);
+      assert.ok(a.height >= 44 && b.height >= 44 && a.x + a.width <= b.x);
+      assert.ok(a.y >= box.y && a.y + a.height <= box.y + box.height);
+      assert.equal(await yes.locator('span').evaluate(el => getComputedStyle(el).animationName), 'rpgNextBlink');
+    }
   await t.test('dice crafting and hidden chest decision use the real game inventory', async () => {
     const chestArt = await page.evaluate(async () => {
       const files = ['dice_face_blank.png', 'item_balloon_dice.png',
@@ -1058,8 +1074,12 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(setup.lv1, [true, false]);
     assert.deepEqual(setup.lv2, [true, false]);
     assert.deepEqual(setup.crafted, [6, 2, 2]);
-    assert.deepEqual(setup.pages, [['balloonv_thinking', '要不要挑戰呢...']]);
+    assert.equal(setup.pages[0][1], '哇！是一個寶箱耶！小V，要不要跟我比比看誰的骰子點數比較大？');
+    assert.deepEqual(setup.pages.at(-1), ['balloonv_thinking', '要不要挑戰呢...']);
 
+    await record(page, 'desktop-dice-spirit-invite');
+    await openDiceChoice(page);
+    await record(page, 'desktop-dice-large-choices');
     await page.getByRole('button', { name: '否', exact: true }).click();
     assert.deepEqual(await page.evaluate(id => [
       playerInventory.coins, currentRunStats.coins, diceRewardAttempt.claims.has(id), v395Count('balloonDice'),
@@ -1082,6 +1102,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       window.restoreTestRollFace = () => { chapter3TreasureDice.rollFace = rollFace; };
       return playerInventory.coins;
     }, setup.chest);
+    await openDiceChoice(page);
     await page.getByRole('button', { name: '是', exact: true }).click();
     assert.deepEqual(await page.evaluate(id => {
       window.restoreTestRollFace();
@@ -1113,6 +1134,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
         player.y = chest.y - player.h / 2;
         checkChapter3Treasure();
       });
+      await openDiceChoice(mobile);
+      await record(mobile, 'mobile-dice-large-choices');
       await mobile.locator('#rpg-overlay [data-act="dice-accept"]').tap();
       const continueButton = mobile.getByRole('button', { name: '繼續冒險' });
       await continueButton.waitFor();

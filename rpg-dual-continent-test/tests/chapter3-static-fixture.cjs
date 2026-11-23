@@ -10,7 +10,7 @@ const mime = {
   '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.webm': 'video/webm',
 };
 
-async function serveCheckout(route, origin, stripPath = '') {
+async function serveCheckout(route, origin, stripPath = '', headers = {}) {
   const request = route.request();
   const url = new URL(request.url());
   if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method())) return route.abort();
@@ -27,10 +27,10 @@ async function serveCheckout(route, origin, stripPath = '') {
     const last = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
     if (first > last) return route.fulfill({ status: 416 });
     return route.fulfill({ status: 206, contentType, headers: {
-      'content-range': `bytes ${first}-${last}/${body.length}`, 'accept-ranges': 'bytes',
+      ...headers, 'content-range': `bytes ${first}-${last}/${body.length}`, 'accept-ranges': 'bytes',
     }, body: body.subarray(first, last + 1) });
   }
-  return route.fulfill({ contentType, body: request.method() === 'HEAD' ? Buffer.alloc(0) : body });
+  return route.fulfill({ contentType, headers, body: request.method() === 'HEAD' ? Buffer.alloc(0) : body });
 }
 
 module.exports = { serveCheckout };

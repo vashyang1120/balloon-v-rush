@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-2';
-const GAME_BUILD_REVISION = 'Balloon Dice v2.0 Integration Test 2';
+const GAME_VERSION = 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-3';
+const GAME_BUILD_REVISION = 'Balloon Dice v2.0 Integration Test 3';
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -18840,6 +18840,10 @@ function loadImageRecord(r) {
       r.current = c.url;
       let done = false;
       const im = new Image();
+      if (window.adventurePlaytestAssetRoot && c.url.startsWith(window.adventurePlaytestAssetRoot) &&
+          (/\/hero\/umbrella\//.test(r.path) || /01_waterfall_main/.test(r.path))) {
+        im.crossOrigin = 'anonymous';
+      }
       const timer = setTimeout(() => { if (done) return; done = true; r.tried.push({ url: c.url, result: 'timeout' }); try { im.src = ''; } catch (e) {} tryAt(i + 1); }, r.timeoutMs || ASSET_SOURCE_TIMEOUT_MS);
       im.onload = () => {
         if (done) return; done = true; clearTimeout(timer);
@@ -20485,7 +20489,8 @@ function rpgShowPage(i) {
   const options = ov.querySelector('.rpg-options');
   next.hidden = !!p.options;
   next.textContent = (i >= scene.pages.length - 1) ? '結束 ▼' : '繼續 ▼';
-  options.hidden = !p.options;
+  options.hidden = !p.options?.length;
+  options.classList.toggle('rpg-options--choice', p.options?.length === 2);
   options.replaceChildren();
   for (const opt of p.options || []) {
     const button = document.createElement('button');

@@ -69,7 +69,8 @@ test('all hidden chests require a dog, ignore legacy flags, and reappear on a ne
     assert.equal(e.ch3TreasureClaim(chest, null), null);
     e.bringBalloonDog = true;
     e.checkChapter3Treasure();
-    assert.equal(e.rpgActive.pages[0].text, '要不要挑戰呢...');
+    assert.equal(e.rpgActive.pages[0].text, '哇！是一個寶箱耶！小V，要不要跟我比比看誰的骰子點數比較大？');
+    assert.equal(e.rpgActive.pages.at(-1).text, '要不要挑戰呢...');
     e.rpgActive = null;
     e.playerInventory.craftedItems.balloonDice = 0;
     e.checkChapter3Treasure();
@@ -93,7 +94,8 @@ test('bags invite without dogs and ordinary coins still grant exactly one', () =
     const bag = { advId: stage + '#c-bag', v395Kind: 'coinBag', x: 10, y: 10 };
     e.coins = [bag, { x: 15, y: 15 }];
     e.v395PickupStep();
-    assert.equal(e.rpgActive.pages[0].text, '要不要挑戰呢...');
+    assert.equal(e.rpgActive.pages[0].text, '哇！是一個金幣包耶！小V，要不要跟我比比看誰的骰子點數比較大？');
+    assert.equal(e.rpgActive.pages.at(-1).text, '要不要挑戰呢...');
     e.checkCollectibles();
     assert.equal(e.currentRunStats.coins, 1);
     assert.equal(bag.collected, undefined);

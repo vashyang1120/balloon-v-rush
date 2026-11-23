@@ -8,7 +8,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
-const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-2/rpg-dual-continent-test/index.html';
+const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/rpg-dual-continent-test/index.html';
 const shots = process.env.CH3_SCREENSHOTS;
 
 test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 220000 }, async t => {

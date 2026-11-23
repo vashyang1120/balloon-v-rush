@@ -6,7 +6,7 @@ on:
     branches: [integration/ch3-abcd-test-4]
     paths:
       - 'rpg-dual-continent-test/**'
-      - 'playtest-balloon-dice-v2-test-2/**'
+      - 'playtest-balloon-dice-v2-test-3/**'
       - '.github/workflows/balloon-dice-v2.yml'
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
           CH3_SCREENSHOTS: dice-v2-screenshots
         run: |
           mkdir -p "$CH3_SCREENSHOTS"
-          node --test rpg-dual-continent-test/tests/balloon-dice-v2.browser.cjs rpg-dual-continent-test/tests/chapter3-normal-flow.browser.cjs rpg-dual-continent-test/tests/chapter3-pages-isolation.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs
+          node --test rpg-dual-continent-test/tests/balloon-dice-v2.browser.cjs rpg-dual-continent-test/tests/chapter3-normal-flow.browser.cjs rpg-dual-continent-test/tests/chapter3-pages-isolation.browser.cjs rpg-dual-continent-test/tests/chapter3-water.browser.cjs rpg-dual-continent-test/tests/balloon-dice-minigames.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

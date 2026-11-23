@@ -130,7 +130,11 @@ function offerDiceReward(source) {
   const choice = { sp: 'balloonv', face: 'balloonv_thinking', text: '要不要挑戰呢...', instant: true, options: DICE_CHOICE_ACTIONS };
   const scene = {
     id: 'chapter3-treasure-invite', title: '氣球骰子', repeatable: true, requirePages: true,
-    pages: [choice],
+    pages: [
+      { sp: 'spirit', face: 'star_spirit_mysterious', text: '哇！是一個' + (source.coin ? '金幣包' : '寶箱') + '耶！小V，要不要跟我比比看誰的骰子點數比較大？' },
+      { sp: 'spirit', face: 'star_spirit_happy', text: '你贏，我給你兩倍金幣。\n你輸，我給你一半金幣。\n如果平手，我給你原本的金幣。' },
+      choice,
+    ],
     onOption(action) {
       if (attempt !== diceRewardAttempt) return;
       if (action === 'dice-decline') {
@@ -141,7 +145,7 @@ function offerDiceReward(source) {
       const result = ch3TreasureClaim(source, rolls);
       if (!result) {
         choice.text = '未能儲存這次挑戰，請再試一次。';
-        rpgShowPage(0);
+        rpgShowPage(scene.pages.indexOf(choice));
         return;
       }
       showDiceDuel(scene, rolls, result);

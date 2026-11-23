@@ -8,11 +8,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-2/';
+const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-2:';
+const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-3:';
 const shortcutResources = {
   '3-1': [313, 44, 14], '3-2': [389, 53, 16], '3-3': [416, 62, 21], '3-4': [507, 68, 23],
 };
@@ -43,7 +43,7 @@ async function fixture(context, guard, requests) {
 
 test('Balloon Dice v2 independent playtest blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-balloon-dice-v2-test-2/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-balloon-dice-v2-test-3/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -72,7 +72,7 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-2');
+        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-3');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
         if (/^3-[1-4]$/.test(section)) {
           // Reproduce a first-continent save asking to resume at boot, before its dialog is mounted.

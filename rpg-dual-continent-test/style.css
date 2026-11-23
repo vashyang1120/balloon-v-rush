@@ -4061,3 +4061,24 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 @media (prefers-reduced-motion: reduce) {
   #rpg-overlay .rpg-options .rpg-next span { animation: none; }
 }
+
+#rpg-overlay .rpg-options--choice:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  left: 6%;
+  right: 6%;
+  gap: 3%;
+}
+#rpg-overlay .rpg-options--choice .rpg-next {
+  width: 100%;
+  min-height: clamp(44px, calc(52px * var(--rk)), 84px);
+  font-size: clamp(18px, calc(27px * var(--rk)), 42px);
+}
+#rpg-overlay .rpg-options--choice .rpg-next:focus-visible {
+  outline: 2px solid #fff2b7;
+  outline-offset: -4px;
+}
+
+#rpg-overlay .rpg-box:has(.rpg-options--choice:not([hidden])) {
+  height: max(104px, calc(150px * var(--rk)));
+}
