@@ -48,7 +48,7 @@
     return readOnly && (url.protocol === 'data:' || url.protocol === 'blob:' ||
       (url.origin === previewRoot.origin && url.pathname.startsWith(previewRoot.pathname)) ||
       (sourceAssets && url.origin === sourceAssets.origin &&
-        ['assets/', 'rpg-dual-continent-test/chapter3-art/'].some(path =>
+        ['assets/', 'rpg-dual-continent-test/chapter3-art/', 'motion-comic/assets/'].some(path =>
           url.pathname.startsWith(sourceAssets.pathname + path))));
   }
 
