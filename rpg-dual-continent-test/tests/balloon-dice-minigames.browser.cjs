@@ -22,6 +22,8 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
     return false;
   }
   const errors = [];
+  const whAlerts = [];
+  page.on('console', msg => { if (msg.text().includes('[Whack]')) whAlerts.push(msg.text()); });
   page.on('pageerror', error => errors.push(error.message));
   const base = publicUrl || origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
   const entry = base + 'rpg-dual-continent-test/index.html?ch3test=3-1';
@@ -52,10 +54,10 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   await page.locator('[data-wh-act="play"]').click();
   await waitFor(() => whFrame.ready || !whFrame.iframe?.isConnected, 22000);
   assert.equal(await page.evaluate(() => whFrame.ready),
-    true, await page.locator('#asset-loading-overlay').innerText().catch(() => ''));
+    true, (await page.locator('#asset-loading-overlay').innerText().catch(() => '')) + '\n' + whAlerts.join('\n'));
 
   const wh = page.frameLocator('#wam-frame');
-  await wh.locator('.spirit-btn').click({ timeout: 7000 });
+  await wh.locator('.spirit-btn').click({ force: true, timeout: 7000 });
   await wh.locator('#btnPause').click({ timeout: 10000 });
   await wh.locator('#c1uPauseHome').click();
   await page.locator('#wam-frame').waitFor({ state: 'detached' });

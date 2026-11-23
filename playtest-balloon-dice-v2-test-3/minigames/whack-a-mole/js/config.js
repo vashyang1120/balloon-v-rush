@@ -100,7 +100,7 @@
      * 任何一張圖或音效載入失敗，都會自動退回 v0.1.0 的幾何圖形 / 靜音，遊戲照常進行。
      * bbox = 圖片實際有畫面的範圍 [左, 上, 右, 下]（已實測），用來對齊洞口，不影響判定。
      * ===================================================== */
-    ASSET_BASES: ['../../', './'],
+    ASSET_BASES: [W.adventurePlaytestAssetRoot, '../../', './'].filter(Boolean),
     IMAGES: {
       scorpion:     { path: 'assets/enemies/scorpion/scorpion_walk_01.png',              bbox: [69, 107, 444, 410] },
       scorpionHit:  { path: 'assets/enemies/scorpion/scorpion_hurt_01.png',              bbox: [65, 73, 446, 399], bodyW: 375 }, // 與一般圖同像素比例
