@@ -18820,11 +18820,17 @@ function flushPendingAssetApplies() {
 function loadImageRecord(r) {
   if (r.promise) return r.promise;
   r.status = 'loading';
-  const cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
+  let cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
   if (window.adventurePlaytestReady && r.groups.some(group => group === 'c34canyon' || group === 'chapter3vertical')) {
     // The isolated playtest serves its own assets. Retry there instead of attempting the blocked raw origin.
     const primary = cands[0];
     cands.splice(1, cands.length - 1, { ...primary, url: primary.url + '&asset-retry=1' });
+  }
+  const previewRoot = window.adventurePlaytestAssetRoot;
+  if (previewRoot && (/\/hero\/umbrella\//.test(r.path) || /01_waterfall_main/.test(r.path))) {
+    // Keep the legacy draw-only guide available if a deployed host rejects CORS.
+    cands = cands.flatMap(candidate => candidate.url.startsWith(previewRoot)
+      ? [{ ...candidate, canvasCors: true }, candidate] : [candidate]);
   }
   r.promise = new Promise(resolve => {
     const tryAt = (i) => {
@@ -18840,10 +18846,7 @@ function loadImageRecord(r) {
       r.current = c.url;
       let done = false;
       const im = new Image();
-      if (window.adventurePlaytestAssetRoot && c.url.startsWith(window.adventurePlaytestAssetRoot) &&
-          (/\/hero\/umbrella\//.test(r.path) || /01_waterfall_main/.test(r.path))) {
-        im.crossOrigin = 'anonymous';
-      }
+      if (c.canvasCors) im.crossOrigin = 'anonymous';
       const timer = setTimeout(() => { if (done) return; done = true; r.tried.push({ url: c.url, result: 'timeout' }); try { im.src = ''; } catch (e) {} tryAt(i + 1); }, r.timeoutMs || ASSET_SOURCE_TIMEOUT_MS);
       im.onload = () => {
         if (done) return; done = true; clearTimeout(timer);

@@ -10,7 +10,7 @@ const cdn = 'https://rawcdn.githack.com';
 const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture';
 const pagesPrefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4';
 const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
-const entry = (publicUrl || cdn + cdnPath + '/playtest-balloon-dice-v2-test-3/') + 'rpg-dual-continent-test/index.html?ch3test=3-4';
+const entryBase = (publicUrl || cdn + cdnPath + '/playtest-balloon-dice-v2-test-3/') + 'rpg-dual-continent-test/index.html?ch3test=';
 const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z' };
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
@@ -19,6 +19,8 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const mobile = mode === 'touch';
+  const fromBCheckpoint = mobile && !publicUrl;
+  const entry = entryBase + (fromBCheckpoint ? '3-1' : '3-4');
   const context = await browser.newContext(mobile
     ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
     : { viewport: { width: 1280, height: 820 } });
@@ -132,6 +134,14 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await page.locator('#btn-start-gate-go').waitFor({ timeout: 30000 });
   await activate(page.locator('#btn-start-gate-go'));
   await page.locator('#h2-nav-go').waitFor({ timeout: 30000 });
+  if (fromBCheckpoint) {
+    // Restore prior Chapter 3 progression inside the guest-only B entrance.
+    await page.evaluate(() => {
+      playerInventory = c34CreateInventory('3-4', 'cumulative');
+      saveInventory();
+      c34OpenTestHome('3-1');
+    });
+  }
   const beforeCraft = await read();
   await activate(page.locator('#h2-title-recipes'));
   await activate(page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }));

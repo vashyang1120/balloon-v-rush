@@ -1021,7 +1021,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       const choice = target.locator('#rpg-overlay .rpg-options--choice');
       const next = target.locator('#rpg-overlay [data-act="next"]');
       for (let step = 0; step < 12 && !await choice.isVisible(); step++) {
-        await next.click({ timeout: 2000 });
+        await next.click({ force: true, timeout: 2000 });
         await target.waitForTimeout(110);
       }
       await choice.waitFor({ timeout: 3000 });

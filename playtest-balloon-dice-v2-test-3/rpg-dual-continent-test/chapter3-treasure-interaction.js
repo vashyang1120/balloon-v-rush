@@ -127,7 +127,7 @@ function offerDiceReward(source) {
   }
   ch3TreasureImage('dice_face_blank.png');
   const attempt = diceRewardAttempt;
-  const choice = { sp: 'balloonv', face: 'balloonv_thinking', text: '要不要挑戰呢...', instant: true, options: DICE_CHOICE_ACTIONS };
+  const choice = { sp: 'balloonv', face: 'balloonv_thinking', right: null, text: '要不要挑戰呢...', instant: true, options: DICE_CHOICE_ACTIONS };
   const scene = {
     id: 'chapter3-treasure-invite', title: '氣球骰子', repeatable: true, requirePages: true,
     pages: [

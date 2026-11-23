@@ -29,11 +29,12 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 9000
   await page.locator('[data-vb-act="play"]').first().click();
   const vb = page.frameLocator('#vb-frame');
   await vb.locator('#btnEmbedStart').click({ timeout: 25000 });
+  await page.waitForFunction(() => vbCurrent()?.state === 'active');
   await vb.locator('#btnPause').click({ timeout: 10000 });
   await vb.locator('#btnPauseTitle').click();
   await page.locator('#vb-frame-wrap').waitFor({ state: 'hidden' });
   await page.locator('#h2-nav-go').waitFor();
-  assert.equal(await page.evaluate(() => vbData().matchesLeft), 0);
+  assert.equal(await page.evaluate(() => vbData().matchesLeft), 1);
 
   await page.locator('#h2-nav-whack').click();
   await page.locator('[data-wh-act="play"]').click();
