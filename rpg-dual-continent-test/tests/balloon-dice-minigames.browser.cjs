@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const { setTimeout: settle } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout, openHostedAdventure } = require('./chapter3-static-fixture.cjs');
 
@@ -12,6 +13,14 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
   if (!publicUrl) await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush'));
   const page = await context.newPage();
+  async function waitFor(check, timeout) {
+    const until = Date.now() + timeout;
+    do {
+      if (await page.evaluate(check)) return true;
+      await settle(50);
+    } while (Date.now() < until);
+    return false;
+  }
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const base = publicUrl || origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
@@ -31,7 +40,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   await page.locator('[data-vb-act="play"]').first().click();
   const vb = page.frameLocator('#vb-frame');
   await vb.locator('#btnEmbedStart').click({ timeout: 25000 });
-  await page.waitForFunction(() => vbCurrent()?.state === 'active');
+  assert.equal(await waitFor(() => vbCurrent()?.state === 'active', 7000), true, 'volleyball session started');
   await vb.locator('#btnPause').click({ timeout: 10000 });
   await vb.locator('#btnPauseTitle').click();
   await page.locator('#vb-frame-wrap').waitFor({ state: 'hidden' });
@@ -41,7 +50,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   await page.locator('#h2-panel-close').click();
   await page.locator('#h2-nav-whack').click();
   await page.locator('[data-wh-act="play"]').click();
-  await page.waitForFunction(() => whFrame.ready || !whFrame.iframe?.isConnected, undefined, { timeout: 22000 });
+  await waitFor(() => whFrame.ready || !whFrame.iframe?.isConnected, 22000);
   assert.equal(await page.evaluate(() => whFrame.ready),
     true, await page.locator('#asset-loading-overlay').innerText().catch(() => ''));
 
