@@ -4,11 +4,12 @@ const CH3_TREASURE_ART = 'assets/adventure/ui/items/';
 const CH3_DICE_RECIPE = 'balloonDice';
 const ch3TreasureImages = new Map();
 let ch3TreasureDialog = null;
+let diceRewardAttempt = { claims: new Set(), coins: 0 };
 
 function installChapter3TreasureItems() {
   RECIPES.push({
     id: CH3_DICE_RECIPE, unlockKey: CH3_DICE_RECIPE, name: '氣球骰子',
-    effect: '帶著氣球骰子發現隱藏寶箱，星靈會邀請你比點數。接受會用掉一顆骰子，贏得兩倍金幣，輸了領一半，平手或婉拒可領原額。',
+    effect: '帶著氣球骰子，遇到金幣包或隱藏寶箱時，發揮你的強運，帶走更多金幣吧！',
     cost: { balloon260: 3, roundBalloon: 1 }, emoji: '🎲',
   });
   V395_BAG.caps.balloonDice = 1;
@@ -17,15 +18,16 @@ function installChapter3TreasureItems() {
 
 function chapter3TreasureSpots(stageId) {
   switch (stageId) {
+    case '2-2': return [{ id: '2-2:low-trench', tier: 'normal', requiresDog: true, x: 3790, y: GROUND_Y + 14 }];
     case '3-1': return [{ id: '3-1:wind-ledge', tier: 'normal', requiresDog: true, x: 1020, y: GROUND_Y - 222 }];
     case '3-3': return [{ id: '3-3:high-ledge', tier: 'rare', requiresDog: true, x: 3580, y: GROUND_Y - 297 }];
-    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', requiresDog: false, x: C34_LAY.bank.x + 565, y: C34_LAY.y(C34_LAY.bank.h) - 27 }];
+    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', requiresDog: true, x: C34_LAY.bank.x + 565, y: C34_LAY.y(C34_LAY.bank.h) - 27 }];
     default: return [];
   }
 }
 
 function unclaimedChapter3Treasure(stageId) {
-  return chapter3TreasureSpots(stageId).find(chest => !Object.hasOwn(playerInventory.chapter3Chests || {}, chest.id));
+  return chapter3TreasureSpots(stageId).find(chest => !diceRewardAttempt.claims.has(chest.id));
 }
 
 function ch3TreasureImage(name) {
@@ -40,7 +42,7 @@ function ch3TreasureImage(name) {
 
 function drawChapter3Treasure(cx) {
   const chest = unclaimedChapter3Treasure(advCurrentStageId());
-  if (!chest || (chest.requiresDog && !bringBalloonDog)) return;
+  if (!chest || !bringBalloonDog) return;
   const dist = Math.abs(player.x + player.w / 2 - chest.x);
   if (dist > 230) return;
   const art = ch3TreasureImage('item_treasure_chest_' + chest.tier + '.png');
@@ -51,62 +53,97 @@ function drawChapter3Treasure(cx) {
   ctx.restore();
 }
 
-function ch3TreasureClaim(chest, rolls) {
-  const priorLedger = playerInventory.chapter3Chests;
-  const result = chapter3TreasureDice.prepareClaim(priorLedger || {}, chest.id, chest.tier, rolls);
-  if (!result) return null;
-  const diceCount = rolls ? v395Count(CH3_DICE_RECIPE) : 0;
-  if (rolls && diceCount < 1) return null;
-  const priorCoins = playerInventory.coins;
-  if (rolls) playerInventory.craftedItems[CH3_DICE_RECIPE] = diceCount - 1;
-  playerInventory.coins += result.coins;
-  playerInventory.chapter3Chests = result.ledger;
-  if (!saveInventory()) {
-    if (rolls) playerInventory.craftedItems[CH3_DICE_RECIPE] = diceCount;
-    playerInventory.coins = priorCoins;
-    playerInventory.chapter3Chests = priorLedger;
-    return null;
-  }
-  // Keep the committed claim when the rest of the attempt rolls back.
-  if (levelStartSnapshot) {
-    levelStartSnapshot.coins += result.coins;
-    levelStartSnapshot.chapter3Chests = { ...result.ledger };
-    if (rolls) levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] = Math.max(0, (levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] || 0) - 1);
-  }
-  advGuardWrite('treasure-claim');
+function resetDiceRewardAttempt() {
+  closeChapter3TreasureChoice();
+  diceRewardAttempt = { claims: new Set(), coins: 0 };
+}
+
+function commitDiceRewardCoins() {
+  playerInventory.coins += diceRewardAttempt.coins;
+  diceRewardAttempt.coins = 0;
+}
+
+function diceSpentTotal(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function restoreDiceCount(snapshot, inventory) {
+  const spentAfterSnapshot = Math.max(0, diceSpentTotal(inventory.balloonDiceSpent) -
+    diceSpentTotal(snapshot.balloonDiceSpent));
+  return Math.max(0, (snapshot.craftedItems?.balloonDice || 0) - spentAfterSnapshot);
+}
+
+function spendDiceForReward() {
+  if (!levelStartSnapshot || v395Count(CH3_DICE_RECIPE) < 1) return false;
+  const craftedItems = { ...playerInventory.craftedItems, [CH3_DICE_RECIPE]: v395Count(CH3_DICE_RECIPE) - 1 };
+  const balloonDiceSpent = diceSpentTotal(playerInventory.balloonDiceSpent) + 1;
+  // Persist the debit with the pre-attempt balances, including in an isolated stage slot.
+  if (!saveInventory({
+    ...playerInventory, craftedItems, balloonDiceSpent,
+    coins: levelStartSnapshot.coins,
+  })) return false;
+  Object.assign(playerInventory, { craftedItems, balloonDiceSpent });
+  levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] =
+    Math.max(0, (levelStartSnapshot.craftedItems[CH3_DICE_RECIPE] || 0) - 1);
+  levelStartSnapshot.balloonDiceSpent = balloonDiceSpent;
+  advGuardWrite('dice-spend');
+  return true;
+}
+
+function ch3TreasureClaim(source, rolls) {
+  if (diceRewardAttempt.claims.has(source.id) || (source.tier && !bringBalloonDog)) return null;
+  const base = source.tier ? chapter3TreasureDice.tiers[source.tier] : source.coins;
+  const result = chapter3TreasureDice.payoutCoins(base, rolls);
+  if (rolls && !spendDiceForReward()) return null;
+  diceRewardAttempt.claims.add(source.id);
+  diceRewardAttempt.coins += result.coins;
   currentRunStats.coins += result.coins;
   player.coinsCollected += result.coins;
-  currentRunStats.foundTreasureCoins = (currentRunStats.foundTreasureCoins || 0) + result.coins;
-  if (!currentRunStats.foundHiddenTreasureName) currentRunStats.foundHiddenTreasureName = '金幣寶箱';
-  spawnTreasurePickupEffect('獲得金幣寶箱！', '金幣 +' + result.coins);
+  if (source.coin) {
+    source.coin.collected = true;
+    advNoteCollect('coin', source.coin);
+    sfxPlay('coinPickup');
+    showHint('💰 金幣袋！冒險金幣 +' + result.coins, 110);
+  } else {
+    if (advCurrentStageId() === '2-2') advNoteExplore({ type: 'goldChest' });
+    currentRunStats.foundTreasureCoins = (currentRunStats.foundTreasureCoins || 0) + result.coins;
+    if (!currentRunStats.foundHiddenTreasureName) currentRunStats.foundHiddenTreasureName = '金幣寶箱';
+    spawnTreasurePickupEffect('獲得金幣寶箱！', '金幣 +' + result.coins);
+  }
   return result;
 }
 
-function ch3TreasureScene() {
+function ch3TreasureScene(source) {
   return {
     id: 'chapter3-treasure-invite', title: '氣球骰子', repeatable: true,
     left: null, right: 'star_spirit_mysterious',
     pages: [
-      { sp: 'spirit', face: 'star_spirit_mysterious', text: '哇！是一個寶箱耶！小V，要不要跟我比比看誰的骰子點數比較大？' },
+      { sp: 'spirit', face: 'star_spirit_mysterious', text: '哇！是一個' + (source.coin ? '金幣包' : '寶箱') + '耶！小V，要不要跟我比比看誰的骰子點數比較大？' },
       { sp: 'spirit', face: 'star_spirit_happy', text: '你贏，我給你兩倍金幣。\n你輸，我給你一半金幣。\n如果平手，我給你原本的金幣。' },
     ],
   };
 }
 
-function checkChapter3Treasure() {
+function offerDiceReward(source) {
   if (gameState !== 'playing' || assetGateActive || rpgActive || ch3TreasureDialog) return;
-  const chest = unclaimedChapter3Treasure(advCurrentStageId());
-  if (!chest || (chest.requiresDog && !bringBalloonDog) ||
-      !rectsOverlap(player.x, player.y, player.w, player.h, chest.x - 37, chest.y - 34, 74, 68)) return;
   if (v395Count(CH3_DICE_RECIPE) < 1) {
-    if (ch3TreasureClaim(chest, null)) sfxPlay('secretDiscovered');
+    if (ch3TreasureClaim(source, null) && source.tier) sfxPlay('secretDiscovered');
     return;
   }
-  const scene = ch3TreasureScene();
+  const attempt = diceRewardAttempt;
+  const scene = ch3TreasureScene(source);
   scene.onEnd = how => {
-    if (how !== 'reset' && (gameState === 'playing' || gameState === 'paused')) ch3TreasureChoose(chest);
+    if (how !== 'reset' && attempt === diceRewardAttempt &&
+        (gameState === 'playing' || gameState === 'paused')) ch3TreasureChoose(source);
   };
-  if (rpgOpen(scene)) sfxPlay('secretDiscovered');
+  if (rpgOpen(scene) && source.tier) sfxPlay('secretDiscovered');
+}
+
+function checkChapter3Treasure() {
+  if (!bringBalloonDog) return;
+  const chest = unclaimedChapter3Treasure(advCurrentStageId());
+  if (!chest || !rectsOverlap(player.x, player.y, player.w, player.h, chest.x - 37, chest.y - 34, 74, 68)) return;
+  offerDiceReward(chest);
 }
 
 function closeChapter3TreasureChoice() {
@@ -127,7 +164,7 @@ function ch3TreasureChoose(chest) {
     '<canvas width="600" height="210" aria-label="小V與星靈的骰子" hidden></canvas><p class="ch3-treasure-note" aria-live="polite"></p>' +
     '<div class="ch3-treasure-scores" hidden><span>小V</span><span>星靈</span></div><div class="ch3-treasure-actions">' +
     '<button type="button" data-choice="accept">好啊！來挑戰看看！</button>' +
-    '<button type="button" data-choice="decline">不用了，直接領取寶箱。</button></div>';
+    '<button type="button" data-choice="decline">不用了，直接領取' + (chest.coin ? '金幣包' : '寶箱') + '。</button></div>';
   const portrait = box.querySelector('img');
   portrait.src = rpgImgUrl('balloonv_thinking');
   portrait.addEventListener('error', () => { portrait.hidden = true; });
@@ -138,6 +175,7 @@ function ch3TreasureChoose(chest) {
   const accept = choices.querySelector('[data-choice="accept"]');
   const decline = choices.querySelector('[data-choice="decline"]');
   const g = board.getContext('2d');
+  const attempt = diceRewardAttempt;
   const roll = chapter3TreasureDice.animate((faces, motion) => {
     g.clearRect(0, 0, board.width, board.height);
     const face = ch3TreasureImage('dice_face_blank.png');
@@ -180,14 +218,15 @@ function ch3TreasureChoose(chest) {
   }
   box.addEventListener('cancel', event => event.preventDefault());
   decline.addEventListener('click', () => {
+    if (attempt !== diceRewardAttempt) return;
     if (ch3TreasureClaim(chest, null)) resume();
-    else note.textContent = '未能儲存寶箱獎勵。';
+    else note.textContent = '未能儲存這次挑戰，請再試一次。';
   });
   accept.addEventListener('click', async () => {
-    if (accept.disabled) return;
+    if (accept.disabled || attempt !== diceRewardAttempt) return;
     const rolls = { player: chapter3TreasureDice.rollFace(), spirit: chapter3TreasureDice.rollFace() };
     const result = ch3TreasureClaim(chest, rolls);
-    if (!result) { note.textContent = '未能儲存寶箱獎勵。'; return; }
+    if (!result) { note.textContent = '未能儲存這次挑戰，請再試一次。'; return; }
     accept.disabled = decline.disabled = true;
     scores.hidden = false;
     try {

@@ -1,0 +1,1667 @@
+/* 自動產生：與 party-island-opening-baseline-v0.3.2.json 內容相同。供 file:// 直接開啟時使用（瀏覽器在 file:// 下不允許讀取 JSON）。 */
+window.MC_BASELINE_V32 = {
+  "schemaVersion": "1.0",
+  "projectId": "party-island-opening",
+  "title": "派對島大作戰・開場",
+  "editorVersion": "motion-comic-editor-v0.3.2-test-1",
+  "contentVersion": 4,
+  "stage": {
+    "width": 1672,
+    "height": 941,
+    "fit": "contain"
+  },
+  "assets": {
+    "scene1_bg": {
+      "src": "assets/scene1_bg.png",
+      "label": "第一幕背景",
+      "width": 1672,
+      "height": 941
+    },
+    "scene2_bg": {
+      "src": "assets/scene2_bg.png",
+      "label": "第二幕背景",
+      "width": 1672,
+      "height": 941
+    },
+    "scene2_char_2a": {
+      "src": "assets/scene2_char_2a.png",
+      "label": "2A 揉眼（人物＋床）",
+      "width": 1448,
+      "height": 1086
+    },
+    "scene2_char_2b": {
+      "src": "assets/scene2_char_2b.png",
+      "label": "2B 驚訝（人物＋床）",
+      "width": 1484,
+      "height": 1060
+    },
+    "intro_scene03_outside": {
+      "src": "assets/intro_scene03_outside.png",
+      "label": "第三幕 窗外景色",
+      "width": 1672,
+      "height": 941
+    },
+    "intro_scene03_window": {
+      "src": "assets/intro_scene03_window.png",
+      "label": "第三幕 窗框／室內前景",
+      "width": 1672,
+      "height": 941
+    },
+    "intro_scene03_v_confused": {
+      "src": "assets/intro_scene03_v_confused.png",
+      "label": "第三幕 3A 小V 疑惑",
+      "width": 1122,
+      "height": 1402
+    },
+    "intro_scene03_v_curious": {
+      "src": "assets/intro_scene03_v_curious.png",
+      "label": "第三幕 3B 小V 好奇",
+      "width": 1145,
+      "height": 1374
+    },
+    "intro_scene04a_bg": {
+      "src": "assets/intro_scene04a_bg.png",
+      "label": "第四幕A 森林小徑背景",
+      "width": 1672,
+      "height": 941
+    },
+    "intro_scene04a_v_near": {
+      "src": "assets/intro_scene04a_v_near.png",
+      "label": "第四幕A 小V 近景（背影）",
+      "width": 1024,
+      "height": 1536
+    },
+    "intro_scene04a_v_far": {
+      "src": "assets/intro_scene04a_v_far.png",
+      "label": "第四幕A 小V 遠景",
+      "width": 1024,
+      "height": 1536
+    },
+    "intro_scene04b_bg": {
+      "src": "assets/intro_scene04b_bg.png",
+      "label": "第四幕B 側面森林背景",
+      "width": 1672,
+      "height": 941
+    },
+    "intro_scene04b_v_walk": {
+      "src": "assets/intro_scene04b_v_walk.png",
+      "label": "第四幕B 小V 謹慎步行",
+      "width": 1086,
+      "height": 1448
+    },
+    "intro_scene04b_v_look_back_up": {
+      "src": "assets/intro_scene04b_v_look_back_up.png",
+      "label": "第四幕B 小V 回頭仰望",
+      "width": 1024,
+      "height": 1536
+    },
+    "intro_scene04b_v_look_up": {
+      "src": "assets/intro_scene04b_v_look_up.png",
+      "label": "第四幕B 小V 抬頭張望",
+      "width": 1122,
+      "height": 1402
+    },
+    "intro_scene04b_fg_trees": {
+      "src": "assets/intro_scene04b_fg_trees.png",
+      "label": "第四幕B 前景失焦樹木",
+      "width": 1672,
+      "height": 941
+    },
+    "intro_scene05_bg": {
+      "src": "assets/intro_scene05_bg.png",
+      "label": "第五幕 第一人稱森林",
+      "width": 1672,
+      "height": 941
+    }
+  },
+  "scenes": [
+    {
+      "id": "intro_scene01",
+      "name": "第一人稱醒來",
+      "status": "ready",
+      "note": "移植自 opening-test v0.2.0 第一幕（已驗收）",
+      "durationMs": 10950,
+      "transitionIn": {
+        "type": "cut"
+      },
+      "markers": [
+        {
+          "id": "open1",
+          "label": "第一次睜眼開始",
+          "t": 1000
+        },
+        {
+          "id": "blink1",
+          "label": "第一次眨眼",
+          "t": 4500
+        },
+        {
+          "id": "blink2",
+          "label": "第二次眨眼",
+          "t": 6900
+        },
+        {
+          "id": "settle",
+          "label": "完全清晰／鏡頭開始穩定",
+          "t": 8300
+        },
+        {
+          "id": "settleEnd",
+          "label": "鏡頭穩定完成",
+          "t": 10400
+        },
+        {
+          "id": "animEnd",
+          "label": "第一幕演出結束",
+          "t": 10800
+        }
+      ],
+      "layers": [
+        {
+          "id": "s1_bg",
+          "name": "第一幕背景",
+          "type": "image",
+          "role": "background",
+          "asset": "scene1_bg",
+          "visible": true
+        }
+      ],
+      "camera": {
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
+      },
+      "effects": {
+        "eyelids": {
+          "enabled": true,
+          "params": {
+            "LID_FEATHER": 0.026,
+            "LID_COLOR": "#070404",
+            "LID_RIM_COLOR": "rgba(78, 26, 18, 0.55)",
+            "LID_CENTER_Y": 0.5,
+            "LID_CURVE_MIN": 0.04,
+            "LID_CURVE_MAX": 0.2,
+            "LOWER_LID_LAG": 1.18,
+            "TREMOR": 0.018
+          }
+        },
+        "breath": {
+          "enabled": true,
+          "params": {
+            "BREATH_Y": 0.0045,
+            "BREATH_X": 0.0022,
+            "BREATH_ROT": 0.12,
+            "BREATH_SCALE": 0.003,
+            "BREATH_PERIOD": 4.2
+          }
+        }
+      },
+      "tracks": {
+        "open": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 0,
+            "label": "閉眼"
+          },
+          {
+            "m": "open1",
+            "o": 0,
+            "v": 0,
+            "label": "開始睜眼"
+          },
+          {
+            "m": "open1",
+            "o": 1600,
+            "v": 0.42,
+            "e": "inOut",
+            "label": "第一次睜眼（半開）"
+          },
+          {
+            "m": "open1",
+            "o": 2500,
+            "v": 0.5,
+            "e": "inOut",
+            "label": "迷濛地再撐開"
+          },
+          {
+            "m": "blink1",
+            "o": 0,
+            "v": 0.5,
+            "label": "第一次眨眼前"
+          },
+          {
+            "m": "blink1",
+            "o": 200,
+            "v": 0,
+            "e": "in",
+            "label": "第一次眨眼：闔上"
+          },
+          {
+            "m": "blink1",
+            "o": 350,
+            "v": 0,
+            "label": "閉眼停留結束"
+          },
+          {
+            "m": "blink1",
+            "o": 1000,
+            "v": 0.78,
+            "e": "out",
+            "label": "第二次睜開（較大）"
+          },
+          {
+            "m": "blink2",
+            "o": 0,
+            "v": 0.78,
+            "label": "第二次眨眼前"
+          },
+          {
+            "m": "blink2",
+            "o": 170,
+            "v": 0,
+            "e": "in",
+            "label": "第二次眨眼：闔上"
+          },
+          {
+            "m": "blink2",
+            "o": 260,
+            "v": 0,
+            "label": "閉眼停留結束"
+          },
+          {
+            "m": "blink2",
+            "o": 1010,
+            "v": 1,
+            "e": "out",
+            "label": "完全睜開"
+          }
+        ],
+        "blur": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 0.024,
+            "label": "高度模糊"
+          },
+          {
+            "m": "blink1",
+            "o": 200,
+            "v": 0.024,
+            "label": "模糊維持到第一次閉眼"
+          },
+          {
+            "m": "blink1",
+            "o": 350,
+            "v": 0.011,
+            "e": "linear",
+            "label": "稍微清楚（閉眼時換檔）"
+          },
+          {
+            "m": "blink2",
+            "o": 170,
+            "v": 0.011,
+            "label": "維持到第二次閉眼"
+          },
+          {
+            "m": "blink2",
+            "o": 260,
+            "v": 0.006,
+            "e": "linear",
+            "label": "再清楚一些（閉眼時換檔）"
+          },
+          {
+            "m": "settle",
+            "o": 0,
+            "v": 0,
+            "e": "out",
+            "label": "對焦完全清晰"
+          }
+        ],
+        "exposure": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1.16,
+            "label": "剛醒來偏亮"
+          },
+          {
+            "m": "blink1",
+            "o": 200,
+            "v": 1.16,
+            "label": "維持到第一次閉眼"
+          },
+          {
+            "m": "blink1",
+            "o": 350,
+            "v": 1.07,
+            "e": "linear",
+            "label": "第一次眨眼後降低"
+          },
+          {
+            "m": "blink2",
+            "o": 260,
+            "v": 1.07,
+            "label": "維持"
+          },
+          {
+            "m": "settle",
+            "o": 0,
+            "v": 1,
+            "e": "out",
+            "label": "回到正常亮度"
+          }
+        ],
+        "breath": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1,
+            "label": "呼吸開始"
+          },
+          {
+            "m": "settle",
+            "o": 0,
+            "v": 1,
+            "label": "開始收束"
+          },
+          {
+            "m": "settleEnd",
+            "o": 0,
+            "v": 0,
+            "e": "inOut",
+            "label": "完全穩定"
+          }
+        ],
+        "overscan": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1.025,
+            "label": "預留放大"
+          },
+          {
+            "m": "settle",
+            "o": 0,
+            "v": 1.025,
+            "label": "開始收回"
+          },
+          {
+            "m": "settleEnd",
+            "o": 0,
+            "v": 1,
+            "e": "inOut",
+            "label": "回到原始鏡位"
+          }
+        ],
+        "tremor": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1,
+            "label": "顫動"
+          },
+          {
+            "m": "blink2",
+            "o": 0,
+            "v": 1,
+            "label": "顫動持續"
+          },
+          {
+            "m": "blink2",
+            "o": 170,
+            "v": 0,
+            "e": "linear",
+            "label": "停止顫動"
+          }
+        ]
+      },
+      "dialogues": []
+    },
+    {
+      "id": "intro_scene02",
+      "name": "小V坐在床側，從揉眼到驚訝",
+      "status": "ready",
+      "note": "v0.3.1：床＋小V再放大、更靠近鏡頭、往左（床頭出框）；「……咦……？」→ 按繼續 → 2A→2B 交叉淡化 → 「我家在飛……？」；不做鏡頭推近（背景不放大）",
+      "durationMs": 2700,
+      "transitionIn": {
+        "type": "fadeBlack",
+        "outMs": 160,
+        "holdMs": 60,
+        "inMs": 240
+      },
+      "markers": [
+        {
+          "id": "shown",
+          "label": "淡入完成（2A 揉眼）",
+          "t": 240
+        },
+        {
+          "id": "s2_d1",
+          "label": "第一句「……咦……？」（等待繼續）",
+          "t": 900
+        },
+        {
+          "id": "switch",
+          "label": "按繼續後：2A → 2B 交叉淡化開始",
+          "t": 1150
+        },
+        {
+          "id": "bShown",
+          "label": "2B 完全取代 2A",
+          "t": 1850
+        },
+        {
+          "id": "s2_d2",
+          "label": "第二句「我家在飛……？」（等待繼續）",
+          "t": 2200
+        }
+      ],
+      "layers": [
+        {
+          "id": "s2_bg",
+          "name": "第二幕背景",
+          "type": "image",
+          "role": "background",
+          "asset": "scene2_bg",
+          "visible": true
+        },
+        {
+          "id": "s2_vbed",
+          "name": "小V＋床組（2A→2B）",
+          "type": "swapPair",
+          "role": "character",
+          "visible": true,
+          "assetA": "scene2_char_2a",
+          "assetB": "scene2_char_2b",
+          "switchFrom": {
+            "m": "switch",
+            "o": 0
+          },
+          "switchTo": {
+            "m": "bShown",
+            "o": 0
+          },
+          "crossfade": "dissolve",
+          "foregroundScale": 0.84,
+          "foregroundX": 0.227,
+          "foregroundY": 1.0,
+          "foregroundAnchorX": 0.4366,
+          "foregroundAnchorY": 0.908,
+          "bAlign": {
+            "scale": 0.97699,
+            "x": -5.28,
+            "y": 41.55,
+            "note": "2B 圖上的點 (u,v) → 2A 圖上 (u*scale+x, v*scale+y)。以床架 9 個地標擬合；殘差平均約 6px、最大約 10px（2A 原圖像素），因 2B 的床橫向比 2A 寬約 3%，屬素材本身差異。"
+          },
+          "look": {
+            "brightness": 1,
+            "saturate": 1,
+            "warmth": 0,
+            "opacity": 1
+          },
+          "shadow": {
+            "opacity": 0.55,
+            "color": "#3a1d08",
+            "bedFeet": [
+              [
+                94,
+                912
+              ],
+              [
+                1171,
+                1061
+              ],
+              [
+                1356,
+                943
+              ],
+              [
+                279,
+                794
+              ]
+            ],
+            "shoesA": [
+              [
+                400,
+                968,
+                95,
+                16
+              ],
+              [
+                540,
+                994,
+                85,
+                15
+              ]
+            ],
+            "shoesB": [
+              [
+                411,
+                946,
+                95,
+                16
+              ],
+              [
+                583,
+                1020,
+                85,
+                15
+              ]
+            ]
+          }
+        }
+      ],
+      "camera": {
+        "originX": 0.4,
+        "originY": 0.52,
+        "tracks": {}
+      },
+      "effects": {},
+      "tracks": {},
+      "dialogues": [
+        {
+          "id": "s2_d1",
+          "speaker": "小V",
+          "text": "……咦……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s2_d1",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 90,
+          "after": "resume",
+          "enabled": true
+        },
+        {
+          "id": "s2_d2",
+          "speaker": "小V",
+          "text": "我家在飛……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s2_d2",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 70,
+          "after": "resume",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "intro_scene03",
+      "name": "透過拱窗看見氣球森林",
+      "status": "ready",
+      "note": "v0.3.0：木牌更小更低；人物淡入；兩句對話等待玩家繼續；3A→3B 真正交叉淡化",
+      "durationMs": 3700,
+      "transitionIn": {
+        "type": "fadeBlack",
+        "outMs": 120,
+        "holdMs": 40,
+        "inMs": 200
+      },
+      "markers": [
+        {
+          "id": "s3_look",
+          "label": "03-01 窗戶與窗外（淡入完成）",
+          "t": 200
+        },
+        {
+          "id": "s3_vin",
+          "label": "03-02 小V淡入完成（3A 疑惑）",
+          "t": 1200
+        },
+        {
+          "id": "s3_d1",
+          "label": "03-03 第一句「這裡是哪裡……？」",
+          "t": 1500
+        },
+        {
+          "id": "s3_cross",
+          "label": "03-04 按繼續後：3A→3B 交叉淡化開始",
+          "t": 1700
+        },
+        {
+          "id": "s3_curious",
+          "label": "03-05 3B 好奇（疊化完成）",
+          "t": 2300
+        },
+        {
+          "id": "s3_d2",
+          "label": "03-06 第二句「氣球森林……？」",
+          "t": 3000
+        }
+      ],
+      "layers": [
+        {
+          "id": "s3_outside_base",
+          "name": "窗外景色・底層補邊（同一張圖，原尺寸）",
+          "type": "image",
+          "role": "far",
+          "asset": "intro_scene03_outside",
+          "visible": true,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "opacity": 1,
+          "rotation": 0,
+          "tracks": {},
+          "note": "窗框右上角有一個小透光孔（x 0.965～1、y 0～0.074）；主窗外層縮小後蓋不到，用同一張圖原尺寸墊在下面，避免露出底色"
+        },
+        {
+          "id": "s3_outside",
+          "name": "窗外景色（主拱窗，可獨立運鏡）",
+          "type": "image",
+          "role": "far",
+          "asset": "intro_scene03_outside",
+          "visible": true,
+          "x": 0.612,
+          "y": 0.52,
+          "scale": 0.95,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "opacity": 1,
+          "rotation": 0,
+          "tracks": {
+            "scale": [
+              {
+                "m": "start",
+                "o": 0,
+                "v": 0.95,
+                "label": "初始推拉值"
+              },
+              {
+                "m": "end",
+                "o": 0,
+                "v": 0.96,
+                "e": "out",
+                "label": "非常輕微的慢推（到本幕結束）"
+              }
+            ],
+            "x": [
+              {
+                "m": "start",
+                "o": 0,
+                "v": 0.612,
+                "label": "初始位置"
+              },
+              {
+                "m": "s3_cross",
+                "o": 0,
+                "v": 0.612,
+                "label": "轉頭前維持不動"
+              },
+              {
+                "m": "s3_d2",
+                "o": 0,
+                "v": 0.616,
+                "e": "inOut",
+                "label": "微平移：把視線帶到較低處的木牌"
+              }
+            ]
+          }
+        },
+        {
+          "id": "s3_window",
+          "name": "窗框／室內前景",
+          "type": "image",
+          "role": "foreground",
+          "asset": "intro_scene03_window",
+          "visible": true,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "opacity": 1,
+          "rotation": 0,
+          "tracks": {}
+        },
+        {
+          "id": "s3_v",
+          "name": "小V（3A 疑惑 → 3B 好奇）",
+          "type": "swapPair",
+          "role": "character",
+          "visible": true,
+          "assetA": "intro_scene03_v_confused",
+          "assetB": "intro_scene03_v_curious",
+          "labelA": "3A 疑惑",
+          "labelB": "3B 好奇",
+          "crossfade": "dissolve",
+          "switchFrom": {
+            "m": "s3_cross",
+            "o": 0
+          },
+          "switchTo": {
+            "m": "s3_curious",
+            "o": 0
+          },
+          "foregroundScale": 0.46,
+          "foregroundX": 0.66,
+          "foregroundY": 0.86,
+          "foregroundAnchorX": 0.4955,
+          "foregroundAnchorY": 0.5492,
+          "bAlign": {
+            "scale": 1.0,
+            "x": -2,
+            "y": 48,
+            "note": "3B 圖上的點 (u,v) → 3A 圖上 (u*scale+x, v*scale+y)。兩張圖人物大小相同（皮帶到鞋底 599／598px），以皮帶中央對齊；3B 的頭比 3A 低約 50px 是「往左下看」的姿勢，不是誤差。"
+          },
+          "look": {
+            "brightness": 1,
+            "saturate": 1,
+            "warmth": 0,
+            "opacity": 1
+          },
+          "shadow": {
+            "opacity": 0,
+            "color": "#3a1d08",
+            "bedFeet": [],
+            "shoesA": [],
+            "shoesB": []
+          },
+          "tracks": {
+            "opacity": [
+              {
+                "m": "start",
+                "o": 500,
+                "v": 0,
+                "label": "先看窗外（人物還沒出現）"
+              },
+              {
+                "m": "s3_vin",
+                "o": 0,
+                "v": 1,
+                "e": "inOut",
+                "label": "小V淡入完成"
+              }
+            ]
+          }
+        }
+      ],
+      "camera": {
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
+      },
+      "effects": {},
+      "tracks": {},
+      "dialogues": [
+        {
+          "id": "s3_d1",
+          "speaker": "小V",
+          "text": "這裡是哪裡……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s3_d1",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 60,
+          "after": "resume",
+          "enabled": true
+        },
+        {
+          "id": "s3_d2",
+          "speaker": "小V",
+          "text": "氣球森林……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "s3_d2",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 70,
+          "after": "resume",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "intro_scene04a",
+      "name": "第四幕A：深入氣球森林",
+      "status": "ready",
+      "note": "v0.3.1：定點分鏡——背景固定；近景小V（偏右、較大）淡出 → 遠景小V（偏左、較小）淡入；人物不移動、不起伏；結束後全畫面淡出進第四幕B",
+      "durationMs": 7000,
+      "transitionIn": {
+        "type": "fadeBlack",
+        "outMs": 300,
+        "holdMs": 200,
+        "inMs": 600
+      },
+      "markers": [
+        {
+          "id": "a_nearIn",
+          "label": "4A-1 近景小V（偏右、較大）",
+          "t": 600
+        },
+        {
+          "id": "a_nearOut",
+          "label": "4A-2 近景開始淡出",
+          "t": 3000
+        },
+        {
+          "id": "a_farIn",
+          "label": "4A-2 遠景開始淡入",
+          "t": 3600
+        },
+        {
+          "id": "a_nearGone",
+          "label": "4A-2 近景完全消失",
+          "t": 3900
+        },
+        {
+          "id": "a_farShown",
+          "label": "4A-3 遠景小V（偏左、較小）完全出現",
+          "t": 4500
+        }
+      ],
+      "layers": [
+        {
+          "id": "a_bg",
+          "name": "森林小徑背景（固定）",
+          "type": "image",
+          "role": "background",
+          "asset": "intro_scene04a_bg",
+          "visible": true
+        },
+        {
+          "id": "a_near",
+          "name": "小V 近景（偏右、較大）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04a_v_near",
+          "visible": true,
+          "x": 0.68,
+          "y": 0.985,
+          "scale": 0.268,
+          "anchorX": 0.436,
+          "anchorY": 0.9883,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.68, 0.985)，人物身高約 0.7 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "start",
+                "o": 0,
+                "v": 1,
+                "label": "隨背景一起淡入"
+              },
+              {
+                "m": "a_nearOut",
+                "o": 0,
+                "v": 1,
+                "label": "停留"
+              },
+              {
+                "m": "a_nearGone",
+                "o": 0,
+                "v": 0,
+                "e": "inOut",
+                "label": "淡出"
+              }
+            ]
+          }
+        },
+        {
+          "id": "a_far",
+          "name": "小V 遠景（偏左、較小）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04a_v_far",
+          "visible": true,
+          "x": 0.52,
+          "y": 0.775,
+          "scale": 0.1052,
+          "anchorX": 0.4385,
+          "anchorY": 0.9486,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.52, 0.775)，人物身高約 0.25 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "a_farIn",
+                "o": 0,
+                "v": 0,
+                "label": "還沒出現"
+              },
+              {
+                "m": "a_farShown",
+                "o": 0,
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "end",
+                "o": 0,
+                "v": 1,
+                "label": "停留到本幕結束"
+              }
+            ]
+          }
+        }
+      ],
+      "camera": {
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
+      },
+      "effects": {
+        "fog": {
+          "enabled": true,
+          "params": {
+            "CX": 0.56,
+            "CY": 0.6,
+            "RX": 0.3,
+            "RY": 0.2,
+            "CORE": 0.9,
+            "HAZE": 0.1,
+            "COLOR": "236, 240, 234"
+          }
+        }
+      },
+      "tracks": {
+        "fog": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 0.12,
+            "label": "遠處薄霧（固定，不再吞沒小V）"
+          }
+        ]
+      },
+      "dialogues": []
+    },
+    {
+      "id": "intro_scene04b",
+      "name": "第四幕B：90° 側面森林小徑（被窺視感）",
+      "status": "ready",
+      "note": "v0.3.1：定點分鏡——三張固定構圖依序淡入淡出：步行（左、遠）→ 回頭仰望（中、稍近）→ 抬頭張望（右、稍遠）；前景失焦樹木固定在最上層遮擋；不做人物平移／起伏",
+      "durationMs": 9800,
+      "transitionIn": {
+        "type": "fadeBlack",
+        "outMs": 700,
+        "holdMs": 250,
+        "inMs": 700
+      },
+      "markers": [
+        {
+          "id": "b_walkIn",
+          "label": "4B-1 步行 淡入開始",
+          "t": 500
+        },
+        {
+          "id": "b_walkShown",
+          "label": "4B-1 步行（左、較遠）完全出現",
+          "t": 1300
+        },
+        {
+          "id": "b_walkOut",
+          "label": "4B-1 步行 淡出開始",
+          "t": 3100
+        },
+        {
+          "id": "b_backIn",
+          "label": "4B-2 回頭仰望 淡入開始",
+          "t": 3500
+        },
+        {
+          "id": "b_walkGone",
+          "label": "4B-1 步行 完全消失",
+          "t": 3800
+        },
+        {
+          "id": "b_backShown",
+          "label": "4B-2 回頭仰望（中、稍近）完全出現",
+          "t": 4300
+        },
+        {
+          "id": "b_backOut",
+          "label": "4B-2 回頭仰望 淡出開始",
+          "t": 6300
+        },
+        {
+          "id": "b_upIn",
+          "label": "4B-3 抬頭張望 淡入開始",
+          "t": 6700
+        },
+        {
+          "id": "b_backGone",
+          "label": "4B-2 回頭仰望 完全消失",
+          "t": 7000
+        },
+        {
+          "id": "b_upShown",
+          "label": "4B-3 抬頭張望（右、稍遠）完全出現",
+          "t": 7500
+        }
+      ],
+      "layers": [
+        {
+          "id": "b_bg",
+          "name": "側面森林背景（固定）",
+          "type": "image",
+          "role": "far",
+          "asset": "intro_scene04b_bg",
+          "visible": true,
+          "x": 0.5,
+          "y": 0.5,
+          "scale": 1.0,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "opacity": 1,
+          "rotation": 0,
+          "tracks": {}
+        },
+        {
+          "id": "b_walk",
+          "name": "小V 1 步行（左、較遠）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04b_v_walk",
+          "visible": true,
+          "x": 0.205,
+          "y": 0.69,
+          "scale": 0.1635,
+          "anchorX": 0.5055,
+          "anchorY": 0.9703,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.205, 0.69)，人物身高約 0.36 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "b_walkIn",
+                "o": 0,
+                "v": 0,
+                "label": "還沒出現"
+              },
+              {
+                "m": "b_walkShown",
+                "o": 0,
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "b_walkOut",
+                "o": 0,
+                "v": 1,
+                "label": "停留"
+              },
+              {
+                "m": "b_walkGone",
+                "o": 0,
+                "v": 0,
+                "e": "inOut",
+                "label": "淡出"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b_back",
+          "name": "小V 2 回頭仰望（中、稍近）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04b_v_look_back_up",
+          "visible": true,
+          "x": 0.48,
+          "y": 0.745,
+          "scale": 0.1644,
+          "anchorX": 0.5557,
+          "anchorY": 0.9792,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.48, 0.745)，人物身高約 0.42 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "b_backIn",
+                "o": 0,
+                "v": 0,
+                "label": "還沒出現"
+              },
+              {
+                "m": "b_backShown",
+                "o": 0,
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "b_backOut",
+                "o": 0,
+                "v": 1,
+                "label": "停留"
+              },
+              {
+                "m": "b_backGone",
+                "o": 0,
+                "v": 0,
+                "e": "inOut",
+                "label": "淡出"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b_up",
+          "name": "小V 3 抬頭張望（右、稍遠）",
+          "type": "image",
+          "role": "character",
+          "asset": "intro_scene04b_v_look_up",
+          "visible": true,
+          "x": 0.845,
+          "y": 0.7,
+          "scale": 0.1726,
+          "anchorX": 0.5357,
+          "anchorY": 0.99,
+          "opacity": 0,
+          "rotation": 0,
+          "blur": 0,
+          "note": "固定構圖：腳底在畫面 (0.845, 0.7)，人物身高約 0.37 個舞台高；只做淡入淡出、不移動",
+          "tracks": {
+            "opacity": [
+              {
+                "m": "b_upIn",
+                "o": 0,
+                "v": 0,
+                "label": "還沒出現"
+              },
+              {
+                "m": "b_upShown",
+                "o": 0,
+                "v": 1,
+                "e": "inOut",
+                "label": "淡入"
+              },
+              {
+                "m": "end",
+                "o": 0,
+                "v": 1,
+                "label": "停留到本幕結束 → 第五幕"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b_fg",
+          "name": "前景失焦樹木（固定，最上層遮擋）",
+          "type": "image",
+          "role": "foreground",
+          "asset": "intro_scene04b_fg_trees",
+          "visible": true,
+          "x": 0.49,
+          "y": 0.47,
+          "scale": 1.06,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "opacity": 1,
+          "rotation": 0,
+          "tracks": {}
+        }
+      ],
+      "camera": {
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {}
+      },
+      "effects": {},
+      "tracks": {},
+      "dialogues": []
+    },
+    {
+      "id": "intro_scene05",
+      "name": "第五幕：第一人稱森林探索",
+      "status": "ready",
+      "note": "v0.3.1：運鏡幅度加大（左右約 ±12%、上下約 ±11%）；正前 → 左 → 左上 →〔第一句〕→ 右 → 右下 → 右上 →〔第二句〕；對話時視線停住、呼吸持續，按繼續從原位接續",
+      "durationMs": 14200,
+      "transitionIn": {
+        "type": "crossfade",
+        "durMs": 900
+      },
+      "markers": [
+        {
+          "id": "c_settle",
+          "label": "5-1 看向前方（承接 4B 的抬頭）",
+          "t": 1000
+        },
+        {
+          "id": "c_left",
+          "label": "5-2 往左看",
+          "t": 2700
+        },
+        {
+          "id": "c_leftUp",
+          "label": "5-3 往左上看樹冠",
+          "t": 4300
+        },
+        {
+          "id": "c_d1",
+          "label": "5-4 左上停留：第一句",
+          "t": 4600
+        },
+        {
+          "id": "c_right",
+          "label": "5-5 轉向右邊",
+          "t": 7100
+        },
+        {
+          "id": "c_rightDown",
+          "label": "5-6 往右下看小徑與草叢",
+          "t": 8900
+        },
+        {
+          "id": "c_rightUp",
+          "label": "5-7 往右上看高處",
+          "t": 10900
+        },
+        {
+          "id": "c_d2",
+          "label": "5-8 右上停留：第二句",
+          "t": 11200
+        },
+        {
+          "id": "c_endLook",
+          "label": "結尾：視線收回",
+          "t": 12700
+        }
+      ],
+      "layers": [
+        {
+          "id": "c_bg",
+          "name": "第一人稱森林背景",
+          "type": "image",
+          "role": "background",
+          "asset": "intro_scene05_bg",
+          "visible": true
+        }
+      ],
+      "camera": {
+        "originX": 0.5,
+        "originY": 0.5,
+        "tracks": {
+          "scale": [
+            {
+              "m": "start",
+              "o": 0,
+              "v": 1.3,
+              "label": "放大 1.30（預留大幅張望空間）"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": 1.3
+            },
+            {
+              "m": "c_d2",
+              "o": 0,
+              "v": 1.33,
+              "e": "inOut",
+              "label": "往前湊近一點（疑惑加深）"
+            },
+            {
+              "m": "end",
+              "o": 0,
+              "v": 1.33
+            }
+          ],
+          "x": [
+            {
+              "m": "start",
+              "o": 0,
+              "v": 0.0,
+              "label": "5-1 前方"
+            },
+            {
+              "m": "c_settle",
+              "o": 0,
+              "v": 0.0
+            },
+            {
+              "m": "c_settle",
+              "o": 500,
+              "v": -0.018,
+              "e": "inOut",
+              "label": "先往右瞄一下（猶豫）"
+            },
+            {
+              "m": "c_left",
+              "o": 0,
+              "v": 0.118,
+              "e": "inOut",
+              "label": "5-2 往左（轉過頭一點）"
+            },
+            {
+              "m": "c_left",
+              "o": 450,
+              "v": 0.105,
+              "e": "inOut",
+              "label": "回正一點"
+            },
+            {
+              "m": "c_leftUp",
+              "o": 0,
+              "v": 0.125,
+              "e": "inOut",
+              "label": "5-3 左上"
+            },
+            {
+              "m": "c_d1",
+              "o": 0,
+              "v": 0.125,
+              "label": "第一句：停住（只剩呼吸）"
+            },
+            {
+              "m": "c_d1",
+              "o": 900,
+              "v": 0.09,
+              "e": "inOut",
+              "label": "慢慢收回"
+            },
+            {
+              "m": "c_d1",
+              "o": 1700,
+              "v": 0.0,
+              "e": "inOut",
+              "label": "轉頭途中"
+            },
+            {
+              "m": "c_right",
+              "o": 0,
+              "v": -0.118,
+              "e": "inOut",
+              "label": "5-5 轉向右（轉過頭一點）"
+            },
+            {
+              "m": "c_right",
+              "o": 450,
+              "v": -0.106,
+              "e": "inOut",
+              "label": "回正一點"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": -0.122,
+              "e": "inOut",
+              "label": "5-6 右下"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 1000,
+              "v": -0.128,
+              "e": "inOut",
+              "label": "往上抬時視線往外擺（曲線）"
+            },
+            {
+              "m": "c_rightUp",
+              "o": 0,
+              "v": -0.1,
+              "e": "inOut",
+              "label": "5-7 右上"
+            },
+            {
+              "m": "c_d2",
+              "o": 0,
+              "v": -0.1,
+              "label": "第二句：停住"
+            },
+            {
+              "m": "c_endLook",
+              "o": 0,
+              "v": -0.03,
+              "e": "inOut",
+              "label": "視線收回"
+            }
+          ],
+          "y": [
+            {
+              "m": "start",
+              "o": 0,
+              "v": 0.06,
+              "label": "承接 4B 抬頭（往上）"
+            },
+            {
+              "m": "c_settle",
+              "o": 0,
+              "v": 0.0,
+              "e": "inOut",
+              "label": "回到前方"
+            },
+            {
+              "m": "c_left",
+              "o": 0,
+              "v": 0.02,
+              "e": "inOut"
+            },
+            {
+              "m": "c_leftUp",
+              "o": 0,
+              "v": 0.112,
+              "e": "inOut",
+              "label": "往上看樹冠"
+            },
+            {
+              "m": "c_d1",
+              "o": 0,
+              "v": 0.112
+            },
+            {
+              "m": "c_d1",
+              "o": 900,
+              "v": 0.06,
+              "e": "inOut"
+            },
+            {
+              "m": "c_d1",
+              "o": 1700,
+              "v": -0.03,
+              "e": "inOut",
+              "label": "轉頭時視線往下沉（弧線）"
+            },
+            {
+              "m": "c_right",
+              "o": 0,
+              "v": 0.0,
+              "e": "inOut"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": -0.11,
+              "e": "inOut",
+              "label": "往下看小徑"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 500,
+              "v": -0.11,
+              "label": "停一下"
+            },
+            {
+              "m": "c_rightUp",
+              "o": 0,
+              "v": 0.115,
+              "e": "inOut",
+              "label": "往上看高處"
+            },
+            {
+              "m": "c_d2",
+              "o": 0,
+              "v": 0.115
+            },
+            {
+              "m": "c_endLook",
+              "o": 0,
+              "v": 0.03,
+              "e": "inOut"
+            }
+          ],
+          "rotation": [
+            {
+              "m": "start",
+              "o": 0,
+              "v": 0
+            },
+            {
+              "m": "c_left",
+              "o": 0,
+              "v": -0.35,
+              "e": "inOut"
+            },
+            {
+              "m": "c_leftUp",
+              "o": 0,
+              "v": -0.6,
+              "e": "inOut",
+              "label": "頭微微側傾"
+            },
+            {
+              "m": "c_d1",
+              "o": 0,
+              "v": -0.6
+            },
+            {
+              "m": "c_d1",
+              "o": 1700,
+              "v": 0.0,
+              "e": "inOut"
+            },
+            {
+              "m": "c_right",
+              "o": 0,
+              "v": 0.3,
+              "e": "inOut"
+            },
+            {
+              "m": "c_rightDown",
+              "o": 0,
+              "v": 0.5,
+              "e": "inOut"
+            },
+            {
+              "m": "c_rightUp",
+              "o": 0,
+              "v": 0.7,
+              "e": "inOut"
+            },
+            {
+              "m": "c_d2",
+              "o": 0,
+              "v": 0.7
+            },
+            {
+              "m": "c_endLook",
+              "o": 0,
+              "v": 0.15,
+              "e": "inOut"
+            }
+          ]
+        }
+      },
+      "effects": {
+        "breath": {
+          "enabled": true,
+          "params": {
+            "BREATH_Y": 0.004,
+            "BREATH_X": 0.002,
+            "BREATH_ROT": 0.1,
+            "BREATH_SCALE": 0.0025,
+            "BREATH_PERIOD": 4.2,
+            "BREATH_CLOCK": "ambient"
+          }
+        }
+      },
+      "tracks": {
+        "breath": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1,
+            "label": "呼吸感（對話時也持續）"
+          }
+        ],
+        "exposure": [
+          {
+            "m": "start",
+            "o": 0,
+            "v": 1
+          },
+          {
+            "m": "c_endLook",
+            "o": 500,
+            "v": 1
+          },
+          {
+            "m": "end",
+            "o": 0,
+            "v": 0,
+            "e": "in",
+            "label": "結尾淡出（之後接飛行屋地圖／第一關；本輪不接）"
+          }
+        ]
+      },
+      "dialogues": [
+        {
+          "id": "s5_d1",
+          "speaker": "小V",
+          "text": "這裡不是叫氣球森林嗎……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "c_d1",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 60,
+          "after": "resume",
+          "enabled": true
+        },
+        {
+          "id": "s5_d2",
+          "speaker": "小V",
+          "text": "怎麼都沒看到什麼氣球……？",
+          "styleType": "rpg_box_no_portrait",
+          "at": {
+            "m": "c_d2",
+            "o": 0
+          },
+          "mode": "wait",
+          "autoMs": 0,
+          "charMs": 60,
+          "after": "resume",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "audio": {
+    "version": 1,
+    "mix": {
+      "master": 1,
+      "bgm": 0.7,
+      "ambient": 0.6,
+      "sfx": 0.9,
+      "voice": 1
+    },
+    "assets": {},
+    "clips": []
+  }
+};

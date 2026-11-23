@@ -665,7 +665,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(actual.swimsOut.swimming, false);
     assert.ok(actual.swimsOut.vy < 0);
     assert.equal(actual.landed, true);
-    assert.deepEqual(actual.bagReward, { counted: 10, inventory: 10 });
+    assert.deepEqual(actual.bagReward, { counted: 10, inventory: 0 });
     assert.equal(actual.beforeExit, 0);
     assert.equal(actual.afterExit, 1);
     assert.equal(actual.done, true);
@@ -1030,6 +1030,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(chestArt, [1254, 1254, 1254, 1254, 1254]);
     const setup = await page.evaluate(() => {
       if (rpgActive) rpgClose('reset');
+      resetDiceRewardAttempt();
       const chest = chapter3TreasureSpots('3-4')[0];
       const inventory = playerInventory;
       inventory.balloon260 = 12;
@@ -1063,18 +1064,17 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     await page.evaluate(() => rpgClose('finished'));
     await page.getByRole('button', { name: '不用了，直接領取寶箱。' }).click();
     assert.deepEqual(await page.evaluate(id => [
-      playerInventory.coins, currentRunStats.coins, playerInventory.chapter3Chests[id]?.coins, v395Count('balloonDice'),
-    ], setup.chest), [setup.coins + 100, setup.before + 100, 100, 2]);
+      playerInventory.coins, currentRunStats.coins, diceRewardAttempt.claims.has(id), v395Count('balloonDice'),
+    ], setup.chest), [setup.coins, setup.before + 100, true, 2]);
 
     const beforeRoll = await page.evaluate(id => {
       const chest = chapter3TreasureSpots('3-4')[0];
       checkChapter3Treasure();
       if (rpgActive) throw Error('claimed chest reopened');
       restoreLevelStartSnapshot();
-      if (!playerInventory.chapter3Chests[id] || playerInventory.coins !== levelStartSnapshot.coins) throw Error('committed claim was lost during an adventure rollback');
-      // Separate deterministic roll fixture after verifying the committed refusal survives rollback.
-      delete playerInventory.chapter3Chests[id];
-      delete levelStartSnapshot.chapter3Chests[id];
+      if (diceRewardAttempt.claims.has(id) || playerInventory.coins !== levelStartSnapshot.coins) {
+        throw Error('abandoned claim or reward survived rollback');
+      }
       player.x = chest.x - player.w / 2;
       player.y = chest.y - player.h / 2;
       bringBalloonDog = true;
@@ -1090,8 +1090,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
       window.restoreTestRollFace();
       delete window.restoreTestRollFace;
       const saved = JSON.parse(localStorage.getItem(c34BagKey('3-4', 'cumulative')));
-      return [saved?.craftedItems?.balloonDice, saved?.coins, saved?.chapter3Chests?.[id]?.outcome];
-    }, setup.chest), [1, beforeRoll + 100, 'tie']);
+      return [saved?.craftedItems?.balloonDice, saved?.coins, diceRewardAttempt.claims.has(id)];
+    }, setup.chest), [1, beforeRoll, true]);
     await page.getByRole('button', { name: '繼續冒險' }).waitFor();
     assert.equal(await page.locator('.ch3-treasure-dialog canvas').isVisible(), true);
     const dialog = await page.locator('.ch3-treasure-dialog').boundingBox();
@@ -1099,8 +1099,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(await page.locator('.ch3-treasure-scores span').allTextContents(), ['小V　4', '星靈　4']);
     assert.match(await page.locator('.ch3-treasure-note').textContent(), /獲得 100 金幣/);
     assert.deepEqual(await page.evaluate(id => [
-      playerInventory.coins, v395Count('balloonDice'), playerInventory.chapter3Chests[id]?.outcome,
-    ], setup.chest), [beforeRoll + 100, 1, 'tie']);
+      playerInventory.coins, v395Count('balloonDice'), diceRewardAttempt.claims.has(id),
+    ], setup.chest), [beforeRoll, 1, true]);
     await record(page, 'desktop-3-4-balloon-dice-result');
     await page.getByRole('button', { name: '繼續冒險' }).click();
   });

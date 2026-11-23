@@ -6,7 +6,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
-const entry = origin + '/balloon-v-rush/playtest-adventure-v0.4.13-test-4/rpg-dual-continent-test/?ch3test=3-4';
+const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-1/rpg-dual-continent-test/?ch3test=3-4';
 const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z' };
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
@@ -77,7 +77,7 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
     bankWind: enemies.find(e => e.c2Id === 'BANK-W1')?.active,
     coins: playerInventory.coins, long: playerInventory.balloon260, round: playerInventory.roundBalloon,
     dice: v395Count('balloonDice'), done: c2Proto.done,
-    chest: playerInventory.chapter3Chests?.['3-4:high-bank'],
+    chest: diceRewardAttempt.claims.has('3-4:high-bank'), pending: diceRewardAttempt.coins,
     cleared: !!c2Flow().stage34?.claimed,
   }));
   async function advance(label, reached, controls = [], tool = null, seconds = 15) {
@@ -92,7 +92,10 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
         return state;
       }
       if (['failed', 'gameover'].includes(state.state)) break;
-      if (state.dialog) {
+      if (await page.locator('.ch3-treasure-dialog [data-choice="decline"]').isVisible()) {
+        await input([]);
+        await activate(page.locator('.ch3-treasure-dialog [data-choice="decline"]'));
+      } else if (state.dialog) {
         await input([]);
         await nextDialogue();
         await delay(190);
@@ -121,9 +124,10 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const crafted = await read();
   assert.deepEqual([crafted.dice, crafted.long, crafted.round], [1, beforeCraft.long - 3, beforeCraft.round - 1]);
   await activate(page.locator('#h2-panel-close'));
+  await activate(page.locator('[data-h2-act="bringDog"]'));
   await activate(page.locator('#h2-nav-go'));
   const initial = await advance('stage start', s => s.state === 'playing', []);
-  assert.ok(initial.x < 620 && initial.hammer && !initial.dog);
+  assert.ok(initial.x < 620 && initial.hammer && initial.dog);
   assert.equal(await page.evaluate(() => adventureTestLoadoutActive || c2UmbTest.active), false);
   const L = initial.layout;
   const onTop = (s, x, w, y) => s.ground && s.x + s.w > x &&
@@ -181,19 +185,21 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await resume.waitFor({ timeout: 15000 });
   await activate(resume);
   const awarded = await read();
-  assert.ok([50, 100, 200].includes(awarded.chest?.coins));
-  assert.equal(awarded.coins - beforeRoll.coins, awarded.chest.coins);
+  assert.equal(awarded.chest, true);
+  const chestCoins = awarded.pending - beforeRoll.pending;
+  assert.ok([50, 100, 200].includes(chestCoins));
+  assert.equal(awarded.coins, beforeRoll.coins);
   assert.equal(awarded.dice, 0);
   await advance('clear', s => s.done, ['right', 'attack'], 'sword');
   await page.locator('#h2-nav-go').waitFor({ timeout: 15000 });
   const home = await read();
-  assert.ok(home.cleared && home.coins >= awarded.coins);
+  assert.ok(home.cleared && home.coins >= awarded.coins + awarded.pending);
   await page.reload();
   await activate(page.locator('#btn-start-gate-go'));
   await page.locator('#h2-nav-go').waitFor({ timeout: 15000 });
   const reloaded = await read();
-  assert.deepEqual([reloaded.coins, reloaded.long, reloaded.round, reloaded.dice, reloaded.chest, reloaded.cleared],
-    [home.coins, home.long, home.round, home.dice, home.chest, home.cleared]);
+  assert.deepEqual([reloaded.coins, reloaded.long, reloaded.round, reloaded.dice, reloaded.cleared],
+    [home.coins, home.long, home.round, home.dice, home.cleared]);
   assert.deepEqual(errors, []);
 });
 }

@@ -8,13 +8,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4/';
+const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-1/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-4:';
+const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-1:';
 const shortcutResources = {
-  '3-1': [303, 44, 13], '3-2': [379, 53, 15], '3-3': [406, 62, 20], '3-4': [497, 68, 22],
+  '3-1': [313, 44, 13], '3-2': [389, 53, 15], '3-3': [416, 62, 20], '3-4': [507, 68, 22],
 };
 
 async function waitUntil(page, predicate, value, timeout = 30000) {
@@ -41,9 +41,9 @@ async function fixture(context, guard, requests) {
   });
 }
 
-test('Chapter 3 Integration Test 4 Pages directory blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
+test('Balloon Dice v2 independent playtest blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-adventure-v0.4.13-test-4/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-balloon-dice-v2-test-1/playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -72,7 +72,7 @@ test('Chapter 3 Integration Test 4 Pages directory blocks writes and preserves f
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-4');
+        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-1');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
