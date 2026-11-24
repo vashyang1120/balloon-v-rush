@@ -5,7 +5,11 @@ const { createPreview } = require('./preview-entry.cjs');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const test = require('node:test');
 
-const dirs = ['rpg-continent1-universe', 'rpg-dual-continent-test'];
+const cases = [
+  { dir: 'rpg-continent1-universe', touch: false },
+  { dir: 'rpg-continent1-universe', touch: true },
+  { dir: 'rpg-dual-continent-test', touch: true },
+];
 const artifacts = process.env.ENTRY_SCREENSHOTS || 'entry-screenshots';
 const whackAsset = '**/minigames/whack-a-mole/assets/whack_hole_back.png*';
 const balances = page => page.evaluate(() => ({
@@ -32,17 +36,19 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
   const origin = 'http://127.0.0.1:' + server.address().port;
   t.after(() => server.close());
   await mkdir(artifacts, { recursive: true });
-  await Promise.all(dirs.map((dir, index) => t.test(dir, async t => {
+  await Promise.all(cases.map(({ dir, touch }) => t.test(dir + (touch ? ' touch' : ' PC'), async t => {
+      const continent1 = dir === 'rpg-continent1-universe';
+      const artifactName = dir + (touch ? '-touch' : '-pc');
       const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
       t.after(() => browser.close());
-      const context = await browser.newContext(index ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
+      const context = await browser.newContext(touch ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
         : { viewport: { width: 1280, height: 720 } });
       const page = await context.newPage();
       page.on('pageerror', e => console.log('pageerror', e.message));
       await page.route(/^https?:\/\/[^/]+\//, async route => {
         const url = route.request().url();
         if (!url.startsWith(origin + '/')) return route.abort();
-        if (index !== 0 || !new URL(url).pathname.endsWith('/minigames/volleyball/main.js')) return route.continue();
+        if (!continent1 || !new URL(url).pathname.endsWith('/minigames/volleyball/main.js')) return route.continue();
         const response = await route.fetch();
         const source = await response.text();
         const testHook = `
@@ -104,7 +110,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       await page.locator('[data-oc="yes"]').click();
       await page.locator('.adv-load-err [data-k="retry"]').waitFor();
       assert.equal((await balances(page)).coins, 71);
-      await page.screenshot({ path: artifacts + '/' + dir + '-official-retry.png' });
+      await page.screenshot({ path: artifacts + '/' + artifactName + '-official-retry.png' });
       await page.unroute(brokenAsset);
       await page.locator('.adv-load-err [data-k="retry"]').click();
       console.log(dir, 'official restart retried simulated HTTP 503 for', required);
@@ -120,7 +126,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       });
       console.log(dir, JSON.stringify(chapters));
       assert.deepEqual(chapters.flatMap(x => x.failed), []);
-      await page.screenshot({ path: artifacts + '/' + dir + '-official-restart.png' });
+      await page.screenshot({ path: artifacts + '/' + artifactName + '-official-restart.png' });
 
       await page.evaluate(() => {
         playerInventory.whack = { unlocked: true, playsLeft: 0 };
@@ -129,30 +135,61 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       });
       await homeForWhack(page);
       await page.getByText('🔒 尚未解鎖', { exact: false }).first().waitFor({ state: 'visible' });
-      await page.evaluate(() => {
-        // Set the 1-2 finish state without driving the side-scroller for the whole chapter.
-        const index = LEVELS.findIndex(l => l.stageId === '1-2');
+      await page.evaluate(continent1 => {
+        // Fast-forward travel, then use the actual dog-only treasure collision in the formal 1-2.
+        if (rpgActive) rpgClose('qa');
+        const index = LEVELS.findIndex(l => l.stageId === (continent1 ? '1-2b' : '1-2'));
         currentLevelIndex = index; loadLevel(index); restart({ keepHp: true }); gameState = 'playing';
+        if (continent1) {
+          bringBalloonDog = true;
+          currentHiddenTreasure = vbTreasureList.find(item => item.recipeKey === 'basicHammer');
+          if (!currentHiddenTreasure) throw Error('Missing hammer recipe in 1-2');
+          player.x = currentHiddenTreasure.x;
+          player.y = currentHiddenTreasure.y;
+          checkHiddenTreasure();
+          if (!currentRunStats.pendingRecipeUnlocks?.basicHammer) throw Error('Dog did not collect hammer recipe');
+          if (rpgActive) rpgClose('qa');
+        }
         triggerClear();
         playerInventory.coins = 50;
         saveInventory();
-      });
+      }, continent1);
       await page.waitForFunction(() => !H2.enterPending && h2IsOpen());
       await page.evaluate(() => { h2HideSummary(); h2OpenPanel('whack'); });
       const launch = page.locator('[data-wh-act="play"]');
       await launch.waitFor({ state: 'visible' });
+      if (continent1) {
+        assert.equal(await launch.isEnabled(), false);
+        assert.equal(await page.evaluate(() => playerInventory.chapter1Flow.hammerRecipeDiscovered), true);
+        await page.evaluate(() => h2OpenPanel('recipes'));
+        const hammer = page.locator('[data-h2-act="craft"][data-key="basicHammer"]');
+        if (touch) await hammer.tap(); else await hammer.click();
+        await page.waitForFunction(() => whUnlocked() && whData().playsLeft === 1);
+        await page.waitForFunction(() => rpgActive && rpgActive.id === C1U_HAMMER_SCENE, undefined, { timeout: 10000 });
+        await page.evaluate(() => { rpgClose('qa'); h2OpenPanel('whack'); });
+      }
       assert.equal(await launch.isEnabled(), true);
-      console.log(dir, '1-2 completed, first play available');
+      console.log(artifactName, '1-2 completed, first play available');
       await page.getByText('遊戲背後的故事', { exact: true }).click();
       await page.getByText('每次在氣球課教孩子們製作氣球槌時', { exact: false }).waitFor({ state: 'visible' });
 
+      if (continent1) {
+        const bgm = '**/volleyball/assets/audio/bgm/volleyball_game_bgm.mp3*';
+        await page.route(bgm, route => route.fulfill({ status: 503, body: 'QA unavailable' }));
+        await launch.click();
+        await page.locator('.adv-load-err [data-k="retry"]').waitFor();
+        assert.equal((await balances(page)).coins, 50);
+        assert.equal((await balances(page)).plays, 1);
+        await page.unroute(bgm);
+        await page.locator('.adv-load-err [data-k="cont"]').click();
+      }
       await page.route(whackAsset, async route => {
         await new Promise(resolve => setTimeout(resolve, 2000));
         try { await route.abort(); } catch {}
       });
       await page.evaluate(() => { whStart(); whStart(); });
       await page.waitForFunction(() => ADV_LOAD.st?.scene === 'WHACK' && ADV_LOAD.st.realP > 0);
-      await page.screenshot({ path: artifacts + '/' + dir + '-whack-loading.png' });
+      await page.screenshot({ path: artifacts + '/' + artifactName + '-whack-loading.png' });
       await page.locator('#whack-loading-back').click();
       assert.equal((await balances(page)).coins, 50);
       assert.equal((await balances(page)).plays, 1);
@@ -176,13 +213,19 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       assert.equal((await balances(page)).coins, 50);
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
       await intro.waitFor();
-      await page.screenshot({ path: artifacts + '/' + dir + '-whack-intro.png' });
+      await page.screenshot({ path: artifacts + '/' + artifactName + '-whack-intro.png' });
       const startButton = await intro.boundingBox();
-      await page.mouse.click(startButton.x + startButton.width / 2, startButton.y + startButton.height / 2);
+      const startPoint = [startButton.x + startButton.width / 2, startButton.y + startButton.height / 2];
+      if (touch) await page.touchscreen.tap(...startPoint); else await page.mouse.click(...startPoint);
       await page.waitForFunction(() => whData().current?.state === 'active');
       if (dir === 'rpg-continent1-universe') {
         const whack = await (await page.locator('#wam-frame').elementHandle()).contentFrame();
-        await whack.waitForFunction(() => WAM.Audio.report().bgmTime > 0, undefined, { timeout: 10000 });
+        await whack.waitForFunction(() => WAM.Audio.report().bgmTime > 0 && WAM.Audio.report().bgm.includes('播放中'), undefined, { timeout: 10000 });
+      }
+      if (continent1) {
+        const board = await page.frameLocator('#wam-frame').locator('#board').boundingBox();
+        const point = [board.x + board.width / 2, board.y + board.height / 2];
+        if (touch) await page.touchscreen.tap(...point); else await page.mouse.click(...point);
       }
       const paid = await balances(page);
       assert.equal(paid.coins, 30);
@@ -246,7 +289,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           assert.ok(tile.scaleY > 0);
           assert.ok(tile.top <= 1 && tile.bottom >= background.height - 1);
         }
-        await page.screenshot({ path: artifacts + '/continent1-volleyball-tall-viewport.png' });
+        await page.screenshot({ path: artifacts + '/' + artifactName + '-volleyball-tall-viewport.png' });
         await page.setViewportSize({ width: 1280, height: 720 });
       }
       await volley.locator('#btnPause').dispatchEvent('click');
@@ -276,6 +319,30 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           await page.evaluate(() => { document.getElementById('vb-modal')?.remove(); });
           console.log(dir, opponent, '5–0 settled and returned home');
         }
+      } else {
+        // Only the existing dual-continent entry exposes the 2-4 → 3-1 trip.
+        const purchased = await page.evaluate(() => {
+          if (rpgActive) rpgClose('qa');
+          document.getElementById('vb-modal')?.remove();
+          currentLevelIndex = getLevelIndexByStageId('2-4');
+          gameState = 'clear';
+          openHomeScreen('clear');
+          playerInventory.coins = 85;
+          const purchase = v395Buy('bagUpgrade');
+          playerInventory.balloon260 = 13;
+          playerInventory.roundBalloon = 3;
+          playerInventory.balloonDog = { present: true, turnsLeft: 2 };
+          playerInventory.craftedItems.basicHammer = 1;
+          nextBringDog = true;
+          return [purchase.ok, purchase.price, c2GoContinent2('home')];
+        });
+        assert.deepEqual(purchased, [true, 80, true]);
+        await page.waitForFunction(() => advCurrentStageId() === '3-1' && !assetGateBusy, undefined, { timeout: 90000 });
+        assert.deepEqual(await page.evaluate(() => [
+          v395BagLevel(), playerInventory.coins, playerInventory.balloon260,
+          playerInventory.roundBalloon, playerInventory.craftedItems.basicHammer, bringBalloonDog
+        ]), [2, 5, 13, 3, 1, true]);
+        console.log(artifactName, 'LV2 and trip inventory carried from 2-4 into 3-1');
       }
   })));
 });

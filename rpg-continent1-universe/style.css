@@ -4082,3 +4082,5 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 #rpg-overlay .rpg-box:has(.rpg-options--choice:not([hidden])) {
   height: max(104px, calc(150px * var(--rk)));
 }
+
+.adv-currency-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -0.2em; }
