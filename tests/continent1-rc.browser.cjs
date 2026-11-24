@@ -34,6 +34,7 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 120000 }, async t 
       await page.evaluate(() => {
         window.rcStage = (stage, dog = false) => {
           if (rpgActive) rpgClose('reset');
+          closeHomeScreen();
           if (gameStartGateActive) startAdventureFromGate();
           currentLevelIndex = LEVELS.findIndex(level => level.stageId === stage);
           loadLevel(currentLevelIndex);

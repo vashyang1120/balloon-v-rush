@@ -11298,23 +11298,26 @@ function triggerClear() {
     }
 
     // 2. 槌子材料保底（一次性：roundBalloon 不足一把槌子 → 補到剛好 2、balloon260 補到 1；已經夠的不加）
-    if (currentRunStats.pendingRecipeUnlocks?.balloonDice && !playerInventory.unlockedRecipes.balloonDice) {
+    const foundDiceRecipe = currentRunStats.pendingRecipeUnlocks?.balloonDice;
+    if (foundDiceRecipe && flags.hammerMaterialGuaranteeDone) {
       playerInventory.roundBalloon = Math.max(playerInventory.roundBalloon || 0, 1);
       playerInventory.balloon260 = Math.max(playerInventory.balloon260 || 0, 3);
     }
     if (!flags.hammerMaterialGuaranteeDone) {
+      const roundNeeded = HAMMER_ROUND_BALLOON_NEED + (foundDiceRecipe ? 1 : 0);
       const haveRound = Number(playerInventory.roundBalloon || 0);
-      if (haveRound < HAMMER_ROUND_BALLOON_NEED + 1) {
-        const missing = HAMMER_ROUND_BALLOON_NEED + 1 - haveRound;
-        playerInventory.roundBalloon = HAMMER_ROUND_BALLOON_NEED + 1;
+      if (haveRound < roundNeeded) {
+        const missing = roundNeeded - haveRound;
+        playerInventory.roundBalloon = roundNeeded;
         currentRunStats.chapter1RoundBalloonGranted = missing;
         showHint('氣球小狗在家門口找到 ' + missing + ' 顆圓氣球！牠搖著尾巴把材料帶回來了！', 280);
       }
       const have260 = Number(playerInventory.balloon260 || 0);
-      if (have260 < 1) {
-        playerInventory.balloon260 = 1;
+      const balloon260Needed = foundDiceRecipe ? 4 : 1;
+      if (have260 < balloon260Needed) {
+        playerInventory.balloon260 = balloon260Needed;
         currentRunStats.chapter1Balloon260Granted = true;
-        showHint('氣球小狗又找到 1 條 260 氣球！剛好可以準備製作氣球槌！', 280);
+        showHint('氣球小狗又找到 ' + (balloon260Needed - have260) + ' 條 260 氣球！', 280);
       }
       flags.hammerMaterialGuaranteeDone = true;
     }
@@ -16865,6 +16868,7 @@ function getInventoryOtherItems() {
   const swordQty = Math.max(ci.basicSword || 0, (equippedSword && equippedSword.id === 'basicSword') ? 1 : 0);
   if (swordQty > 0)                  list.push({ icon: weaponIconHtml('basicSword'), label: '基礎氣球劍', count: swordQty });
   if ((ci.basicHammer || 0) > 0)     list.push({ icon: weaponIconHtml('basicHammer'), label: '基礎氣球槌', count: ci.basicHammer });
+  if ((ci.balloonDice || 0) > 0) list.push({ icon: '🎲', label: '氣球骰子', count: ci.balloonDice });
   if ((ci.balloonLollipop || 0) > 0) list.push({ icon: '🍭', label: '氣球棒棒糖', count: ci.balloonLollipop });
   if ((items.bandage || 0) > 0)      list.push({ icon: '🩹', label: '繃帶',       count: items.bandage });
   if ((items.firstAidKit || 0) > 0)  list.push({ icon: '🚑', label: '急救包',     count: items.firstAidKit });
