@@ -41,7 +41,8 @@ function fixture(mode = 'production', hostname = 'vashyang1120.github.io') {
     advNewRun: () => ({ status: 'in_progress', challengeId: 'adv-1234567890', startedAt: 1 }),
     advOnAttemptStart: () => {}, advAfterClear: () => {},
     achLoad: () => d, achSave: () => {},
-    vbOpenFrame: () => {}, vbSettle: (_data, state) => { state.result = { playerScore: 7, cpuScore: 0 }; return true; },
+    VB_CONFIG: { targetScore: 5 },
+    vbOpenFrame: () => {}, vbSettle: (data, state) => { state.result = data; return true; },
     whOpenFrame: () => {}, whSettle: () => true, whData: () => ({ current: { id: 'whack-match', score: 660 } }),
     location: { hostname },
     C1U_TITLES: [{ titleKey: 'adventure_whack_legend', name: '傳奇槌王', desc: '氣球槌打地鼠達到 660 分' }],
@@ -124,7 +125,7 @@ test('minigame retry keeps the qualified result in the original player outbox', 
   const state = { id: 'volley-match', opponent: 'orange_king' };
   f.box.vbOpenFrame(state);
   f.fail(true);
-  assert.equal(f.box.vbSettle({}, state), true);
+  assert.equal(f.box.vbSettle({ playerScore: 5, cpuScore: 0, winner: 'player' }, state), true);
   await f.events.online();
   const key = [...f.store.keys()][0];
   assert.ok(JSON.parse(f.store.get(key))['volley-match']);
@@ -183,4 +184,24 @@ test('migration uses the verified player namespace and remembers only server-ack
   player.playerId = 'player-two';
   await f.events.online();
   assert.equal(f.calls.length, 2);
+});
+
+test('volleyball forwards five-point shutouts for all opponents and skips other results', async () => {
+  for (const opponent of ['scorpion', 'orange', 'orange_king']) {
+    const f = fixture();
+    for (const [i, playerScore, cpuScore, winner] of [
+      [0, 5, 0, 'player'], [1, 5, 1, 'player'], [2, 5, 4, 'player'],
+      [3, 0, 5, 'cpu'], [4, 4, 5, 'cpu'],
+    ]) {
+      const match = { id: 'match-' + i, opponent };
+      f.box.vbOpenFrame(match);
+      f.box.vbSettle({ playerScore, cpuScore, winner }, match);
+    }
+    await f.events.online();
+    const results = f.calls.filter((call) => call.url.endsWith('/adventure-title-result'));
+    assert.equal(results.length, 1);
+    assert.deepEqual({ ...results[0].body.evidence }, {
+      kind: 'volleyball', opponent, playerScore: 5, cpuScore: 0, winner: 'player',
+    });
+  }
 });

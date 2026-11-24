@@ -4030,3 +4030,55 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
 #pause-bag-panel .pb2-equip { margin: 0 0 0.45em; }
 #pause-bag-panel .h2-row-slot { width: clamp(46px, 13vh, 72px); }
 #pause-bag-panel .pb2-note { margin-top: 0.5em; }
+
+#rpg-overlay .rpg-options:not([hidden]) {
+  position: absolute;
+  right: calc(18px * var(--rk));
+  bottom: calc(10px * var(--rk));
+  display: flex;
+  gap: calc(14px * var(--rk));
+  z-index: 2;
+}
+#rpg-overlay .rpg-options .rpg-next {
+  position: static;
+  min-width: calc(90px * var(--rk));
+  min-height: 32px;
+  opacity: 1;
+  animation: none;
+}
+#rpg-overlay .rpg-options .rpg-next span {
+  display: inline-block;
+  animation: rpgNextBlink 0.9s ease-in-out infinite;
+}
+#rpg-overlay .rpg-dice-board:not([hidden]) {
+  position: absolute;
+  width: 63%;
+  left: 18.5%;
+  top: 12%;
+  z-index: 1;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #rpg-overlay .rpg-options .rpg-next span { animation: none; }
+}
+
+#rpg-overlay .rpg-options--choice:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  left: 6%;
+  right: 6%;
+  gap: 3%;
+}
+#rpg-overlay .rpg-options--choice .rpg-next {
+  width: 100%;
+  min-height: clamp(44px, calc(52px * var(--rk)), 84px);
+  font-size: clamp(18px, calc(27px * var(--rk)), 42px);
+}
+#rpg-overlay .rpg-options--choice .rpg-next:focus-visible {
+  outline: 2px solid #fff2b7;
+  outline-offset: -4px;
+}
+
+#rpg-overlay .rpg-box:has(.rpg-options--choice:not([hidden])) {
+  height: max(104px, calc(150px * var(--rk)));
+}

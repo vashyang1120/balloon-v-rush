@@ -39,9 +39,39 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
         : { viewport: { width: 1280, height: 720 } });
       const page = await context.newPage();
       page.on('pageerror', e => console.log('pageerror', e.message));
-      await page.route(/^https?:\/\/[^/]+\//, route => {
-        const req = route.request();
-        return req.url().startsWith(origin + '/') ? route.continue() : route.abort();
+      await page.route(/^https?:\/\/[^/]+\//, async route => {
+        const url = route.request().url();
+        if (!url.startsWith(origin + '/')) return route.abort();
+        if (index !== 0 || !new URL(url).pathname.endsWith('/minigames/volleyball/main.js')) return route.continue();
+        const response = await route.fetch();
+        const source = await response.text();
+        const testHook = `
+          window.testVolleyBackground = () => {
+            const tiles = [];
+            const draw = ctx.drawImage;
+            ctx.drawImage = function (image, x, y, width, height) {
+              const transform = ctx.getTransform();
+              tiles.push({ top: transform.f, bottom: transform.f + height * transform.d, scaleY: transform.d });
+              return draw.apply(this, arguments);
+            };
+            ctx.save();
+            try {
+              ctx.setTransform(viewScale * dpr, 0, 0, viewScale * dpr, viewOX * dpr, viewOY * dpr);
+              drawArtBackground();
+            } finally {
+              ctx.restore();
+              ctx.drawImage = draw;
+            }
+            return { height: canvas.height, tiles };
+          };
+          window.awardTestVolleyPoint = () => {
+            game.state = STATE.RALLY;
+            scorePoint('left');
+            afterPoint();
+            return { target: CONFIG.TARGET_SCORE, score: game.score.left, won: game.state === STATE.GAME_OVER };
+          };
+        `;
+        return route.fulfill({ response, body: source.replace(/\}\)\(\);\s*$/, testHook + '})();') });
       });
       await page.goto(origin + '/' + dir + '/?guest=1&sandbox=1', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => typeof h2IsOpen === 'function' && assetBootReady, undefined, { timeout: 90000 });
@@ -147,8 +177,13 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       const intro = page.frameLocator('#wam-frame').getByRole('button', { name: /開始/ });
       await intro.waitFor();
       await page.screenshot({ path: artifacts + '/' + dir + '-whack-intro.png' });
-      await intro.dispatchEvent('click');
+      const startButton = await intro.boundingBox();
+      await page.mouse.click(startButton.x + startButton.width / 2, startButton.y + startButton.height / 2);
       await page.waitForFunction(() => whData().current?.state === 'active');
+      if (dir === 'rpg-continent1-universe') {
+        const whack = await (await page.locator('#wam-frame').elementHandle()).contentFrame();
+        await whack.waitForFunction(() => WAM.Audio.report().bgmTime > 0, undefined, { timeout: 10000 });
+      }
       const paid = await balances(page);
       assert.equal(paid.coins, 30);
       assert.equal(paid.plays, 0);
@@ -192,13 +227,55 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
       const volley = page.frameLocator('#vb-frame');
       const volleyStart = volley.locator('#btnEmbedStart');
       await volleyStart.waitFor();
-      await volleyStart.dispatchEvent('click');
+      await volleyStart.click();
       await page.waitForFunction(() => vbCurrent()?.state === 'active');
+      if (dir === 'rpg-continent1-universe') {
+        const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
+        await frame.waitForFunction(() => {
+          const snapshot = BalloonVolleyball.getSnapshot();
+          return snapshot.audio.bgm.game?.playing && snapshot.visual.court.background === 'ready';
+        }, undefined, { timeout: 10000 });
+      }
+      if (dir === 'rpg-continent1-universe') {
+        const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
+        await page.setViewportSize({ width: 1046, height: 896 });
+        await frame.waitForFunction(() => BalloonVolleyball.getSnapshot().view.h === 896);
+        const background = await frame.evaluate(() => testVolleyBackground());
+        assert.ok(background.tiles.length > 0);
+        for (const tile of background.tiles) {
+          assert.ok(tile.scaleY > 0);
+          assert.ok(tile.top <= 1 && tile.bottom >= background.height - 1);
+        }
+        await page.screenshot({ path: artifacts + '/continent1-volleyball-tall-viewport.png' });
+        await page.setViewportSize({ width: 1280, height: 720 });
+      }
       await volley.locator('#btnPause').dispatchEvent('click');
       await volley.locator('#btnPauseTitle').dispatchEvent('click');
       await page.waitForFunction(() => !vbFrame.session);
       const tickets = await page.evaluate(() => ({ tickets: vbTickets(), matches: vbData().matchesLeft }));
       assert.deepEqual(tickets, { tickets: 1, matches: 1 });
       console.log(dir, 'volleyball opened, started and returned home');
+      if (dir === 'rpg-continent1-universe') {
+        for (const opponent of ['scorpion', 'orange', 'orange_king']) {
+          await page.evaluate(() => {
+            vbData().matchesLeft = 1;
+            playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
+            h2OpenPanel('volleyball');
+          });
+          await page.waitForFunction(() => Date.now() - (H2.lastTap.vbPlay || 0) >= 500);
+          await page.locator('[data-vb-act="play"][data-op="' + opponent + '"]').click();
+          await page.waitForFunction(opponent => vbFrame.ready && vbFrame.session && vbCurrent()?.opponent === opponent, opponent);
+          await volleyStart.dispatchEvent('click');
+          await page.waitForFunction(() => vbCurrent()?.state === 'active');
+          const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
+          const scores = await frame.evaluate(() => Array.from({ length: 5 }, () => awardTestVolleyPoint()));
+          assert.deepEqual(scores, Array.from({ length: 5 }, (_, i) => ({ target: 5, score: i + 1, won: i === 4 })));
+          await page.waitForFunction(() => vbCurrent()?.state === 'done');
+          await volley.locator('#btnChange').dispatchEvent('click');
+          await page.waitForFunction(() => !vbFrame.session);
+          await page.evaluate(() => { document.getElementById('vb-modal')?.remove(); });
+          console.log(dir, opponent, '5–0 settled and returned home');
+        }
+      }
   })));
 });

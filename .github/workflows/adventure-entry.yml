@@ -7,6 +7,7 @@ on:
       - 'rpg-dual-continent-test/**'
       - 'assets/adventure/entry-reliability.js'
       - 'tests/entry-reliability*'
+      - 'tests/continent1-rc.browser.cjs'
       - 'tests/preview-entry.cjs'
       - '.github/workflows/adventure-entry.yml'
 permissions:
@@ -34,7 +35,7 @@ jobs:
       - name: Test both entries with actual repository assets
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
-        run: node --test tests/entry-reliability.browser.cjs
+        run: node --test tests/entry-reliability.browser.cjs tests/continent1-rc.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
