@@ -3479,13 +3479,8 @@ function loadInventory() {
       return merged;
     }
   } catch(e) { /* 存檔損壞時直接用預設值 */ }
-  // 深複製 defaults（避免共用同一個 craftedItems 物件參考）
-  const d = Object.assign({}, INVENTORY_DEFAULTS);
-  d.craftedItems = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
-  d.chapter1Flow = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
-  d.items        = Object.assign({}, INVENTORY_DEFAULTS.items);
-  d.keyItems     = {};
-  return d;
+  // 各趟冒險的秘笈、收集物與裝備不得寫入預設背包。
+  return structuredClone(INVENTORY_DEFAULTS);
 }
 
 // v0.3.27-test-2：橘子家族測試關期間，補給道具是 runtime-only；
@@ -3506,17 +3501,8 @@ function resetInventory(options = {}) {
   if (options.freshAdventure) {
     for (const key of Object.keys(playerInventory)) delete playerInventory[key];
   }
-  Object.assign(playerInventory, INVENTORY_DEFAULTS);
-  playerInventory.craftedItems       = Object.assign({}, INVENTORY_DEFAULTS.craftedItems);
-  playerInventory.unlockedRecipes    = Object.assign({}, INVENTORY_DEFAULTS.unlockedRecipes);
-  playerInventory.uniqueCollectibles = Object.assign({}, INVENTORY_DEFAULTS.uniqueCollectibles);
-  playerInventory.balloonDog         = Object.assign({}, INVENTORY_DEFAULTS.balloonDog);
-  playerInventory.chapter1Flow       = Object.assign({}, INVENTORY_DEFAULTS.chapter1Flow);
-  playerInventory.items              = Object.assign({}, INVENTORY_DEFAULTS.items);
-  playerInventory.keyItems           = {}; // v0.3.32
+  Object.assign(playerInventory, structuredClone(INVENTORY_DEFAULTS));
   if (options.freshAdventure) playerInventory.bagLevel = 1;
-  playerInventory.equippedSwordDur     = 0;
-  playerInventory.tutorialSwordGranted = false;
   saveInventory();
   // 清除執行期裝備狀態
   equippedSword.id = null;
