@@ -19687,6 +19687,7 @@ const RPG_ASSETS = {
   // v0.3.61：正式 RPG 立繪（使用者已上傳）
   balloonv_angry:     'assets/adventure/rpg/portraits/balloonv/balloonv_angry.png.png',
   balloonv_heroic:    'assets/adventure/rpg/portraits/balloonv/balloonv_heroic.png',
+  balloonv_panic:     'assets/adventure/rpg/portraits/balloonv/balloonv_panic_v3.png',
   orange_king_taunt:  'assets/adventure/rpg/portraits/boss/orange_king_taunt.png',
   orange_king_angry:  'assets/adventure/rpg/portraits/boss/orange_king_angry.png',
   orange_king_weakness_note: 'assets/adventure/rpg/objects/orange_king_weakness_note.png',
@@ -19705,7 +19706,7 @@ const RPG_EXTERNAL_ASSET_KEYS = []; // 由其他素材群組載入的立繪（�
 // v0.3.61：RPG 立繪改成「一張一張依序載入」（手機上 13 張同時下載容易逾時失敗），常用的先載；每個來源最多等 30 秒
 const RPG_ASSET_LOAD_ORDER = ['balloonv_surprised', 'balloonv_thinking', 'balloonv_shocked', 'balloonv_confused', 'balloonv_happy', 'dog_treasure_alert',
   'star_spirit_happy', 'star_spirit_mysterious',   // v0.4.0
-  'balloon_recipe_book', 'star_spirit_angry', 'star_spirit_angry_02', 'star_spirit_sulking', 'orange_king_weakness_note', 'balloonv_angry', 'balloonv_heroic', 'orange_king_taunt', 'orange_king_angry'];
+  'balloon_recipe_book', 'star_spirit_angry', 'star_spirit_angry_02', 'star_spirit_sulking', 'orange_king_weakness_note', 'balloonv_angry', 'balloonv_heroic', 'balloonv_panic', 'orange_king_taunt', 'orange_king_angry'];
 const RPG_ASSET_TIMEOUT_MS = 30000;
 const RPG_ASSET_MAX_RETRY = 2;
 const RPG_BOOT_ASSET_KEYS = ['star_spirit_normal']; // 1-1 一開場就要用 → 跟開機一起載；其他立繪開機後在背景載

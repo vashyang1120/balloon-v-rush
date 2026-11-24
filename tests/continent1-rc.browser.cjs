@@ -64,6 +64,8 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 120000 }, async t 
       assert.deepEqual(crafted, [3, 1, 1, 1, false]);
       await page.evaluate(() => {
         rcStage('1-3');
+        const rolls = [1, 6];
+        balloonDice.rollFace = () => rolls.shift();
         rcCollect(coins.find(item => item.v395Kind === 'coinBag'));
       });
       const dialog = page.locator('#rpg-overlay');
@@ -80,12 +82,15 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 120000 }, async t 
       const decline = dialog.getByRole('button', { name: '否', exact: true });
       assert.ok((await accept.boundingBox()).x < (await decline.boundingBox()).x);
       const button = touch ? decline : accept;
-      if (touch) await button.tap(); else await button.click();
+      const box = await button.boundingBox();
+      const point = [box.x + box.width / 2, box.y + box.height / 2];
+      if (touch) await page.touchscreen.tap(...point); else await page.mouse.click(...point);
       if (!touch) {
         const outcome = dialog.getByRole('button', { name: '繼續冒險' });
         await outcome.waitFor({ state: 'visible' });
-        assert.match(await dialog.locator('.rpg-dice-board').getAttribute('data-points'), /^[1-6],[1-6]$/);
-        await outcome.click();
+        assert.equal(await dialog.locator('.rpg-dice-board').getAttribute('data-points'), '1,6');
+        const resultBox = await outcome.boundingBox();
+        await page.mouse.click(resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2);
       }
       const after = await page.evaluate(() => {
         const reward = diceRewardAttempt.coins;
@@ -96,7 +101,7 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 120000 }, async t 
       });
       assert.equal(after.dice, touch ? 1 : 0);
       assert.equal(after.saved, after.dice);
-      assert.ok((touch ? [10] : [5, 10, 20]).includes(after.reward));
+      assert.equal(after.reward, touch ? 10 : 5);
       const chest = await page.evaluate(() => {
         rcStage('2-2');
         playerInventory.craftedItems.balloonDice = 0;
@@ -109,6 +114,26 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 120000 }, async t 
         return [withoutDog, chest.found, diceRewardAttempt.coins];
       });
       assert.deepEqual(chest, [false, true, 40]);
+      const replay = await page.evaluate(() => {
+        rcStage('2-2', true);
+        const chest = vbTreasureList.find(item => item.type === 'goldChest');
+        currentHiddenTreasure = chest;
+        rcCollect(chest);
+        const repeatChest = diceRewardAttempt.coins;
+        rcStage('2-1');
+        rcCollect(coins.find(item => item.v395Kind === 'coinBag'));
+        return [repeatChest, diceRewardAttempt.coins, playerInventory.unlockedRecipes.balloonDice];
+      });
+      assert.deepEqual(replay, [40, 10, true]);
+      const upgrade = await page.evaluate(() => {
+        gameState = 'clear';
+        playerInventory.coins = 80;
+        const purchase = v395Buy('bagUpgrade');
+        if (!purchase.ok) throw Error(purchase.why);
+        return [purchase.ok, purchase.price, purchase.coinsBefore - purchase.coinsAfter,
+          v395Cap('balloonDice'), JSON.parse(localStorage.getItem(SAVE_KEY)).bagLevel];
+      });
+      assert.deepEqual(upgrade, [true, 80, 80, 2, 2]);
       assert.deepEqual(errors, []);
     });
   }
