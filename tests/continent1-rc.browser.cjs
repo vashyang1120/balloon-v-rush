@@ -234,27 +234,13 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
       assert.deepEqual(await serialized(), beforeView);
       assert.deepEqual(await page.evaluate(() => [v395BagLevel(), whUnlocked()]), [1, false]);
 
-      const crossing = await page.evaluate(() => {
+      const upgradedThisRun = await page.evaluate(() => {
         playerInventory.coins = 85;
         const purchase = v395Buy('bagUpgrade');
-        playerInventory.balloon260 = 13;
-        nextBringDog = true;
-        return [purchase.price, c2ToC2State().kind];
+        return [purchase.ok, purchase.price, v395BagLevel(), playerInventory.coins, getLevelIndexByStageId('3-1')];
       });
-      assert.deepEqual(crossing, [80, 'blocked']); // A real hammer is still required before departure.
-      await page.evaluate(() => {
-        playerInventory.unlockedRecipes.basicHammer = true;
-        playerInventory.craftedItems.basicHammer = 1;
-        currentLevelIndex = getLevelIndexByStageId('2-4');
-        if (!c2GoContinent2('home')) throw Error('Cross-continent departure was blocked');
-      });
-      await page.waitForFunction(() => advCurrentStageId() === '3-1' && !assetGateBusy, undefined, { timeout: 90000 });
-      assert.deepEqual(await page.evaluate(() => [v395BagLevel(), playerInventory.coins, playerInventory.balloon260]), [2, 5, 13]);
-      await page.evaluate(() => {
-        gameState = 'clear';
-        openHomeScreen('clear');
-        advConfirmOfficialChallenge();
-      });
+      assert.deepEqual(upgradedThisRun, [true, 80, 2, 5, -1]);
+      await click(page.locator('#h2-nav-challenge'));
       await click(page.locator('[data-oc="yes"]'));
       await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy);
       assert.deepEqual(await page.evaluate(() => [v395BagLevel(), whUnlocked(), vbUnlocked()]), [1, false, false]);

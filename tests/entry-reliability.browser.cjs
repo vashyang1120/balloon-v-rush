@@ -289,7 +289,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           assert.ok(tile.scaleY > 0);
           assert.ok(tile.top <= 1 && tile.bottom >= background.height - 1);
         }
-        await page.screenshot({ path: artifacts + '/continent1-volleyball-tall-viewport.png' });
+        await page.screenshot({ path: artifacts + '/' + artifactName + '-volleyball-tall-viewport.png' });
         await page.setViewportSize({ width: 1280, height: 720 });
       }
       await volley.locator('#btnPause').dispatchEvent('click');
@@ -319,6 +319,30 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           await page.evaluate(() => { document.getElementById('vb-modal')?.remove(); });
           console.log(dir, opponent, '5–0 settled and returned home');
         }
+      } else {
+        // Only the existing dual-continent entry exposes the 2-4 → 3-1 trip.
+        const purchased = await page.evaluate(() => {
+          if (rpgActive) rpgClose('qa');
+          document.getElementById('vb-modal')?.remove();
+          currentLevelIndex = getLevelIndexByStageId('2-4');
+          gameState = 'clear';
+          openHomeScreen('clear');
+          playerInventory.coins = 85;
+          const purchase = v395Buy('bagUpgrade');
+          playerInventory.balloon260 = 13;
+          playerInventory.roundBalloon = 3;
+          playerInventory.balloonDog = { present: true, turnsLeft: 2 };
+          playerInventory.craftedItems.basicHammer = 1;
+          nextBringDog = true;
+          return [purchase.ok, purchase.price, c2GoContinent2('home')];
+        });
+        assert.deepEqual(purchased, [true, 80, true]);
+        await page.waitForFunction(() => advCurrentStageId() === '3-1' && !assetGateBusy, undefined, { timeout: 90000 });
+        assert.deepEqual(await page.evaluate(() => [
+          v395BagLevel(), playerInventory.coins, playerInventory.balloon260,
+          playerInventory.roundBalloon, playerInventory.craftedItems.basicHammer, bringBalloonDog
+        ]), [2, 5, 13, 3, 1, true]);
+        console.log(artifactName, 'LV2 and trip inventory carried from 2-4 into 3-1');
       }
   })));
 });
