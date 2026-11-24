@@ -309,7 +309,7 @@ const COURT_VISUAL_CONFIG = {
   background: {
     file: 'assets/court/volleyball_arena_bg.png',      // 實際 1672×941（16:9，無透明）
     offsetX: 0, offsetY: 0,
-    extendMirror: true,     // 螢幕比 16:9 寬或高時，用鏡像延伸背景填滿（不留黑邊）
+    extendMirror: true,     // 寬螢幕側邊以水平鏡像延伸
   },
   ground: {
     file: 'assets/court/volleyball_court_ground.png',  // 實際 2172×724，透明
@@ -1571,28 +1571,25 @@ function drawBackground() {
   else drawGeomFloor();
 }
 
-// 正式背景：等比例鋪滿 16:9 球場；螢幕更寬／更高時用鏡像延伸，不留黑邊
+// 正式背景：等比例鋪滿可視高度，寬螢幕只向左右延伸
 function drawArtBackground() {
   const C = COURT_VISUAL_CONFIG.background, img = courtArt.background.img;
-  const s = Math.max(CONFIG.WORLD_W / C.srcW, CONFIG.WORLD_H / C.srcH);   // 不變形
-  const w = C.srcW * s, h = C.srcH * s;
-  const x0 = (CONFIG.WORLD_W - w) / 2 + C.offsetX, y0 = (CONFIG.WORLD_H - h) / 2 + C.offsetY;
   const B = worldBounds();
+  const s = Math.max(CONFIG.WORLD_W / C.srcW, (B.b - B.t) / C.srcH);
+  const w = C.srcW * s, h = C.srcH * s;
+  const x0 = (CONFIG.WORLD_W - w) / 2 + C.offsetX, y0 = (B.t + B.b - h) / 2 + C.offsetY;
   const span = C.extendMirror ? 1 : 0;
-  for (let j = -span; j <= span; j++) {
-    for (let i = -span; i <= span; i++) {
-      const x = x0 + i * w, y = y0 + j * h;
-      if (x > B.r || x + w < B.l || y > B.b || y + h < B.t) continue;  // 看不到的就不畫
-      const fx = i % 2 !== 0, fy = j % 2 !== 0;
-      ctx.save();
-      ctx.translate(x + (fx ? w : 0), y + (fy ? h : 0));
-      ctx.scale(fx ? -1 : 1, fy ? -1 : 1);
-      ctx.drawImage(img, 0, 0, w + (i === 0 ? 0 : 0.5), h + (j === 0 ? 0 : 0.5));
-      ctx.restore();
-    }
+  for (let i = -span; i <= span; i++) {
+    const x = x0 + i * w;
+    if (x > B.r || x + w < B.l) continue;
+    const flipX = i % 2 !== 0;
+    ctx.save();
+    ctx.translate(x + (flipX ? w : 0), y0);
+    ctx.scale(flipX ? -1 : 1, 1);
+    ctx.drawImage(img, 0, 0, w + (i === 0 ? 0 : 0.5), h);
+    ctx.restore();
   }
 }
-
 // 正式地面：可見上緣對齊物理地板，可見寬度剛好橫跨球場
 function drawArtGround() {
   const C = COURT_VISUAL_CONFIG.ground, img = courtArt.ground.img;

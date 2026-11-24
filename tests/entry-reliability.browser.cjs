@@ -46,6 +46,24 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
         const response = await route.fetch();
         const source = await response.text();
         const testHook = `
+          window.testVolleyBackground = () => {
+            const tiles = [];
+            const draw = ctx.drawImage;
+            ctx.drawImage = function (image, x, y, width, height) {
+              const transform = ctx.getTransform();
+              tiles.push({ top: transform.f, bottom: transform.f + height * transform.d, scaleY: transform.d });
+              return draw.apply(this, arguments);
+            };
+            ctx.save();
+            try {
+              ctx.setTransform(viewScale * dpr, 0, 0, viewScale * dpr, viewOX * dpr, viewOY * dpr);
+              drawArtBackground();
+            } finally {
+              ctx.restore();
+              ctx.drawImage = draw;
+            }
+            return { height: canvas.height, tiles };
+          };
           window.awardTestVolleyPoint = () => {
             game.state = STATE.RALLY;
             scorePoint('left');
@@ -217,6 +235,19 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           const snapshot = BalloonVolleyball.getSnapshot();
           return snapshot.audio.bgm.game?.playing && snapshot.visual.court.background === 'ready';
         }, undefined, { timeout: 10000 });
+      }
+      if (dir === 'rpg-continent1-universe') {
+        const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
+        await page.setViewportSize({ width: 1046, height: 896 });
+        await frame.waitForFunction(() => BalloonVolleyball.getSnapshot().view.h === 896);
+        const background = await frame.evaluate(() => testVolleyBackground());
+        assert.ok(background.tiles.length > 0);
+        for (const tile of background.tiles) {
+          assert.ok(tile.scaleY > 0);
+          assert.ok(tile.top <= 1 && tile.bottom >= background.height - 1);
+        }
+        await page.screenshot({ path: artifacts + '/continent1-volleyball-tall-viewport.png' });
+        await page.setViewportSize({ width: 1280, height: 720 });
       }
       await volley.locator('#btnPause').dispatchEvent('click');
       await volley.locator('#btnPauseTitle').dispatchEvent('click');
