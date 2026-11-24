@@ -231,8 +231,9 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
             playerInventory.craftedItems[VB_CONFIG.recipeKey] = 1;
             h2OpenPanel('volleyball');
           });
+          await page.waitForFunction(() => Date.now() - (H2.lastTap.vbPlay || 0) >= 500);
           await page.locator('[data-vb-act="play"][data-op="' + opponent + '"]').click();
-          await page.waitForFunction(() => vbFrame.ready);
+          await page.waitForFunction(opponent => vbFrame.ready && vbFrame.session && vbCurrent()?.opponent === opponent, opponent);
           await volleyStart.dispatchEvent('click');
           await page.waitForFunction(() => vbCurrent()?.state === 'active');
           const frame = await (await page.locator('#vb-frame').elementHandle()).contentFrame();
@@ -242,6 +243,7 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
           await volley.locator('#btnChange').dispatchEvent('click');
           await page.waitForFunction(() => !vbFrame.session);
           await page.evaluate(() => { document.getElementById('vb-modal')?.remove(); });
+          console.log(dir, opponent, '5–0 settled and returned home');
         }
       }
   })));
