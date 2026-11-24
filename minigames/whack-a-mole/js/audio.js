@@ -24,10 +24,15 @@
     function next() {
       if (i >= bases.length) { onFail(); return; }
       var src = bases[i++] + path;
-      fetch(src).then(function (r) {
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 6000);
+      fetch(src, { signal: controller.signal }).then(function (r) {
         if (!r.ok) throw new Error(r.status);
         return r.arrayBuffer();
-      }).then(function (ab) { onOk(ab, src); }, next);
+      }).then(function (ab) {
+        if (!ab.byteLength) throw new Error('Empty audio: ' + src);
+        return ab;
+      }).finally(function () { clearTimeout(timer); }).then(function (ab) { onOk(ab, src); }, next);
     }
     if (!W.fetch || IS_FILE) { onFail(); return; }
     next();
@@ -80,11 +85,24 @@
       el.src = bgm.src;
       el.load();
     }
-    el.addEventListener('error', nextBgm);
-    el.addEventListener('canplay', function () { if (bgm.status !== 'ok') bgm.status = 'ok'; });
+    el.addEventListener('canplay', function () { bgm.status = 'ok'; });
     bgm.el = el;
     bgm.status = 'loading';
-    nextBgm();
+    if (new URLSearchParams(location.search).get('embed') === 'adventure' && !IS_FILE) {
+      // 隱藏的 iframe 可能延後 media preload。先確認 BGM 檔案已下載，開始時由玩家手勢播放。
+      fetchFirst(A.BGM.path, function (ab, src) {
+        bgm.src = src;
+        var objectUrl = URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' }));
+        el.addEventListener('error', function () { bgm.status = 'failed'; });
+        W.addEventListener('pagehide', function () { URL.revokeObjectURL(objectUrl); }, { once: true });
+        bgm.status = 'fetched';
+        el.src = objectUrl;
+        el.load();
+      }, function () { bgm.status = 'failed'; });
+    } else {
+      el.addEventListener('error', nextBgm);
+      nextBgm();
+    }
   }
 
   function unlock() {
