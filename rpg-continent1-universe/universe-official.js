@@ -371,8 +371,8 @@
   var origVbSettle = window.vbSettle;
   window.vbSettle = function (d, c) {
     var success = origVbSettle.apply(this, arguments);
-    if (success && c && c.result && c.result.playerScore === 7 && c.result.cpuScore === 0) {
-      recordMinigame(c.id, { kind: 'volleyball', opponent: c.opponent, playerScore: 7, cpuScore: 0, winner: 'player' });
+    if (success && c && c.result && c.result.playerScore === VB_CONFIG.targetScore && c.result.cpuScore === 0) {
+      recordMinigame(c.id, { kind: 'volleyball', opponent: c.opponent, playerScore: c.result.playerScore, cpuScore: c.result.cpuScore, winner: c.result.winner });
     }
     return success;
   };
@@ -397,8 +397,8 @@
       }
     });
     vbData().history.forEach(function (r) {
-      if (r.t === 'match' && r.score === '7:0' && r.winner === 'player') {
-        evidence.push({ id: r.session, kind: 'volleyball', opponent: r.opponent, playerScore: 7, cpuScore: 0, winner: r.winner });
+      if (r.t === 'match' && (r.score === '7:0' || r.score === VB_CONFIG.targetScore + ':0') && r.winner === 'player') {
+        evidence.push({ id: r.session, kind: 'volleyball', opponent: r.opponent, playerScore: Number(r.score.split(':')[0]), cpuScore: 0, winner: r.winner });
       }
     });
     whData().history.forEach(function (r) {
