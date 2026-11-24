@@ -4,6 +4,29 @@ const test = require('node:test');
 const { mkdir } = require('node:fs/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { createPreview } = require('./preview-entry.cjs');
+const entryPath = '/rpg-continent1-universe/';
+const baselineRef = '5272600dfb76a7782a3d879336a9961bae969f9f';
+const baselineRepo = 'https://raw.githubusercontent.com/vashyang1120/balloon-v-rush/' + baselineRef;
+
+async function baselineSources() {
+  if (process.env.GITHUB_ACTIONS !== 'true') return null;
+  const files = { 'index.html': 'text/html', 'main.js': 'text/javascript', 'style.css': 'text/css' };
+  return new Map(await Promise.all(Object.entries(files).map(async ([name, contentType]) => {
+    const response = await fetch(baselineRepo + entryPath + name, { signal: AbortSignal.timeout(30000) });
+    assert.equal(response.ok, true, 'Load exact baseline ' + name);
+    return [entryPath + name, { contentType: contentType + '; charset=utf-8', body: await response.text() }];
+  })));
+}
+
+function clearFirstStageForSummary() {
+  if (gameStartGateActive) startAdventureFromGate();
+  if (rpgActive) rpgClose('qa');
+  rpgLoad().worldIntro = 'done';
+  currentRunStats.coins = 10;
+  currentRunStats.vCoinsGranted = true;
+  currentRunStats.vCoinsEarnedThisClear = 5;
+  triggerClear();
+}
 
 test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t => {
   const server = createPreview();
@@ -12,6 +35,7 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
   const origin = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
+  const baseline = await baselineSources();
   for (const touch of [false, true]) {
     await t.test(touch ? 'landscape touch' : 'desktop keyboard', async t => {
       const context = await browser.newContext({ viewport: { width: touch ? 844 : 1280, height: touch ? 390 : 720 },
@@ -29,10 +53,13 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
           balloonDog: { present: true, turnsLeft: 3 }, bagLevel: 1,
         }));
       });
-      const url = origin + '/rpg-continent1-universe/?guest=1&sandbox=1';
+      const url = origin + entryPath + '?guest=1&sandbox=1&nocomic=1';
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
       await page.evaluate(() => {
+        rpgLoad().worldIntro = 'done';
+        rpgSetMode('first');
+        rpgMarkSeen('rpg011_hammer_crafted', 'qa');
         window.rcStage = (stage, dog = false) => {
           if (rpgActive) rpgClose('reset');
           closeHomeScreen();
@@ -150,20 +177,15 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
       assert.equal(await page.evaluate(() => v395BagLevel()), 2);
       await click(page.locator('#h2-nav-challenge'));
       await click(page.locator('[data-oc="yes"]'));
-      await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy && gameState === 'playing');
+      await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy);
       assert.deepEqual(await page.evaluate(() => [
         v395BagLevel(), whUnlocked(), whData().playsLeft, vbUnlocked(), v395Count('balloonDice'),
         !!playerInventory.unlockedRecipes.balloonDice, JSON.parse(localStorage.getItem(SAVE_KEY)).bagLevel
       ]), [1, false, 0, false, 0, false, 1]);
 
       // The guest fixture supplies display-only V coins without exercising the production wallet.
-      await page.evaluate(() => {
-        if (rpgActive) rpgClose('qa');
-        currentRunStats.coins = 10;
-        currentRunStats.vCoinsGranted = true;
-        currentRunStats.vCoinsEarnedThisClear = 5;
-        triggerClear();
-      });
+      assert.equal(await page.evaluate(() => rpgShouldShowScene(rpgBuildScene('rpg011_hammer_crafted'))), false);
+      await page.evaluate(clearFirstStageForSummary);
       await page.locator('#h2-sum-wrap.is-open').waitFor();
       const summary = page.locator('#h2-sum-wrap');
       assert.deepEqual(await summary.getByRole('button').allTextContents(), ['收下獎勵，開始整備']);
@@ -178,15 +200,26 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
       const device = touch ? 'touch' : 'pc';
       await mkdir(artifacts, { recursive: true });
       await page.screenshot({ path: artifacts + '/fresh-start-vcoin-after-' + device + '.png' });
-      // Render the baseline row and buttons in the same screen to compare the icon at its original scale.
-      await page.evaluate(() => {
-        const icon = document.querySelector('#h2-sum-body img[data-h2-path$="item_coin_crown.png"]');
-        icon.outerHTML = '<span class="h2-ico-txt">🐷</span>';
-        document.querySelector('.h2-sum-btns').insertAdjacentHTML('beforeend',
-          '<button type="button" class="h2-pill h2-pill--blue h2-pill--sm" id="h2-sum-detail">查看本關詳細結算</button>');
-      });
-      await page.screenshot({ path: artifacts + '/fresh-start-vcoin-baseline-render-' + device + '.png' });
-      await page.locator('#h2-sum-detail').evaluate(element => element.remove());
+      if (baseline) {
+        const priorContext = await browser.newContext({ viewport: { width: touch ? 844 : 1280, height: touch ? 390 : 720 },
+          isMobile: touch, hasTouch: touch });
+        t.after(() => priorContext.close().catch(() => {}));
+        const prior = await priorContext.newPage();
+        await prior.route('**/*', route => {
+          const url = new URL(route.request().url());
+          if (url.origin !== origin) return route.abort();
+          const exact = baseline.get(url.pathname);
+          return exact ? route.fulfill(exact) : route.continue();
+        });
+        await prior.goto(origin + entryPath + 'index.html?guest=1&sandbox=1&nocomic=1', { waitUntil: 'domcontentloaded' });
+        await prior.waitForFunction(() => assetBootReady, undefined, { timeout: 90000 });
+        await prior.evaluate(() => { rpgLoad().worldIntro = 'done'; });
+        await prior.evaluate(clearFirstStageForSummary);
+        await prior.locator('#h2-sum-detail').waitFor();
+        await prior.locator('#h2-sum-body').getByText('🐷').waitFor();
+        await prior.screenshot({ path: artifacts + '/fresh-start-vcoin-before-' + device + '.png' });
+        await priorContext.close();
+      }
       await click(page.locator('#h2-sum-ok'));
       const serialized = () => page.evaluate(() => [JSON.stringify(playerInventory), JSON.stringify(playerWallet)]);
       const beforeView = await serialized();
@@ -212,7 +245,8 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
       await page.evaluate(() => {
         playerInventory.unlockedRecipes.basicHammer = true;
         playerInventory.craftedItems.basicHammer = 1;
-        c2Enter31Main();
+        currentLevelIndex = getLevelIndexByStageId('2-4');
+        if (!c2GoContinent2('home')) throw Error('Cross-continent departure was blocked');
       });
       await page.waitForFunction(() => advCurrentStageId() === '3-1' && !assetGateBusy, undefined, { timeout: 90000 });
       assert.deepEqual(await page.evaluate(() => [v395BagLevel(), playerInventory.coins, playerInventory.balloon260]), [2, 5, 13]);
@@ -222,7 +256,7 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
         advConfirmOfficialChallenge();
       });
       await click(page.locator('[data-oc="yes"]'));
-      await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy && gameState === 'playing');
+      await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy);
       assert.deepEqual(await page.evaluate(() => [v395BagLevel(), whUnlocked(), vbUnlocked()]), [1, false, false]);
       assert.deepEqual(errors, []);
     });
