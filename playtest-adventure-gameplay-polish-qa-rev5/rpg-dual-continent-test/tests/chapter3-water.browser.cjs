@@ -959,7 +959,8 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     }));
     assert.equal(state.ready, true);
     assert.equal(state.stage, '3-4');
-    assert.ok(state.cam > 0 && state.cam <= 430);
+    // Revision 5 C-06 raised the 3-4 camera limit from 430 to C34.cam.max (760) so high platforms keep the ground composition.
+    assert.ok(state.cam > 0 && state.cam <= 760);
     assert.ok(state.canvas > 0 && state.canvas <= 844);
     assert.ok(state.groups.every(groups => groups.includes('chapter3vertical') && groups.includes('ch3NewScorpions')));
     assert.equal(state.scorpionArt, true);

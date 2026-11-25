@@ -20,7 +20,9 @@ function chapter3TreasureSpots(stageId) {
     case '2-2': return [{ id: '2-2:low-trench', tier: 'normal', requiresDog: true, x: 3790, y: GROUND_Y + 14 }];
     case '3-1': return [{ id: '3-1:wind-ledge', tier: 'normal', requiresDog: true, x: 1020, y: GROUND_Y - 222 }];
     case '3-3': return [{ id: '3-3:high-ledge', tier: 'rare', requiresDog: true, x: 3580, y: GROUND_Y - 297 }];
-    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', requiresDog: true, x: C34_LAY.bank.x + 565, y: C34_LAY.y(C34_LAY.bank.h) - 27 }];
+    // Revision 5 C-05: moved off the exit bank (was x = bank.x + 565 = 4427, y = y(705) - 27 = -272) to the
+    // optional ledge above the drying vent. Same id, tier, dog rule and once-per-run claim.
+    case '3-4': return [{ id: '3-4:high-bank', tier: 'precious', requiresDog: true, x: C34_LAY.chestLedge.x + 80, y: C34_LAY.y(C34_LAY.chestLedge.h) - 27 }];
     default: return [];
   }
 }

@@ -27,7 +27,7 @@ function c34LeaveSurface() {
 
 function c34ResetWater() {
   for (const id of ['c34_first_wet', 'c34_first_dry_wind', 'c34_tree_gap_2', 'c34_tree_gap_4']) c34.taught.delete(id);
-  Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
+  Object.assign(c34, { camY: 0, camRefY: null, level: 0, fillFrames: 0, stream: 'none', _filling: false,
     swim: false, swimTime: 0, climb: null, lowWaterPanicSeen: false, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
     falls: new Map(), poolImpact: null, shower: null, treeCrossing: false, treeFailures: 0 });
 }
@@ -511,7 +511,20 @@ function c34Step() {
   }
   c34StepWet(!!showerFall || c34.swim, lowWaterSwim);
   c34StepLowWaterPanic(lowWaterSwim);
-  const target = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
+  const target = c34CamTarget(false);
   c34.camY += (target - c34.camY) * C34.cam.ease;
   if (Math.abs(c34.camY) < 0.05) c34.camY = 0;
+}
+
+// Revision 5 C-06: the 3-4 camera aims at the normal ground composition.
+// The reference height is the last surface the player stood on (ground, platform, water or rope), so
+// a jump does not move the camera. Falling below that surface follows the player down. The old
+// "keep the head 110 px below the top" rule stays as a floor, so a wind vent never lifts the player
+// off screen. Terrain, jump height and flight physics are unchanged.
+function c34CamTarget(snap) {
+  const settled = !!(player.onGround || c34.swim || c34.climb);
+  if (snap || settled || c34.camRefY == null || player.y > c34.camRefY) c34.camRefY = player.y;
+  const ground = C34.cam.ground - c34.camRefY;
+  const keepVisible = C34.cam.top - player.y;
+  return Math.max(0, Math.min(C34.cam.max, Math.max(ground, keepVisible)));
 }

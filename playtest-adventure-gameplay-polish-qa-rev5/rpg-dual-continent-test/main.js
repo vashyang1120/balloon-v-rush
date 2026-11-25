@@ -33744,7 +33744,7 @@ function c42DrawBrokenIcon(barLeft, cy) {
 var C34 = {
   abyssDepth: 70,              // 深淵：腳低於地面 70px（快到畫面下緣）才算掉下去
   wallTol: 8,                  // 高台側面：腳低於高台頂面 8px 以上才算撞牆（站在頂面邊緣不會被推開）
-  cam: { top: 110, max: 430, ease: 0.12 },
+  cam: { top: 110, max: 760, ease: 0.1, ground: GROUND_Y - CONFIG.PLAYER_H },   // Revision 5 C-06：以平地構圖（小V腳底在 GROUND_Y）為目標，見 c34CamTarget
   // 3-4 導風裝置：沿用 3-2 機關（位置平移），角度為 30°／45°／60°；這些數值只在 3-4 套用，離開 3-4 會還原（3-2 的設定不變）
   // 三個角度從同一發射區接收一次拋射，使用同一風速與水平慣性。
   wd: {
@@ -33789,6 +33789,7 @@ var C34_LAY = (function () {
   L.pool = { x: L.ct.x + L.ct.w, w: 460 };                                                        // 水池（峽谷頂部；左右是岩壁）
   L.fallX = L.pool.x - 80;                                                                        // 水池上方的瀑布
   L.dryingVent = { x: L.fallX - 340, w: 80, h: 112 };
+  L.chestLedge = { x: L.dryingVent.x - 160, w: 160, h: L.ct.h + 160 };                           // Revision 5 C-05：烘乾風口左上方的支線小岩棚（珍貴寶箱）；平跳 147px 上不去，要借風口（約 193px）
   L.bank = { x: L.pool.x + L.pool.w, w: 760, h: L.ct.h + 140 };                                   // 對岸（出口所在）
   L.length = L.bank.x + L.bank.w;
   L.y = h => G - h;
@@ -33818,6 +33819,7 @@ const C2_STAGE_34 = (function () {
       { x: L.ct.x, y: ct, w: L.ct.w, h: 22, c34Mesa: true, c34Id: 'CT' },              // 峽谷頂部（水池左岸）
       { x: L.pool.x + 145, y: ct + C34.pool.surf0 - C34.pool.padClear, w: C34.pool.padW, h: 14, c34Pad: true },   // 充氣浮墊（跟著水面）
       { x: L.bank.x, y: L.y(L.bank.h), w: L.bank.w, h: 22, c34Mesa: true, c34Id: 'BANK' },   // 對岸（水位夠高才跳得上去）
+      { x: L.chestLedge.x, y: L.y(L.chestLedge.h), w: L.chestLedge.w, h: 22, c34Id: 'CHEST' },   // Revision 5 C-05：支線寶箱岩棚（非主線）
     ],
     buildWindVents: () => [makeWindVent({ ...L.dryingVent, y: ct, id: '3-4-left-bank' })],
     spikePits: [
@@ -34060,7 +34062,7 @@ function c34PlaceAtPool() {
   const D = c34Pool(); if (!D) return;
   player.x = D.resetX - 110; player.y = D.baseY - player.h; player.vx = 0; player.vy = 0; player.onGround = true;
   cameraX = Math.max(0, Math.min(LEVEL_LENGTH - CANVAS_W, player.x - 380));
-  c34.camY = Math.max(0, Math.min(C34.cam.max, C34.cam.top - player.y));
+  c34.camY = c34CamTarget(true);
   activeSlot = 'umbrella'; try { initEquippedUmbrella(); } catch (e) {}
   c34L({ ev: 'devPool', x: Math.round(player.x) });
 }
@@ -34098,7 +34100,9 @@ function c34Complete(sid) {
   const BG = 'chapter3vertical';
   const addGroup = M => {
     if (M && !M[G]) M[G] = [...c34Art.entries(false), ...c34HeroWater.entries(),
-      { path: RPG_ASSETS.balloonv_panic, type: 'image', critical: true, label: '小V慌張立繪' }].map(entry => ({ ...entry, timeoutMs: 30000 }));
+      { path: RPG_ASSETS.balloonv_panic, type: 'image', critical: true, label: '小V慌張立繪' },
+      // Revision 5 C-05：支線寶箱岩棚用第三章既有懸空平台三段圖（只取平台三張，不載入 chapter3bg 的地面／坑圖）
+      ...c3PieceEntries().filter(entry => entry.label.startsWith('chapter3Piece:plat_'))].map(entry => ({ ...entry, timeoutMs: 30000 }));
     if (M && !M[BG]) M[BG] = c34Art.entries(true).map(entry => ({ ...entry, timeoutMs: 30000 }));
     return M;
   };
