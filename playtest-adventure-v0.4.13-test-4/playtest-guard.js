@@ -5,7 +5,7 @@
   if (!location.pathname.startsWith(previewRoot.pathname)) return;
   if (window.adventurePlaytestReady) return;
 
-  const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-4:';
+  const namespace = 'balloon-v-rush:adventure-playtest:second-continent-rpg-revision-3:';
   const save = window.Storage.prototype;
   const { getItem, setItem, removeItem, key } = save;
   const storageLength = Object.getOwnPropertyDescriptor(save, 'length').get;
@@ -62,7 +62,7 @@
 
   if (location.pathname.startsWith(previewRoot.pathname + 'rpg-dual-continent-test/')) {
     const url = new URL(location.href);
-    for (const name of ['guest', 'sandbox', 'devtools']) url.searchParams.set(name, '1');
+    for (const name of ['guest', 'sandbox']) url.searchParams.set(name, '1');
     url.searchParams.delete('bvPlayerId');
     if (url.href !== location.href) history.replaceState(null, '', url);
   }

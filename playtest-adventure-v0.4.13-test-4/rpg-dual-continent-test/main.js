@@ -43,7 +43,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-ch3-water-terrain-integration-test-4';
+const GAME_VERSION = 'second-continent-rpg-dialogue-umbrella-recovery-revision-3';
 const GAME_BUILD_REVISION = 'Chapter 3 Integration Test 4';
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
@@ -4457,6 +4457,8 @@ const LEVELS = [
       found:      false,
       emoji:      '🔨',
     },
+    extraHiddenTreasures: [{ id: 'balloonDiceRecipe', type: 'recipe', recipeKey: 'balloonDice',
+      recipeName: '氣球骰子秘笈', x: 3800, y: GROUND_Y - 160, emoji: '🎲' }],
   },
 
   // ════════════════════════════════════════════════════════════
@@ -11234,7 +11236,6 @@ function triggerGameOver() {
 }
 
 function triggerClear() {
-  if (advCurrentStageId() === BALLOON_DICE_UNLOCK_STAGE) playerInventory.unlockedRecipes.balloonDice = true;
   try { advOnAttemptCleared(); } catch (e) { console.warn('[Score] 通關提交失敗', e); } // v0.3.63：本關有效成果
   try { sfxOnLevelClear(); } catch (e) {} // v0.3.65：每一次正式過關播一次（不延遲結算畫面）
   try { rpgHideDogFloat(true); } catch (e) {} // v0.3.59
@@ -19764,6 +19765,10 @@ function rpgIsTouchControlsShown() {
   } catch (e) { return false; }
 }
 const RPG_RECIPE_LINES = {
+  balloonDice: [
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '氣球骰子？原來用氣球也能做出骰子啊！' },
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '可是氣球骰子可以做什麼呢？' },
+  ],
   // v0.3.68：第一張「咦！發現了氣球秘笈！」改成獨立的發現提示（rpg020_find，一定會顯示）；這裡從「原來是＿＿的製作秘笈啊！」開始
   basicHammer: [
     { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來是{g:氣球槌}的製作秘笈啊！' },
@@ -19875,14 +19880,23 @@ function rpgBuildScene(id, extra) {
   if (id.startsWith('rpg003_weapon_pop:')) return rpgBuildPopScene(id, extra); // v0.3.70：依爆裂次數（尖刺＋橘子怪合併）
   if (id.startsWith('rpg007_recipe:')) {
     const key = id.split(':')[1]; const lines = RPG_RECIPE_LINES[key]; if (!lines) return null;
-    return { id, title: '發現秘笈：' + ((extra && extra.recipeName) || key), modeControlled: true, saveHistory: true, left: lines[0].face, right: 'balloon_recipe_book', pages: lines.map(l => Object.assign({}, l)) };
+    return { id, title: '發現秘笈：' + ((extra && extra.recipeName) || (key === 'balloonDice' ? '氣球骰子' : key)),
+      modeControlled: true, policy: key === 'balloonDice' ? 'recipeReplay' : undefined,
+      firstReplayFrom: key === 'balloonDice' ? 1 : undefined,
+      saveHistory: true, left: lines[0].face, right: 'balloon_recipe_book', pages: lines.map(l => Object.assign({}, l)) };
   }
   // v0.3.68：rpg020_find:recipe:<配方> / rpg020_find:goldChest / rpg020_find:bossNote — 第一張發現提示，接著播原本的說明
   if (id.startsWith('rpg020_find:')) {
     const parts = id.split(':'), kind = parts[1], key = parts[2];
     const nm = RPG_FIND_NAMES[kind]; if (!nm) return null;
+    if (kind === 'recipe' && key === 'balloonDice') {
+      return { id, title: '發現氣球秘笈', policy: 'recipeReplay', saveHistory: false, oneClick: true,
+        left: 'balloonv_surprised', right: 'balloon_recipe_book', next: 'rpg007_recipe:balloonDice',
+        pages: [{ sp: 'balloonv', face: 'balloonv_surprised', text: '咦？這裡竟然藏著一本氣球秘笈！' }] };
+    }
     const next = kind === 'recipe' ? (RPG_RECIPE_LINES[key] ? 'rpg007_recipe:' + key : null) : kind === 'goldChest' ? 'rpg008_chest:goldChest' : null;
-    return { id, title: '發現' + nm, modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: 'balloonv_surprised', right: kind === 'recipe' ? 'balloon_recipe_book' : null,
+    const policy = kind === 'recipe' && key === 'balloonVolleyball' ? 'recipeReplay' : undefined;
+    return { id, title: '發現' + nm, modeControlled: false, policy, saveHistory: false, repeatable: true, oneClick: true, left: 'balloonv_surprised', right: kind === 'recipe' ? 'balloon_recipe_book' : null,
       next, pages: [{ sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:' + nm + '}！' }] };
   }
   if (id.startsWith('rpg008_chest:')) {
@@ -20073,6 +20087,7 @@ function rpgIsActive() { return !!rpgActive; }
 const rpgSessionShown = new Set(); // 本次開啟網頁已播過的場景（Boss 登場「完整提示」用）
 function rpgShouldShowScene(scene) {
   if (!scene) return false;
+  if (scene.policy === 'recipeReplay') return rpgGetMode() !== 'off';
   if (scene.policy === 'oncePerPlayer') return !rpgIsSeen(scene.id);              // 一生一次，不受顯示模式影響
   if (scene.showcase) return true;                                                 // v0.3.61：必要的發現展示（例如觀察筆記）
   if (scene.policy === 'bossIntro') {
@@ -20095,6 +20110,9 @@ function rpgRequest(id, valid, extra) {
   if (!scene) return false;
   if (rpgAttempt.shown.has(id) && !scene.repeatable) return false;
   if (!rpgShouldShowScene(scene)) return false;
+  if (scene.firstReplayFrom !== undefined && rpgGetMode() === 'first' && rpgIsSeen(id)) {
+    scene.pages = [scene.pages[scene.firstReplayFrom]];
+  }
   if (extra && typeof extra.target === 'function') scene.targetFn = extra.target;
   rpgAttempt.queued.add(id);
   rpgQueue.push({ scene, valid: valid || (() => true), at: Date.now() });
@@ -22641,7 +22659,13 @@ function h2UseSupply(key, anchor) {
 }
 
 // ── 商店：數量 ▲▼ ＋ 購買（逐個呼叫既有 buyShopItem）──
-function h2ShopRoom(id) { ensureInventoryItems(); const item = SHOP_ITEMS[id]; return item ? Math.max(0, item.maxCarry - (playerInventory.items[id] || 0)) : 0; }
+function h2ShopRoom(id) {
+  ensureInventoryItems();
+  const item = SHOP_ITEMS[id];
+  if (item) return Math.max(0, item.maxCarry - (playerInventory.items[id] || 0));
+  const pack = V395_SHOP.find(item => item.id === id && item.kind === 'bundle');
+  return pack ? Math.floor((Number.MAX_SAFE_INTEGER - (playerInventory[pack.mat] || 0)) / Math.max(pack.n, pack.price)) : 0;
+}
 function h2ShopQty(id) { const room = h2ShopRoom(id); const q = Math.max(1, Math.min(H2.shopQty[id] || 1, Math.max(1, room))); H2.shopQty[id] = q; return q; }
 function h2BuyQty(id) {
   if (h2Busy(450, 'buy:' + id)) return;
@@ -25687,7 +25711,7 @@ function c2ResetEvents31() {
       { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！好長一排{r:尖刺}！！' },
       { sp: 'balloonv', face: 'balloonv_shocked',   text: '這絕對跳不過去的吧！！！' },
       { sp: 'balloonv', face: 'balloonv_thinking',  text: '我該怎麼過去呢……' } ] };
-    if (id === 'c2_31_umbrella') return { id, title: '發現氣球雨傘秘笈', modeControlled: false, saveHistory: false, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
+    if (id === 'c2_31_umbrella') return { id, title: '發現氣球雨傘秘笈', policy: 'recipeReplay', firstReplayFrom: 0, saveHistory: false, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
       { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:氣球雨傘}的製作秘笈！' },
       { sp: 'balloonv', face: 'balloonv_thinking',  text: '氣球雨傘……可以用在哪裡呢……？' } ] };
     return o.apply(this, arguments);
@@ -25696,7 +25720,7 @@ function c2ResetEvents31() {
     if (c2IsWindStage() || (typeof c2IsField === 'function' && c2IsField())) { try { rpgAttempt.shown.add('rpg002_first_spike'); rpgAttempt.shown.add('rpg004_first_scorpion'); } catch (e) {} }   // v0.3.82：開發用雨傘測試場也不播第一大陸的教學對話
     return o.apply(this, arguments);
   });
-  // ⑬ 取得雨傘秘笈：沿用既有取得通知框；RPG 改成規格的兩句（已經收藏過 → 不重播、不重複加入）
+  // ⑬ 雨傘秘笈已收錄時仍可播發現句，收錄資格維持原有檢查。
   wrapFn('rpgOnTreasureFound', o => function (t) {
     if (t && t.recipeKey === 'balloonUmbrella' && c2Is31()) {
       if (c2Run) c2Run.umbrellaFound = true;
@@ -25704,7 +25728,6 @@ function c2ResetEvents31() {
       if (c2UmbrellaOwned()) {
         try { if (treasurePickupEffects[0]) treasurePickupEffects[0].subtitle = '已經收藏過了（不會重複加入）'; } catch (e) {}
         showHint('☂️ 氣球雨傘秘笈已經收藏過了', 200);
-        return true;
       }
       return rpgRequest('c2_31_umbrella', () => true);
     }
@@ -25984,16 +26007,25 @@ function c2UmbrellaPrep() {
   const n = c2UmbrellaCount(), have = Math.max(0, Math.floor(Number(playerInventory.balloon260) || 0));
   if (n > 0) return { ready: true, n };
   if (!c2UmbrellaOwned()) return { noRecipe: true, have };
-  if (have >= UMBRELLA_NEED_260) return { craft: true, have };
+  const required = RECIPES.find(recipe => recipe.id === 'balloonUmbrella').cost.balloon260;
+  const missing = Math.max(0, required - have);
+  if (!missing) return { craft: true, have, required };
+  const pack = V395_SHOP.find(item => item.id === 'b260Bundle');
+  const quantity = Math.ceil(missing / pack.n);
+  const totalCost = quantity * pack.price;
+  if (quantity <= h2ShopRoom(pack.id) && playerInventory.coins >= totalCost) {
+    return { buy: true, have, missing, required, quantity, totalCost };
+  }
   const flow = c2Flow();
-  return { rescue: !flow.umbrellaRescue, rescued: !!flow.umbrellaRescue, have, missing: UMBRELLA_NEED_260 - have };
+  return { rescue: !flow.umbrellaRescue, rescued: !!flow.umbrellaRescue, have, missing, required, quantity, totalCost };
 }
 function c2DepartState() {
   const p = c2UmbrellaPrep();
   if (p.ready) return { kind: 'go', c2ready32: true, sub: '☂️ 已準備好前往 3-2' };
   if (p.noRecipe) return { kind: 'blocked', sub: '還沒有氣球雨傘秘笈', msg: '前往 3-2 前需要氣球雨傘，但還沒有雨傘秘笈。', detail: '在 3-1 讓小狗找到雨傘秘笈，通關後就會收進氣球秘笈。' };
-  if (p.craft) return { kind: 'blocked', sub: '請先製作氣球雨傘', msg: '前往 3-2 前，需要一把氣球雨傘。', detail: '260 長條氣球已經有 ' + p.have + ' 條，打開氣球秘笈做第一把雨傘吧！（260 ×5）', fix: { card: 'recipes', focus: 'balloonUmbrella', label: '打開氣球秘笈' } };
-  if (p.rescue) return { kind: 'blocked', sub: '材料不足：星靈來幫忙', msg: '做氣球雨傘需要 260 ×5，你只有 ' + p.have + ' 條（還差 ' + p.missing + ' 條）。', detail: '再按一次「出發」，星靈會補上差額，直接幫你做好第一把氣球雨傘。', fix: { c2rescue: true, label: '請星靈幫忙' } };
+  if (p.craft) return { kind: 'blocked', sub: '請先製作氣球雨傘', msg: '前往 3-2 前，需要一把氣球雨傘。', detail: '260 長條氣球已經有 ' + p.have + ' 條，打開氣球秘笈做雨傘吧！（260 ×' + p.required + '）', fix: { card: 'recipes', focus: 'balloonUmbrella', label: '打開氣球秘笈' } };
+  if (p.buy) return { kind: 'blocked', sub: '到商店補足 260 長條氣球', msg: '前往 3-2 前，需要一把氣球雨傘。', fix: { c2buy: true, label: '前往商店' } };
+  if (p.rescue) return { kind: 'blocked', sub: '材料不足：星靈來幫忙', msg: '做氣球雨傘需要 260 ×' + p.required + '，你只有 ' + p.have + ' 條（還差 ' + p.missing + ' 條）。', detail: '再按一次「出發」，星靈會補上差額，直接幫你做好第一把氣球雨傘。', fix: { c2rescue: true, label: '請星靈幫忙' } };
   return { kind: 'blocked', sub: '還差 ' + p.missing + ' 條 260', msg: '星靈已經幫過一次了。做氣球雨傘還差 ' + p.missing + ' 條 260 長條氣球。', detail: '收集 260 長條氣球後，到氣球秘笈製作。' };
 }
 var c2RescueBusy = false;
@@ -26002,6 +26034,7 @@ function c2DoUmbrellaRescue() {
   const p = c2UmbrellaPrep(); if (!p.rescue) return false;           // 已經有雨傘／材料夠／救援過 → 不會再補
   c2RescueBusy = true;
   try {
+    const previous = structuredClone(playerInventory);
     const flow = c2Flow(), have = p.have, missing = p.missing, now = Date.now();
     // 一次完成（先寫紀錄與結果、再存檔、最後才播對話）：重新整理、連點都不會再補第二次
     //   星靈補的 260 不會進背包：連同小V自己的 ${have} 條一起直接做成雨傘
@@ -26012,7 +26045,7 @@ function c2DoUmbrellaRescue() {
     playerInventory.craftedItems.balloonUmbrella = (playerInventory.craftedItems.balloonUmbrella || 0) + 1;
     playerInventory.equippedUmbrellaDur = UMBRELLA_MAX_DUR;
     if (!flow.umbrellaFirstCraft) flow.umbrellaFirstCraft = { at: now, how: 'rescue' };
-    saveInventory();
+    if (!saveInventory()) { Object.assign(playerInventory, previous); return false; }
     try { initEquippedUmbrella(); } catch (e) {}
     try { preloadAssetGroup('c2umbrella'); } catch (e) {}   // 剛拿到第一把 → 背景載入雨傘角色圖
     console.log('[3-2 準備] 星靈救援：自己有 ' + have + ' 條 260，星靈補 ' + missing + ' 條 → 直接做好 1 把氣球雨傘', flow.umbrellaRescue);
@@ -27466,7 +27499,6 @@ function c2Complete32() {
   // 小V的家：3-1 通關後（已經有過第一把雨傘）→ 出發＝進入 3-2；3-2 通關後 → 出發＝再玩一次 3-2（3-3 尚未開放）
   wrapFn('c2DepartState', o => function () {
     const g = o.apply(this, arguments);
-    if (g.kind !== 'go' && c2UmbrellaEverOwned()) return { kind: 'go', c2ready32: true, sub: '☂️ 前往 3-2（目前沒有氣球雨傘也可以通過）' };   // 雨傘用完也不會卡住
     if (g.c2ready32) g.sub = '☂️ 前往 3-2 雨傘試煉';
     return g;
   });
@@ -27752,7 +27784,7 @@ const VB_CONFIG = {
       { min: 6, max: 6, perPoint: 7 },
     ],
   },
-  targetScore: 7,
+  targetScore: 5,
   frameUrl: '../minigames/volleyball/index.html',
   loadTimeoutMs: 20000,
   // 主線關卡（首次完成才會補場次）：第一大陸正式七關＋第二大陸 3-1、3-2（開發用雨傘測試場不算）
@@ -27853,6 +27885,19 @@ function vbPickupExtra(t) {
   const R = 50;
   if (!rectsOverlap(player.x, player.y, player.w, player.h, t.x - R, t.y - R, R * 2, R * 2)) return;
   t.found = true;
+  if (t.recipeKey === 'balloonDice') {
+    const known = !!playerInventory.unlockedRecipes?.balloonDice;
+    if (!known) {
+      currentRunStats.pendingRecipeUnlocks ||= {};
+      currentRunStats.pendingRecipeUnlocks.balloonDice = true;
+    }
+    advNoteExplore(t);
+    sfxPlay('secretDiscovered');
+    spawnTreasurePickupEffect('📖 獲得氣球骰子秘笈！', known ? '已收錄於氣球秘笈' : '通關後收進氣球秘笈');
+    if (!known) rpgOnTreasureFound(t);
+    vbFocus();
+    return;
+  }
   const sid = advCurrentStageId();
   currentRunStats.vbFound = currentRunStats.vbFound || {}; currentRunStats.vbFound[sid] = true;
   if (!currentRunStats.pendingRecipeUnlocks) currentRunStats.pendingRecipeUnlocks = {};
@@ -28041,7 +28086,7 @@ function vbPanelHtml() {
       + '<b>' + h2Esc(o.name) + '（' + h2Esc(o.level) + '）</b><small>勝利獎勵：260 ×' + R.win[o.id].balloon260 + '<br>圓氣球 ×' + R.win[o.id].roundBalloon + '・金幣 ' + R.win[o.id].coins + '</small>'
       + '<button type="button" class="h2-pill ' + (left > 0 && t > 0 ? 'h2-pill--green' : 'h2-pill--yellow') + ' h2-pill--sm" data-vb-act="play" data-op="' + o.id + '">' + (left <= 0 ? '休息中' : t > 0 ? '開始比賽' : '先製作排球') + '</button></div>';
   });
-  h += '</div><div class="vb-note">先得 7 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
+  h += '</div><div class="vb-note">先得 5 分獲勝。比賽完成後依比分獲得比賽獎勵；打贏還能拿到圓氣球。每輪最多 ' + VB_CONFIG.maxMatches + ' 場（三位對手共用），每一趟冒險中，完成這一趟還沒完成過的主線關卡後，回到小V的家會補回。氣球排球是額外活動，不影響主線通關。</div></div>';
   return h;
 }
 function vbEnsureNav() {
@@ -28063,7 +28108,7 @@ function vbEnsureNav() {
   const wrapFn = (name, make) => { const o = globalThis[name]; if (typeof o !== 'function' || o._v385) { if (typeof o !== 'function') console.warn('[v0.3.85] 找不到函式：' + name); return; } const w = make(o); Object.keys(o).forEach(k => { w[k] = o[k]; }); w._v385 = true; globalThis[name] = w; };
   // 秘笈與製作（沿用既有氣球秘笈）
   RECIPES.push({ id: 'balloonVolleyball', name: '氣球排球', minigame: true, durability: 0, cost: Object.assign({}, VB_CONFIG.cost), emoji: '🏐', unlockKey: 'balloonVolleyball',
-    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 7 分獲勝）。比賽完成後可以獲得 260、金幣等比賽獎勵，打贏還有圓氣球。' });
+    effect: '一顆氣球排球可以在小V的家和蠍子怪、橘子怪、橘子王比一場氣球排球（先得 5 分獲勝）。比賽完成後可以獲得 260、金幣等比賽獎勵，打贏還有圓氣球。' });
   H2_PANEL_TITLES.volleyball = '氣球排球';
   // v0.3.85 test-3：氣球排球秘笈 RPG 台詞（使用者確認的正式台詞，不得改寫）
   //   第一幕「咦！發現了氣球秘笈！」由既有共用場景 rpg020_find 播放；這裡是第二～四幕（和氣球槌、棒棒糖相同的資料格式）
@@ -28074,7 +28119,7 @@ function vbEnsureNav() {
   ];
   wrapFn('rpgBuildScene', o => function (id) {
     // 已經學會、在另一處又找到：兩幕（每次找到都播；不寫入對話紀錄）
-    if (id === 'vb_found_again') return { id, title: '又發現氣球排球秘笈', modeControlled: false, saveHistory: false, repeatable: true, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
+    if (id === 'vb_found_again') return { id, title: '又發現氣球排球秘笈', policy: 'recipeReplay', firstReplayFrom: 0, saveHistory: false, repeatable: true, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
       { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！這裡也藏著{g:氣球排球秘笈}！' },
       { sp: 'balloonv', face: 'balloonv_happy',     text: '雖然我已經學會了，不過又發現一個秘密地點了！' } ] };
     const s = o.apply(this, arguments);
@@ -30028,30 +30073,43 @@ function v395ShopTiles() {
     return { key: it.id, name: it.name, label: it.name, price: price != null ? price : undefined, sub: st.off ? st.btn : null, icon: it.icon, count: it.kind === 'equip' ? (v395Owned(it) ? '✓' : '') : it.id === 'bagUpgrade' ? v395Owned(it) : '', off: !!st.off }; });
 }
 // 購買：成功才扣一次；失敗不扣（金幣不足、已裝備、已滿級、價格待定）；同一次點擊／連點只處理一次
-function v395Buy(id) {
+function v395Buy(id, quantity = 1) {
   const it = V395_SHOP.find(x => x.id === id); if (!it) return { ok: false, why: 'unknown' };
   const now = Date.now(); v395Buy._at = v395Buy._at || {}; if (now - (v395Buy._at[id] || 0) < 350) return { ok: false, why: 'debounce' }; v395Buy._at[id] = now;   // 同一個商品連點只算一次（不同商品各自計算）
   const inv = v395Inv(), st = v395ShopState(it), c0 = inv.coins || 0;
   if (st.off) { v395L({ ev: 'buyRefused', id, why: st.state, coins: c0 }); return { ok: false, why: st.state }; }
-  const price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+  const bundle = it.kind === 'bundle';
+  const qty = bundle ? quantity : 1;
+  if (!Number.isSafeInteger(qty) || qty < 1 || (bundle && qty > h2ShopRoom(id))) return { ok: false, why: '數量無效' };
+  const price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price * qty;
   if (!(price > 0) || c0 < price) { v395L({ ev: 'buyRefused', id, why: '金幣不足', coins: c0 }); return { ok: false, why: '金幣不足' }; }
+  const beforeBundle = bundle ? structuredClone(inv) : null;
   inv.coins = c0 - price;
   if (id === 'vShield') inv.equip.shield = true;
   else if (id === 'wingedBoots') inv.equip.boots = { state: 'ready', boughtAt: Date.now() };
-  else if (it.kind === 'bundle') inv[it.mat] = (inv[it.mat] || 0) + it.n;
+  else if (bundle) {
+    inv[it.mat] = (inv[it.mat] || 0) + it.n * qty;
+    v396ShopLog(id, price, qty);
+  }
   else if (id === 'bagUpgrade') inv.bagLevel = Math.min(V395_BAG.maxLevel, inv.bagLevel + 1);
-  saveInventory();
+  if (!saveInventory() && bundle) {
+    delete inv.shopLog;
+    delete inv[it.mat];
+    Object.assign(inv, beforeBundle);
+    return { ok: false, why: '存檔失敗，請重新購買' };
+  }
   v395L({ ev: 'buy', id, price, coinsBefore: c0, coinsAfter: inv.coins });
-  return { ok: true, id, price, coinsBefore: c0, coinsAfter: inv.coins };
+  return { ok: true, id, price, quantity: qty, coinsBefore: c0, coinsAfter: inv.coins };
 }
 function v395ShopBuy(id, anchor) {
   if (typeof h2Busy === 'function' && h2Busy(450, 'buy395:' + id)) return;
   const it = V395_SHOP.find(x => x.id === id);
-  const r = v395Buy(id);
+  const r = v395Buy(id, it?.kind === 'bundle' ? h2ShopQty(id) : 1);
   if (!r.ok) { if (r.why !== 'debounce') h2Toast(r.why === '金幣不足' ? '金幣不夠，先去冒險收集更多金幣吧！' : r.why === '價格待定' ? '背包升級的價格還沒決定，目前不能購買' : (it ? it.name : '') + '：' + r.why); h2RenderAll(); return; }
+  H2.shopQty[id] = 1;
   h2RenderAll(); try { if (H2.panel) h2RenderPanel(); } catch (e) {}
   const row = document.querySelector('#h2-panel-body [data-shop-row="' + id + '"]') || anchor;
-  const got = it.kind === 'bundle' ? [(it.mat === 'balloon260' ? '260 氣球' : '圓氣球') + ' +' + it.n] : id === 'bagUpgrade' ? ['背包 LV' + v395BagLevel()] : [it.name + ' 已裝備'];
+  const got = it.kind === 'bundle' ? [(it.mat === 'balloon260' ? '260 氣球' : '圓氣球') + ' +' + it.n * r.quantity] : id === 'bagUpgrade' ? ['背包 LV' + v395BagLevel()] : [it.name + ' 已裝備'];
   try { h2Shake(row); h2FloatDeltas(got, ['🪙 冒險金幣 −' + r.price], row); playCraftSuccessFx(row || null, { name: it.name, emoji: '', shopBuy: true }); } catch (e) {}
   try { sfxPlay('uiClick'); } catch (e) {}
 }
@@ -30380,19 +30438,24 @@ SHOP_ITEMS.invincibleStar.description = '放進背包的補給品，使用後20�
 v395ShopRowsHtml = function () {
   return V395_SHOP.map(it => {
     const st = v395ShopState(it), owned = v395Owned(it), price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
+    const pack = it.kind === 'bundle';
+    const qty = pack ? h2ShopQty(it.id) : 1;
+    const total = price * qty;
+    const poor = pack && (playerInventory.coins || 0) < total;
+    const controls = pack ? '<span class="h2-qty"><button type="button" data-h2-act="qty" data-key="' + it.id + '" data-d="1" aria-label="增加數量"' + (qty >= h2ShopRoom(it.id) ? ' disabled' : '') + '>▲</button><b>' + qty + '</b><button type="button" data-h2-act="qty" data-key="' + it.id + '" data-d="-1" aria-label="減少數量"' + (qty <= 1 ? ' disabled' : '') + '>▼</button></span><span class="h2-price">合計 $' + total + '</span>' : '';
     const line = it.kind === 'equip' ? (owned ? '已裝備' : '未裝備（不占背包）') : it.kind === 'bundle' ? '目前持有 ' + owned : '目前背包 ' + owned + (v395BagLevel() >= V395_BAG.maxLevel ? '（已滿級）' : '');
     const dev = (it.id === 'bagUpgrade' && H2_DEVTOOLS) ? '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="dev395" data-key="' + (v395BagLevel() >= 2 ? 'bagLv1' : 'bagLv2') + '">🛠 ' + (v395BagLevel() >= 2 ? '測試回 LV1' : '測試 LV2（免費）') + '</button>' : '';
     return h2RowHtml({ iconHtml: h2Icon(it.icon), badge: it.kind === 'equip' ? (owned ? '<span class="h2-count">✓</span>' : '') : it.id === 'bagUpgrade' ? '<span class="h2-count">' + owned + '</span>' : '', name: it.name,
       full: !!st.off && !/金幣不足/.test(st.state || ''), attr: ' data-shop-row="' + it.id + '" data-v395="1"', price: price != null ? price : null, state: st.state || '',
       desc: h2Esc(it.desc) + '<br>' + h2Esc(line),
-      side: dev + '<button type="button" class="h2-pill h2-pill--green" data-h2-act="buy395" data-key="' + it.id + '"' + (st.off ? ' disabled' : '') + '>' + h2Esc(st.btn) + '</button>' });
+      side: dev + controls + '<button type="button" class="h2-pill h2-pill--green" data-h2-act="buy395" data-key="' + it.id + '"' + (st.off || poor ? ' disabled' : '') + '>' + h2Esc(poor ? '金幣不足' : st.btn) + '</button>' });
   }).join('');
 };
 // ── #29 正式購物紀錄（給之後的「超勤儉冒險家」判定；開發測試升級不算）──
-function v396ShopLog(id, spent) {
+function v396ShopLog(id, spent, quantity = 1) {
   const inv = playerInventory; if (!inv.shopLog || typeof inv.shopLog !== 'object') inv.shopLog = { purchases: 0, spent: 0, items: {} };
-  inv.shopLog.purchases = (inv.shopLog.purchases || 0) + 1; inv.shopLog.spent = (inv.shopLog.spent || 0) + spent;
-  inv.shopLog.items = inv.shopLog.items || {}; inv.shopLog.items[id] = (inv.shopLog.items[id] || 0) + 1; inv.shopLog.lastAt = Date.now();
+  inv.shopLog.purchases = (inv.shopLog.purchases || 0) + quantity; inv.shopLog.spent = (inv.shopLog.spent || 0) + spent;
+  inv.shopLog.items = inv.shopLog.items || {}; inv.shopLog.items[id] = (inv.shopLog.items[id] || 0) + quantity; inv.shopLog.lastAt = Date.now();
 }
 // ── #31／#34 無敵星星：音訊 ──
 Object.assign(SFX_DEFS, { starActivate: { path: 'item/invincible_star_activate.mp3', vol: 0.9, minGapMs: 300, maxVoices: 1 } });
@@ -30548,7 +30611,7 @@ function v396RenderPauseBag() {
     return ok;
   });
   // 背包升級正式購買（80）＋正式購物紀錄
-  wrapFn('v395Buy', o => function (id) { const r = o.apply(this, arguments); if (r && r.ok) { v396ShopLog(id, r.price); try { saveInventory(); } catch (e) {} } return r; });
+  wrapFn('v395Buy', o => function (id) { const r = o.apply(this, arguments); if (r && r.ok && !V395_SHOP.some(item => item.id === id && item.kind === 'bundle')) { v396ShopLog(id, r.price); try { saveInventory(); } catch (e) {} } return r; });
   wrapFn('buyShopItem', o => function (id) { const c0 = playerInventory.coins || 0, n0 = (playerInventory.items || {})[id] || 0; const r = o.apply(this, arguments); const spent = c0 - (playerInventory.coins || 0); if (spent > 0 && ((playerInventory.items || {})[id] || 0) > n0) { v396ShopLog(id, spent); try { saveInventory(); } catch (e) {} } return r; });
   // 每一步：星星碰撞擊殺
   wrapFn('update', o => function () { const r = o.apply(this, arguments); try { v396StarContactStep(); } catch (e) { console.warn('[v0.3.96] star', e); } return r; });
@@ -31176,9 +31239,9 @@ const C1U_TITLES = [
   { titleKey: 'adventure_peace_ambassador', name: '和平大使',     gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有對任何怪物造成傷害（橘子王決戰不計）；同時獲得「善良冒險家」' },
   { titleKey: 'adventure_super_thrifty',    name: '超勤儉冒險家', gameId: 'adventure', category: 'adventure', desc: '整個第一大陸都沒有在商店成功購買任何東西（打地鼠入場費不算）' },
   // v0.4.1：小遊戲稱號（比賽／遊戲結算時取得）
-  { titleKey: 'adventure_volleyball_rookie', name: '排球新星',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'scorpion',    desc: '氣球排球 7：0 完封蠍子怪' },
-  { titleKey: 'adventure_volleyball_expert', name: '排球高手',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange',      desc: '氣球排球 7：0 完封橘子怪' },
-  { titleKey: 'adventure_volleyball_king',   name: '排球王者',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange_king', desc: '氣球排球 7：0 完封橘子王' },
+  { titleKey: 'adventure_volleyball_rookie', name: '排球新星',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'scorpion',    desc: '氣球排球 5：0 完封蠍子怪' },
+  { titleKey: 'adventure_volleyball_expert', name: '排球高手',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange',      desc: '氣球排球 5：0 完封橘子怪' },
+  { titleKey: 'adventure_volleyball_king',   name: '排球王者',   gameId: 'adventure', category: 'adventure', group: 'minigame', vbOpponent: 'orange_king', desc: '氣球排球 5：0 完封橘子王' },
   { titleKey: 'adventure_whack_legend',      name: '傳奇槌王',   gameId: 'adventure', category: 'adventure', group: 'minigame', whackScore: 660,           desc: '氣球槌打地鼠分數達到 660 分' },
   // v0.4.1：成績稱號（2-4 完整結算時，該分項拿到滿分）
   { titleKey: 'adventure_treasure_hunter',   name: '寶藏獵人',   gameId: 'adventure', category: 'adventure', group: 'score', scorePart: 'collect',    desc: '第一大陸完整結算時「收集」滿分' },
@@ -33602,6 +33665,9 @@ function c34ArtReady() { const status = c34Art.status(); return status.loaded ==
 
 function c34Mesas() { return (platforms || []).filter(p => p.c34Mesa); }
 function c34Gaps(kind) { return (c2Pits || []).filter(p => p.c34 && (!kind || p.c34 === kind)); }
+function c34WindLaunchZone() {
+  return { x: wdPivot().x + C34.wd.launchStart, w: C34.wd.launchDepth };
+}
 function c34Pool() { const lv = c34Lv(); return (lv && lv.c34) ? (lv.c34PoolDef || null) : null; }   // v0.4.11：水池在峽谷頂部，左右是高台岩壁（不是地面缺口）
 function c34SurfaceY() { const P = C34.pool, D = c34Pool(); return (D ? D.baseY : GROUND_Y) + P.surf0 + (P.surf1 - P.surf0) * c34.level; }
 
@@ -33654,7 +33720,7 @@ const C2_STAGE_34 = (function () {
     spikePits: [
       { id: 'A1', x: L.a1, w: L.p1.x - L.a1, resetX: 850, wd: true, c34: 'abyss' },                       // 導風深淵（失敗：沿用導風機關規則，不扣血回起點）
       { id: 'A2', x: L.p1.x, w: L.p2.x - L.p1.x, resetX: L.p1.x + L.p1.w / 2 - 20, c34: 'abyss' },          // P1 右邊的深淵 → 受傷一次＋回到 P1
-      { id: 'A3', x: L.p2.x, w: L.ct.x - L.p2.x, resetX: L.p2.x + 60, c34: 'abyss' },                       // P2 右邊的深淵 → 受傷一次＋回到 P2
+      { id: 'A3', x: L.p2.x, w: L.ct.x - L.p2.x, resetX: L.p2.x + 60, c34: 'abyss' },                     // 倒樹解謎：免扣血，回 P2
     ],
     c34Falls: [
       { id: 'WA', x: 620, w: C34_FALL_WIDTH, vx: 4, vy: 2, split: true },        // 入口景觀瀑布（只是環境互動）
@@ -33963,9 +34029,9 @@ function c34Complete(sid) {
     if (!c34WdOn || !c34Is('3-4')) return o.call(this);
     if (gameState !== 'playing') return;
 
-    const offset = player.x + player.w / 2 - wdPivot().x;
-    const atNozzle = offset >= C34.wd.launchStart &&
-      offset < C34.wd.launchStart + C34.wd.launchDepth;
+    const zone = c34WindLaunchZone();
+    const center = player.x + player.w / 2;
+    const atNozzle = center >= zone.x && center < zone.x + zone.w;
     const atGround = player.onGround && Math.abs(player.y + player.h - GROUND_Y) < 1;
     if (!wd.attempt && atNozzle && atGround && wd.mech?.state === 'idle') {
       const direction = wd.dispAng * Math.PI / 180;
@@ -33978,6 +34044,16 @@ function c34Complete(sid) {
       player.onGround = false;
     }
     wdMovePlayer();
+  });
+  wrapFn('wdDrawDevice', original => function (camera) {
+    const result = original.apply(this, arguments);
+    if (!c34WdOn || !c34Is('3-4')) return result;
+    const zone = c34WindLaunchZone();
+    ctx.save();
+    ctx.fillStyle = 'rgba(122,229,255,0.65)';
+    ctx.fillRect(zone.x - camera, GROUND_Y - 3, zone.w, 3);
+    ctx.restore();
+    return result;
   });
   wrapFn('loadLevel', o => function (idx) {
     const lv = LEVELS[idx];
@@ -34016,11 +34092,6 @@ function c34Complete(sid) {
   });
   wrapFn('openHomeScreen', o => function () {
     if (!c34.devBagMode) c34DevEnd('home');
-    if (!playerInventory.unlockedRecipes.balloonDice &&
-        advProgressEnsure(advLoad()).cleared.includes(BALLOON_DICE_UNLOCK_STAGE)) {
-      playerInventory.unlockedRecipes.balloonDice = true;
-      saveInventory();
-    }
     return o.apply(this, arguments);
   });
   wrapFn('restart', o => function () {
@@ -34041,6 +34112,21 @@ function c34Complete(sid) {
   });
   // 一般深淵退回到高台上時：放在高台頂面（不是埋在岩體裡）
   wrapFn('c2PitHazardStep', o => function () {
+    const pit = c34Is() && c2PitUnderPlayer();
+    if (pit?.id === 'A3') {
+      const tree = breakableTrees.find(t => t.c34BaseDy);
+      const fromTreePlatform = c34.treeCrossing;
+      c34.treeCrossing = false;
+      player.x = pit.resetX; player.y = C34_LAY.y(C34_LAY.p2.h) - player.h;
+      player.vx = 0; player.vy = 0; player.onGround = true;
+      player.windT = 0; player.windInfo = null;
+      if (fromTreePlatform && tree?.state === 'standing') {
+        const failures = ++c34.treeFailures;
+        if (failures === 2 || failures === 4) c34Teach('c34_tree_gap_' + failures);
+      }
+      c34L({ ev: 'treeAbyssReset', x: player.x, hp: player.hp, failures: c34.treeFailures });
+      return;
+    }
     const r = o.apply(this, arguments);
     if (c34Is()) { const m = c34Mesas().find(q => player.x + player.w / 2 > q.x && player.x + player.w / 2 < q.x + q.w); if (m && player.y + player.h > m.y + 1) { player.y = m.y - player.h; player.vy = 0; player.onGround = true; c34L({ ev: 'abyssReset', x: Math.round(player.x), onMesa: m.c34Id || m.x, hp: player.hp }); try { if (gameState === 'playing') showHint('🕳️ 掉進深淵了！受傷一次，回到平台上', 150); } catch (e) {} } }
     return r;
@@ -34088,13 +34174,23 @@ function c34Complete(sid) {
   wrapFn('rpgBuildScene', o => function (id) {
     const line = C34_TEACHING[id];
     if (!line) return o.apply(this, arguments);
-    return { id, title: id.startsWith('c34_canyon_') ? '飛越峽谷' : '水域探索', policy: 'oncePerAttempt', saveHistory: false, left: line.face, right: null,
+    const wetTutorial = id === 'c34_first_wet' || id === 'c34_first_dry_wind';
+    const canyon = id.startsWith('c34_canyon_');
+    return { id, title: canyon || id.startsWith('c34_tree_gap_') ? '飛越峽谷' : '水域探索',
+      policy: canyon ? 'oncePerAttempt' : wetTutorial ? 'oncePerPlayer' : undefined,
+      modeControlled: !canyon, saveHistory: false, left: line.face, right: null,
       pages: [{ sp: 'balloonv', face: line.face, text: line.text }] };
   });
   wrapFn('updatePlayer', o => function () {
     if (c34Is() && gameState === 'playing' && !rpgActive && c34AdvanceClimb()) return;
     const result = o.apply(this, arguments);
     if (c34Is() && gameState === 'playing' && !rpgActive) {
+      if (player.onGround) {
+        const center = player.x + player.w / 2;
+        const p2 = C34_LAY.p2;
+        c34.treeCrossing = center >= p2.x && center <= p2.x + p2.w &&
+          Math.abs(player.y + player.h - C34_LAY.y(p2.h)) < 1;
+      }
       if (player.x >= 900 && player.x < C34_LAY.a1) c34Teach('c34_canyon_arrival');
       c34Step();
     }

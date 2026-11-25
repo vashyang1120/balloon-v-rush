@@ -5,6 +5,8 @@ const C34_TEACHING = {
   c34_canyon_umbrella: { face: 'balloonv_confused', text: '咦...還是飛得不夠高...如果加上氣球雨傘的輔助呢？' },
   c34_first_wet: { face: 'balloonv_surprised', text: '啊！！我全身都溼了...身體變好重好難動...' },
   c34_first_dry_wind: { face: 'balloonv_happy', text: '哇！這裡的風讓我身體乾了一些！！' },
+  c34_tree_gap_2: { face: 'balloonv_confused', text: '咦！這個峽谷似乎太遠了，好像跳不過去。那我可以怎麼辦呢？' },
+  c34_tree_gap_4: { face: 'balloonv_thinking', text: '咦！這邊有棵樹。還是說我可以把樹槌倒當作橋梁呢？' },
 };
 
 function c34JumpSpeed(base, heightRatio) {
@@ -24,9 +26,10 @@ function c34LeaveSurface() {
 }
 
 function c34ResetWater() {
+  for (const id of ['c34_first_wet', 'c34_first_dry_wind', 'c34_tree_gap_2', 'c34_tree_gap_4']) c34.taught.delete(id);
   Object.assign(c34, { camY: 0, level: 0, fillFrames: 0, stream: 'none', _filling: false,
     swim: false, swimTime: 0, climb: null, lowWaterPanicSeen: false, wet: 0, dryingWindStart: null, waterTick: 0, ripples: [], rippleAt: 0, jumpReleased: true,
-    falls: new Map(), poolImpact: null, shower: null });
+    falls: new Map(), poolImpact: null, shower: null, treeCrossing: false, treeFailures: 0 });
 }
 
 function c34PlatformSurface(p, x = player.x + player.w / 2) {

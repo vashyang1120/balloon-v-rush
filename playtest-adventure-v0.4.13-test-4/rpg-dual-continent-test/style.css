@@ -4062,3 +4062,25 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
   cursor: pointer;
 }
 .ch3-treasure-actions button:disabled { opacity: .6; }
+.umbrella-guide-panel .h2-panel-wrap.is-open .h2-panel-body {
+  overflow: hidden;
+}
+.umbrella-guide-panel .umbrella-guide-row {
+  position: relative;
+  z-index: 5;
+  box-shadow: 0 0 0 2px #ffe597, 0 0 0 100vmax #110c25b0;
+}
+.umbrella-guide-panel .umbrella-guide-row button:is([data-h2-act="buy395"], [data-h2-act="craft"]) {
+  position: relative;
+  outline: 2px solid #ffefaa;
+  outline-offset: 2px;
+}
+.umbrella-guide-panel .umbrella-guide-row button:is([data-h2-act="buy395"], [data-h2-act="craft"])::before {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  color: #ffefaa;
+  content: '▼';
+  transform: translateX(-50%);
+  pointer-events: none;
+}
