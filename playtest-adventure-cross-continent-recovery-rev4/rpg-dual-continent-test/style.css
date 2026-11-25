@@ -4105,3 +4105,5 @@ img.wpn-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-alig
   transform: translateX(-50%);
   pointer-events: none;
 }
+
+.adv-currency-icon { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -0.2em; }
