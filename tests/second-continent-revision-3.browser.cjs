@@ -102,6 +102,7 @@ test('Revision 3 umbrella recovery through the home UI', { timeout: 180000 }, as
       await craft.waitFor();
       const state = () => page.evaluate(() => [playerInventory.coins, playerInventory.balloon260,
         c2UmbrellaCount(), !!c2Flow().umbrellaRescue, !!c2Flow().umbrellaPurchaseGuide]);
+      await craft.dispatchEvent('click');
       assert.deepEqual(await state(), [0, 6, 0, false, true]);
       await page.reload();
       await start();

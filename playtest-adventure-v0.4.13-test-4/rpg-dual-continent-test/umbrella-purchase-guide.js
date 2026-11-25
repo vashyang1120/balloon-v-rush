@@ -8,6 +8,7 @@
   let entranceTimer = 0;
   let focusFrame = 0;
   let crafting = false;
+  let craftEnabledAt = 0;
   const wrapFn = (name, wrap) => { globalThis[name] = wrap(globalThis[name]); };
 
   function target() {
@@ -124,7 +125,11 @@
     if (!prep.buy) return openRequiredPanel();
     H2.shopQty[packId] = prep.quantity;
     const result = original.apply(this, arguments);
-    if (c2UmbrellaPrep().craft) openRequiredPanel();
+    if (c2UmbrellaPrep().craft) {
+      // The second click of a purchase double-click cannot activate the new panel.
+      craftEnabledAt = performance.now() + 450;
+      openRequiredPanel();
+    }
     return result;
   });
   wrapFn('saveInventory', original => function () {
@@ -132,7 +137,7 @@
   });
   wrapFn('craftItem', original => function (id) {
     if (!phase) return original.apply(this, arguments);
-    if (phase !== 'craft' || id !== recipeId) return false;
+    if (phase !== 'craft' || id !== recipeId || performance.now() < craftEnabledAt) return false;
     const before = structuredClone(playerInventory);
     let crafted;
     crafting = true;
@@ -153,7 +158,8 @@
   function blockOutsideGuide(event) {
     if (!phase) return;
     const eventTarget = event.target;
-    const allowed = phase === 'dialogue' ? rpgActive?.id === sceneId && eventTarget.closest?.('#rpg-overlay') : target()?.contains(eventTarget);
+    const allowed = phase === 'dialogue' ? rpgActive?.id === sceneId && eventTarget.closest?.('#rpg-overlay') :
+      (phase !== 'craft' || performance.now() >= craftEnabledAt) && target()?.contains(eventTarget);
     if (allowed) return;
     event.preventDefault();
     event.stopImmediatePropagation();
