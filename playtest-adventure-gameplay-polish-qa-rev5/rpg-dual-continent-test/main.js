@@ -32459,12 +32459,23 @@ function c1dDevJump(what) {
 
   // 小遊戲背景：每次打開小V的家就先準備好「目前這塊大陸」的淡化窗景（第二次以後直接用快取）
   // 小V之家窗景：每次畫面更新都依「目前所在的大陸」換圖（第一大陸 01、第二大陸 02；原本只在第一次建立小V之家時設定一次）
-  var c1dWinPath = null;
+  var c1dWinPath = null, c1dPauseBgPath = null;
+  // Revision 5 D-01：暫停選單背景（--h2-img-continent）原本只在小V之家重畫時更新 → 從小V之家（第一大陸窗景）
+  //   出發到第二大陸關卡後按暫停，背景仍是第一大陸。改成每次打開暫停選單都依「目前所在的大陸」設定。
+  function c1dSyncPauseBg() {
+    const w = c1uHomeWindowFor(c1uCurrentContinent());
+    if (w === c1dPauseBgPath) return;
+    c1dPauseBgPath = w; h2CssAsset(w, '--h2-img-continent', null);
+  }
+  wrapFn('p2RenderPause', o => function () {
+    try { c1dSyncPauseBg(); } catch (e) {}
+    return o.apply(this, arguments);
+  });
   wrapFn('h2RenderAll', o => function () {
     const r = o.apply(this, arguments);
     try {
       const w = c1uHomeWindowFor(c1uCurrentContinent());
-      if (w !== c1dWinPath) { c1dWinPath = w; h2SetImgEl(h2$('h2-bg-window'), w); h2CssAsset(w, '--h2-img-continent', null); console.log('[C1D] 小V之家窗景：' + w.split('/').pop()); }
+      if (w !== c1dWinPath) { c1dWinPath = w; h2SetImgEl(h2$('h2-bg-window'), w); c1dPauseBgPath = w; h2CssAsset(w, '--h2-img-continent', null); console.log('[C1D] 小V之家窗景：' + w.split('/').pop()); }
       c1uPrepareMinigameBg();
     } catch (e) {}
     return r;
