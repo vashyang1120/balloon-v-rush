@@ -1,8 +1,14 @@
 {
-  "version": "adventure-v0.4.13-ch3-water-terrain-integration-test-4",
-  "integrationCommit": "ea09f609c80f6c790de7e870df5256f5718a2881",
-  "gameBlob": "05cc399c509353d729a853df2b50755e989267b0",
-  "start": "rpg-dual-continent-test/?ch3test=3-4",
-  "directStart": "rpg-dual-continent-test/?ch3test=start",
-  "pool": "rpg-dual-continent-test/?ch3test=pool"
+  "version": "adventure-v0.4.13-cross-continent-recovery-rev4",
+  "baseline": "d0633abfbb7c71f003db8d22998f7a2af10bd1a5",
+  "sources": {
+    "revision3": "d0633abfbb7c71f003db8d22998f7a2af10bd1a5",
+    "balloonDiceV2": "01c07f82b596d2d25a4920906d6c05bbdcbf4385",
+    "continent1Release": "c3fabbb9bce2bbf585b3328ae7bbfba868e2d6ee",
+    "volleyballCourtFix": "0ed4ff701861b3f401b4457b7955ba5e1b434b48"
+  },
+  "fullAdventure": "rpg-dual-continent-test/index.html",
+  "secondContinent": "rpg-dual-continent-test/index.html?devtools=1&ch3test=3-1",
+  "pool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=pool",
+  "storageNamespace": "balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:"
 }
