@@ -19853,7 +19853,8 @@ function rpgBuildScene(id, extra) {
   if (id.startsWith('rpg007_recipe:')) {
     const key = id.split(':')[1]; const lines = RPG_RECIPE_LINES[key]; if (!lines) return null;
     return { id, title: '發現秘笈：' + ((extra && extra.recipeName) || (key === 'balloonDice' ? '氣球骰子' : key)),
-      modeControlled: true, policy: key === 'balloonDice' ? 'oncePerPlayer' : undefined,
+      modeControlled: true, policy: key === 'balloonDice' ? 'recipeReplay' : undefined,
+      firstReplayFrom: key === 'balloonDice' ? 1 : undefined,
       saveHistory: true, left: lines[0].face, right: 'balloon_recipe_book', pages: lines.map(l => Object.assign({}, l)) };
   }
   // v0.3.68：rpg020_find:recipe:<配方> / rpg020_find:goldChest / rpg020_find:bossNote — 第一張發現提示，接著播原本的說明
@@ -19861,12 +19862,13 @@ function rpgBuildScene(id, extra) {
     const parts = id.split(':'), kind = parts[1], key = parts[2];
     const nm = RPG_FIND_NAMES[kind]; if (!nm) return null;
     if (kind === 'recipe' && key === 'balloonDice') {
-      return { id, title: '發現氣球秘笈', policy: 'oncePerPlayer', saveHistory: false, oneClick: true,
+      return { id, title: '發現氣球秘笈', policy: 'recipeReplay', saveHistory: false, oneClick: true,
         left: 'balloonv_surprised', right: 'balloon_recipe_book', next: 'rpg007_recipe:balloonDice',
         pages: [{ sp: 'balloonv', face: 'balloonv_surprised', text: '咦？這裡竟然藏著一本氣球秘笈！' }] };
     }
     const next = kind === 'recipe' ? (RPG_RECIPE_LINES[key] ? 'rpg007_recipe:' + key : null) : kind === 'goldChest' ? 'rpg008_chest:goldChest' : null;
-    return { id, title: '發現' + nm, modeControlled: false, saveHistory: false, repeatable: true, oneClick: true, left: 'balloonv_surprised', right: kind === 'recipe' ? 'balloon_recipe_book' : null,
+    const policy = kind === 'recipe' && key === 'balloonVolleyball' ? 'recipeReplay' : undefined;
+    return { id, title: '發現' + nm, modeControlled: false, policy, saveHistory: false, repeatable: true, oneClick: true, left: 'balloonv_surprised', right: kind === 'recipe' ? 'balloon_recipe_book' : null,
       next, pages: [{ sp: 'balloonv', face: 'balloonv_surprised', text: '咦！發現了{g:' + nm + '}！' }] };
   }
   if (id.startsWith('rpg008_chest:')) {
@@ -20057,6 +20059,7 @@ function rpgIsActive() { return !!rpgActive; }
 const rpgSessionShown = new Set(); // 本次開啟網頁已播過的場景（Boss 登場「完整提示」用）
 function rpgShouldShowScene(scene) {
   if (!scene) return false;
+  if (scene.policy === 'recipeReplay') return rpgGetMode() !== 'off';
   if (scene.policy === 'oncePerPlayer') return !rpgIsSeen(scene.id);              // 一生一次，不受顯示模式影響
   if (scene.showcase) return true;                                                 // v0.3.61：必要的發現展示（例如觀察筆記）
   if (scene.policy === 'bossIntro') {
@@ -20079,6 +20082,9 @@ function rpgRequest(id, valid, extra) {
   if (!scene) return false;
   if (rpgAttempt.shown.has(id) && !scene.repeatable) return false;
   if (!rpgShouldShowScene(scene)) return false;
+  if (scene.firstReplayFrom !== undefined && rpgGetMode() === 'first' && rpgIsSeen(id)) {
+    scene.pages = scene.pages.slice(scene.firstReplayFrom, scene.firstReplayFrom + 1);
+  }
   if (extra && typeof extra.target === 'function') scene.targetFn = extra.target;
   rpgAttempt.queued.add(id);
   rpgQueue.push({ scene, valid: valid || (() => true), at: Date.now() });
@@ -28071,8 +28077,8 @@ function vbEnsureNav() {
     { sp: 'balloonv', face: 'balloonv_happy',    text: '等回到家，就可以找蠍子怪、橘子怪和橘子王一起打排球了！' },
   ];
   wrapFn('rpgBuildScene', o => function (id) {
-    // 已經學會、在另一處又找到：兩幕（每次找到都播；不寫入對話紀錄）
-    if (id === 'vb_found_again') return { id, title: '又發現氣球排球秘笈', modeControlled: false, saveHistory: false, repeatable: true, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
+    // 另一處藏匿地點有自己的已讀紀錄，與首次取得排球的說明分開。
+    if (id === 'vb_found_again') return { id, title: '又發現氣球排球秘笈', policy: 'recipeReplay', firstReplayFrom: 0, saveHistory: false, repeatable: true, left: 'balloonv_surprised', right: 'balloon_recipe_book', pages: [
       { sp: 'balloonv', face: 'balloonv_surprised', text: '咦！這裡也藏著{g:氣球排球秘笈}！' },
       { sp: 'balloonv', face: 'balloonv_happy',     text: '雖然我已經學會了，不過又發現一個秘密地點了！' } ] };
     const s = o.apply(this, arguments);

@@ -28,6 +28,76 @@ function clearFirstStageForSummary() {
   triggerClear();
 }
 
+async function verifyRecipeReplay(page) {
+  // Trigger the real collision and drive its queued RPG scenes, including the normal close/seen hook.
+  const pickup = (stage, recipe, mode, known = false) => page.evaluate(({ stage, recipe, mode, known }) => {
+    rpgSetMode(mode);
+    if (known) playerInventory.unlockedRecipes[recipe] = true;
+    else delete playerInventory.unlockedRecipes[recipe];
+    rcStage(stage, true);
+    const book = vbTreasureList.find(item => item.recipeKey === recipe);
+    currentHiddenTreasure = book;
+    rcCollect(book);
+    const lines = [];
+    while (rpgQueue.length) {
+      const { scene } = rpgQueue.shift();
+      rpgOpen(scene);
+      lines.push(...scene.pages.map(page => rpgPlainText(page.text)));
+      rpgClose('finished');
+    }
+    const pending = !!currentRunStats.pendingRecipeUnlocks?.[recipe];
+    currentHiddenTreasure = book;
+    rcCollect(book);
+    return { lines, found: book.found, pending, queuedAgain: rpgQueue.length };
+  }, { stage, recipe, mode, known });
+  const expectPickup = async (stage, recipe, mode, lines, known = false) => {
+    const pending = !known || recipe === 'balloonVolleyball';
+    assert.deepEqual(await pickup(stage, recipe, mode, known), { lines, found: true, pending, queuedAgain: 0 });
+  };
+  const dice = [
+    '咦？這裡竟然藏著一本氣球秘笈！',
+    '氣球骰子？原來用氣球也能做出骰子啊！',
+    '可是氣球骰子可以做什麼呢？',
+  ];
+  const volleyball = [
+    '咦！發現了氣球秘笈！',
+    '原來是氣球排球的製作秘笈啊！',
+    '只要用 3 條 260 氣球，就能做出一顆氣球排球！',
+    '等回到家，就可以找蠍子怪、橘子怪和橘子王一起打排球了！',
+  ];
+  const volleyballAgain = ['咦！這裡也藏著氣球排球秘笈！', '雖然我已經學會了，不過又發現一個秘密地點了！'];
+  const diceBook = (mode, lines, known) => expectPickup('1-2b', 'balloonDice', mode, lines, known);
+  const volleyballBook = (mode, lines, known) => expectPickup('2-2', 'balloonVolleyball', mode, lines, known);
+  // The legacy discovery flag alone must not suppress the unread explanation.
+  await page.evaluate(() => rpgMarkSeen('rpg020_find:recipe:balloonDice', 'finished'));
+  await diceBook('off', []);
+  await diceBook('first', dice);
+  await diceBook('first', [dice[0], dice[2]]);
+  await diceBook('full', dice);
+  await diceBook('full', [], true);
+  await volleyballBook('off', []);
+  await volleyballBook('first', volleyball);
+  await volleyballBook('first', volleyball.slice(0, 1));
+  await volleyballBook('full', volleyball);
+  await volleyballBook('off', [], true);
+  await volleyballBook('first', volleyballAgain, true);
+  await volleyballBook('first', volleyballAgain.slice(0, 1), true);
+  await volleyballBook('full', volleyballAgain, true);
+  assert.deepEqual(await page.evaluate(() => {
+    rpgSetMode('first');
+    const result = ['basicHammer', 'balloonLollipop', 'balloonUmbrella'].map(key => {
+      const scene = rpgBuildScene('rpg020_find:recipe:' + key);
+      return [rpgShouldShowScene(scene), rpgPlainText(scene.pages[0].text)];
+    });
+    return { common: result, targetScore: VB_CONFIG.targetScore };
+  }), { common: Array(3).fill([true, volleyball[0]]), targetScore: 5 });
+
+  await volleyballBook('off', []);
+  assert.equal(await page.evaluate(() => vbUnlocked()), false);
+  await page.evaluate(() => triggerClear());
+  assert.deepEqual(await page.evaluate(() => [vbUnlocked(), vbData().matchesLeft]), [true, 3]);
+}
+
 test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t => {
   const server = createPreview();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -244,6 +314,7 @@ test('Continent 1 RC dice and legacy-save replay', { timeout: 300000 }, async t 
       await click(page.locator('[data-oc="yes"]'));
       await page.waitForFunction(() => advCurrentStageId() === '1-1' && !assetGateBusy);
       assert.deepEqual(await page.evaluate(() => [v395BagLevel(), whUnlocked(), vbUnlocked()]), [1, false, false]);
+      await verifyRecipeReplay(page);
       assert.deepEqual(errors, []);
     });
   }
