@@ -63,3 +63,19 @@
 ## 測試
 
 `tests/chapter3-dog-water-hotfix1.browser.cjs`（鍵盤、手機橫向觸控）：入水、水中右／左移、水中靜止、到浮板（小狗在浮板旁游泳／站在浮板上）、回到岸上、小V在岸邊而小狗在水裡、再次入水；檢查只用走路四張圖、靜止仍四張輪替、爬出時不用 fall、鼻子高度、腳在水下、入出水切換次數、相鄰兩幀垂直位移、沒有錯誤。另外跑完第二大陸既有套件（見最終報告）。
+
+## 結果
+
+| 項目 | 結果 |
+|---|---|
+| `chapter3-dog-water-hotfix1`（鍵盤、觸控） | 2／2 |
+| `chapter3-water`（含小V游泳、爬上岸、浮板、水位、瀑布、雨傘分流、骰子寶箱） | 23／23 |
+| `chapter3-normal-flow`（鍵盤、觸控；帶狗出發、狗狗尋寶、岩棚寶箱、通關） | 2／2 |
+| `chapter3-pages-isolation` | 8／8（版本字串的預期值改為 hotfix1；存檔命名空間不變） |
+| `balloon-dice-minigames`、`balloon-dice-v2`、`chapter3-tree-gap-rev5`、`balloon-dice-audio-rev5` | 全部通過 |
+| `tests/gameplay-polish-qa-rev5.browser.cjs`（Rev3／Rev4／Rev5 回歸） | 7／7 |
+| 單元測試 | 13／13 |
+| 跨大陸同步檢查 | 64 項全部通過 |
+| 公開 HTTPS（提交 `6a7e3d6`，`qago=dogpool`） | 版本 `adventure-v0.4.13-gameplay-polish-qa-rev5-hotfix1`；小狗同行；入水後只用 run1～run4（小V停住時四張仍輪替），鼻子在水面上 10～12.4 px，腳在水下 16～21 px；主控台沒有 SecurityError／CORS／404／TypeError |
+
+證據：`evidence/hotfix1/`（修正前後對照 `before-after.png`、修正前後靜止游泳 GIF、上岸 GIF、鍵盤／觸控各情境截圖與逐幀紀錄）。
