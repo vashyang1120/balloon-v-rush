@@ -32,15 +32,18 @@ function record(kind, feature, build, ok, detail) {
   results.push({ kind, feature, build, status, ok, detail });
 }
 
+function readRaw(rel) { const file = join(repo, rel); return existsSync(file) ? readFileSync(file) : null; }
 for (const rule of manifest.identical) {
-  const canonical = read(rule.canonical);
+  // Binary assets (audio) are compared byte for byte; text files ignore CRLF.
+  const canonical = rule.binary ? readRaw(rule.canonical) : read(rule.canonical);
   for (const copy of rule.copies) {
     const rel = posix.join(manifest.builds[copy.build].root, copy.path);
-    const text = read(rel);
+    const text = rule.binary ? readRaw(rel) : read(rel);
     if (canonical == null) { record('identical', rule.feature, copy.build, false, 'canonical missing: ' + rule.canonical); continue; }
     if (text == null) { record('identical', rule.feature, copy.build, false, 'copy missing: ' + rel); continue; }
-    record('identical', rule.feature, copy.build, text === canonical,
-      text === canonical ? rel + ' = ' + rule.canonical + ' (' + sha(text) + ')'
+    const same = rule.binary ? Buffer.compare(text, canonical) === 0 : text === canonical;
+    record('identical', rule.feature, copy.build, same,
+      same ? rel + ' = ' + rule.canonical + ' (' + sha(text) + ')'
         : rel + ' (' + sha(text) + ') differs from ' + rule.canonical + ' (' + sha(canonical) + ') — stale copy?');
   }
 }
@@ -88,7 +91,7 @@ for (const rule of manifest.cacheTags) {
 if (args.has('--archived')) {
   for (const [id, b] of Object.entries(manifest.builds)) {
     if (b.status !== 'archived') continue;
-    for (const rule of manifest.contains.filter(r => r.builds.includes('rev4'))) {
+    for (const rule of manifest.contains.filter(r => r.builds.includes(manifest.secondContinentActive || 'rev5'))) {
       const rel = posix.normalize(posix.join(gameDir(id), rule.file));
       const text = read(rel);
       if (text == null) continue;

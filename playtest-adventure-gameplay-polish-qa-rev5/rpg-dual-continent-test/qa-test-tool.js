@@ -139,14 +139,14 @@
   }
   const L = () => C34_LAY;
   const SHORTCUTS = [
-    { name: '3-1 雨傘秘笈（帶狗）', go: () => startAt('3-1', { dog: true, name: '3-1 雨傘秘笈前', place: () => ({ x: 2900 - 260, y: GROUND_Y }) }) },
-    { name: '3-2 新增風刃蠍子', go: () => startAt('3-2', { name: '3-2 開頭空地（新蠍子在右邊 x 650～750）', place: () => ({ x: 380, y: GROUND_Y }) }) },
-    { name: '3-4 樹峽谷', go: () => startAt('3-4', { name: '3-4 P2 樹旁', place: () => ({ x: L().p2.x + 40, y: L().y(L().p2.h) }) }) },
-    { name: '3-4 水池／瀑布', go: () => startAt('3-4', { section: 'pool', name: '3-4 水池區段' }) },
-    { name: '3-4 珍貴寶箱（帶狗）', go: () => startAt('3-4', { dog: true, name: '3-4 烘乾風口前（往右走進風口再跳、往左上到寶箱岩棚）',
+    { key: 'umbrella31', name: '3-1 雨傘秘笈（帶狗）', go: () => startAt('3-1', { dog: true, name: '3-1 雨傘秘笈前', place: () => ({ x: 2900 - 260, y: GROUND_Y }) }) },
+    { key: 'scorpion32', name: '3-2 新增風刃蠍子', go: () => startAt('3-2', { name: '3-2 開頭空地（新蠍子在右邊 x 650～750）', place: () => ({ x: 380, y: GROUND_Y }) }) },
+    { key: 'tree', name: '3-4 樹峽谷', go: () => startAt('3-4', { name: '3-4 P2 樹旁', place: () => ({ x: L().p2.x + 40, y: L().y(L().p2.h) }) }) },
+    { key: 'pool', name: '3-4 水池／瀑布', go: () => startAt('3-4', { section: 'pool', name: '3-4 水池區段' }) },
+    { key: 'chest', name: '3-4 珍貴寶箱（帶狗）', go: () => startAt('3-4', { dog: true, name: '3-4 烘乾風口前（往右走進風口再跳、往左上到寶箱岩棚）',
       place: () => ({ x: L().dryingVent.x - 160, y: L().y(L().ct.h) }) }) },
-    { name: '3-4 高台鏡頭', go: () => startAt('3-4', { name: '3-4 P3 岩棚（往右跳上峽谷頂部）', place: () => ({ x: L().p3.x + 20, y: L().y(L().p3.h) }) }) },
-    { name: '骰子音效（寶箱前，骰子 1 顆）', go: () => startAt('3-4', { dog: true, name: '寶箱岩棚（站到寶箱旁，星靈邀請會直接出現）',
+    { key: 'camera', name: '3-4 高台鏡頭', go: () => startAt('3-4', { name: '3-4 P3 岩棚（往右跳上峽谷頂部）', place: () => ({ x: L().p3.x + 20, y: L().y(L().p3.h) }) }) },
+    { key: 'dice', name: '骰子音效（寶箱前，骰子 1 顆）', go: () => startAt('3-4', { dog: true, name: '寶箱岩棚（站到寶箱旁，星靈邀請會直接出現）',
       place: () => ({ x: L().chestLedge.x + 30, y: L().y(L().chestLedge.h),
         after: () => { playerInventory.unlockedRecipes.balloonDice = true; playerInventory.craftedItems.balloonDice = Math.max(1, v395Count('balloonDice')); } }) }) },
   ];
@@ -238,5 +238,21 @@ ${SHORTCUTS.map((s, i) => `<div class="row"><span class="l">${esc(s.name)}</span
     if (btn.style.display !== want) btn.style.display = want;
   }, 200);
   resumePending();
+  // Landing-page links: ?qago=<shortcut key> runs a shortcut once the game is running; ?qaopen=1 opens the panel.
+  const autoGo = query.get('qago'), autoOpen = query.get('qaopen') === '1';
+  if (autoGo || autoOpen) {
+    const begun = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - begun > 90000) return clearInterval(timer);
+      try {
+        if (gameStartGateActive || assetGateActive) return;
+        if (autoGo) { if (gameState !== 'playing' && !(typeof h2IsOpen === 'function' && h2IsOpen())) return; }
+        else if (!(typeof h2IsOpen === 'function' && h2IsOpen()) && gameState !== 'playing') return;
+      } catch (e) { return; }
+      clearInterval(timer);
+      const s = SHORTCUTS.find(x => x.key === autoGo);
+      if (s) s.go(); else open();
+    }, 250);
+  }
   window.qaTestTool = { open, close, render, applyUmbrellaScenario, loadUmbrellaScenario, setRpgItem, RPG_ITEMS, SHORTCUTS, umbrellaNumbers };
 })();
