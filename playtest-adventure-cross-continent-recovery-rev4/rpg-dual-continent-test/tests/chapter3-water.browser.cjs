@@ -25,8 +25,14 @@ async function openSection(page, section) {
     pauseGame();
   });
   const entry = page.locator('#btn-pause-test-c2-3-4-' + section);
-  if (!await entry.isVisible()) await page.locator('#p2-dev-toggle').click();
-  await entry.click();
+  if (!await entry.count()) {
+    // The packaged playtest has no 3-2 wind/volleyball dev buttons to anchor this button to
+    // (also true for the Revision 3 package); call the button's own handler instead.
+    await page.evaluate(sec => c34Start('3-4', 'dev', sec), section);
+  } else {
+    if (!await entry.isVisible()) await page.locator('#p2-dev-toggle').click();
+    await entry.click();
+  }
   await page.waitForFunction(expected =>
     !assetGateActive && gameState === 'playing' && debugC34().ready && debugC34().section === expected,
   section, { timeout: 90000 });
@@ -327,6 +333,9 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
   await openSection(page, 'pool');
   await t.test('pool catches the right-hand branch at the facing-dependent rate and dries continuously in wind', async () => {
     const actual = await page.evaluate(() => {
+      // Revision 3 made the first-dry line once per player (read records persist). Earlier
+      // subtests in this session may already have read it, so start this check unread.
+      delete rpgLoad().seen.c34_first_dry_wind;
       const { x, baseY } = c34Pool();
       const f = c34Falls()[1], pad = platforms.find(p => p.c34Pad);
       function put(cx, y, direction, slot) {
@@ -699,10 +708,22 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.deepEqual(await readState(), before);
     await record(page, 'desktop-3-4-reopened-result');
 
+    // Settlement UI 2.0 (PR #45): the summary is also kept with the prep resume, so clearing
+    // the in-memory copy still reopens the same read-only summary; with neither copy the
+    // player gets a toast instead of an empty sheet.
     await page.evaluate(() => { H2.summary = null; });
     await page.locator('#h2-sum-ok').click();
     await page.locator('#h2-back').click();
-    assert.match(await body.textContent(), /尚無本關結算紀錄/);
+    const stored = await page.evaluate(() => !!h2CurrentSummary());
+    if (stored) {
+      await summary.waitFor({ state: 'visible' });
+      // The stored copy holds the reward rows; developer-only rows appended on screen are not saved.
+      assert.ok(originalRows.startsWith(await body.textContent()));
+      assert.equal(await page.locator('#h2-sum-ok').textContent(), '返回整備');
+      await page.locator('#h2-sum-ok').click();
+    } else {
+      assert.equal(await summary.isVisible(), false);
+    }
     assert.deepEqual(await readState(), before);
   });
 
@@ -785,6 +806,14 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           if (rpgActive) rpgClose('finished');
           rpgQueue.length = 0;
           c34.taught.add('c34_first_wet');
+          // Revision 3: wet/dry tutorials are once per player and c34ResetWater re-arms them,
+          // so mark both as read to keep this check about the low-water panic only.
+          const seen = rpgLoad().seen;
+          seen.c34_first_wet = seen.c34_first_wet || Date.now();
+          seen.c34_first_dry_wind = seen.c34_first_dry_wind || Date.now();
+          // The developer pool shortcut grants a hammer without the 2-x crafting scene, so the
+          // first-hammer tutorial would otherwise queue here (same in the Revision 3 package).
+          seen.rpg011_hammer_crafted = seen.rpg011_hammer_crafted || Date.now();
           activeSlot = 'sword';
           Object.assign(player, { x: pool.x - player.w - 6, y: pool.baseY - player.h,
             vx: 0, vy: 0, onGround: true });
@@ -826,7 +855,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
           await control('right', false);
           const tick = await rescuePage.evaluate(() => c34.waterTick);
           await rescuePage.waitForFunction(initial => c34.waterTick >= initial + 30 || !!rpgActive, tick);
-          assert.deepEqual(await rescuePage.evaluate(() => ({ swim: c34.swim, dialog: !!rpgActive,
+          assert.deepEqual(await rescuePage.evaluate(() => ({ swim: c34.swim, dialog: rpgActive ? rpgActive.id : false,
             level: c34.level, visits: c34.log.filter(e => e.ev === 'poolRescue').length })),
           { swim: true, dialog: false, level: 0, visits: 0 });
         }

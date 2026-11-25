@@ -30160,7 +30160,7 @@ function v395ShopBuy(id, anchor) {
 // 開發測試用（只有 ?devtools=1 會出現按鈕；不扣金幣）
 function v395DevAction(key) {
   const inv = v395Inv();
-  // Revision 4（BUG-06）：bagLv1／bagLv2 免費切換已廢止；背包等級只能經正式商店購買或從頭挑戰重置改變
+  // Revision 4（BUG-06）：背包 LV1／LV2 免費切換已廢止；背包等級只能經正式商店購買或從頭挑戰重置改變
   if (/^boots/.test(key)) { const m = +key.slice(5); if (V395_BOOTS.candidates.includes(m)) { V395_BOOTS.mul = m; h2Toast('🛠 測試：翼靴倍率 ×' + m.toFixed(2)); } }
   v395L({ ev: 'dev', key, bagLevel: inv.bagLevel, bootsMul: V395_BOOTS.mul });
   try { h2RenderAll(); if (H2.panel) h2RenderPanel(); } catch (e) {}
