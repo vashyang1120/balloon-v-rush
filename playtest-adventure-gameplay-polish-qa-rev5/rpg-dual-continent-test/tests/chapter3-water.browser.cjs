@@ -76,7 +76,7 @@ test('Chapter 3 terrain and water through the dual-continent entry', { timeout: 
     assert.equal(report.stage, '3-4');
     assert.equal(report.section, 'start');
     assert.equal(report.dev, true);
-    assert.match(report.version, /v0\.4\.13-(balloon-dice-v2|cross-continent-recovery-rev4)/);
+    assert.match(report.version, /v0\.4\.13-(balloon-dice-v2|gameplay-polish-qa-rev5)/);
     assert.ok(report.x < 620);
     assert.deepEqual(report.art, { loaded: 82, failed: [] });
     assert.equal(report.frames, 64);

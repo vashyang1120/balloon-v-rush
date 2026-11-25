@@ -11,7 +11,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
   const origin = 'https://vashyang1120.github.io';
   const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
-  if (!publicUrl) await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4'));
+  if (!publicUrl) await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush/playtest-adventure-gameplay-polish-qa-rev5'));
   const page = await context.newPage();
   async function waitFor(check, timeout) {
     const until = Date.now() + timeout;
@@ -25,7 +25,7 @@ test('Test 3 guest home starts and returns from both minigames', { timeout: 1450
   const whAlerts = [];
   page.on('console', msg => { if (msg.text().includes('[Whack]')) whAlerts.push(msg.text()); });
   page.on('pageerror', error => errors.push(error.message));
-  const base = publicUrl || origin + '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4/';
+  const base = publicUrl || origin + '/balloon-v-rush/playtest-adventure-gameplay-polish-qa-rev5/';
   const entry = base + 'rpg-dual-continent-test/index.html?devtools=1&ch3test=3-1';
   if (publicUrl) await openHostedAdventure(page, entry);
   else await page.goto(entry);

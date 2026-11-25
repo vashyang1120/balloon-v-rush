@@ -1,5 +1,5 @@
 {
-  "version": "adventure-v0.4.13-cross-continent-recovery-rev4",
+  "version": "adventure-v0.4.13-gameplay-polish-qa-rev5",
   "baseline": "d0633abfbb7c71f003db8d22998f7a2af10bd1a5",
   "sources": {
     "revision3": "d0633abfbb7c71f003db8d22998f7a2af10bd1a5",
@@ -10,5 +10,5 @@
   "fullAdventure": "rpg-dual-continent-test/index.html",
   "secondContinent": "rpg-dual-continent-test/index.html?devtools=1&ch3test=3-1",
   "pool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=pool",
-  "storageNamespace": "balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:"
+  "storageNamespace": "balloon-v-rush:adventure-playtest:gameplay-polish-qa-rev5:"
 }

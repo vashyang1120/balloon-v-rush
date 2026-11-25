@@ -9,7 +9,7 @@
   if (!location.pathname.startsWith(previewRoot.pathname)) return;
   if (window.adventurePlaytestReady) return;
 
-  const namespace = 'balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:';
+  const namespace = 'balloon-v-rush:adventure-playtest:gameplay-polish-qa-rev5:';
   const save = window.Storage.prototype;
   const { getItem, setItem, removeItem, key } = save;
   const storageLength = Object.getOwnPropertyDescriptor(save, 'length').get;

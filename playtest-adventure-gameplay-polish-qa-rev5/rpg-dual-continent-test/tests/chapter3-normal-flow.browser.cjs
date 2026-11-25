@@ -7,7 +7,7 @@ const { serveCheckout, openHostedAdventure } = require('./chapter3-static-fixtur
 
 const origin = 'https://vashyang1120.github.io';
 const cdn = 'https://rawcdn.githack.com';
-const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture/playtest-adventure-cross-continent-recovery-rev4';
+const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture/playtest-adventure-gameplay-polish-qa-rev5';
 const raw = 'https://raw.githubusercontent.com';
 const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
 const entryBase = (publicUrl || cdn + cdnPath + '/') + 'rpg-dual-continent-test/index.html?devtools=1&ch3test=';
