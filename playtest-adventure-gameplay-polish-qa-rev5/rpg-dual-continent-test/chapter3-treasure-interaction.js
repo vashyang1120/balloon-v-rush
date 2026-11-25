@@ -138,6 +138,7 @@ function offerDiceReward(source) {
     onOption(action) {
       if (attempt !== diceRewardAttempt) return;
       if (action === 'dice-decline') {
+        if (typeof balloonDiceAudio !== 'undefined') balloonDiceAudio.decline();   // G-01：選「否」→ 結束小遊戲 BGM，不播 Heroic／骰子音效
         if (ch3TreasureClaim(source, null)) rpgClose('finished');
         return;
       }
@@ -151,7 +152,9 @@ function offerDiceReward(source) {
       showDiceDuel(scene, rolls, result);
     },
   };
-  if (rpgOpen(scene) && source.tier) sfxPlay('secretDiscovered');
+  const opened = rpgOpen(scene);
+  if (opened && typeof balloonDiceAudio !== 'undefined') balloonDiceAudio.invite();   // Revision 5（G-01）：星靈邀約 → 小遊戲 BGM
+  if (opened && source.tier) sfxPlay('secretDiscovered');
 }
 
 function checkChapter3Treasure() {
@@ -174,6 +177,7 @@ async function showDiceDuel(scene, rolls, result) {
     text: '來比比誰的骰子點數比較大！', options: [],
   };
   rpgShowPage(0);
+  if (typeof balloonDiceAudio !== 'undefined') balloonDiceAudio.accept();   // G-03：小V首次切到 Heroic 表情 → 金色油管環音效一次
   board.hidden = false;
   board.removeAttribute('data-points');
   const still = { y: 0, angle: 0, scaleX: 1, scaleY: 1 };
@@ -194,7 +198,10 @@ async function showDiceDuel(scene, rolls, result) {
       }
     }
   };
-  try { await chapter3TreasureDice.animate(render)(rolls); } catch { /* Keep the rolled result if animation fails. */ }
+  // G-04：骰子跳動與骰子音效同時開始；音效結束時（或核對過的音檔長度到時）最後一顆骰子停住並揭曉
+  const timing = typeof balloonDiceAudio !== 'undefined' ? balloonDiceAudio.startRoll() : null;
+  try { await chapter3TreasureDice.animate(render, { timing })(rolls); } catch { /* Keep the rolled result if animation fails. */ }
+  if (typeof balloonDiceAudio !== 'undefined') balloonDiceAudio.reveal(result.outcome);   // G-05～07：勝利／敗北音效；平手不加
   if (rpgActive !== scene) return;
   render(rolls, still);
   board.dataset.points = rolls.player + ',' + rolls.spirit;
