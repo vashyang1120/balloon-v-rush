@@ -30001,6 +30001,7 @@ function wdFlowAudioFrame(playing, dtSec) {
 //      氣球劍 2／4、氣球槌 2／4、繃帶 5／10、急救包 1／2、無敵星星 1／2；金幣、260、圓氣球、其他材料不限量；盾牌、翼靴是穿戴裝備，不占容量
 //      上限只擋「再取得」（商店購買、秘笈製作）：舊存檔超過上限的道具一個都不刪，只是滿了不能再買／再做
 //      LV1 → LV2 售價：使用者尚未決定 → 商店顯示「價格待定」不能購買；只有開發者模式有「測試用升級」按鈕（不扣金幣）
+//      （#29 已定案 80 冒險金幣；Revision 4 起移除開發者免費升級按鈕，見 BUG-06）
 //  C 盾牌（15）：買了自動裝備、最多一面；受到一般傷害（damagePlayer）時優先消耗盾牌 → HP 不變、盾牌消失；HUD 愛心旁顯示盾牌
 //    翼靴（30）：買了自動裝備；下一次進入關卡時開始生效、整關「地面」跑速 ×V395_BOOTS.mul（空中速度不變 → 跳躍距離、重力、雨傘、風力都不變）；那一關過關後消耗
 //    無敵星星（50）：放進背包的補給品（不是買了就用、不是進關自動用）；冒險中 暫停 → 背包 → 使用 才開始 30 秒；暫停時倒數停止；過關結束
@@ -30104,7 +30105,7 @@ function v395ShopRowsHtml() {
   return V395_SHOP.map(it => {
     const st = v395ShopState(it), owned = v395Owned(it), price = it.id === 'bagUpgrade' ? V395_BAG.upgradePrice : it.price;
     const ownTxt = it.kind === 'equip' ? (owned ? '已裝備' : '未裝備') : it.kind === 'bundle' ? '目前' + (it.mat === 'balloon260' ? ' 260 氣球 ' : '圓氣球 ') + owned : '目前背包 ' + owned;
-    const dev = (it.id === 'bagUpgrade' && H2_DEVTOOLS) ? '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="dev395" data-key="' + (v395BagLevel() >= 2 ? 'bagLv1' : 'bagLv2') + '">🛠 ' + (v395BagLevel() >= 2 ? '測試：回到 LV1' : '測試：升到 LV2（不扣金幣）') + '</button>' : '';
+    const dev = '';   // Revision 4（BUG-06）：背包已以 80 冒險金幣正式販售（#29），免費 LV1／LV2 測試切換已廢止
     return h2RowHtml({ iconHtml: h2Icon(it.icon), badge: it.kind === 'equip' ? (owned ? '<span class="h2-count">✓</span>' : '') : it.id === 'bagUpgrade' ? '<span class="h2-count">' + owned + '</span>' : '', name: it.name,
       full: !!st.off && !/金幣不足/.test(st.state || ''), attr: ' data-shop-row="' + it.id + '" data-v395="1"', price: price != null ? price : null, state: st.state || '',
       desc: h2Esc(it.desc) + '<br>' + h2Esc(ownTxt) + (it.id === 'bagUpgrade' && st.pending ? '<br>升級價格尚未決定，目前還不能購買' : ''),
@@ -30159,9 +30160,8 @@ function v395ShopBuy(id, anchor) {
 // 開發測試用（只有 ?devtools=1 會出現按鈕；不扣金幣）
 function v395DevAction(key) {
   const inv = v395Inv();
-  if (key === 'bagLv2') { inv.bagLevel = 2; saveInventory(); h2Toast('🛠 測試：背包升到 LV2（沒有扣金幣）'); }
-  else if (key === 'bagLv1') { inv.bagLevel = 1; saveInventory(); h2Toast('🛠 測試：背包回到 LV1（超過上限的道具不會被刪除）'); }
-  else if (/^boots/.test(key)) { const m = +key.slice(5); if (V395_BOOTS.candidates.includes(m)) { V395_BOOTS.mul = m; h2Toast('🛠 測試：翼靴倍率 ×' + m.toFixed(2)); } }
+  // Revision 4（BUG-06）：bagLv1／bagLv2 免費切換已廢止；背包等級只能經正式商店購買或從頭挑戰重置改變
+  if (/^boots/.test(key)) { const m = +key.slice(5); if (V395_BOOTS.candidates.includes(m)) { V395_BOOTS.mul = m; h2Toast('🛠 測試：翼靴倍率 ×' + m.toFixed(2)); } }
   v395L({ ev: 'dev', key, bagLevel: inv.bagLevel, bootsMul: V395_BOOTS.mul });
   try { h2RenderAll(); if (H2.panel) h2RenderPanel(); } catch (e) {}
 }
@@ -30372,8 +30372,6 @@ function v395CapHtml() {
     if (document.getElementById('v395-dev')) return true;
     const d = document.createElement('div'); d.id = 'v395-dev'; d.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px';
     const mk = (txt, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'h2-pill h2-pill--purple h2-pill--sm'; b.textContent = txt; b.addEventListener('click', e => { e.preventDefault(); fn(); }); d.appendChild(b); return b; };
-    mk('🎒 背包 LV2（測試）', () => { v395Inv().bagLevel = 2; saveInventory(); showHint('🛠 背包 LV2（測試，沒有扣金幣）', 120); });
-    mk('🎒 背包 LV1（測試）', () => { v395Inv().bagLevel = 1; saveInventory(); showHint('🛠 背包 LV1（測試）', 120); });
     V395_BOOTS.candidates.forEach(m => mk('🪽 翼靴 ×' + m.toFixed(2), () => { V395_BOOTS.mul = m; showHint('🛠 翼靴倍率 ×' + m.toFixed(2) + '（測試候選）', 120); }));
     box.appendChild(d); return true;
   };
@@ -30489,7 +30487,7 @@ v395ShopRowsHtml = function () {
     const poor = pack && (playerInventory.coins || 0) < total;
     const controls = pack ? '<span class="h2-qty"><button type="button" data-h2-act="qty" data-key="' + it.id + '" data-d="1" aria-label="增加數量"' + (qty >= h2ShopRoom(it.id) ? ' disabled' : '') + '>▲</button><b>' + qty + '</b><button type="button" data-h2-act="qty" data-key="' + it.id + '" data-d="-1" aria-label="減少數量"' + (qty <= 1 ? ' disabled' : '') + '>▼</button></span><span class="h2-price">合計 $' + total + '</span>' : '';
     const line = it.kind === 'equip' ? (owned ? '已裝備' : '未裝備（不占背包）') : it.kind === 'bundle' ? '目前持有 ' + owned : '目前背包 ' + owned + (v395BagLevel() >= V395_BAG.maxLevel ? '（已滿級）' : '');
-    const dev = (it.id === 'bagUpgrade' && H2_DEVTOOLS) ? '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="dev395" data-key="' + (v395BagLevel() >= 2 ? 'bagLv1' : 'bagLv2') + '">🛠 ' + (v395BagLevel() >= 2 ? '測試回 LV1' : '測試 LV2（免費）') + '</button>' : '';
+    const dev = '';   // Revision 4（BUG-06）：背包已以 80 冒險金幣正式販售（#29），免費 LV1／LV2 測試切換已廢止
     return h2RowHtml({ iconHtml: h2Icon(it.icon), badge: it.kind === 'equip' ? (owned ? '<span class="h2-count">✓</span>' : '') : it.id === 'bagUpgrade' ? '<span class="h2-count">' + owned + '</span>' : '', name: it.name,
       full: !!st.off && !/金幣不足/.test(st.state || ''), attr: ' data-shop-row="' + it.id + '" data-v395="1"', price: price != null ? price : null, state: st.state || '',
       desc: h2Esc(it.desc) + '<br>' + h2Esc(line),
