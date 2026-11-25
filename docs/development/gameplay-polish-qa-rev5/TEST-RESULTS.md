@@ -15,7 +15,7 @@
 | `chapter3-pages-isolation.browser.cjs` | 試玩包隔離 7 個入口 | 8／8 |
 | `balloon-dice-minigames.browser.cjs` | 小V之家開始並返回兩個小遊戲 | 通過 |
 | `balloon-dice-v2.browser.cjs` | 1-1 入口、1-2 秘笈、1-3／2-2 美術 | 通過 |
-| `chapter3-tree-gap-rev5.browser.cjs`（新增） | 樹峽谷 1～6 次掉落 × RPG 三種模式、倒樹與過橋 | 3／3 |
+| `chapter3-tree-gap-rev5.browser.cjs`（新增） | 樹峽谷 1～6 次掉落（單數次跳下、雙數次直接走下）× RPG 三種模式、倒樹與過橋 | 3／3 |
 | `balloon-dice-audio-rev5.browser.cjs`（新增，第二大陸） | 勝／敗／平時間軸、「否」、平手無音效、靜音、切分頁 | 5／5 |
 | `continent1-dice-audio-rev5.browser.cjs`（新增，第一大陸） | 1-3 金幣包：勝／敗／平時間軸、「否」 | 5／5 |
 | `gameplay-polish-qa-rev5.browser.cjs`（新增，含 Rev3／Rev4 回歸） | 雨傘救援／購買引導（桌機、觸控）、樹峽谷計數、Batch A 兩個大陸、A-04／D-01、Batch B | 7／7 |

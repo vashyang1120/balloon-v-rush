@@ -16,7 +16,7 @@
       "at": {
         "hp": 3,
         "shield": false,
-        "x": 2117,
+        "x": 2110,
         "feet": 150,
         "p2Top": 150,
         "invincible": 88,
@@ -47,13 +47,13 @@
         "x": 2110,
         "feet": 150,
         "p2Top": 150,
-        "invincible": 90,
+        "invincible": 89,
         "pose": "hurt",
         "failures": 2,
         "hurtSfx": 2,
         "hits": "[0,null]",
         "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
-        "gameState": "playing"
+        "gameState": "paused"
       },
       "fresh": [
         {
@@ -77,10 +77,10 @@
       "at": {
         "hp": 3,
         "shield": false,
-        "x": 2110,
+        "x": 2117,
         "feet": 150,
         "p2Top": 150,
-        "invincible": 90,
+        "invincible": 88,
         "pose": "hurt",
         "failures": 3,
         "hurtSfx": 3,
@@ -105,16 +105,16 @@
       "at": {
         "hp": 3,
         "shield": false,
-        "x": 2114,
+        "x": 2110,
         "feet": 150,
         "p2Top": 150,
-        "invincible": 89,
+        "invincible": 90,
         "pose": "hurt",
         "failures": 4,
         "hurtSfx": 4,
         "hits": "[0,null]",
         "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
-        "gameState": "paused"
+        "gameState": "playing"
       },
       "fresh": [
         {

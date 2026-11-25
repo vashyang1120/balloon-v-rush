@@ -62,7 +62,8 @@ async function fallOnce(page, n) {
   // A real attempt: run right and jump at the edge of P2.
   await page.keyboard.down('ArrowRight');
   await page.waitForFunction(() => player.x + player.w > C34_LAY.p2.x + C34_LAY.p2.w - 6, undefined, { timeout: 8000 });
-  await page.keyboard.down('Space'); await page.waitForTimeout(250); await page.keyboard.up('Space');
+  // Odd falls: jump at the edge. Even falls: just walk off the edge.
+  if (n % 2) { await page.keyboard.down('Space'); await page.waitForTimeout(250); await page.keyboard.up('Space'); }
   await page.waitForFunction(h => (c34.treeGapHurts || 0) > h, before.hurts, { timeout: 8000 });
   await page.keyboard.up('ArrowRight');
   const at = await page.evaluate(() => ({

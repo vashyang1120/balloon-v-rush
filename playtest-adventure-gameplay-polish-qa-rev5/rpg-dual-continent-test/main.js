@@ -34314,9 +34314,10 @@ function c34Complete(sid) {
     const result = o.apply(this, arguments);
     if (c34Is() && gameState === 'playing' && !rpgActive) {
       if (player.onGround) {
-        const center = player.x + player.w / 2;
+        // Revision 5 C-03: any part of 小V standing on P2 counts (the old centre test missed walking off the
+        // edge without jumping, so that fall was not counted).
         const p2 = C34_LAY.p2;
-        c34.treeCrossing = center >= p2.x && center <= p2.x + p2.w &&
+        c34.treeCrossing = player.x + player.w > p2.x && player.x < p2.x + p2.w &&
           Math.abs(player.y + player.h - C34_LAY.y(p2.h)) < 1;
       }
       if (player.x >= 900 && player.x < C34_LAY.a1) c34Teach('c34_canyon_arrival');
