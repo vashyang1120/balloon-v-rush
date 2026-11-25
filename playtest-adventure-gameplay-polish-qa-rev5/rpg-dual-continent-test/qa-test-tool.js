@@ -229,6 +229,14 @@ ${SHORTCUTS.map((s, i) => `<div class="row"><span class="l">${esc(s.name)}</span
     render();
   });
 
+  // The button stays out of the way of the touch controls: it is hidden while the stage is being played
+  // and shows on the start gate, at home, in the pause menu and on result screens.
+  setInterval(() => {
+    let playing = false;
+    try { playing = gameState === 'playing' && !(typeof h2IsOpen === 'function' && h2IsOpen()); } catch (e) {}
+    const want = playing && !box.classList.contains('on') ? 'none' : '';
+    if (btn.style.display !== want) btn.style.display = want;
+  }, 200);
   resumePending();
   window.qaTestTool = { open, close, render, applyUmbrellaScenario, loadUmbrellaScenario, setRpgItem, RPG_ITEMS, SHORTCUTS, umbrellaNumbers };
 })();

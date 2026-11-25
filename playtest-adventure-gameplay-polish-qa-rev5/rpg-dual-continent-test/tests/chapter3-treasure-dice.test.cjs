@@ -72,3 +72,40 @@ test('a running animation rejects duplicate starts and lands on the exact result
   assert.equal(Math.abs(draws.at(-1).motion.y), 0);
   assert.equal(draws.at(-1).motion.scaleX, 1);
 });
+
+// Revision 5 G-04: with an audio timing source, the dice stop exactly when the audio ends.
+test('audio-timed animation splits the clip between the two dice and stops at its end', async () => {
+  const frames = [], draws = [];
+  let clock = 0, ended = false;
+  const total = 6661;
+  const timing = { totalMs: () => total, elapsed: () => clock, finished: () => ended };
+  const play = dice.animate((faces, motion) => draws.push({ faces, motion, at: clock }), {
+    random: () => 0.5, nextFrame: callback => frames.push(callback), timing,
+  });
+  const result = play({ player: 4, spirit: 3 });
+  const step = ms => { clock = ms; frames.shift()(ms); };
+  for (let t = 0; t <= 6600; t += 100) step(t);
+  assert.equal(frames.length, 1, 'still rolling before the audio ends');
+  assert.ok(draws.filter(d => d.at < total / 2).every(d => d.motion.die === 'player'));
+  assert.ok(draws.filter(d => d.at >= total / 2 + 1).every(d => d.motion.die === 'spirit'));
+  ended = true; step(6661);
+  assert.equal(frames.length, 0, 'stops on the audio end');
+  assert.deepEqual(await result, { player: 4, spirit: 3 });
+  assert.deepEqual(draws.at(-1).faces, { player: 4, spirit: 3 });
+  assert.equal(draws.at(-1).at, 6661);
+});
+
+test('audio-timed animation also stops on the verified duration when no end event comes (G-10)', async () => {
+  const frames = [];
+  let clock = 0;
+  const play = dice.animate(() => {}, {
+    random: () => 0.3, nextFrame: callback => frames.push(callback),
+    timing: { totalMs: () => 6661, elapsed: () => clock, finished: () => false },
+  });
+  const result = play({ player: 1, spirit: 6 });
+  for (const t of [0, 3000, 6000, 6660]) { clock = t; frames.shift()(t); }
+  assert.equal(frames.length, 1);
+  clock = 6661; frames.shift()(6661);
+  assert.equal(frames.length, 0);
+  assert.deepEqual(await result, { player: 1, spirit: 6 });
+});

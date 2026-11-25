@@ -139,7 +139,11 @@ const balloonDiceAudio = (() => {
     const roll = state.roll;
     if (roll && !roll.done) {
       roll.done = true; roll.revealAt = nowMs();
-      log('reveal', { outcome, mode: roll.mode, totalMs: Math.round(roll.totalMs), animMs: Math.round(roll.revealAt - roll.t0),
+      // audioMs：揭曉當下，骰子音效在 AudioContext 時鐘上實際播到的位置（onended 事件可能晚一兩幀才送達）
+      let audioMs = null;
+      try { if (roll.mode === 'webaudio' && roll.voice && SFX.ctx) audioMs = Math.round((SFX.ctx.currentTime - roll.voice.startCtx) * 1000); } catch (e) {}
+      try { if (roll.mode === 'element' && roll.el) audioMs = Math.round(roll.el.currentTime * 1000); } catch (e) {}
+      log('reveal', { outcome, mode: roll.mode, totalMs: Math.round(roll.totalMs), animMs: Math.round(roll.revealAt - roll.t0), audioMs,
         audioEndedMs: roll.audioEndedAt ? Math.round(roll.audioEndedAt - roll.t0) : null });
       stopVoice(state.rollVoice); state.rollVoice = null;
       if (state.rollEl) { try { state.rollEl.pause(); } catch (e) {} state.rollEl = null; }

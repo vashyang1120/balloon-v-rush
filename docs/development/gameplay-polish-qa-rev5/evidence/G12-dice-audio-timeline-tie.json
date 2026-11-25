@@ -1,0 +1,72 @@
+{
+  "outcome": "tie",
+  "timelineMs": [
+    {
+      "ev": "invite",
+      "t": 0
+    },
+    {
+      "ev": "loaded",
+      "t": 412,
+      "key": "defeat",
+      "durationMs": 2247
+    },
+    {
+      "ev": "loaded",
+      "t": 413,
+      "key": "victory",
+      "durationMs": 3997
+    },
+    {
+      "ev": "loaded",
+      "t": 418,
+      "key": "roll",
+      "durationMs": 6661
+    },
+    {
+      "ev": "heroic",
+      "t": 2308,
+      "played": true
+    },
+    {
+      "ev": "rollStart",
+      "t": 2308,
+      "mode": "webaudio",
+      "totalMs": 6661
+    },
+    {
+      "ev": "rollAudioEnded",
+      "t": 8968
+    },
+    {
+      "ev": "reveal",
+      "t": 8981,
+      "outcome": "tie",
+      "mode": "webaudio",
+      "totalMs": 6661,
+      "animMs": 6673,
+      "audioMs": 6670,
+      "audioEndedMs": 6659
+    },
+    {
+      "ev": "resultSfx",
+      "t": 8981,
+      "outcome": "tie",
+      "played": false
+    }
+  ],
+  "ringSfxAtMs": [
+    2308
+  ],
+  "audioMsAtReveal": 6670,
+  "revealMinusEndEventMs": 13,
+  "animMs": 6673,
+  "rollTotalMs": 6661,
+  "resultSfxAtMs": [
+    8981
+  ],
+  "afterContinue": {
+    "minigameBgmPaused": true,
+    "levelBgmPaused": false
+  }
+}

@@ -193,26 +193,13 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   await advance('rock pillar', s => onMesa(s, L.p3) && s.x >= L.p3.x + 70, ['right', 'attack'], 'hammer');
   await advance('canyon top', s => onMesa(s, L.ct), jumpRight(), 'umbrella');
   await advance('upper enemy path', s => s.x >= L.ct.x + 440, ['right', 'attack'], 'sword');
-  await advance('second waterfall approach', s => s.x >= L.fallX - 77, ['right'], 'umbrella');
-  await advance('filled and dried', s => s.fill === 1 && s.wet === 0, s => {
-    if (s.filling) return [];
-    return s.x >= L.fallX - 40 ? ['left'] : ['right'];
-  }, 'umbrella', 42);
-  await advance('swimming', s => s.swim, ['right'], 'umbrella');
-  await advance('climbing the floating pad', s => s.climb, ['right'], 'umbrella');
-  await advance('on the floating pad', s => s.pad && onTop(s, s.pad.x, s.pad.w, s.pad.y), [], 'umbrella');
-  await advance('dried on the floating pad', s => s.wet === 0, [], 'umbrella', 25);
-  await advance('right bank', s => onMesa(s, L.bank), s => {
-    if (s.climb) return [];
-    if (s.swim) return ['left'];
-    if (!s.ground || !onTop(s, s.pad.x, s.pad.w, s.pad.y)) return ['right'];
-    if (s.wet > 0) return []; // After a missed jump, wait for full jump height again.
-    return s.x >= s.pad.x + s.pad.w - 33 ? ['right', 'jump'] : ['right'];
-  }, 'umbrella', 50);
-  await advance('wind blade blocked', s => s.reflected, ['attack'], 'umbrella', 20);
-  await advance('bank enemy approach', s => s.x >= L.bank.x + 335, ['right'], 'sword');
-  await advance('bank enemy defeated', s => !s.bankWind, ['attack'], 'sword');
-
+  // Revision 5 C-05: the precious chest now sits on the optional ledge above the drying vent
+  // (it used to be on the exit bank). Detour: step back into the vent, ride it up, steer left.
+  await advance('drying vent', s => Math.abs(s.x + s.w / 2 - (L.dryingVent.x + L.dryingVent.w / 2)) < 18,
+    s => (s.x + s.w / 2 > L.dryingVent.x + L.dryingVent.w / 2 ? ['left'] : ['right']), 'sword');
+  const ledgeTop = initial.floor - L.chestLedge.h;
+  await advance('chest ledge', s => s.dialog === 'chapter3-treasure-invite' || onTop(s, L.chestLedge.x, L.chestLedge.w, ledgeTop),
+    s => (s.y + s.h < ledgeTop - 4 ? ['left'] : ['jump']), 'sword', 20);
   const accept = page.locator('#rpg-overlay [data-act="dice-accept"]');
   const deadline = Date.now() + 15000;
   while (!await accept.isVisible() && Date.now() < deadline) {
@@ -237,6 +224,26 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   assert.ok([50, 100, 200].includes(chestCoins));
   assert.equal(awarded.coins, beforeRoll.coins);
   assert.equal(awarded.dice, 0);
+  await advance('second waterfall approach', s => s.x >= L.fallX - 77, ['right'], 'umbrella');
+  await advance('filled and dried', s => s.fill === 1 && s.wet === 0, s => {
+    if (s.filling) return [];
+    return s.x >= L.fallX - 40 ? ['left'] : ['right'];
+  }, 'umbrella', 42);
+  await advance('swimming', s => s.swim, ['right'], 'umbrella');
+  await advance('climbing the floating pad', s => s.climb, ['right'], 'umbrella');
+  await advance('on the floating pad', s => s.pad && onTop(s, s.pad.x, s.pad.w, s.pad.y), [], 'umbrella');
+  await advance('dried on the floating pad', s => s.wet === 0, [], 'umbrella', 25);
+  await advance('right bank', s => onMesa(s, L.bank), s => {
+    if (s.climb) return [];
+    if (s.swim) return ['left'];
+    if (!s.ground || !onTop(s, s.pad.x, s.pad.w, s.pad.y)) return ['right'];
+    if (s.wet > 0) return []; // After a missed jump, wait for full jump height again.
+    return s.x >= s.pad.x + s.pad.w - 33 ? ['right', 'jump'] : ['right'];
+  }, 'umbrella', 50);
+  await advance('wind blade blocked', s => s.reflected, ['attack'], 'umbrella', 20);
+  await advance('bank enemy approach', s => s.x >= L.bank.x + 335, ['right'], 'sword');
+  await advance('bank enemy defeated', s => !s.bankWind, ['attack'], 'sword');
+
   await advance('clear', s => s.done, ['right', 'attack'], 'sword');
   await page.locator('#h2-nav-go').waitFor({ timeout: 15000 });
   const home = await read();

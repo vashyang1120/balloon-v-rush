@@ -1,0 +1,68 @@
+{
+  "outcome": "loss",
+  "timelineMs": [
+    {
+      "ev": "invite",
+      "t": 0
+    },
+    {
+      "ev": "loaded",
+      "t": 332,
+      "key": "defeat",
+      "durationMs": 2247
+    },
+    {
+      "ev": "loaded",
+      "t": 341,
+      "key": "victory",
+      "durationMs": 3997
+    },
+    {
+      "ev": "loaded",
+      "t": 401,
+      "key": "roll",
+      "durationMs": 6661
+    },
+    {
+      "ev": "heroic",
+      "t": 2392,
+      "played": true
+    },
+    {
+      "ev": "rollStart",
+      "t": 2393,
+      "mode": "webaudio",
+      "totalMs": 6661
+    },
+    {
+      "ev": "reveal",
+      "t": 9061,
+      "outcome": "loss",
+      "mode": "webaudio",
+      "totalMs": 6661,
+      "animMs": 6669,
+      "audioMs": 6670,
+      "audioEndedMs": null
+    },
+    {
+      "ev": "resultSfx",
+      "t": 9062,
+      "outcome": "loss",
+      "played": true
+    }
+  ],
+  "ringSfxAtMs": [
+    2392
+  ],
+  "audioMsAtReveal": 6670,
+  "revealMinusEndEventMs": null,
+  "animMs": 6669,
+  "rollTotalMs": 6661,
+  "resultSfxAtMs": [
+    9062
+  ],
+  "afterContinue": {
+    "minigameBgmPaused": true,
+    "levelBgmPaused": false
+  }
+}

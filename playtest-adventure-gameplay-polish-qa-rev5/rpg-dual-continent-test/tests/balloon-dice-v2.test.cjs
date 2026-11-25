@@ -25,7 +25,8 @@ function game(stage = '3-4') {
     player: { x: 0, y: 0, w: 60, h: 80, coinsCollected: 0 },
     currentRunStats: { coins: 0 },
     coins: [], balloons260: [], chapter3TreasureDice: rules, assetGateActive: false,
-    GROUND_Y: 460, C34_LAY: { bank: { x: 3862, h: 705 }, y: h => 460 - h },
+    GROUND_Y: 460, // Revision 5 C-05: the 3-4 chest moved to the drying-vent ledge, so the fixture layout carries it.
+    C34_LAY: { bank: { x: 3862, h: 705 }, chestLedge: { x: 2822, w: 160, h: 725 }, y: h => 460 - h },
     CONFIG: { COIN_R: 10 }, V395_BUNDLE: { coinBag: 10 }, bringBalloonDog: true,
     gameState: 'playing', rpgActive: null, writeFails: false, showHint() {}, spawnTreasurePickupEffect() {},
     advNoteExplore() {}, advNoteCollect() {}, sfxPlay() {}, advGuardWrite() {},
