@@ -8,11 +8,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
+const prefix = '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
 const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-3:';
+const namespace = 'balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:';
 const shortcutResources = {
   '3-1': [313, 44, 14], '3-2': [389, 53, 16], '3-3': [416, 62, 21], '3-4': [507, 68, 23],
 };
@@ -37,13 +37,13 @@ async function fixture(context, guard, requests) {
     if (url.pathname === prefix + 'playtest-guard.js') {
       return route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: guard });
     }
-    return serveCheckout(route, origin, '/balloon-v-rush');
+    return serveCheckout(route, origin, '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4');
   });
 }
 
 test('Balloon Dice v2 independent playtest blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-balloon-dice-v2-test-3/playtest-guard.js'), 'utf8');
+    resolve(root, 'playtest-guard.js'), 'utf8');
   const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
@@ -65,15 +65,16 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           for (const key of keys) { localStorage.setItem(key, 'formal'); sessionStorage.setItem(key, 'formal'); }
         }, formalKeys);
         requests.length = 0;
-        const entry = origin + prefix + tree + (section ? '?ch3test=' + section : '');
+        const entry = origin + prefix + tree + (section ? '?devtools=1&ch3test=' + section : '');
         await page.goto(entry);
         await waitUntil(page, () => window.adventurePlaytestReady && assetBootReady);
         const identity = await page.evaluate(() => ({
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-3');
-        assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
+        assert.equal(identity.version, 'adventure-v0.4.13-cross-continent-recovery-rev4');
+        // Revision 3 起訪客入口只強制 guest／sandbox；開發者工具只在明確帶 devtools=1 的捷徑出現。
+        assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools ?? null], ['1', '1', section ? '1' : null]);
         if (/^3-[1-4]$/.test(section)) {
           // Reproduce a first-continent save asking to resume at boot, before its dialog is mounted.
           assert.equal(await page.evaluate(() => {

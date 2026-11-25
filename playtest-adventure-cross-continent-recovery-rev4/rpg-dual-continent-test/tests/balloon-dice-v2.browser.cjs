@@ -8,19 +8,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const origin = 'https://vashyang1120.github.io';
-const entry = origin + '/balloon-v-rush/playtest-balloon-dice-v2-test-3/rpg-dual-continent-test/index.html';
+const entry = origin + '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4/rpg-dual-continent-test/index.html';
 const shots = process.env.CH3_SCREENSHOTS;
 
 test('1-1 entry, 1-2 recipe by normal movement, and 1-3 / 2-2 art', { timeout: 220000 }, async t => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
-  await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush'));
+  await context.route('**/*', route => serveCheckout(route, origin, '/balloon-v-rush/playtest-adventure-cross-continent-recovery-rev4'));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   async function open(stage = '') {
-    await page.goto(entry + (stage ? '?ch3test=' + stage : ''));
+    await page.goto(entry + (stage ? '?devtools=1&ch3test=' + stage : ''));
     await page.locator('#btn-start-gate-go').click({ timeout: 35000 });
   }
   async function waitFor(predicate, timeout = 30000) {

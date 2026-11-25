@@ -7,10 +7,10 @@ const { serveCheckout, openHostedAdventure } = require('./chapter3-static-fixtur
 
 const origin = 'https://vashyang1120.github.io';
 const cdn = 'https://rawcdn.githack.com';
-const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture';
-const pagesPrefix = '/balloon-v-rush/playtest-adventure-v0.4.13-test-4';
+const cdnPath = '/vashyang1120/balloon-v-rush/test-fixture/playtest-adventure-cross-continent-recovery-rev4';
+const raw = 'https://raw.githubusercontent.com';
 const publicUrl = process.env.PLAYTEST_PUBLIC_URL;
-const entryBase = (publicUrl || cdn + cdnPath + '/playtest-balloon-dice-v2-test-3/') + 'rpg-dual-continent-test/index.html?ch3test=';
+const entryBase = (publicUrl || cdn + cdnPath + '/') + 'rpg-dual-continent-test/index.html?devtools=1&ch3test=';
 const keys = { left: 'ArrowLeft', right: 'ArrowRight', jump: 'Space', attack: 'z' };
 const weaponKeys = { sword: 'Digit1', hammer: 'Digit2', umbrella: 'Digit3' };
 
@@ -24,9 +24,18 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const context = await browser.newContext(mobile
     ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }
     : { viewport: { width: 1280, height: 820 } });
+  // Like rawcdn.githack.com, the fixture CDN redirects binary files to GitHub Raw at the same
+  // commit, and GitHub Raw answers CORS. Anything else is blocked.
   if (!publicUrl) await context.route('**/*', route => {
-    if (route.request().url().startsWith(cdn + cdnPath + '/')) return serveCheckout(route, cdn, cdnPath);
-    return serveCheckout(route, origin, pagesPrefix, { 'access-control-allow-origin': '*' });
+    const url = route.request().url();
+    if (url.startsWith(cdn + cdnPath + '/')) {
+      if (/\.(png|jpe?g|webp|gif|mp3|ogg|wav|mp4)(\?|$)/i.test(url)) {
+        return route.fulfill({ status: 302, headers: { location: raw + url.slice(cdn.length) } });
+      }
+      return serveCheckout(route, cdn, cdnPath);
+    }
+    if (url.startsWith(raw + cdnPath + '/')) return serveCheckout(route, raw, cdnPath, { 'access-control-allow-origin': '*' });
+    return route.abort();
   });
   const page = await context.newPage();
   const cdp = mobile ? await context.newCDPSession(page) : null;

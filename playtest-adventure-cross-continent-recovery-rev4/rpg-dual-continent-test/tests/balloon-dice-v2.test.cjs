@@ -137,7 +137,7 @@ test('failed save, duplicate decision, defeat and stale guard restore keep debit
   }
 });
 
-test('the discovery scene contains only the three approved lines and is watched once', () => {
+test('the discovery scene contains only the three approved lines and follows the accepted replay rule', () => {
   const env = {
     RPG_TEXT: {}, RPG_FIND_NAMES: { recipe: '氣球秘笈' },
   };
@@ -146,7 +146,8 @@ test('the discovery scene contains only the three approved lines and is watched 
     'function scene(kind, key, id) {\n' +
     source('    const nm = RPG_FIND_NAMES', '    const next = kind') + '\n}', env);
   const scene = env.scene('recipe', 'balloonDice', 'rpg020_find:recipe:balloonDice');
-  assert.equal(scene.policy, 'oncePerPlayer');
+  // Revision 2（053dc94，使用者已驗收）：骰子秘笈重玩依 recipeReplay，已讀後保留第一及最後一句。
+  assert.equal(scene.policy, 'recipeReplay');
   assert.equal(scene.oneClick, true);
   assert.equal(scene.next, 'rpg007_recipe:balloonDice');
   const pages = [...scene.pages, ...vm.runInContext('RPG_RECIPE_LINES.balloonDice', env)];
