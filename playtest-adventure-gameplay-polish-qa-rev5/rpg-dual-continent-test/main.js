@@ -34030,6 +34030,14 @@ function c34DevBegin(stageId) {
     data.progress = { ...progress, cleared: OFFICIAL_ADVENTURE_STAGE_IDS.filter(id => prior.has(id)) };
     advSave(data);
     saveInventory();
+    // Revision 5 C-07: the shortcut fixture stands for a player who already made the hammer on an
+    // earlier stage, so its first-craft lesson counts as read in this isolated test save. The global
+    // tutorial rule (rpgHammerTutorialDue) is unchanged and still teaches real first crafts.
+    if (v395Count('basicHammer') > 0) {
+      for (const id of ['rpg011_hammer_crafted', typeof C1U_HAMMER_SCENE === 'string' ? C1U_HAMMER_SCENE : null]) {
+        if (id && !rpgIsSeen(id)) rpgMarkSeen(id, 'testFixture');
+      }
+    }
   }
   c34L({ ev: 'devBegin', bagMode: mode });
 }
