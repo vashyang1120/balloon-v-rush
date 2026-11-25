@@ -1,17 +1,18 @@
 {
-  "version": "adventure-v0.4.13-gameplay-polish-qa-rev5",
+  "version": "adventure-v0.4.13-gameplay-polish-qa-rev5-hotfix1",
   "baseline": "b5b2f47",
   "sources": {
     "revision3": "d0633abfbb7c71f003db8d22998f7a2af10bd1a5",
     "balloonDiceV2": "01c07f82b596d2d25a4920906d6c05bbdcbf4385",
     "continent1Release": "c3fabbb9bce2bbf585b3328ae7bbfba868e2d6ee",
     "volleyballCourtFix": "0ed4ff701861b3f401b4457b7955ba5e1b434b48",
-    "revision4": "b5b2f47"
+    "revision4": "b5b2f47",
+    "revision5": "4f59fbb07dcdccd8e92516c0f0569dcd532b7d0b"
   },
   "fullAdventure": "rpg-dual-continent-test/index.html",
   "secondContinent": "rpg-dual-continent-test/index.html?devtools=1&ch3test=3-1",
   "storageNamespace": "balloon-v-rush:adventure-playtest:gameplay-polish-qa-rev5:",
-  "revision": "Gameplay Polish & QA Accessibility｜Revision 5",
+  "revision": "Revision 5 + Companion Water Animation｜Hotfix 1",
   "entries": {
     "home": "index.html",
     "fullAdventure": "rpg-dual-continent-test/index.html",
@@ -25,6 +26,7 @@
     "pool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=pool",
     "diceAudio": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qago=dice",
     "umbrellaTool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=3-2&qaopen=1",
-    "rpgTool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qaopen=1"
+    "rpgTool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qaopen=1",
+    "dogPool": "rpg-dual-continent-test/index.html?devtools=1&ch3test=pool&qago=dogpool"
   }
 }

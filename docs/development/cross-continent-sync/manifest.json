@@ -505,6 +505,30 @@
         "query.get('guest') === '1' && query.get('sandbox') === '1' && query.get('devtools') === '1'"
       ],
       "source": "Revision 5 E-06"
+    },
+    {
+      "feature": "hotfix1-dog-water",
+      "builds": [
+        "rev5"
+      ],
+      "file": "index.html",
+      "patterns": [
+        "chapter3-dog-water.js?v="
+      ],
+      "source": "Companion Water Animation｜Hotfix 1 (Continent 2 only)"
+    },
+    {
+      "feature": "hotfix1-dog-water-rules",
+      "builds": [
+        "rev5"
+      ],
+      "file": "chapter3-dog-water.js",
+      "patterns": [
+        "function c34DogWaterStep()",
+        "function c34DrawSwimmingDog(cx)",
+        "waterlineBelowNose: 70,"
+      ],
+      "source": "Companion Water Animation｜Hotfix 1"
     }
   ],
   "forbidden": [
@@ -579,6 +603,21 @@
         "['style', '造型・寵物配件']"
       ],
       "reason": "Revision 5 A-05 hides the cosmetics shop entry (data kept)."
+    },
+    {
+      "feature": "hotfix1-dog-water-not-on-continent1",
+      "builds": [
+        "continent1"
+      ],
+      "files": [
+        "index.html",
+        "main.js"
+      ],
+      "patterns": [
+        "chapter3-dog-water.js",
+        "c34DogWaterStep"
+      ],
+      "reason": "The 3-4 pool and the dog swim state are Continent 2 only (Hotfix 1)."
     }
   ],
   "cacheTags": [
@@ -593,12 +632,13 @@
         "chapter3-treasure-interaction.js",
         "umbrella-purchase-guide.js",
         "balloon-dice-audio.js",
-        "qa-test-tool.js"
+        "qa-test-tool.js",
+        "chapter3-dog-water.js"
       ],
       "styles": [
         "style.css"
       ],
-      "expected": "gameplay-polish-qa-rev5"
+      "expected": "gameplay-polish-qa-rev5-hotfix1"
     },
     {
       "build": "rev5",

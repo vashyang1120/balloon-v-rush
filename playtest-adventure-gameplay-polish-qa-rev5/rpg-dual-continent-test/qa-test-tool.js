@@ -143,6 +143,7 @@
     { key: 'scorpion32', name: '3-2 新增風刃蠍子', go: () => startAt('3-2', { name: '3-2 開頭空地（新蠍子在右邊 x 650～750）', place: () => ({ x: 380, y: GROUND_Y }) }) },
     { key: 'tree', name: '3-4 樹峽谷', go: () => startAt('3-4', { name: '3-4 P2 樹旁', place: () => ({ x: L().p2.x + 40, y: L().y(L().p2.h) }) }) },
     { key: 'pool', name: '3-4 水池／瀑布', go: () => startAt('3-4', { section: 'pool', name: '3-4 水池區段' }) },
+    { key: 'dogpool', name: '3-4 水池（帶小狗，狗狗游泳）', go: () => startAt('3-4', { section: 'pool', dog: true, name: '3-4 水池區段（小狗同行）' }) },
     { key: 'chest', name: '3-4 珍貴寶箱（帶狗）', go: () => startAt('3-4', { dog: true, name: '3-4 烘乾風口前（往右走進風口再跳、往左上到寶箱岩棚）',
       place: () => ({ x: L().dryingVent.x - 160, y: L().y(L().ct.h) }) }) },
     { key: 'camera', name: '3-4 高台鏡頭', go: () => startAt('3-4', { name: '3-4 P3 岩棚（往右跳上峽谷頂部）', place: () => ({ x: L().p3.x + 20, y: L().y(L().p3.h) }) }) },

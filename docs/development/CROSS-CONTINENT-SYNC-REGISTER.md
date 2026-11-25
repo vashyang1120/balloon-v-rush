@@ -1,6 +1,6 @@
 # 跨大陸共用功能同步清冊（Cross-Continent Sync Register）
 
-最近同步：2026-11-26（Revision 5，分支 `test/adventure-v0.4.13-gameplay-polish-qa-rev5`；Revision 4 為 PR #47）
+最近同步：2026-11-26（Revision 5 + Companion Water Animation｜Hotfix 1，分支 `test/adventure-v0.4.13-gameplay-polish-qa-rev5`；Revision 4 為 PR #47）
 機器可讀版本：`docs/development/cross-continent-sync/manifest.json`
 自動檢查：`node tools/sync-check/check-cross-continent-sync.cjs --archived`（CI：`.github/workflows/cross-continent-sync.yml`）
 
@@ -46,6 +46,7 @@
 | 3-4 樹峽谷受傷演出、寶箱、鏡頭、捷徑（Batch C） | 見 Revision 5 報告 | Revision 5 `407567d`／`c50e462`／`d1c4c1e` | 待驗收 | — | `main.js`、`chapter3-water-runtime.js`、`chapter3-treasure-interaction.js` | — | | 只在第二大陸 | 2026-11-26 |
 | 暫停背景依大陸（D-01） | 第二大陸用風之峽谷窗景 | Revision 5 `ddda10f` | 待驗收 | 共用程式（第一大陸沒有第二大陸關卡，不受影響） | `main.js` c1dSyncPauseBg | — | | | 2026-11-26 |
 | QA 測試工具（Batch E） | 只在訪客沙盒＋開發者模式；遊玩中隱藏按鈕 | Revision 5 `563ce3d` | 待驗收 | — | `qa-test-tool.js` | — | | | 2026-11-26 |
+| 氣球小狗游泳（Hotfix 1） | 3-4 水池：依小狗自己的位置進入水中；循環走路圖划水；鼻子在水面上 11.2 px；水下部分用小V的水色與漸淡 | Companion Water Animation｜Hotfix 1 | 待驗收 | —（第一大陸沒有水池，不載入） | `chapter3-dog-water.js` | — | | 共用的小狗程式（`getDogPoseKey`、`drawCompanionDog`）沒有修改，只在第二大陸包裝 | 2026-11-26 |
 | 已廢止測試功能 | 不得出現在正常玩家流程 | 見 §3 | — | — | — | — | | | 自動檢查 |
 
 ## 3. 已廢止測試功能與臨時開發邏輯清點

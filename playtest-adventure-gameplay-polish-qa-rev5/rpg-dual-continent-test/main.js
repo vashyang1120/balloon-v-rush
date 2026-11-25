@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-gameplay-polish-qa-rev5';
-const GAME_BUILD_REVISION = 'Gameplay Polish & QA Accessibility｜Revision 5';
+const GAME_VERSION = 'adventure-v0.4.13-gameplay-polish-qa-rev5-hotfix1';
+const GAME_BUILD_REVISION = 'Revision 5 + Companion Water Animation｜Hotfix 1';
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 

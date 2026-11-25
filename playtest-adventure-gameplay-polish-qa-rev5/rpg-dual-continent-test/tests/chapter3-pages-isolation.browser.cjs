@@ -72,7 +72,8 @@ test('Balloon Dice v2 independent playtest blocks writes and preserves formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-gameplay-polish-qa-rev5');
+        // Companion Water Animation｜Hotfix 1 bumped the build version (storage namespace unchanged).
+        assert.equal(identity.version, 'adventure-v0.4.13-gameplay-polish-qa-rev5-hotfix1');
         // Revision 3 起訪客入口只強制 guest／sandbox；開發者工具只在明確帶 devtools=1 的捷徑出現。
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools ?? null], ['1', '1', section ? '1' : null]);
         if (/^3-[1-4]$/.test(section)) {
