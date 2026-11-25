@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "description": "Cross-continent shared-feature register. tools/sync-check/check-cross-continent-sync.cjs reads this file. 'active' builds are checked strictly; 'archived' builds are frozen playtest snapshots and only reported.",
+  "builds": {
+    "continent1": { "root": "rpg-continent1-universe", "status": "active", "note": "First continent production (main, PR #45 c3fabbb). Loads ../minigames/." },
+    "rev4": { "root": "playtest-adventure-cross-continent-recovery-rev4", "game": "rpg-dual-continent-test", "status": "active", "note": "Second continent Revision 4 playtest package. Loads its own minigames/ copy." },
+    "dualSource": { "root": "rpg-dual-continent-test", "status": "archived", "note": "On main this tree stopped at 2026-11-18 (before Chapter 3 water, dice v2, PR #45). Not a source of truth until it is refreshed from the Revision 4 package." },
+    "rev3": { "root": "playtest-adventure-v0.4.13-test-4", "game": "rpg-dual-continent-test", "status": "archived", "note": "Integration Test 4 snapshot (2026-11-22); Revision 3 edited it on its branch. Superseded by rev4." }
+  },
+  "identical": [
+    { "feature": "volleyball-court", "canonical": "minigames/volleyball/main.js", "copies": [{ "build": "rev4", "path": "minigames/volleyball/main.js" }], "source": "PR #44 0ed4ff7 (court art without vertical mirroring), PR #41 five-point rule" },
+    { "feature": "whack-bgm", "canonical": "minigames/whack-a-mole/js/audio.js", "copies": [{ "build": "rev4", "path": "minigames/whack-a-mole/js/audio.js" }], "source": "PR #45 46d4d35 (embedded BGM fetched first, played on start gesture)" },
+    { "feature": "whack-rules", "canonical": "minigames/whack-a-mole/js/game.js", "copies": [{ "build": "rev4", "path": "minigames/whack-a-mole/js/game.js" }], "source": "whack-a-mole v0.1.4" },
+    { "feature": "whack-scoring", "canonical": "minigames/whack-a-mole/js/scoring.js", "copies": [{ "build": "rev4", "path": "minigames/whack-a-mole/js/scoring.js" }], "source": "whack-a-mole v0.1.4" },
+    { "feature": "volleyball-adapter", "canonical": "rpg-continent1-universe/minigame-volleyball.html", "copies": [{ "build": "rev4", "path": "rpg-dual-continent-test/minigame-volleyball.html" }], "source": "v0.4.1 faded + blurred window backdrop adapter" }
+  ],
+  "contains": [
+    { "feature": "fresh-start", "builds": ["continent1", "rev4"], "file": "main.js", "patterns": ["function advConfirmOfficialChallenge()", "resetInventory({ freshAdventure: true })", "if (options.freshAdventure) playerInventory.bagLevel = 1;"], "source": "PR #45" },
+    { "feature": "settlement-ui-2", "builds": ["continent1", "rev4"], "file": "main.js", "patterns": ["function h2ShowStoredSummary()", "resume.homeSummary = summary;", "ok.textContent = readOnly ? '返回整備' : '收下獎勵，開始整備';", "vCoins:          { path: H2_UI_ITEMS + 'item_coin_crown.png'"], "source": "PR #45" },
+    { "feature": "official-currency-icons", "builds": ["continent1", "rev4"], "file": "main.js", "patterns": ["coins:           { path: H2_UI_ITEMS + 'item_coin.png'"], "assets": ["assets/adventure/ui/items/item_coin.png", "assets/adventure/ui/items/item_coin_crown.png", "assets/adventure/ui/items/item_coin_bag.png"], "source": "PR #45" },
+    { "feature": "minigame-backdrop-fade-blur", "builds": ["continent1", "rev4"], "file": "main.js", "patterns": ["g.filter = 'blur(5px) saturate(0.85)';", "g.fillStyle = 'rgba(255,255,255,0.30)'; g.fillRect(0, 0, W, H);"], "source": "v0.4.1 (accepted)" },
+    { "feature": "minigame-backdrop-cors", "builds": ["rev4"], "file": "main.js", "patterns": ["if (new URL(src, location.href).origin !== location.origin) img.crossOrigin = 'anonymous';"], "source": "Revision 4 (BUG-04)" },
+    { "feature": "volleyball-five-point", "builds": ["continent1", "rev4"], "file": "main.js", "patterns": ["targetScore: 5,", "不是 5 分制的完成比分"], "source": "PR #41 / PR #44" },
+    { "feature": "canvas-taint-guard", "builds": ["rev4"], "file": "chapter3-umbrella-diversion.js", "patterns": ["const unreadable = new WeakSet();", "function readPixels(context, image, width, height)", "if (error.name !== 'SecurityError') throw error;"], "source": "PR #43 607c698 / ea8a317" },
+    { "feature": "canvas-cors-load", "builds": ["rev4"], "file": "main.js", "patterns": ["if (c.canvasCors) im.crossOrigin = 'anonymous';"], "source": "PR #43" },
+    { "feature": "balloon-dice-v2", "builds": ["rev4"], "file": "main.js", "patterns": ["commitDiceRewardCoins();", "rpg-dice-board"], "source": "PR #43 01c07f8" },
+    { "feature": "balloon-dice-v2-rules", "builds": ["rev4"], "file": "chapter3-treasure-interaction.js", "patterns": ["function commitDiceRewardCoins()"], "source": "PR #43" },
+    { "feature": "rev3-umbrella-recovery", "builds": ["rev4"], "file": "umbrella-purchase-guide.js", "patterns": [], "source": "PR #46 d0633ab" },
+    { "feature": "rev3-tree-gap-hints", "builds": ["rev4"], "file": "chapter3-water-runtime.js", "patterns": ["咦！這個峽谷似乎太遠了，好像跳不過去。那我可以怎麼辦呢？", "咦！這邊有棵樹。還是說我可以把樹槌倒當作橋梁呢？"], "source": "PR #46 d0633ab" },
+    { "feature": "playtest-asset-root", "builds": ["rev4"], "file": "../playtest-guard.js", "patterns": ["const sourceAssets = previewMirror;", "balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:"], "source": "Revision 4 (BUG-02)" }
+  ],
+  "forbidden": [
+    { "feature": "obsolete-free-bag-lv2", "builds": ["rev4"], "files": ["main.js"], "patterns": ["bagLv2", "測試 LV2（免費）", "背包 LV2（測試）", "測試：升到 LV2（不扣金幣）"], "reason": "BUG-06: the free LV1/LV2 developer toggles predate the 80-coin price (#29)." },
+    { "feature": "external-sdk-in-playtest", "builds": ["rev4"], "files": ["index.html"], "patterns": ["balloon-v-universe/universe/shared/universe-sdk.js"], "reason": "Isolated playtest packages must not load the production universe SDK." },
+    { "feature": "playtest-forces-devtools", "builds": ["rev4"], "files": ["../playtest-guard.js"], "patterns": ["['guest', 'sandbox', 'devtools']"], "reason": "Since Revision 3 the guard only forces guest/sandbox; developer tools need an explicit devtools=1 shortcut." },
+    { "feature": "pages-asset-mirror-of-other-build", "builds": ["rev4"], "files": ["../playtest-guard.js", "../minigames/whack-a-mole/index.html", "../motion-comic/player/index.html"], "patterns": ["vashyang1120.github.io/balloon-v-rush/playtest-adventure-v0.4.13-test-4"], "reason": "A package must not read assets from another deployment's directory." }
+  ],
+  "cacheTags": [
+    { "build": "rev4", "file": "index.html", "scripts": ["main.js", "chapter3-umbrella-diversion.js", "chapter3-water-runtime.js", "chapter3-treasure-dice.js", "chapter3-treasure-interaction.js", "umbrella-purchase-guide.js"], "styles": ["style.css"], "expected": "cross-continent-recovery-rev4" },
+    { "build": "rev4", "file": "../minigames/volleyball/index.html", "scripts": ["main.js"], "expected": "cross-continent-recovery-rev4" },
+    { "build": "rev4", "file": "../minigames/whack-a-mole/index.html", "scripts": ["js/audio.js", "js/config.js"], "expected": "cross-continent-recovery-rev4" }
+  ]
+}

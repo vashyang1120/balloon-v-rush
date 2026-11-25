@@ -1,0 +1,31 @@
+name: Cross-continent sync
+on:
+  pull_request:
+    paths:
+      - 'rpg-continent1-universe/**'
+      - 'rpg-dual-continent-test/**'
+      - 'minigames/**'
+      - 'playtest-adventure-cross-continent-recovery-rev4/**'
+      - 'docs/development/cross-continent-sync/**'
+      - 'tools/sync-check/**'
+      - '.github/workflows/cross-continent-sync.yml'
+  push:
+    branches: ['test/adventure-v0.4.13-cross-continent-recovery-rev4']
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Shared features match the register
+        run: node tools/sync-check/check-cross-continent-sync.cjs --archived
+      - name: Syntax and rule tests of the Revision 4 package
+        working-directory: playtest-adventure-cross-continent-recovery-rev4/rpg-dual-continent-test
+        run: |
+          for f in main.js chapter3-*.js umbrella-purchase-guide.js ../playtest-guard.js; do node --check "$f"; done
+          node --test tests/balloon-dice-v2.test.cjs tests/chapter3-treasure-dice.test.cjs
