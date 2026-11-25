@@ -27445,6 +27445,10 @@ const C2_STAGE_32 = {
     { x: 2959, y: 0, h: 358, trunkW: 34, crownR: 40, state: 'standing', fallTimer: 0, safeZone: null, safeLen: 253, walkable: true, pivotRight: true, c3Art: true },
   ],
   buildEnemies: () => [
+    // Revision 5（B-01）：開頭空曠路段加一隻普通風刃蠍子（既有素材、HP、攻擊、移動、獎勵）。巡邏 650～750：
+    //   出生點 x 100 的小V中心到牠最左邊的中心約 555px，超過攻擊距離 520px → 出生時不會被攻擊；
+    //   在低平台 A（420～570）右邊、風口 B1（890）左邊，不擋 30／760 的提示與風口；普通風刃射程 480px 也到不了出生點。
+    Object.assign(makeWindScorpion(700, 50), { c2Id: 'A1', c2Wind: true }),
     Object.assign(makeWindScorpion(2190, 110), { c2Id: 'C1', c2Wind: true }),   // 巡邏 1990～2390，經過風口 C1
     Object.assign(makeSwiftScorpion(2600, 65), { c2Id: 'C2', c2Wind: true, patrolRange0: 65 }),    // 巡邏 2520～2680（離坑 S2 的退回點 2780 有一段距離）
     Object.assign(makeChapter2Scorpion(4300, 120, 'normal'), { c2Id: 'E2', c2Wind: true }),   // 飄下來之後的格擋練習
@@ -28601,7 +28605,11 @@ var WS_TUNING = {
   bladeW: 72,             // 風刃畫面寬度（px）。test-2：玩家回饋太小、沒有威力感 → 放大約 124%（58 → 72）
   bladeHitR: 16,          // 風刃碰撞圓半徑（px；依風刃實際可見的月牙主體；test-2 跟著圖放大 13 → 16）
   bladeHitFwd: 7,         // 碰撞圓中心往飛行方向前移（月牙主體偏前；test-2 6 → 7）
-  bladeMaxDist: 900,      // 最遠飛行距離
+  bladeMaxDist: 900,      // 最遠飛行距離（Revision 5 起普通風刃改用下面的 normalRange；保留給其他規則）
+  // Revision 5（B-03）：普通風刃射程＝標準遊戲畫面寬度（邏輯座標 CANVAS_W＝960）的一半；依實際飛行距離漸進淡出
+  normalRange: 480,       // px（＝CANVAS_W / 2，不跟著瀏覽器 CSS 寬度變）
+  fadeStartRatio: 0.35,   // 飛到射程 35%（168 px）開始變淡，之後以 smoothstep 曲線連續淡出，480 px 完全消失
+  hitMinAlpha: 0.2,       // 透明度低於 0.2（約 405 px 之後）就不再造成傷害、也不會被格擋
   maxAimDeg: 60,          // 最大仰角／俯角（相對水平）
   // 雨傘格擋後
   reflectDeg: 50,         // 固定往小V面向的斜上方 50° 彈開
@@ -28716,6 +28724,15 @@ function wsStep(e) {
   }
   if (s.swirlFade > 0) s.swirlFade--;
 }
+// Revision 5（B-03）：普通風刃依飛行距離的透明度（1 → 0）；大型（磐甲）風刃不套用
+function wsBladeAlpha(b) {
+  if (!b || b.big) return 1;
+  const R = WS_TUNING.normalRange, s0 = R * WS_TUNING.fadeStartRatio, d = b.dist || 0;
+  if (d <= s0) return 1;
+  if (d >= R) return 0;
+  const u = (d - s0) / (R - s0);
+  return 1 - u * u * (3 - 2 * u);
+}
 function wsCircleRect(cx, cy, r, x, y, w, h) { const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h)); return (cx - nx) * (cx - nx) + (cy - ny) * (cy - ny) <= r * r; }
 function wsBladeHit(b) { return { x: b.x + Math.cos(b.ang) * WS_TUNING.bladeHitFwd, y: b.y + Math.sin(b.ang) * WS_TUNING.bladeHitFwd, r: WS_TUNING.bladeHitR }; }
 function wsUpdateBlades() {
@@ -28725,10 +28742,11 @@ function wsUpdateBlades() {
       b.x += b.vx; b.y += b.vy; b.dist += Math.hypot(b.vx, b.vy);
       const h = wsBladeHit(b);
       let end = '';
-      if (!b.owner || !b.owner.active) end = '蠍子被擊敗';
-      else if (h.y + h.r * 0.5 >= GROUND_Y) end = '碰到地面';
+      // Revision 5（B-02）：風刃射出後是獨立投射物；發射者死亡不會讓它消失
+      if (h.y + h.r * 0.5 >= GROUND_Y) end = '碰到地面';
       else if ((platforms || []).some(p => wsCircleRect(h.x, h.y, h.r * 0.6, p.x, p.y, p.w, p.h))) end = '碰到平台';
-      if (end) { b.st = 'fade'; b.t = 0; b.why = end; wsLogPush({ ev: 'end', id: b.id, why: end }); continue; }
+      if (end) { b.st = 'fade'; b.t = 0; b.why = end; b.alpha0 = wsBladeAlpha(b); wsLogPush({ ev: 'end', id: b.id, why: end }); continue; }
+      if (!b.big && b.dist >= WS_TUNING.normalRange) { wsLogPush({ ev: 'end', id: b.id, why: '射程用盡（完全消散）', dist: Math.round(b.dist) }); wsBlades.splice(i, 1); continue; }
       const top = -120 - (c34Is() ? Math.round(c34.camY) : 0);
       if (b.dist > WS_TUNING.bladeMaxDist || b.x < cameraX - 200 || b.x > cameraX + CANVAS_W + 200 || b.y < top) { wsLogPush({ ev: 'end', id: b.id, why: '飛出範圍' }); wsBlades.splice(i, 1); continue; }
     } else if (b.st === 'reflect') {
@@ -28747,6 +28765,7 @@ function wsCheckBlades() {
   const pr = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 6 };   // 和 checkHazards 相同的小V判定框
   for (const b of wsBlades) {
     if (b.st !== 'fly') continue;
+    if (wsBladeAlpha(b) < WS_TUNING.hitMinAlpha) continue;   // Revision 5：幾乎看不見的普通風刃不再有碰撞
     const h = wsBladeHit(b);
     if (holding) {
       const pcx = player.x + player.w / 2, front = bx.dir > 0 ? h.x >= pcx - 4 : h.x <= pcx + 4;
@@ -28756,7 +28775,7 @@ function wsCheckBlades() {
         const durBefore = equippedUmbrella.currentDur;
         b.blocked++;
         const a = WS_TUNING.reflectDeg * Math.PI / 180, rs = WS_TUNING.reflectSpeed;
-        b.st = 'reflect'; b.t = 0; b.vx = bx.dir * Math.cos(a) * rs; b.vy = -Math.sin(a) * rs; b.ang = Math.atan2(b.vy, b.vx);   // 固定斜上（不原路返回、不追蹤）
+        b.alpha0 = wsBladeAlpha(b); b.st = 'reflect'; b.t = 0; b.vx = bx.dir * Math.cos(a) * rs; b.vy = -Math.sin(a) * rs; b.ang = Math.atan2(b.vy, b.vx);   // 固定斜上（不原路返回、不追蹤）
         try { sfxPlay('c2UmbrellaBlock'); } catch (er) {}
         try { c2BlockFxStart({}, bx); } catch (er) {}
         console.log('[WindScorpion] 雨傘格擋風刃 ' + b.id + ' → 雨傘耐久 −1、風刃往斜上 ' + WS_TUNING.reflectDeg + '° 彈開');
@@ -28769,7 +28788,7 @@ function wsCheckBlades() {
     if (wsCircleRect(h.x, h.y, h.r, pr.x, pr.y, pr.w, pr.h)) {
       const hp0 = player.hp;
       damagePlayer();
-      b.st = 'fade'; b.t = 0; b.why = '命中小V';
+      b.alpha0 = wsBladeAlpha(b); b.st = 'fade'; b.t = 0; b.why = '命中小V';
       wsLogPush({ ev: 'hit', id: b.id, hpBefore: hp0, hpAfter: player.hp });
     }
   }
@@ -28812,7 +28831,8 @@ function wsDrawBlades(cx) {
   const im = wsImgs.blade; if (!im) return;
   const w = WS_TUNING.bladeW, h = w * im.naturalHeight / im.naturalWidth;
   wsBlades.forEach(b => {
-    const a = b.st === 'fly' ? 1 : b.st === 'reflect' ? Math.max(0, 1 - b.t / WS_TUNING.reflectLife) : Math.max(0, 1 - b.t / 12);
+    const a0 = b.alpha0 != null ? b.alpha0 : 1;   // Revision 5：從當下的距離透明度接著淡出
+    const a = b.st === 'fly' ? wsBladeAlpha(b) : b.st === 'reflect' ? a0 * Math.max(0, 1 - b.t / WS_TUNING.reflectLife) : a0 * Math.max(0, 1 - b.t / 12);
     ctx.save(); ctx.globalAlpha = a; ctx.translate(b.x - cx, b.y); ctx.rotate(b.ang - Math.PI);   // 原圖朝左（π）→ 依飛行方向旋轉
     if (b.st === 'fade') ctx.scale(1 + b.t / 12 * 0.4, 1 + b.t / 12 * 0.4);
     ctx.drawImage(im, -w / 2, -h / 2, w, h);
@@ -32797,7 +32817,7 @@ function c4UpdateSlashes(list) {
     const b = list[i]; b.t++;
     if (b.st === 'fly' || b.st === 'reflect') {
       b.x += b.vx; b.dist += Math.abs(b.vx);
-      if (b.st === 'fly' && (!b.owner || !b.owner.active)) { b.st = 'fade'; b.t = 0; c4L({ ev: 'slashEnd', id: b.id, why: '磐甲被擊倒（去程風刃消失）' }); continue; }
+      // Revision 5（B-02）：磐甲被擊倒後，已射出的大型風刃照原方向繼續飛（射程、速度、傷害不變）
       if (b.st === 'fly') {   // 去程：只看小V（其他敵人、樹木全部穿過，記錄下來給測試看）
         const g = c4SlashGeom(b);
         enemies.forEach(e => { if (e.active && e !== b.owner && rectsOverlap(g.x, g.y, g.w, g.h, e.x, e.y, e.w, e.h) && !b.passed.includes('E:' + (e.c2Id || e.runtimeId))) b.passed.push('E:' + (e.c2Id || e.runtimeId)); });
