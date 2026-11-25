@@ -62,10 +62,12 @@ test('a running animation rejects duplicate starts and lands on the exact result
   });
   const result = play();
   assert.equal(play(), result);
-  for (const time of [0, 240, 600, 1050, 1460]) frames.shift()(time);
+  for (const time of [0, 240, 600, 1050, 1460, 1480, 1710, 2100, 2950]) frames.shift()(time);
   assert.equal(frames.length, 0);
   assert.deepEqual(await result, { player: 6, spirit: 2 });
   assert.deepEqual(draws.at(-1).faces, { player: 6, spirit: 2 });
+  assert.ok(draws.filter(({ motion }) => motion.die === 'player').every(({ faces }) => faces.spirit === null));
+  assert.ok(draws.filter(({ motion }) => motion.die === 'spirit').every(({ faces }) => faces.player === 6));
   assert.ok(draws.some(frame => frame.motion.y < -10));
   assert.equal(Math.abs(draws.at(-1).motion.y), 0);
   assert.equal(draws.at(-1).motion.scaleX, 1);

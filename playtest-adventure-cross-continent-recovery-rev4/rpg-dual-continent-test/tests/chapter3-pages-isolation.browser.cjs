@@ -1,25 +1,21 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { readFile } = require('node:fs/promises');
-const { extname, resolve, sep } = require('node:path');
+const { resolve } = require('node:path');
 const { test } = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { serveCheckout } = require('./chapter3-static-fixture.cjs');
 
 const root = resolve(__dirname, '../..');
-const prefix = '/balloon-v-rush/playtest-adventure-v0.4.13/';
+const prefix = '/balloon-v-rush/playtest-balloon-dice-v2-test-3/';
 const origin = 'https://vashyang1120.github.io';
 const tree = 'rpg-dual-continent-test/';
-const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
-const mime = {
-  '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
-  '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp3': 'audio/mpeg',
-  '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.webm': 'video/webm',
+const test2Namespace = 'balloon-v-rush:adventure-playtest:v0.4.13:';
+const namespace = 'balloon-v-rush:adventure-playtest:balloon-dice-v2-test-3:';
+const shortcutResources = {
+  '3-1': [313, 44, 14], '3-2': [389, 53, 16], '3-3': [416, 62, 21], '3-4': [507, 68, 23],
 };
-const csp = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; " +
-  "connect-src 'self' data: blob:; frame-src 'self'; base-uri 'self'; form-action 'none'";
 
 async function waitUntil(page, predicate, value, timeout = 30000) {
   const deadline = Date.now() + timeout;
@@ -36,57 +32,33 @@ async function fixture(context, guard, requests) {
     const url = new URL(request.url());
     requests.push({ origin: url.origin, pathname: url.pathname, method: request.method() });
     if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method())) return route.abort();
-    if (url.pathname === '/formal-fixture') return route.fulfill({ contentType: mime['.html'], body: '<title>Formal fixture</title>' });
+    if (url.pathname === '/formal-fixture') return route.fulfill({ contentType: 'text/html', body: '<title>Formal fixture</title>' });
     if (!url.pathname.startsWith(prefix)) return route.abort();
-
-    let rel = decodeURIComponent(url.pathname.slice(prefix.length));
-    if (rel.endsWith('/')) rel += 'index.html';
-    const file = resolve(root, rel);
-    if (!file.startsWith(root + sep)) return route.abort();
-    let body;
-    try {
-      body = rel === 'playtest-guard.js' ? guard : await readFile(file);
-    } catch {
-      return route.fulfill({ status: 404 });
+    if (url.pathname === prefix + 'playtest-guard.js') {
+      return route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: guard });
     }
-    if (rel === tree + 'index.html') {
-      body = Buffer.from(body.toString('utf8')
-        .replace('<head>', '<head><meta http-equiv="Content-Security-Policy" content="' + csp +
-          '"><script src="' + prefix + 'playtest-guard.js"></script>')
-        .replace(/<script[^>]+github\.io[^>]+><\/script>/g, ''));
-    }
-    const contentType = mime[extname(rel)] || 'application/octet-stream';
-    const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/);
-    if (range) {
-      const first = Number(range[1]);
-      const last = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
-      if (first > last) return route.fulfill({ status: 416 });
-      return route.fulfill({ status: 206, contentType, headers: {
-        'content-range': 'bytes ' + first + '-' + last + '/' + body.length,
-        'accept-ranges': 'bytes',
-      }, body: body.subarray(first, last + 1) });
-    }
-    return route.fulfill({ status: 200, contentType, body: request.method() === 'HEAD' ? Buffer.alloc(0) : body });
+    return serveCheckout(route, origin, '/balloon-v-rush');
   });
 }
 
-test('test-2 in the existing Pages directory can load without touching formal saves or network', { timeout: 180000 }, async t => {
+test('Balloon Dice v2 independent playtest blocks writes and preserves formal saves', { timeout: 180000 }, async t => {
   const guard = await readFile(process.env.ADVENTURE_PLAYTEST_GUARD ||
-    resolve(root, 'playtest-adventure-v0.4.13/playtest-guard.js'));
+    resolve(root, 'playtest-balloon-dice-v2-test-3/playtest-guard.js'), 'utf8');
+  const test3Guard = guard.replace(test2Namespace, namespace);
   const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const formalKeys = ['balloonV_inventory', 'adventure:title', 'adventure:achievement',
-    'adventure:vcoins', 'adventure:settings', 'adventure:progress'];
+    'adventure:vcoins', 'adventure:settings', 'adventure:progress', test2Namespace + 'probe'];
 
   const desktop = { width: 1280, height: 820 };
   for (const [section, viewport] of [['', desktop], ['start', desktop],
-    ['pool', { width: 844, height: 390 }], ['3-1', desktop], ['3-2', desktop], ['3-3', desktop]]) {
+    ['pool', { width: 844, height: 390 }], ['3-1', desktop], ['3-2', desktop], ['3-3', desktop], ['3-4', desktop]]) {
     await t.test(section || 'general', async () => {
       const mobile = section === 'pool';
       const context = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
       try {
         const requests = [];
-        await fixture(context, guard, requests);
+        await fixture(context, test3Guard, requests);
         const page = await context.newPage();
         await page.goto(origin + '/formal-fixture');
         await page.evaluate(keys => {
@@ -100,8 +72,15 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           query: Object.fromEntries(new URLSearchParams(location.search)),
           version: GAME_VERSION,
         }));
-        assert.equal(identity.version, 'adventure-v0.4.13-ch3-water-terrain-integration-test-2');
+        assert.equal(identity.version, 'adventure-v0.4.13-balloon-dice-v2-cross-continent-test-3');
         assert.deepEqual([identity.query.guest, identity.query.sandbox, identity.query.devtools], ['1', '1', '1']);
+        if (/^3-[1-4]$/.test(section)) {
+          // Reproduce a first-continent save asking to resume at boot, before its dialog is mounted.
+          assert.equal(await page.evaluate(() => {
+            advShowResumePrompt({ stageResults: {}, resume: {} });
+            return advIsBlockingGame() && !!advResumePromptDeferred;
+          }), true);
+        }
         await page.locator('#btn-start-gate-go').click();
         let bagKey;
         if (section === 'start' || section === 'pool') {
@@ -110,13 +89,58 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           const persisted = await page.evaluate(() => {
             playerInventory.coins += 10;
             const ok = saveInventory();
-            return ok && !!localStorage.getItem(c34BagKey('cumulative'));
+            return ok && !!localStorage.getItem(c34BagKey('3-4', 'cumulative'));
           });
           assert.equal(persisted, true);
-          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('cumulative')));
+          bagKey = await page.evaluate(() => ADV_DEVTEST.map(c34BagKey('3-4', 'cumulative')));
         } else if (section) {
-          await waitUntil(page, s => !assetGateActive && gameState === 'playing' &&
-            advCurrentStageId() === s && playerInventory.unlockedRecipes.balloonDice === true, section);
+          await waitUntil(page, s => !assetGateActive && h2IsOpen() &&
+            c34.devBagStage === s && playerInventory.unlockedRecipes.balloonDice === true, section);
+          assert.deepEqual(await page.evaluate(() =>
+            [playerInventory.coins, playerInventory.balloon260, playerInventory.roundBalloon]),
+          shortcutResources[section]);
+          if (section === '3-1') await page.locator('[data-h2-act="bringDog"]').click();
+          if (section === '3-2') {
+            await page.locator('#h2-title-recipes').click();
+            await page.locator('.h2-more').filter({ hasText: '打開氣球秘笈' }).click();
+            await page.locator('[data-h2-act="craft"][data-key="balloonUmbrella"]').click();
+            await page.locator('#h2-panel-close').click();
+          }
+          await page.locator('#h2-nav-go').click();
+          if (section === '3-1') {
+            await waitUntil(page, () => !h2IsOpen() && advCurrentStageId() === '3-1', null, 45000);
+          }
+          await waitUntil(page, s => !assetGateActive && advCurrentStageId() === s, section, 45000);
+          assert.equal(await page.evaluate(() => advIsBlockingGame()), false);
+          const next = page.locator('#rpg-overlay [data-act="next"]');
+          const skip = page.locator('#rpg-overlay [data-act="skip"]');
+          const read = () => page.evaluate(() => ({
+            x: player.x, y: player.y, grounded: player.onGround, seconds: elapsedSec,
+            dialogue: rpgActive?.id, state: gameState, weapon: activeSlot,
+            attacking: player.swordAnimTimer > 0 || player.meleeActive > 0 || !!player.c2Block,
+          }));
+          async function control(key, passes, hold = 130, grounded = true) {
+            const deadline = Date.now() + 12000;
+            let state;
+            do {
+              state = await read();
+              if (state.dialogue) {
+                const button = await skip.isVisible() ? skip : next;
+                if (await button.isVisible()) await button.click({ timeout: 1000 }).catch(() => {});
+              } else if (state.state === 'playing' && (!grounded || state.grounded)) {
+                await page.keyboard.press(key, { delay: hold });
+                const after = await read();
+                if (passes(state, after)) return;
+              }
+              await delay(65);
+            } while (Date.now() < deadline);
+            assert.fail(section + ' did not respond to ' + key + ': ' + JSON.stringify(state));
+          }
+          await control('ArrowRight', (before, after) => after.x > before.x + 8 && after.seconds > 0);
+          await control('ArrowLeft', (before, after) => after.x < before.x - 4, 190);
+          await control('ArrowUp', (before, after) => after.y < before.y - 12);
+          await control('z', (before, after) => after.attacking, 75);
+          console.log(section + ' spawn grounded, clock advanced, left/right, jump and weapon action accepted');
         } else {
           await waitUntil(page, () => !gameStartGateActive);
         }
@@ -147,8 +171,11 @@ test('test-2 in the existing Pages directory can load without touching formal sa
           return denied;
         });
         assert.deepEqual(guardResult, [true, true, true, true]);
-        assert.ok(requests.every(req => req.origin === origin && req.pathname.startsWith(prefix) &&
-          ['GET', 'HEAD'].includes(req.method)));
+        // The home attempts a public default avatar; fixture() aborts every out-of-root request.
+        const permittedObservation = req => req.origin === origin &&
+          (req.pathname.startsWith(prefix) || req.pathname === '/balloon-v-universe/assets/avatars/base/boy1.png');
+        assert.ok(requests.every(req => permittedObservation(req) &&
+          ['GET', 'HEAD'].includes(req.method)), JSON.stringify(requests.filter(req => req.origin !== origin || !req.pathname.startsWith(prefix) || !['GET', 'HEAD'].includes(req.method))));
         await page.goto(origin + '/formal-fixture');
         const storage = await page.evaluate(({ keys, namespace, bagKey }) => ({
           preserved: keys.every(key => localStorage.getItem(key) === 'formal' &&

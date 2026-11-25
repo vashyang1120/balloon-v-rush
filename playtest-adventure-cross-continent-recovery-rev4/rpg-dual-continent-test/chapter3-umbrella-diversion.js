@@ -3,6 +3,7 @@
 // Local playtest renderer. The original simulation still supplies the canopy and landing positions.
 const c34PreviewWater = (() => {
   const cache = new WeakMap();
+  const unreadable = new WeakSet();
   const layer = document.createElement('canvas');
   const paint = layer.getContext('2d', {willReadFrequently:true});
   const source = document.createElement('canvas');
@@ -10,12 +11,27 @@ const c34PreviewWater = (() => {
   const smooth = (v) => { v=Math.max(0,Math.min(1,v)); return v*v*(3-2*v); };
   let last;
 
+  // A non-CORS bitmap taints only its scratch canvas. Use the existing guide fallback
+  // for that bitmap and avoid testing it again every frame.
+  function readPixels(context, image, width, height) {
+    if (unreadable.has(image)) return null;
+    try { return context.getImageData(0, 0, width, height); }
+    catch (error) {
+      if (error.name !== 'SecurityError') throw error;
+      unreadable.add(image);
+      return null;
+    }
+  }
+
   function texture(image) {
+    if (unreadable.has(image)) return null;
     if (cache.has(image)) return cache.get(image);
     source.width=362;
     source.height=1080;
     read.drawImage(image,0,0,362,1080);
-    const pixels=read.getImageData(0,0,362,1080).data;
+    const data=readPixels(read,image,362,1080);
+    if (!data) return null;
+    const pixels=data.data;
     cache.set(image,pixels);
     return pixels;
   }
@@ -23,7 +39,8 @@ const c34PreviewWater = (() => {
   function draw(f, cx, time, top, canopy, profile) {
     const spriteKey=c2UmbArtKey(), image=c34Art.image('01_waterfall_main',time);
     const sprite=umbImgs[spriteKey];
-    if (!image || !sprite || !profile.left || !profile.right) return false;
+    if (!image || !sprite || !profile.left || !profile.right ||
+        unreadable.has(image) || unreadable.has(sprite)) return false;
     const {left,right,root}=profile;
     const transform=c34UmbrellaTransform(spriteKey);
     const pad=24;
@@ -36,8 +53,6 @@ const c34PreviewWater = (() => {
     const reachRight=canopy.overhead ? f.x+f.w/2 : canopy.reach1;
     const average=(left.width+right.width)/2;
     if (width<=0 || height<=0 || width*height>350000) return false;
-    c34Art.clip(reachLeft-cx,top,reachRight-reachLeft,Math.max(0,y0-top),() =>
-      c34Art.column(f.x-cx,top,canopy.outY,f.w,time,{surfaceAt:x=>profile.surfaceAt(x+cx)}));
     const key=[f.id,root.x,root.y,left.dx,left.dy,right.dx,right.dy,transform.toX(0),transform.toY(0),phase].join(':');
     if (!last || last.key!==key || last.image!==image || last.sprite!==sprite) {
       layer.width=width;
@@ -46,8 +61,10 @@ const c34PreviewWater = (() => {
       paint.imageSmoothingQuality='high';
       paint.drawImage(sprite,0,0);
       paint.resetTransform();
-      const data=paint.getImageData(0,0,width,height);
+      const data=readPixels(paint,sprite,width,height);
+      if (!data) return false;
       const pixels=texture(image);
+      if (!pixels) return false;
       const scale=135/f.w;
       const half=f.w/2;
       const columns=Array.from({length:width},(_,i)=>{
@@ -106,6 +123,8 @@ const c34PreviewWater = (() => {
       paint.putImageData(data,0,0);
       last={key,image,sprite};
     }
+    c34Art.clip(reachLeft-cx,top,reachRight-reachLeft,Math.max(0,y0-top),() =>
+      c34Art.column(f.x-cx,top,canopy.outY,f.w,time,{surfaceAt:x=>profile.surfaceAt(x+cx)}));
     ctx.drawImage(layer,x0-cx,y0);
     return true;
   }

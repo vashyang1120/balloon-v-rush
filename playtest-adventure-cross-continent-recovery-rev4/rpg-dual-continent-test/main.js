@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'second-continent-rpg-dialogue-umbrella-recovery-revision-3';
-const GAME_BUILD_REVISION = 'Chapter 3 Integration Test 4';
+const GAME_VERSION = 'adventure-v0.4.13-cross-continent-recovery-rev4';
+const GAME_BUILD_REVISION = 'Cross-Continent Synchronization & Regression Recovery｜Revision 4';
 const CH3_TEST_STAGES = ['3-1', '3-2', '3-3', '3-4'];
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
@@ -681,7 +681,12 @@ function resolveAdventureAssetSrc(path) {
   // 已是完整 URL，直接回傳
   if (/^https?:\/\//.test(s)) return s;
   // 相對路徑：組完整 URL
-  return ADVENTURE_BASE_URL + s.replace(/^\//, '');
+  const relative = s.replace(/^\//, '');
+  const previewAssets = window.adventurePlaytestAssetRoot;
+  if (previewAssets && /^(assets\/|rpg-dual-continent-test\/chapter3-art\/)/.test(relative)) {
+    return new URL(relative, previewAssets).href;
+  }
+  return ADVENTURE_BASE_URL + relative;
 }
 
 function resolveAdventureAvatarSrc(avatarKey) {
@@ -2776,7 +2781,7 @@ function buildAdventureResultSnapshot(clearStatus) {
     recipesFound:   foundRecipe   ? 1 : 0,
     recipesTotal:   lv.hiddenTreasure?.type === 'recipe'    ? 1 : 0,
     treasuresFound: foundTreasure ? 1 : 0,
-    treasuresTotal: lv.hiddenTreasure?.type === 'goldChest' ? 1 : 0,
+    treasuresTotal: Number(lv.hiddenTreasure?.type === 'goldChest') + chapter3TreasureSpots(lv.stageId).length,
 
     // 當場裝備稱號快照（Phase 3B：讀取 equippedTitle / quizEquippedTitle）
     equippedTitleKey:          playerEquippedTitle?.titleKey          || '',
@@ -3157,10 +3162,10 @@ function inp(action) {
 // =============================================
 
 // ── Inventory & Save ──────────────────────────
-const BALLOON_DICE_UNLOCK_STAGE = '1-2b';
 const INVENTORY_DEFAULTS = {
   coins:         0,
   balloon260:    0,
+  balloonDiceSpent: 0,
   roundBalloon:  0,        // MVP 1.0B：圓氣球材料
   // 未來材料可在此擴充：balloon160, roundBalloon5, roundBalloon12 ...
   craftedItems: {
@@ -3485,11 +3490,10 @@ function loadInventory() {
 // 若期間有任何流程呼叫 saveInventory()，存檔中的 items 會使用進入測試關前的數量。
 let testSupplyOriginalItems = null;
 
-function saveInventory() {
+function saveInventory(data = playerInventory) {
   try {
-    let data = playerInventory;
     if (testSupplyOriginalItems) {
-      data = Object.assign({}, playerInventory, { items: Object.assign({}, testSupplyOriginalItems) });
+      data = Object.assign({}, data, { items: Object.assign({}, testSupplyOriginalItems) });
     }
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     return true;
@@ -4171,6 +4175,7 @@ const LEVELS = [
         // 段 1：引導
         [150,55],[240,55],[330,55],
         [300,120],[540,170],[780,130],
+        [605,162], // 金幣包：入口後中平台
         // 段 2：下方路線少量，上方路線較多
         [1070,120],[1180,55],[1400,120],
         // 上方路線金幣（y 偏移更大）
@@ -4441,10 +4446,11 @@ const LEVELS = [
     })),
     buildOranges: () => [],
     buildRoundBalloons: () => {
-      // v0.3.70：固定 2 顆（原本依背包缺量補到 2 顆）
+      // 第三顆放在主路地面附近，供取得骰子秘笈後製作。
       return [
         { x: 1600, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
         { x: 2000, y: GROUND_Y - 195, collected: false, bobOffset: Math.random()*Math.PI*2 },
+        { x: 2175, y: GROUND_Y - 51, collected: false, bobOffset: Math.random()*Math.PI*2 },
       ];
     },
     hiddenTreasure: {
@@ -4604,19 +4610,8 @@ const LEVELS = [
       { x: 4200, phaseTimer: 800 },
     ].map(d => makeChapter2DualOrange(d.x, GROUND_Y, d.phaseTimer)),
     buildProjectileOranges: () => [],
-    // v0.3.31：氣球小狗尋寶 — 隱藏金幣寶箱（只有帶氣球小狗才看得到、拿得到）
-    // 放在低處安全區（坑道 3650~3880）裡：遠離雙噴嘴 4200 油線、煙囪 5150、重甲蠍子 4600~4808
-    // 拾取判定為以 (x, y) 為中心 ±50px；玩家要走進坑道才碰得到
-    hiddenTreasure: {
-      type:        'goldChest',
-      name:        '隱藏金幣寶箱',
-      rewardCoins: 40,
-      x:           3790,
-      y:           GROUND_Y + 14,
-      found:       false,
-      emoji:       '🪙',
-      foundMsg:    '氣球小狗找到隱藏金幣寶箱！金幣 +40！',
-    },
+    // 普通寶箱與第三章走共用顯示與領取流程。
+    hiddenTreasure: null,
     // v0.3.85：同一關的第二個隱藏寶物「氣球排球秘笈」（和金幣寶箱各自獨立：各自的發現狀態、各自的小狗鼻子提示）
     //   位置：入口後的「上路」平台（x 520～700、高 110，普通橘子 750 之前）左側上方 → 不在必經道路上（底下的地面可以直接走過去）
     //   拾取判定以 (x, y) 為中心 ±50px：站在平台上才碰得到（從地面碰不到）
@@ -5332,7 +5327,7 @@ var prepCheckpoint = null;
 
 function createLevelStartSnapshot() {
   levelStartSnapshot = {
-    chapter3Chests:     { ...(playerInventory.chapter3Chests || {}) },
+    balloonDiceSpent:   diceSpentTotal(playerInventory.balloonDiceSpent),
     // 背包資料
     coins:              playerInventory.coins,
     balloon260:         playerInventory.balloon260,
@@ -5364,11 +5359,13 @@ function createLevelStartSnapshot() {
 
 function restoreLevelStartSnapshot() {
   if (!levelStartSnapshot) return;
-  if (levelStartSnapshot.chapter3Chests) playerInventory.chapter3Chests = { ...levelStartSnapshot.chapter3Chests };
+  resetDiceRewardAttempt();
+  const diceAfterRollback = restoreDiceCount(levelStartSnapshot, playerInventory);
   playerInventory.coins              = levelStartSnapshot.coins;
   playerInventory.balloon260         = levelStartSnapshot.balloon260;
   playerInventory.roundBalloon       = levelStartSnapshot.roundBalloon;
   playerInventory.craftedItems       = JSON.parse(JSON.stringify(levelStartSnapshot.craftedItems));
+  playerInventory.craftedItems.balloonDice = diceAfterRollback;
   playerInventory.unlockedRecipes    = JSON.parse(JSON.stringify(levelStartSnapshot.unlockedRecipes));
   playerInventory.uniqueCollectibles = JSON.parse(JSON.stringify(levelStartSnapshot.uniqueCollectibles));
   playerInventory.balloonDog         = JSON.parse(JSON.stringify(levelStartSnapshot.balloonDog));
@@ -5805,6 +5802,7 @@ function update(dt, dtMs = 16.667) {
   updateProjectileOranges(dtMs);  // v0.3.26：飛行油彈橘子（美術測試，無傷害）
   updateProjectileOrangeShots(dtMs); // v0.3.26：飛行油彈（視覺測試，無傷害）
   checkCollectibles();
+  if (gameState !== 'playing') return;
   checkHazards();
   checkHints();
   tickHint();
@@ -5818,15 +5816,14 @@ function update(dt, dtMs = 16.667) {
 function updateCamera() {
   let scrollSpeed = CONFIG.AUTO_SCROLL_SPEED_NORMAL;
   try {
-    const hasTreasure = !!(currentHiddenTreasure
-      && !currentHiddenTreasure.found
-      && typeof currentHiddenTreasure.x === 'number');
+    const treasure = advCurrentStageId() === '2-2' ? dogScentTarget() : currentHiddenTreasure;
+    const hasTreasure = !!(treasure && !treasure.found && typeof treasure.x === 'number');
     if (hasTreasure) {
       scrollSpeed = bringBalloonDog
         ? CONFIG.AUTO_SCROLL_SPEED_DOG
         : CONFIG.AUTO_SCROLL_SPEED_EXPLORE;
       if (bringBalloonDog) {
-        const dist = Math.abs(player.x - currentHiddenTreasure.x);
+        const dist = Math.abs(player.x - treasure.x);
         if (dist < CONFIG.TREASURE_SLOW_ZONE_RADIUS) {
           const factor = Math.max(
             CONFIG.TREASURE_SLOW_SCROLL_MULTIPLIER,
@@ -5839,7 +5836,7 @@ function updateCamera() {
         }
         // Debug log（每 60 幀）
         if (frameCount % 60 === 0) {
-          const dist2 = Math.abs(player.x - currentHiddenTreasure.x);
+          const dist2 = Math.abs(player.x - treasure.x);
           console.log('[Scroll] speed:', scrollSpeed.toFixed(3),
             'dist:', Math.round(dist2), 'noseLevel:', dogNoseLevel,
             'pendingCoins:', currentRunStats.pendingCoins || 0,
@@ -8074,7 +8071,7 @@ function checkCollectibles() {
   const px = player.x, py = player.y, pw = player.w, ph = player.h;
 
   coins.forEach(c => {
-    if (c.collected) return;
+    if (c.collected || c.v395Kind === 'coinBag') return;
     if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R*2, CONFIG.COIN_R*2)) {
       c.collected = true;
       try { advNoteCollect('coin', c); } catch (e) {} // v0.3.63
@@ -11098,7 +11095,9 @@ function startAdventureFromGate() {
     advIntroChecked = true;
     advBootHomePending = null;
     advResumePromptDeferred = null;
-    const stageId = chapter3Preview.startsWith('3-') ? chapter3Preview : '3-4';
+    // A pending first-continent resume prompt blocks the main loop even before it is rendered.
+    advHideResumePrompt();
+    const stageId = ['start', 'pool'].includes(chapter3Preview) ? '3-4' : chapter3Preview;
     c34DevBegin(stageId);
     if (chapter3Preview === 'start' || chapter3Preview === 'pool') c34Start(stageId, 'dev', chapter3Preview);
     else c34OpenTestHome(stageId);
@@ -11236,6 +11235,7 @@ function triggerGameOver() {
 }
 
 function triggerClear() {
+  commitDiceRewardCoins();
   try { advOnAttemptCleared(); } catch (e) { console.warn('[Score] 通關提交失敗', e); } // v0.3.63：本關有效成果
   try { sfxOnLevelClear(); } catch (e) {} // v0.3.65：每一次正式過關播一次（不延遲結算畫面）
   try { rpgHideDogFloat(true); } catch (e) {} // v0.3.59
@@ -11310,12 +11310,14 @@ function triggerClear() {
       flags.hammerRecipeGranted = true;
     }
 
-    // 2. 槌子材料保底（一次性：roundBalloon 不足一把槌子 → 補到剛好 2、balloon260 補到 1；已經夠的不加）
+    // 2. 首次通關材料保底：維持槌子補給，找到骰子秘笈時圓氣球多保留一顆。
     if (!flags.hammerMaterialGuaranteeDone) {
       const haveRound = Number(playerInventory.roundBalloon || 0);
-      if (haveRound < HAMMER_ROUND_BALLOON_NEED) {
-        const missing = HAMMER_ROUND_BALLOON_NEED - haveRound;
-        playerInventory.roundBalloon = HAMMER_ROUND_BALLOON_NEED;
+      const foundDiceRecipe = currentRunStats.pendingRecipeUnlocks?.balloonDice;
+      const roundNeeded = HAMMER_ROUND_BALLOON_NEED + (foundDiceRecipe ? 1 : 0);
+      if (haveRound < roundNeeded) {
+        const missing = roundNeeded - haveRound;
+        playerInventory.roundBalloon = roundNeeded;
         currentRunStats.chapter1RoundBalloonGranted = missing;
         showHint('氣球小狗在家門口找到 ' + missing + ' 顆圓氣球！牠搖著尾巴把材料帶回來了！', 280);
       }
@@ -11357,7 +11359,7 @@ function triggerClear() {
   }
 
   // 隱藏物通關正式結算
-  if (currentRunStats.foundHiddenTreasure) {
+  if (currentRunStats.foundHiddenTreasure || currentRunStats.pendingRecipeUnlocks?.balloonDice) {
     if (!playerInventory.unlockedRecipes) playerInventory.unlockedRecipes = {};
     const pending = currentRunStats.pendingRecipeUnlocks || {};
     for (const key of Object.keys(pending)) {
@@ -18046,6 +18048,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ── Restart ───────────────────────────────────
 function restart(opts) {
+  resetDiceRewardAttempt();
   try { sfxStopLevelClear(); sfxStopEnemyVoices(); } catch (e) {} // v0.3.65：開始下一關 / 重試 / 新冒險 → 過關音效立刻停
   try { advEndLiveAttempt('discard'); } catch (e) {} // v0.3.64：其他原因重新開始（測試捷徑等）→ 不計次數，但已受傷害保留
   try { if (typeof flushPendingAssetApplies === 'function') flushPendingAssetApplies(); } catch (e) {} // v0.3.51：關卡開始時才套用晚到的素材
@@ -18153,6 +18156,7 @@ function restart(opts) {
     equippedHammerMax:  equippedHammer.maxDur,
     activeSlot:         activeSlot,
     hp:                 player.hp,
+    balloonDiceSpent:   diceSpentTotal(playerInventory.balloonDiceSpent),
     bringBalloonDog:    bringBalloonDog, // ← 關鍵：記錄本關帶狗狀態
   };
   // 穩定備份（雙重保險）
@@ -18692,7 +18696,7 @@ function assetCap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function buildAssetManifest() {
   const M = { common: [], chapter1: [], chapter2: [], orangeKingBoss: [], dog: [], rpgBoot: [], rpg: [] };
   // v0.3.59：RPG 對話立繪（optional：載入失敗不擋進關；對話框會顯示可辨識的錯誤訊息與路徑）
-  Object.keys(RPG_ASSETS).filter(key => !RPG_EXTERNAL_ASSET_KEYS.includes(key))
+  Object.keys(RPG_ASSETS)
     .sort((a, b) => (RPG_ASSET_LOAD_ORDER.indexOf(a) + 1 || 99) - (RPG_ASSET_LOAD_ORDER.indexOf(b) + 1 || 99))
     .forEach(key => M[RPG_BOOT_ASSET_KEYS.includes(key) ? 'rpgBoot' : 'rpg'].push({ path: RPG_ASSETS[key], type: 'image', critical: false, label: 'rpg:' + key, timeoutMs: RPG_ASSET_TIMEOUT_MS,
       apply: im => { rpgImgs[key] = im; rpgImgStatus[key] = 'ok'; }, fail: () => { rpgImgStatus[key] = 'error'; }, altPaths: RPG_ASSET_ALT_PATHS[key] || [] }));
@@ -18816,11 +18820,17 @@ function flushPendingAssetApplies() {
 function loadImageRecord(r) {
   if (r.promise) return r.promise;
   r.status = 'loading';
-  const cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
+  let cands = getAssetSourceCandidates(r.path, r.entries.reduce((a, e) => a.concat(e.altPaths || []), []));
   if (window.adventurePlaytestReady && r.groups.some(group => group === 'c34canyon' || group === 'chapter3vertical')) {
     // The isolated playtest serves its own assets. Retry there instead of attempting the blocked raw origin.
     const primary = cands[0];
     cands.splice(1, cands.length - 1, { ...primary, url: primary.url + '&asset-retry=1' });
+  }
+  const previewRoot = window.adventurePlaytestAssetRoot;
+  if (previewRoot && (/\/hero\/umbrella\//.test(r.path) || /01_waterfall_main/.test(r.path))) {
+    // Keep the legacy draw-only guide available if a deployed host rejects CORS.
+    cands = cands.flatMap(candidate => candidate.url.startsWith(previewRoot)
+      ? [{ ...candidate, canvasCors: true }, candidate] : [candidate]);
   }
   r.promise = new Promise(resolve => {
     const tryAt = (i) => {
@@ -18836,6 +18846,7 @@ function loadImageRecord(r) {
       r.current = c.url;
       let done = false;
       const im = new Image();
+      if (c.canvasCors) im.crossOrigin = 'anonymous';
       const timer = setTimeout(() => { if (done) return; done = true; r.tried.push({ url: c.url, result: 'timeout' }); try { im.src = ''; } catch (e) {} tryAt(i + 1); }, r.timeoutMs || ASSET_SOURCE_TIMEOUT_MS);
       im.onload = () => {
         if (done) return; done = true; clearTimeout(timer);
@@ -19727,7 +19738,6 @@ const RPG_BOSS_PORTRAIT = {
 };
 // 目前素材使用雙副檔名，先走已存在的路徑，單副檔名保留為改名後的備援。
 const RPG_ASSET_ALT_PATHS = { balloonv_angry: ['assets/adventure/rpg/portraits/balloonv/balloonv_angry.png'] };
-const RPG_EXTERNAL_ASSET_KEYS = ['balloonv_panic'];
 // v0.3.61：RPG 立繪改成「一張一張依序載入」（手機上 13 張同時下載容易逾時失敗），常用的先載；每個來源最多等 30 秒
 const RPG_ASSET_LOAD_ORDER = ['balloonv_surprised', 'balloonv_thinking', 'balloonv_shocked', 'balloonv_confused', 'balloonv_happy', 'dog_treasure_alert',
   'star_spirit_happy', 'star_spirit_mysterious',   // v0.4.0
@@ -19774,6 +19784,10 @@ const RPG_RECIPE_LINES = {
     { sp: 'balloonv', face: 'balloonv_thinking',  text: '原來是{g:氣球槌}的製作秘笈啊！' },
     // 第三頁依操作方式：電腦鍵盤 / 手機觸控（手機時圈出真正的換武器鍵）
     { sp: 'balloonv', face: 'balloonv_happy', text: () => rpgIsTouchControlsShown() ? '原來按這裡就能使用槌子了!' : '原來做出來後按2就能使用槌子了!', focusSwitchBtn: true },
+  ],
+  balloonDice: [
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '氣球骰子？原來用氣球也能做出骰子啊！' },
+    { sp: 'balloonv', face: 'balloonv_thinking', text: '可是氣球骰子可以做什麼呢？' },
   ],
   balloonLollipop: [
     { sp: 'balloonv', face: 'balloonv_thinking', text: '原來是{g:氣球棒棒糖}的製作秘笈啊！' },
@@ -20177,7 +20191,6 @@ function rpgAssetState(key) {
   const r = (typeof ASSET_REGISTRY !== 'undefined') ? ASSET_REGISTRY[RPG_ASSETS[key]] : null;
   if (r && r.status === 'loaded' && r.img) return 'loaded'; // 例如橘子王：已由 Boss 素材群組載好
   if (rpgImgStatus[key] === 'error' || (r && r.status === 'failed')) { rpgScheduleRetry(key); return 'failed'; }
-  if (RPG_EXTERNAL_ASSET_KEYS.includes(key) && !r) return 'failed'; // 不在任何群組裡 → 不要無限等待
   return 'pending';
 }
 function rpgSceneAssetKeys(scene) {
@@ -20300,8 +20313,9 @@ function rpgEnsureDom() {
     + '<div class="rpg-side rpg-side--left"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div></div>'
     + '<div class="rpg-target" style="display:none"><div class="rpg-target-glow"></div><div class="rpg-target-arrow">▼</div></div>'
     + '<div class="rpg-side rpg-side--right"><div class="rpg-backdrop"></div><img class="rpg-pimg" alt=""><img class="rpg-pimg" alt=""><div class="rpg-perr"></div><div class="rpg-ptag"></div><div class="rpg-dog-nose"></div><div class="rpg-woof">汪汪！</div><div class="rpg-dog-heart">💗</div><div class="rpg-dog-paws"><span>🐾</span><span>🐾</span><span>🐾</span></div></div>'
+    + '<canvas class="rpg-dice-board" width="660" height="252" aria-label="小V與星靈的骰子" hidden></canvas>'
     + '<div class="rpg-topbtns"><button type="button" class="rpg-btn" data-act="skip">⏭ 略過</button></div>'   // v0.3.75：對話中不再放「冒險提示筆記」（改到暫停選單／小V的家的「冒險手冊」）
-    + '<div class="rpg-box"><div class="rpg-box-bg"></div><div class="rpg-name"></div><div class="rpg-text"></div><button type="button" class="rpg-next" data-act="next">繼續 ▼</button></div>'
+    + '<div class="rpg-box"><div class="rpg-box-bg"></div><div class="rpg-name"></div><div class="rpg-text"></div><button type="button" class="rpg-next" data-act="next">繼續 ▼</button><div class="rpg-options" hidden></div></div>'
     + '<div class="rpg-showcase" style="display:none"><img class="rpg-showcase-img" alt=""><div class="rpg-showcase-err"></div><button type="button" class="hv-ui-btn hv-ui-btn--primary rpg-showcase-done" data-act="showcasedone">看完了</button></div>'
     + '<div class="rpg-log" style="display:none"><div class="rpg-log-panel"><div class="rpg-log-head"><span>📜 對話紀錄</span><button type="button" class="rpg-btn" data-act="logclose">✕ 關閉</button></div><div class="rpg-log-body"></div></div></div>';
   wrap.appendChild(ov);
@@ -20478,13 +20492,31 @@ function rpgShowPage(i) {
   if (p.right !== undefined) rpgCurRight = p.right;
   if (spk.side === 'left') rpgCurLeft = p.face; else rpgCurRight = p.face;
   const ov = document.getElementById('rpg-overlay');
-  rpgSetSide(ov.querySelector('.rpg-side--left'), rpgCurLeft, spk.side === 'left');
-  rpgSetSide(ov.querySelector('.rpg-side--right'), rpgCurRight, spk.side === 'right');
+  rpgSetSide(ov.querySelector('.rpg-side--left'), rpgCurLeft, p.bothActive || spk.side === 'left');
+  rpgSetSide(ov.querySelector('.rpg-side--right'), rpgCurRight, p.bothActive || spk.side === 'right');
   const nm = ov.querySelector('.rpg-name');
   nm.textContent = spk.name;
   nm.classList.toggle('rpg-name--right', spk.side === 'right');
   nm.dataset.sp = p.sp;
-  ov.querySelector('.rpg-next').textContent = (i >= scene.pages.length - 1) ? '結束 ▼' : '繼續 ▼';
+  const next = ov.querySelector('.rpg-next');
+  const options = ov.querySelector('.rpg-options');
+  next.hidden = !!p.options;
+  next.textContent = (i >= scene.pages.length - 1) ? '結束 ▼' : '繼續 ▼';
+  options.hidden = !p.options?.length;
+  options.classList.toggle('rpg-options--choice', p.options?.length === 2);
+  options.replaceChildren();
+  for (const opt of p.options || []) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'rpg-next';
+    button.dataset.act = opt.action;
+    button.textContent = opt.label + ' ';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '▼';
+    button.appendChild(arrow);
+    options.appendChild(button);
+  }
   rpgTypeStart = performance.now(); rpgTypeDone = false;
   ov.querySelector('.rpg-box').classList.remove('rpg-box--done');
   cancelAnimationFrame(rpgRaf);
@@ -20494,7 +20526,7 @@ function rpgShowPage(i) {
   const total = segs.reduce((a, sg) => a + sg.chars.length, 0);
   const tick = () => {
     if (!rpgActive) return;
-    const n = Math.floor((performance.now() - rpgTypeStart) * RPG_TEXT_CPS / 1000);
+    const n = p.instant ? total : Math.floor((performance.now() - rpgTypeStart) * RPG_TEXT_CPS / 1000);
     rpgRenderMarkup(ov.querySelector('.rpg-text'), segs, n);
     if (n >= total) { rpgTypeDone = true; ov.querySelector('.rpg-box').classList.add('rpg-box--done'); return; }
     rpgRaf = requestAnimationFrame(tick);
@@ -20510,9 +20542,14 @@ function rpgHandleAction(act) {
   if (act === 'skip' && !rpgActive.requirePages) { rpgClose('skipped'); return; }
   if (act === 'skip') act = 'advance';
   if (rpgActive.showcase && (act === 'showcasedone' || act === 'key')) { rpgClose('finished'); return; }
-  if (performance.now() - rpgOpenedAt < 250 && !rpgActive.showcase) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
+  if (performance.now() - rpgOpenedAt < 250 && !rpgActive.showcase && !rpgActive.pages[rpgPageIdx]?.options) return; // 開啟瞬間的誤觸（例如還按著跳躍鍵）不算
   if (rpgActive.dogAlert && rpgActive.oneClick && performance.now() - rpgOpenedAt < V390_DOG_GUARD_MS) { try { v390DogGuardLog.push({ act, ms: Math.round(performance.now() - rpgOpenedAt), id: rpgActive.id }); } catch (e) {} return; }   // v0.3.90 #14：小狗提醒 1.2 秒內不被跳躍／移動鍵或連點關掉（略過鈕、Esc 在上面已處理）
   if (rpgActive.showcase) { if (act === 'showcasedone' || act === 'key') rpgClose('finished'); return; } // v0.3.62：觀察筆記由玩家按「看完了」才關（點畫面其他地方不會誤關）
+  const page = rpgActive.pages[rpgPageIdx];
+  if (page.options) {
+    if (page.options.some(option => option.action === act)) rpgActive.onOption(act);
+    return;
+  }
   if (rpgActive.oneClick) { rpgClose('finished'); return; } // v0.3.60：狗狗汪汪一頁 → 點一下就關（不用先補完文字）
   // 第一次點：補完本頁；第二次點：下一頁
   if (!rpgTypeDone) {
@@ -20538,7 +20575,7 @@ function rpgClose(how) {
   }
   rpgActive = null;
   const ov = document.getElementById('rpg-overlay');
-  if (ov) { ov.style.display = 'none'; ov.classList.remove('rpg--show', 'rpg--showcase'); const sc = ov.querySelector('.rpg-showcase'); if (sc) sc.style.display = 'none'; }
+  if (ov) { ov.querySelector('.rpg-dice-board').hidden = true; ov.style.display = 'none'; ov.classList.remove('rpg--show', 'rpg--showcase'); const sc = ov.querySelector('.rpg-showcase'); if (sc) sc.style.display = 'none'; }
   rpgSetTargetHighlight(null);   // 對話結束：光暈與箭頭立即消失
   rpgSetButtonFocus(null);       // v0.3.62：按鈕引導也立即消失
   try { rpgSetHudFocus(false); } catch (e) {} // v0.3.70
@@ -20606,6 +20643,14 @@ function rpgOpenLogLegacy() {
 // 鍵盤：對話中只處理對話（Enter / 空白 / Z / → 前進，Esc 略過），其他鍵不傳給遊戲
 function rpgHandleKey(e) {
   if (!rpgActive) return false;
+  const optionButtons = [...document.querySelectorAll('#rpg-overlay .rpg-options:not([hidden]) button')];
+  if (optionButtons.length) {
+    if (e.code === 'Tab' || (['Enter', 'Space'].includes(e.code) && optionButtons.includes(document.activeElement))) return true;
+    e.preventDefault();
+    if (e.code === 'ArrowLeft') optionButtons[0].focus();
+    if (e.code === 'ArrowRight') optionButtons.at(-1).focus();
+    return true;
+  }
   e.preventDefault();
   if (e.repeat) return true;
   if (rpgNotesOpen()) { if (e.code === 'Escape' || e.code === 'Enter') rpgCloseNotes(); return true; }
@@ -20715,8 +20760,8 @@ const ADV_RESOURCE_CATALOG = {
   version: 'catalog-v2-2026-11-04',   // v0.3.85：2-2 新增探索項目「2-2#recipe:balloonVolleyball」（氣球排球秘笈；金幣寶箱照舊）
   stages: {
     '1-1':  { coins: 33, b260: 8,  roundMax: 0, normal: 4, big: 0, explore: [] },
-    '1-2b': { coins: 35, b260: 10, roundMax: 2, normal: 2, big: 0, explore: [{ id: '1-2b#recipe:basicHammer',       cat: 'recipe' }] },
-    '1-3':  { coins: 46, b260: 10, roundMax: 2, normal: 3, big: 2, explore: [{ id: '1-3#recipe:balloonLollipop',    cat: 'recipe' }] },
+    '1-2b': { coins: 35, b260: 10, roundMax: 3, normal: 2, big: 0, explore: [{ id: '1-2b#recipe:basicHammer', cat: 'recipe' }, { id: '1-2b#recipe:balloonDice', cat: 'recipe' }] },
+    '1-3':  { coins: 47, b260: 10, roundMax: 2, normal: 3, big: 2, explore: [{ id: '1-3#recipe:balloonLollipop',    cat: 'recipe' }] },
     '2-1':  { coins: 38, b260: 4,  roundMax: 1, normal: 1, big: 0, explore: [] },
     '2-2':  { coins: 46, b260: 5,  roundMax: 2, normal: 0, big: 1, explore: [{ id: '2-2#treasure:goldChest',        cat: 'treasure' }, { id: '2-2#recipe:balloonVolleyball', cat: 'recipe' }] },
     '2-3':  { coins: 56, b260: 6,  roundMax: 2, normal: 1, big: 1, explore: [{ id: '2-3#note:orangeKingWeaknessNote01', cat: 'note' }] },
@@ -21244,6 +21289,7 @@ function advVerifyCatalog(quiet) {
     Object.keys(got).forEach(k => { if (got[k] !== c[k]) issues.push(sid + ' ' + k + '：目錄 ' + c[k] + ' / 關卡 ' + got[k]); });
     const t = lv.hiddenTreasure; const want = c.explore.map(x => x.id);
     const have = (t ? [sid + (t.type === 'recipe' ? '#recipe:' + t.recipeKey : t.type === 'goldChest' ? '#treasure:goldChest' : t.type === 'bossNote' ? '#note:' + t.id : '#hidden:' + t.type)] : [])
+      .concat(chapter3TreasureSpots(sid).map(() => sid + '#treasure:goldChest'))
       .concat((lv.extraHiddenTreasures || []).map(x => sid + '#recipe:' + x.recipeKey));   // v0.3.85：同一關的第二個隱藏寶物
     if (JSON.stringify(want) !== JSON.stringify(have)) issues.push(sid + ' 探索物：目錄 ' + want.join(',') + ' / 關卡 ' + have.join(','));
   });
@@ -22881,7 +22927,6 @@ function h2PanelBody(kind, tab) {
     return '<div class="h2-sub">' + h2Esc(pr.name) + '正式挑戰：已通過 ' + pr.done + ' / ' + pr.total + ' 關' + (summary ? '<br>' + summary : '') + '</div>'
       + '<div class="h2-progress" style="height:1.1em;margin-bottom:0.8em"><div class="h2-progress-fill" style="width:' + (pr.total ? pr.done / pr.total * 100 : 0).toFixed(2) + '%"></div></div>'
       + '<div class="h2-sub">本次冒險統計</div><div id="h2-borrow-challenge"></div>'
-      + (gameState === 'clear' ? '<div style="margin-top:0.7em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="stageResult">查看本關詳細結算</button></div>' : '')
       + '<div class="h2-soon" style="margin-top:0.8em">「正式挑戰／自由練習」的模式選擇與世界地圖，會在下一階段開放。<br>目前請用「出發」繼續目前的冒險。</div>';
   }
   if (kind === 'handbook') {
@@ -22889,6 +22934,7 @@ function h2PanelBody(kind, tab) {
       + h2RowHtml({ iconHtml: h2Icon('mapScroll'), name: '冒險提示筆記・劇情紀錄', desc: '學過的玩法提示與看過的對話', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="notes">打開</button>' })
       + h2RowHtml({ iconHtml: h2Icon('bossNote'), name: 'Boss 弱點筆記・重要物品', desc: '冒險中找到的重要物品', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="openPanel" data-key="bag" data-tab="key">打開</button>' })
       + h2RowHtml({ iconHtml: h2Icon('star'), name: '冒險紀錄', desc: '正式挑戰進度、本次統計與本關詳細結算', side: '<button type="button" class="h2-pill h2-pill--purple h2-pill--sm" data-h2-act="openPanel" data-key="challenge">打開</button>' })
+      + (gameState === 'clear' ? '<div style="margin-top:0.7em"><button type="button" class="h2-pill h2-pill--blue h2-pill--sm" data-h2-act="stageResult">查看本關詳細結算</button></div>' : '')
       + '</div><div class="h2-sub" style="margin-top:1em">版本：' + h2Esc(GAME_VERSION) + '</div>';
   }
   if (kind === 'next') {
@@ -22974,7 +23020,6 @@ function h2BindOnce() {
     }
     if (c('#h2-bulb')) { const b = h2$('h2-bulb-bubble'); if (b && b.style.display === 'block') h2HideBubble(); else h2ShowBubble(); return; }
     if (c('#h2-sum-ok')) { h2HideSummary(); return; }
-    if (c('#h2-sum-detail')) { h2ReopenSummary(); return; }
     if (t === h2$('h2-panel-wrap') || c('#h2-panel-close')) { h2ClosePanel(); return; }
     if (c('#h2-turn-l')) { h2SetDir(H2.dir - 1); return; }
     if (c('#h2-turn-r')) { h2SetDir(H2.dir + 1); return; }
@@ -30126,6 +30171,7 @@ function v395DevAction(key) {
 //   提案配置（待使用者確認）：第二章起每章合計 2～3 個；只取代一般金幣／260，不新增額外獎勵；不碰劇情道具、秘笈、寶箱、隱藏秘密
 //   每個項目用「原本那一個拾取物的座標」找到它 → 只改顯示與數量（位置、拾取判定、去重、失敗重試回滾都沿用原本的金幣／260）
 const V395_DROPS = {
+  '1-3': [{ from: 'coin', x: 605, y: 162, kind: 'coinBag' }],
   // 第二章（3 個）：2-4 是 Boss 房（沒有拾取物）→ 不放
   '2-1': [{ from: 'coin', x: 1480, y: 145, kind: 'coinBag' }],        // 三枚一排的空中金幣中間那枚（金幣 +1 → +10）
   '2-2': [{ from: 'b260', x: 4240, y: 200, kind: 'b260Bundle' }],     // 高處的 260（260 +1 → +3）
@@ -30174,13 +30220,14 @@ function v395PickupStep() {
   const take = (o, kind) => {
     o.collected = true;
     const inv = playerInventory;
-    if (kind === 'coinBag') { const n = V395_BUNDLE.coinBag; currentRunStats.coins += n; player.coinsCollected += n; inv.coins = (inv.coins || 0) + n; try { advNoteCollect('coin', o); } catch (e) {} try { sfxPlay('coinPickup'); } catch (e) {} showHint('💰 金幣袋！冒險金幣 +' + n, 110); }
-    else if (kind === 'b260Bundle') { const n = V395_BUNDLE.b260Bundle; currentRunStats.balloon260 += n; player.balloonsCollected += n; inv.balloon260 = (inv.balloon260 || 0) + n; try { advNoteCollect('b260', o); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} showHint('🎈 260 氣球組合！260 氣球 +' + n, 110); }
+    if (kind === 'b260Bundle') { const n = V395_BUNDLE.b260Bundle; currentRunStats.balloon260 += n; player.balloonsCollected += n; inv.balloon260 = (inv.balloon260 || 0) + n; try { advNoteCollect('b260', o); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} showHint('🎈 260 氣球組合！260 氣球 +' + n, 110); }
     else if (kind === 'roundBundle') { const n = V395_BUNDLE.roundBundle; currentRunStats.roundBalloon = (currentRunStats.roundBalloon || 0) + n; inv.roundBalloon = (inv.roundBalloon || 0) + n; try { advNoteCollect('b260', o); } catch (e) {} try { sfxPlay('balloonPickup'); } catch (e) {} saveInventory(); showHint('🔴 圓氣球組合！圓氣球 +' + n, 110); }
     v395Drops.got.push({ kind, x: o.x, stageId: v395Drops.stageId, frame: frameCount });
     v395L({ ev: 'pickup', kind, x: o.x, coins: inv.coins, b260: inv.balloon260, round: inv.roundBalloon });
   };
-  coins.forEach(c => { if (c.collected || !c.v395Kind) return; if (rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R * 2, CONFIG.COIN_R * 2)) take(c, c.v395Kind); });
+  const bag = coins.find(c => !c.collected && c.v395Kind === 'coinBag' &&
+    rectsOverlap(px, py, pw, ph, c.x - CONFIG.COIN_R, c.y - CONFIG.COIN_R, CONFIG.COIN_R * 2, CONFIG.COIN_R * 2));
+  if (bag) offerDiceReward({ id: bag.advId, coin: bag, coins: V395_BUNDLE.coinBag });
   balloons260.forEach(b => { if (b.collected || !b.v395Kind) return; if (rectsOverlap(px, py, pw, ph, b.x - CONFIG.BALLOON_W / 2, b.y - CONFIG.BALLOON_H / 2, CONFIG.BALLOON_W, CONFIG.BALLOON_H)) take(b, b.v395Kind); });
 }
 // ── HUD：盾牌圖示（愛心旁）、無敵星星圖示＋剩餘秒數 ──
@@ -33778,7 +33825,7 @@ function c34PreviewSection() {
   const query = new URLSearchParams(location.search);
   if (query.get('guest') !== '1' || query.get('sandbox') !== '1') return null;
   const section = query.get('ch3test');
-  return ['start', 'pool', ...CH3_TEST_STAGES].includes(section) ? section : null;
+  return ['start', 'pool', '1-2b', '1-3', '2-1', '2-2', ...CH3_TEST_STAGES].includes(section) ? section : null;
 }
 // v0.4.11：3-4 只有一個關卡。section：'start'（起點）／'pool'（開發用：直接放到峽谷頂部的水池區段；同一個關卡、同一套通關狀態）
 //   開發者入口（?devtools=1）：測試用氣球劍＋氣球槌（999）＋測試雨傘（只在記憶體，6／6 ×9）→ 不寫進正式背包、存檔
@@ -33865,10 +33912,6 @@ function c34CumulativeResources(stageId = '3-4') {
   for (const id of stages) {
     const { fixed, hidden } = adventureLevelResourceConfig(LEVELS[getLevelIndexByStageId(id)]);
     for (const key of Object.keys(totals)) totals[key] += fixed[key];
-    if (id === BALLOON_DICE_UNLOCK_STAGE) {
-      recipes.add('balloonDice');
-      recipes.add('basicHammer');
-    }
     for (const item of hidden) {
       totals.coins += item.coins;
       if (item.recipeKey) recipes.add(item.recipeKey);
@@ -33888,12 +33931,12 @@ function c34CreateInventory(stageId, mode) {
     inventory.tutorialSwordGranted = inventory.tutorialDogGranted = true;
     inventory.craftedItems.basicSword = 1;
   }
-  if (stages.includes(BALLOON_DICE_UNLOCK_STAGE)) {
+  if (stages.includes('1-1')) inventory.balloonDog = { present: true, turnsLeft: CONFIG.DOG_INITIAL_TURNS || 3 };
+  if (stages.includes('1-2b')) {
     inventory.chapter1Flow.dogIntroDone = true;
     inventory.chapter1Flow.dogCraftIntroDone = true;
     inventory.chapter1Flow.forcedDogTripDone = true;
     inventory.chapter1Flow.hammerRecipeGranted = true;
-    inventory.balloonDog = { present: true, turnsLeft: CONFIG.DOG_INITIAL_TURNS || 3 };
   }
   if (stages.includes('2-4')) inventory.craftedItems.basicHammer = 1;
   inventory.c2Flow = {};
@@ -33905,12 +33948,6 @@ function c34CreateInventory(stageId, mode) {
     const key = 'stage' + id.replace('-', '');
     inventory.c2Flow[key] = { claimed: true, dev: true };
     inventory.c2Flow[key + 'Clears'] = 1;
-    if (mode === 'cumulative') {
-      for (const chest of chapter3TreasureSpots(id)) {
-        const result = chapter3TreasureDice.prepareClaim(inventory.chapter3Chests || {}, chest.id, chest.tier);
-        inventory.chapter3Chests = result.ledger;
-      }
-    }
   }
   return inventory;
 }
@@ -33940,6 +33977,12 @@ function c34DevBegin(stageId) {
 }
 
 function c34OpenTestHome(stageId) {
+  const firstContinentIndex = OFFICIAL_ADVENTURE_STAGE_IDS.indexOf(stageId);
+  if (firstContinentIndex > 0) {
+    const prior = OFFICIAL_ADVENTURE_STAGE_IDS[firstContinentIndex - 1];
+    advBootOpenHome({ ctx: { stageId: prior, gameState: 'clear', entry: 'normal', mode: 'official' } });
+    return;
+  }
   const flow = playerInventory.c2Flow || {};
   const cleared = CH3_TEST_STAGES.slice(CH3_TEST_STAGES.indexOf(stageId))
     .filter(id => flow['stage' + id.replace('-', '')]?.claimed).at(-1);
@@ -34082,11 +34125,11 @@ function c34Complete(sid) {
     return r;
   });
   // 開發入口存檔隔離（見 c34DevBegin）
-  wrapFn('saveInventory', o => function () {
+  wrapFn('saveInventory', o => function (data = playerInventory) {
     if (!c34.devSnap) return o.apply(this, arguments);
     if (!c34.devBagMode) return true;
     try {
-      localStorage.setItem(c34BagKey(c34.devBagStage, c34.devBagMode), JSON.stringify({ ...playerInventory, ch3TestDogPlanned: nextBringDog }));
+      localStorage.setItem(c34BagKey(c34.devBagStage, c34.devBagMode), JSON.stringify({ ...data, ch3TestDogPlanned: nextBringDog }));
       return true;
     } catch { return false; }
   });

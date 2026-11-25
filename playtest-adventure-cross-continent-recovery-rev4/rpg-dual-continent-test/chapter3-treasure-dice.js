@@ -15,7 +15,11 @@ const chapter3TreasureDice = (() => {
 
   function payout(tier, rolls = null) {
     if (!Object.hasOwn(tiers, tier)) throw new RangeError('Unknown treasure tier');
-    const base = tiers[tier];
+    return payoutCoins(tiers[tier], rolls);
+  }
+
+  function payoutCoins(base, rolls = null) {
+    if (!Number.isSafeInteger(base) || base <= 0) throw new RangeError('Invalid coin reward');
     if (rolls === null) return { outcome: 'declined', coins: base };
     const { player, spirit } = rolls;
     if (!isFace(player) || !isFace(spirit)) throw new RangeError('Invalid die face');
@@ -100,7 +104,7 @@ const chapter3TreasureDice = (() => {
     };
   }
 
-  return { tiers, payout, prepareClaim, rollFace, drawFace, animate };
+  return { tiers, payout, payoutCoins, prepareClaim, rollFace, drawFace, animate };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = chapter3TreasureDice;

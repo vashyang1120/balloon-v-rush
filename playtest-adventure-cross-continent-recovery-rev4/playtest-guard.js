@@ -9,7 +9,7 @@
   if (!location.pathname.startsWith(previewRoot.pathname)) return;
   if (window.adventurePlaytestReady) return;
 
-  const namespace = 'balloon-v-rush:adventure-playtest:second-continent-rpg-revision-3:';
+  const namespace = 'balloon-v-rush:adventure-playtest:cross-continent-recovery-rev4:';
   const save = window.Storage.prototype;
   const { getItem, setItem, removeItem, key } = save;
   const storageLength = Object.getOwnPropertyDescriptor(save, 'length').get;
@@ -41,11 +41,20 @@
     sessionStorage: { value: session },
   });
 
+  // On the githack preview hosts binary files are redirected to GitHub Raw. Load them
+  // from the same commit and directory on GitHub Raw directly, which answers CORS, so
+  // canvas pixel reads stay untainted. Same-origin hosts (GitHub Pages) need no mirror.
+  const sourceAssets = previewMirror;
+  if (sourceAssets) Object.defineProperty(window, 'adventurePlaytestAssetRoot', { value: sourceAssets.href });
+
   function canRead(input, method) {
     const url = new URL(input, document.baseURI);
     const readOnly = ['GET', 'HEAD'].includes(String(method).toUpperCase());
     return readOnly && (url.protocol === 'data:' || url.protocol === 'blob:' ||
-      (url.origin === previewRoot.origin && url.pathname.startsWith(previewRoot.pathname)));
+      (url.origin === previewRoot.origin && url.pathname.startsWith(previewRoot.pathname)) ||
+      (sourceAssets && url.origin === sourceAssets.origin &&
+        ['assets/', 'rpg-dual-continent-test/chapter3-art/', 'motion-comic/assets/', 'minigames/whack-a-mole/assets/', 'minigames/volleyball/assets/audio/'].some(path =>
+          url.pathname.startsWith(sourceAssets.pathname + path))));
   }
 
   const download = window.fetch;
