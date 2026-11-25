@@ -22,7 +22,7 @@ const base = 'http://127.0.0.1:8412/playtest-adventure-gameplay-polish-qa-rev5/r
     await page.locator('#btn-start-gate-go').click();
     await page.waitForFunction(() => gameState === 'playing' && debugC34().ready, null, { timeout: 90000 });
     await page.evaluate(() => { if (rpgActive) rpgClose('skipped'); });
-    await page.evaluate(() => pauseGame()); await page.locator('#qa-tool-btn').click();
+    await page.evaluate(() => { if (gameState === 'playing') pauseGame(); qaTestTool.open(); });
     for (const k of ['dice', 'wet', 'tree']) {
       await page.locator(`#qa-tool button[data-qa="read"][data-k="${k}"]`).click();
       const a = await page.evaluate(k => qaTestTool.RPG_ITEMS.find(i => i.key === k).ids.map(id => [id, rpgIsSeen(id), c34.taught.has(id)]), k);
@@ -42,7 +42,7 @@ const base = 'http://127.0.0.1:8412/playtest-adventure-gameplay-polish-qa-rev5/r
     // shortcuts
     const names = await page.evaluate(() => qaTestTool.SHORTCUTS.map(s => s.name));
     for (let i = 0; i < names.length; i++) {
-      if (!await page.locator('#qa-tool.on').count()) await page.evaluate(() => pauseGame()); await page.locator('#qa-tool-btn').click();
+      if (!await page.locator('#qa-tool.on').count()) await page.evaluate(() => { if (gameState === 'playing') pauseGame(); qaTestTool.open(); });
       await page.locator(`#qa-tool button[data-qa="go"][data-k="${i}"]`).click();
       const want = ['3-1', '3-2', '3-4', '3-4', '3-4', '3-4', '3-4'][i];
       await page.waitForFunction(w => advCurrentStageId() === w && gameState === 'playing' && !assetGateActive, want, { timeout: 60000 }).catch(() => {});

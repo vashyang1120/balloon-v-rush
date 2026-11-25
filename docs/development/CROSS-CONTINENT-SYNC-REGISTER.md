@@ -1,6 +1,6 @@
 # 跨大陸共用功能同步清冊（Cross-Continent Sync Register）
 
-最近同步：2026-11-25（Revision 4，分支 `test/adventure-v0.4.13-cross-continent-recovery-rev4`）
+最近同步：2026-11-26（Revision 5，分支 `test/adventure-v0.4.13-gameplay-polish-qa-rev5`；Revision 4 為 PR #47）
 機器可讀版本：`docs/development/cross-continent-sync/manifest.json`
 自動檢查：`node tools/sync-check/check-cross-continent-sync.cjs --archived`（CI：`.github/workflows/cross-continent-sync.yml`）
 
@@ -11,7 +11,8 @@
 | 代號 | 目錄 | 狀態 | 說明 |
 |---|---|---|---|
 | continent1 | `rpg-continent1-universe/` | 正式版（main，PR #45 `c3fabbb`） | 第一大陸正式入口，讀取 repo 根目錄的 `minigames/` |
-| rev4 | `playtest-adventure-cross-continent-recovery-rev4/` | 第二大陸試玩（本次） | 自帶 `minigames/`、`motion-comic/`、`assets/` 副本；`rpg-dual-continent-test/` 是遊戲本體 |
+| rev5 | `playtest-adventure-gameplay-polish-qa-rev5/` | 第二大陸試玩（本次，Revision 5） | 由 rev4 原樣複製後施工；自帶 `minigames/`、`motion-comic/`、`assets/` 副本 |
+| rev4 | `playtest-adventure-cross-continent-recovery-rev4/` | 封存（PR #47，`b5b2f47`） | 自帶 `minigames/`、`motion-comic/`、`assets/` 副本；`rpg-dual-continent-test/` 是遊戲本體 |
 | dualSource | `rpg-dual-continent-test/`（main） | 已過期，封存 | main 上停在 2026-11-18，沒有第三章水域、骰子 v2、PR #45。之後若要恢復成來源，需從 rev4 回寫 |
 | rev3 | `playtest-adventure-v0.4.13-test-4/` | 封存 | Integration Test 4 快照（2026-11-22）。Revision 3 在這份快照上修改 |
 | 其他 | `playtest-adventure-v0.4.13*/`、`playtest-balloon-dice-v2-test-*/`（PR #43 分支） | 封存 | 歷次獨立試玩快照，不再修改 |
@@ -27,13 +28,24 @@
 | 結算 UI 2.0／詳細結算 | 正式金幣、皇冠 V 幣圖示；摘要依關卡保存，可唯讀重開（返回整備） | PR #45 | 已驗收 | `main.js` h2ShowSummary 等 | `main.js`（同步） | — | `assets/adventure/ui/items/item_coin*.png` | 第二大陸獎勵列內容依關卡不同（正常） | 2026-11-25 桌機／手機截圖 |
 | 從頭挑戰 | 共用確認；LV1、清空本趟背包與秘笈；保留身份、成績、RPG 已讀 | PR #45 | 已驗收 | `advConfirmOfficialChallenge` | 同步 | — | | | 2026-11-25 瀏覽器：LV1、0 金幣、秘笈清空、歷史保留 |
 | 跨大陸延續（2-4→3-1） | 同一趟、LV2、金幣、材料、道具、秘笈延續 | 既有 v0.3.99 起；PR #45 驗證 | 已驗收（第一大陸端） | — | `main.js` | — | | 帶狗出發扣 260×1 為正常規則 | 2026-11-25 瀏覽器：LV2、金幣、秘笈、槌子延續 |
-| 背包 LV1／LV2 | LV2 以 80 冒險金幣購買一次 | v0.3.96 #29 | 已驗收 | `main.js` | `main.js` | — | | 開發者免費升級按鈕已於 rev4 移除（BUG-06）；第一大陸正式版程式仍保留在 devtools 內，待決策 | 2026-11-25 |
+| 背包 LV1／LV2 | LV2 以 80 冒險金幣購買一次 | v0.3.96 #29 | 已驗收 | `main.js` | `main.js` | — | | 開發者免費升級按鈕：rev4 移除（BUG-06）；第一大陸於 Revision 5（A-07）移除；測試用背包等級改由 QA 測試工具設定 | 2026-11-26 |
 | 3-4 瀑布、雨傘分流 | 主水柱／水花／水面各 6 幀；雨傘導水與分流 | Batch D Rev7 `1ad8635`；Canvas 防護 PR #43 `607c698`/`ea8a317` | 已驗收（動畫） | — | `chapter3-umbrella-diversion.js`、`chapter3-water-runtime.js` | — | `chapter3-art/` | 預覽網域需 CORS；讀不到像素時退回原導流畫法 | 2026-11-25 公開 HTTPS 60/60 次正常分流、無 SecurityError |
 | 星靈雨傘救援、商店購買引導、批量購買 | 見 Revision 3 規格 | PR #46 `ab7c398`/`d0633ab` | Revision 3 未驗收 | — | `umbrella-purchase-guide.js`、`main.js` | — | | | 2026-11-25 rev4 回歸測試通過 |
 | 3-4 倒樹峽谷、第 2／4 次提示 | | PR #46 `d0633ab` | 未驗收 | — | `chapter3-water-runtime.js` | — | | | 2026-11-25 通過 |
 | 溼身／風乾已讀 | 各自一生一次（oncePerPlayer） | PR #46 | 未驗收 | — | `main.js` rpgBuildScene 包裝 | — | | | 2026-11-25 |
 | 導風判定、30／45／60 度 | 統一初速；45 最遠、60 最高 | v0.4.11 | 已驗收 | — | `main.js` | — | | 不調整物理 | 2026-11-25 chapter3-water 測試 2–4 通過 |
 | Guest／Sandbox／DevTools 隔離 | 試玩存檔獨立命名空間；不讀寫正式資料 | 各試玩 guard | — | — | `playtest-guard.js`（命名空間 `cross-continent-recovery-rev4`） | — | | 自 Revision 3 起 guard 只強制 guest／sandbox | 2026-11-25 隔離測試 8/8 |
+| 武器・裝備分頁（A-01） | 骰子顯示圖示、名稱、數量、上限（LV1 1／LV2 2），沒有耐久條；雨傘也顯示 | Revision 5 `11edb0c` | 待驗收 | `main.js` h2DiceBagRowHtml、v396BagRows | 同步 | — | | | 2026-11-26 rev5 回歸測試（兩個大陸） |
+| 氣球雨傘上限（A-02） | LV1 2 把／LV2 4 把；超過上限的既有庫存不沒收、只是不能再做 | Revision 5 `11edb0c` | 待驗收 | `V395_BAG.caps` | 同步 | — | | | 2026-11-26 |
+| 急救包文字（A-03） | 「使用後直接補滿生命。」 | Revision 5 | 待驗收 | `SHOP_ITEMS.firstAidKit` | 同步 | — | | | 2026-11-26 |
+| 暫停畫面 HP 即時更新（A-04） | 任何補血後暫停畫面立即重畫 | Revision 5 | 待驗收 | rev5HpSyncInstall | 同步 | — | | | 2026-11-26 |
+| 商店造型入口隱藏（A-05） | 只留「冒險道具」；資料保留 | Revision 5 | 待驗收 | `H2_SHOP_TABS` | 同步 | — | | | 2026-11-26 |
+| 批量購買上限（A-06） | 上限＝min(買得起, 背包剩餘)；按鈕到上限變灰 | Revision 5 | 待驗收 | h2ShopAffordable／h2ShopRoom | 同步 | — | | | 2026-11-26 |
+| 氣球骰子音訊（Batch G） | 邀約→小遊戲 BGM；選「是」→ 金色油管環音效一次；骰子音效 6.661 秒，播完同時揭曉；勝／敗音效一次、平手無；結束恢復關卡 BGM | Revision 5 `a8347d5`／`927f1a5` | 待驗收 | `balloon-dice-audio.js`（逐位元相同）＋`balloon-dice.js`／`balloon-dice-interaction.js` | `balloon-dice-audio.js`（相同）＋`chapter3-treasure-dice.js`／`chapter3-treasure-interaction.js` | 排球 BGM／勝敗音效 | `assets/audio/sfx/item/balloon_dice_roll.mp3`（兩份 SHA-256 相同） | | 2026-11-26 瀏覽器實測時間軸（勝／敗／平） |
+| 3-2 開頭風刃蠍子、風刃射程（Batch B） | 新增一般蠍子 x 700；風刃為獨立飛行物；一般風刃 480 px 連續淡出 | Revision 5 `c7a081d` | 待驗收 | — | `main.js` | — | | 只在第二大陸 | 2026-11-26 |
+| 3-4 樹峽谷受傷演出、寶箱、鏡頭、捷徑（Batch C） | 見 Revision 5 報告 | Revision 5 `407567d`／`c50e462`／`d1c4c1e` | 待驗收 | — | `main.js`、`chapter3-water-runtime.js`、`chapter3-treasure-interaction.js` | — | | 只在第二大陸 | 2026-11-26 |
+| 暫停背景依大陸（D-01） | 第二大陸用風之峽谷窗景 | Revision 5 `ddda10f` | 待驗收 | 共用程式（第一大陸沒有第二大陸關卡，不受影響） | `main.js` c1dSyncPauseBg | — | | | 2026-11-26 |
+| QA 測試工具（Batch E） | 只在訪客沙盒＋開發者模式；遊玩中隱藏按鈕 | Revision 5 `563ce3d` | 待驗收 | — | `qa-test-tool.js` | — | | | 2026-11-26 |
 | 已廢止測試功能 | 不得出現在正常玩家流程 | 見 §3 | — | — | — | — | | | 自動檢查 |
 
 ## 3. 已廢止測試功能與臨時開發邏輯清點
@@ -48,9 +60,10 @@
 | 第三章測試背包模式（`ch3bag=cumulative/stocked/empty`） | `main.js` | 合法、僅訪客沙盒＋開發者、回家還原 | 保留 |
 | 翼靴倍率候選按鈕 | `main.js` | 合法開發工具 | 保留 |
 | `?homeLegacy=1` 舊版小V之家 | `main.js` | 開發用回歸工具 | 保留 |
-| 3-4 水池捷徑開機時出現「做出氣球槌」對話 | 開發捷徑（Revision 3 起就有） | 僅開發捷徑 | 記錄，未修改 |
+| 3-4 水池捷徑開機時出現「做出氣球槌」對話 | 開發捷徑（Revision 3 起就有） | 僅開發捷徑 | Revision 5（C-07）修正：捷徑測試存檔把這段教學標為已讀，正式教學規則不變 |
+| 第一大陸商店／暫停的免費 LV2 測試按鈕 | `rpg-continent1-universe/main.js` | 已廢止 | Revision 5（A-07）移除；manifest 對 continent1 也檢查 |
 
 ## 4. 已知差異與後續建議
 
-- 第一大陸（`rpg-continent1-universe/main.js`）與第二大陸（rev4 `main.js`）仍是兩份約 3.4 萬行的分叉程式。本次以 manifest 檢查擋住已知回歸，但沒有把共用模組抽出來（施工通知未批准大規模重構）。建議後續另開工程：先把結算 UI、從頭挑戰、背包、骰子規則抽成共用 JS 檔，兩個大陸都以 `<script>` 載入同一份。
+- 第一大陸（`rpg-continent1-universe/main.js`）與第二大陸（rev5 `main.js`）仍是兩份約 3.4 萬行的分叉程式。本次以 manifest 檢查擋住已知回歸，但沒有把共用模組抽出來（施工通知未批准大規模重構）。建議後續另開工程：先把結算 UI、從頭挑戰、背包、骰子規則抽成共用 JS 檔，兩個大陸都以 `<script>` 載入同一份。
 - 試玩包是整個目錄的副本。每次發佈新試玩包時，跑一次檢查工具即可發現小遊戲或共用 UI 是不是複製到舊版。

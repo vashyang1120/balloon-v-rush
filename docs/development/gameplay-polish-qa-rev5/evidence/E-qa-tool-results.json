@@ -206,7 +206,7 @@
   "骰子音效（寶箱前，骰子 1 顆）": {
    "stage": "3-4",
    "gs": "paused",
-   "x": 2828,
+   "x": 2852,
    "feet": -265,
    "dog": true,
    "section": "start",

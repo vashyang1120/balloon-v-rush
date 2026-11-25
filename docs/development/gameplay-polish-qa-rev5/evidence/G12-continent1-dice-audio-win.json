@@ -1,0 +1,58 @@
+{
+  "outcome": "win",
+  "timelineMs": [
+    {
+      "ev": "invite",
+      "t": 0
+    },
+    {
+      "ev": "loaded",
+      "t": 147,
+      "key": "roll",
+      "durationMs": 6661
+    },
+    {
+      "ev": "loaded",
+      "t": 166,
+      "key": "victory",
+      "durationMs": 3997
+    },
+    {
+      "ev": "loaded",
+      "t": 167,
+      "key": "defeat",
+      "durationMs": 2247
+    },
+    {
+      "ev": "heroic",
+      "t": 1149,
+      "played": true
+    },
+    {
+      "ev": "rollStart",
+      "t": 1150,
+      "mode": "webaudio",
+      "totalMs": 6661
+    },
+    {
+      "ev": "rollAudioEnded",
+      "t": 7818
+    },
+    {
+      "ev": "reveal",
+      "t": 7824,
+      "outcome": "win",
+      "mode": "webaudio",
+      "totalMs": 6661,
+      "animMs": 6675,
+      "audioMs": 6670,
+      "audioEndedMs": 6669
+    },
+    {
+      "ev": "resultSfx",
+      "t": 7825,
+      "outcome": "win",
+      "played": true
+    }
+  ]
+}
