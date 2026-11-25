@@ -168,6 +168,7 @@ const ctx = canvas.getContext('2d');
 
 // Internal resolution (16:9)
 const CANVAS_W = 960;
+const C34_TREE_GAP_HURT_FRAMES = 90;   // Revision 5：倒樹峽谷落坑的受傷演出長度（＝damagePlayer 的 player.invincible）
 const CANVAS_H = 540;
 canvas.width  = CANVAS_W;
 canvas.height = CANVAS_H;
@@ -34218,6 +34219,12 @@ function c34Complete(sid) {
       player.x = pit.resetX; player.y = C34_LAY.y(C34_LAY.p2.h) - player.h;
       player.vx = 0; player.vy = 0; player.onGround = true;
       player.windT = 0; player.windInfo = null;
+      // Revision 5（C-01／C-02）：借用既有受傷演出（受傷音效 sfxOnPlayerHurt、Hurt 姿勢與閃爍＝player.invincible，
+      //   長度和一般受傷相同 90 步）。不呼叫 damagePlayer → HP、盾牌、道具、受傷次數、無傷成就都不變；
+      //   回到安全高台後腳不在深淵裡，同一次落坑不會再進來。
+      try { sfxOnPlayerHurt(); } catch (e) {}
+      player.invincible = Math.max(player.invincible || 0, C34_TREE_GAP_HURT_FRAMES);
+      c34.treeGapHurts = (c34.treeGapHurts || 0) + 1;
       if (fromTreePlatform && tree?.state === 'standing') {
         const failures = ++c34.treeFailures;
         if (failures === 2 || failures === 4) c34Teach('c34_tree_gap_' + failures);
