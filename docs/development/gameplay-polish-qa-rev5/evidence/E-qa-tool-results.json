@@ -1,0 +1,298 @@
+{
+ "isolation": {
+  "(none)": 0,
+  "guest=1&sandbox=1": 0,
+  "devtools=1": 1,
+  "guest=1&devtools=1": 1,
+  "guest=1&sandbox=1&devtools=1": 1
+ },
+ "umbrella": {
+  "A": {
+   "dbg": {
+    "key": "A",
+    "prep": {
+     "ready": true,
+     "n": 1
+    },
+    "numbers": {
+     "required": 5,
+     "packN": 3,
+     "price": 6,
+     "quantity": 2,
+     "total": 12
+    }
+   },
+   "coins": 389,
+   "b260": 53,
+   "stage": "3-1",
+   "after": {
+    "rpg": null,
+    "stage": "3-2",
+    "gs": "playing",
+    "guide": false
+   }
+  },
+  "B": {
+   "dbg": {
+    "key": "B",
+    "prep": {
+     "craft": true,
+     "have": 53,
+     "required": 5
+    },
+    "numbers": {
+     "required": 5,
+     "packN": 3,
+     "price": 6,
+     "quantity": 2,
+     "total": 12
+    }
+   },
+   "coins": 389,
+   "b260": 53,
+   "stage": "3-1",
+   "after": {
+    "rpg": null,
+    "stage": "3-1",
+    "gs": "clear",
+    "guide": false
+   }
+  },
+  "C": {
+   "dbg": {
+    "key": "C",
+    "prep": {
+     "buy": true,
+     "have": 0,
+     "missing": 5,
+     "required": 5,
+     "quantity": 2,
+     "totalCost": 12
+    },
+    "numbers": {
+     "required": 5,
+     "packN": 3,
+     "price": 6,
+     "quantity": 2,
+     "total": 12
+    }
+   },
+   "coins": 12,
+   "b260": 0,
+   "stage": "3-1",
+   "after": {
+    "rpg": "c2_umbrella_shop",
+    "stage": "3-1",
+    "gs": "clear",
+    "guide": true
+   }
+  },
+  "D": {
+   "dbg": {
+    "key": "D",
+    "prep": {
+     "rescue": true,
+     "rescued": false,
+     "have": 0,
+     "missing": 5,
+     "required": 5,
+     "quantity": 2,
+     "totalCost": 12
+    },
+    "numbers": {
+     "required": 5,
+     "packN": 3,
+     "price": 6,
+     "quantity": 2,
+     "total": 12
+    }
+   },
+   "coins": 5,
+   "b260": 0,
+   "stage": "3-1",
+   "after": {
+    "rpg": "c2_umbrella_rescue",
+    "stage": "3-1",
+    "gs": "clear",
+    "guide": false
+   }
+  },
+  "E": {
+   "dbg": {
+    "key": "E",
+    "prep": {
+     "rescue": true,
+     "rescued": false,
+     "have": 0,
+     "missing": 5,
+     "required": 5,
+     "quantity": 2,
+     "totalCost": 12
+    },
+    "numbers": {
+     "required": 5,
+     "packN": 3,
+     "price": 6,
+     "quantity": 2,
+     "total": 12
+    }
+   },
+   "coins": 6,
+   "b260": 0,
+   "stage": "3-1",
+   "after": {
+    "rpg": "c2_umbrella_rescue",
+    "stage": "3-1",
+    "gs": "clear",
+    "guide": false
+   }
+  }
+ },
+ "shortcuts": {
+  "3-1 雨傘秘笈（帶狗）": {
+   "stage": "3-1",
+   "gs": "playing",
+   "x": 2640,
+   "feet": 460,
+   "dog": true,
+   "section": null,
+   "dice": 0
+  },
+  "3-2 新增風刃蠍子": {
+   "stage": "3-2",
+   "gs": "playing",
+   "x": 380,
+   "feet": 460,
+   "dog": false,
+   "section": null,
+   "dice": 0
+  },
+  "3-4 樹峽谷": {
+   "stage": "3-4",
+   "gs": "playing",
+   "x": 2090,
+   "feet": 150,
+   "dog": false,
+   "section": "start",
+   "dice": 2
+  },
+  "3-4 水池／瀑布": {
+   "stage": "3-4",
+   "gs": "playing",
+   "x": 3122,
+   "feet": -105,
+   "dog": false,
+   "section": "pool",
+   "dice": 2
+  },
+  "3-4 珍貴寶箱（帶狗）": {
+   "stage": "3-4",
+   "gs": "playing",
+   "x": 2822,
+   "feet": -105,
+   "dog": true,
+   "section": "start",
+   "dice": 2
+  },
+  "3-4 高台鏡頭": {
+   "stage": "3-4",
+   "gs": "playing",
+   "x": 2532,
+   "feet": 5,
+   "dog": false,
+   "section": "start",
+   "dice": 2
+  },
+  "骰子音效（寶箱前，骰子 1 顆）": {
+   "stage": "3-4",
+   "gs": "paused",
+   "x": 2828,
+   "feet": -265,
+   "dog": true,
+   "section": "start",
+   "dice": 2
+  }
+ },
+ "rpg": {
+  "dice": {
+   "read": [
+    [
+     "rpg020_find:recipe:balloonDice",
+     true,
+     false
+    ],
+    [
+     "rpg007_recipe:balloonDice",
+     true,
+     false
+    ]
+   ],
+   "unread": [
+    [
+     "rpg020_find:recipe:balloonDice",
+     false,
+     false
+    ],
+    [
+     "rpg007_recipe:balloonDice",
+     false,
+     false
+    ]
+   ]
+  },
+  "wet": {
+   "read": [
+    [
+     "c34_first_wet",
+     true,
+     true
+    ]
+   ],
+   "unread": [
+    [
+     "c34_first_wet",
+     false,
+     false
+    ]
+   ]
+  },
+  "tree": {
+   "read": [
+    [
+     "c34_tree_gap_2",
+     false,
+     true
+    ],
+    [
+     "c34_tree_gap_4",
+     false,
+     true
+    ]
+   ],
+   "unread": [
+    [
+     "c34_tree_gap_2",
+     false,
+     false
+    ],
+    [
+     "c34_tree_gap_4",
+     false,
+     false
+    ]
+   ]
+  },
+  "mode": "off",
+  "treeFailures": 3
+ },
+ "res": {
+  "coins": 260,
+  "b260": 7,
+  "round": 4,
+  "bag": 2,
+  "hp": 1,
+  "umb": 3,
+  "dice": 2
+ },
+ "errors": []
+}
