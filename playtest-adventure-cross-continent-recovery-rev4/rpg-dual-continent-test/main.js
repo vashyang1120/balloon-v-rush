@@ -32036,6 +32036,9 @@ function c1uPrepareMinigameBg() {
       } catch (e) { console.warn('[C1U] 小遊戲背景處理失敗 → 用原圖', e); res(c1uMinigameBg()); }
     };
     img.onerror = () => res(c1uMinigameBg());
+    // Preview hosts serve the window art from another origin. Request it with CORS so the
+    // accepted fade + blur canvas can still be exported; same-origin hosts are unaffected.
+    try { if (new URL(src, location.href).origin !== location.origin) img.crossOrigin = 'anonymous'; } catch (e) {}
     img.src = src;
   });
   return c.promise;
