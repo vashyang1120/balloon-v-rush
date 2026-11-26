@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "description": "Cross-continent shared-feature register. tools/sync-check/check-cross-continent-sync.cjs reads this file. 'active' builds are checked strictly; 'archived' builds are frozen playtest snapshots and only reported.",
+  "description": "Cross-continent shared-feature register. tools/sync-check/check-cross-continent-sync.cjs reads this file. 'active' builds are checked strictly; 'archived' builds are frozen playtest snapshots (acceptance records) and only reported.",
   "builds": {
     "continent1": {
       "root": "rpg-continent1-universe",
       "status": "active",
-      "note": "First continent production (main, PR #45 c3fabbb). Loads ../minigames/."
+      "note": "Continent 1 official release (Baseline Release 1). Loads ../minigames/ and ../assets/."
     },
     "rev4": {
       "root": "playtest-adventure-cross-continent-recovery-rev4",
@@ -15,8 +15,9 @@
     },
     "dualSource": {
       "root": "rpg-dual-continent-test",
-      "status": "archived",
-      "note": "On main this tree stopped at 2026-11-18 (before Chapter 3 water, dice v2, PR #45). Not a source of truth until it is refreshed from the Revision 4 package."
+      "assetRoot": "",
+      "status": "active",
+      "note": "The only cumulative development baseline for both continents (Baseline Release 1 = Revision 3 + 4 + 5 + Hotfix 1). Loads the repo-root ../assets/, ../minigames/ and ../motion-comic/. All later Continent 2 work starts here."
     },
     "rev3": {
       "root": "playtest-adventure-v0.4.13-test-4",
@@ -27,8 +28,8 @@
     "rev5": {
       "root": "playtest-adventure-gameplay-polish-qa-rev5",
       "game": "rpg-dual-continent-test",
-      "status": "active",
-      "note": "Second continent Revision 5 playtest package (Gameplay Polish & QA Accessibility). Loads its own minigames/ copy."
+      "status": "archived",
+      "note": "Revision 5 + Hotfix 1 independent playtest (accepted at 7bd25bd). Acceptance record only; superseded by dualSource."
     }
   },
   "identical": [
@@ -109,6 +110,28 @@
         }
       ],
       "source": "Revision 5 G-02 (user-supplied 骰子.mp3, unaltered)"
+    },
+    {
+      "feature": "balloon-dice-audio-dual",
+      "canonical": "rpg-continent1-universe/balloon-dice-audio.js",
+      "copies": [
+        {
+          "build": "dualSource",
+          "path": "balloon-dice-audio.js"
+        }
+      ],
+      "source": "Revision 5 Batch G"
+    },
+    {
+      "feature": "volleyball-adapter-dual",
+      "canonical": "rpg-continent1-universe/minigame-volleyball.html",
+      "copies": [
+        {
+          "build": "dualSource",
+          "path": "minigame-volleyball.html"
+        }
+      ],
+      "source": "v0.4.1 adapter"
     }
   ],
   "contains": [
@@ -116,6 +139,7 @@
       "feature": "fresh-start",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -130,6 +154,7 @@
       "feature": "settlement-ui-2",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -145,6 +170,7 @@
       "feature": "official-currency-icons",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -162,6 +188,7 @@
       "feature": "minigame-backdrop-fade-blur",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -174,6 +201,7 @@
     {
       "feature": "minigame-backdrop-cors",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -186,6 +214,7 @@
       "feature": "volleyball-five-point",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -198,6 +227,7 @@
     {
       "feature": "canvas-taint-guard",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-umbrella-diversion.js",
@@ -211,6 +241,7 @@
     {
       "feature": "canvas-cors-load",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -222,6 +253,7 @@
     {
       "feature": "balloon-dice-v2",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -234,6 +266,7 @@
     {
       "feature": "balloon-dice-v2-rules",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-treasure-interaction.js",
@@ -245,6 +278,7 @@
     {
       "feature": "rev3-umbrella-recovery",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "umbrella-purchase-guide.js",
@@ -254,6 +288,7 @@
     {
       "feature": "rev3-tree-gap-hints",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-water-runtime.js",
@@ -279,6 +314,7 @@
       "feature": "rev5-A01-dice-in-bag",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -293,6 +329,7 @@
       "feature": "rev5-A02-umbrella-cap",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -305,6 +342,7 @@
       "feature": "rev5-A03-first-aid-text",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -317,6 +355,7 @@
       "feature": "rev5-A04-pause-hp",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -330,6 +369,7 @@
       "feature": "rev5-A05-shop-tabs",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -342,6 +382,7 @@
       "feature": "rev5-A06-bulk-buy",
       "builds": [
         "continent1",
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -369,6 +410,7 @@
     {
       "feature": "rev5-G-dice-audio-c2",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-treasure-interaction.js",
@@ -395,6 +437,7 @@
     {
       "feature": "rev5-G-dice-audio-script-c2",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "index.html",
@@ -417,6 +460,7 @@
     {
       "feature": "rev5-G-dice-timing-c2",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-treasure-dice.js",
@@ -428,6 +472,7 @@
     {
       "feature": "rev5-B-wind-blades",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -441,6 +486,7 @@
     {
       "feature": "rev5-C-3-4",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -454,6 +500,7 @@
     {
       "feature": "rev5-C06-camera",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-water-runtime.js",
@@ -465,6 +512,7 @@
     {
       "feature": "rev5-C05-chest",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-treasure-interaction.js",
@@ -476,6 +524,7 @@
     {
       "feature": "rev5-D01-pause-bg",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "main.js",
@@ -487,17 +536,19 @@
     {
       "feature": "rev5-E-qa-tool",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "index.html",
       "patterns": [
-        "qa-test-tool.js?v=gameplay-polish-qa-rev5"
+        "qa-test-tool.js?v="
       ],
       "source": "Revision 5 Batch E"
     },
     {
       "feature": "rev5-E-qa-tool-isolation",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "qa-test-tool.js",
@@ -509,6 +560,7 @@
     {
       "feature": "hotfix1-dog-water",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "index.html",
@@ -520,6 +572,7 @@
     {
       "feature": "hotfix1-dog-water-rules",
       "builds": [
+        "dualSource",
         "rev5"
       ],
       "file": "chapter3-dog-water.js",
@@ -536,7 +589,8 @@
       "feature": "obsolete-free-bag-lv2",
       "builds": [
         "continent1",
-        "rev5"
+        "rev5",
+        "dualSource"
       ],
       "files": [
         "main.js"
@@ -552,7 +606,8 @@
     {
       "feature": "external-sdk-in-playtest",
       "builds": [
-        "rev5"
+        "rev5",
+        "dualSource"
       ],
       "files": [
         "index.html"
@@ -594,7 +649,8 @@
       "feature": "rev5-no-cosmetic-shop-tile",
       "builds": [
         "continent1",
-        "rev5"
+        "rev5",
+        "dualSource"
       ],
       "files": [
         "main.js"
@@ -618,6 +674,20 @@
         "c34DogWaterStep"
       ],
       "reason": "The 3-4 pool and the dog swim state are Continent 2 only (Hotfix 1)."
+    },
+    {
+      "feature": "dual-baseline-no-playtest-guard",
+      "builds": [
+        "dualSource"
+      ],
+      "files": [
+        "index.html"
+      ],
+      "patterns": [
+        "playtest-guard.js",
+        "Content-Security-Policy"
+      ],
+      "reason": "The repo-root baseline runs on GitHub Pages paths; the isolated-playtest guard and CSP belong only to playtest-* packages."
     }
   ],
   "cacheTags": [
@@ -666,8 +736,30 @@
         "balloon-dice-interaction.js",
         "balloon-dice-audio.js"
       ],
-      "expected": "gameplay-polish-qa-rev5"
+      "styles": [
+        "style.css"
+      ],
+      "expected": "adventure-v0.4.13-baseline-release-1"
+    },
+    {
+      "build": "dualSource",
+      "file": "index.html",
+      "scripts": [
+        "main.js",
+        "chapter3-dog-water.js",
+        "chapter3-umbrella-diversion.js",
+        "chapter3-water-runtime.js",
+        "chapter3-treasure-dice.js",
+        "chapter3-treasure-interaction.js",
+        "umbrella-purchase-guide.js",
+        "balloon-dice-audio.js",
+        "qa-test-tool.js"
+      ],
+      "styles": [
+        "style.css"
+      ],
+      "expected": "adventure-v0.4.13-dual-baseline-release-1"
     }
   ],
-  "secondContinentActive": "rev5"
+  "secondContinentActive": "dualSource"
 }

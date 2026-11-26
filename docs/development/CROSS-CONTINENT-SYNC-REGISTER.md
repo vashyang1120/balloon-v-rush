@@ -1,25 +1,31 @@
 # 跨大陸共用功能同步清冊（Cross-Continent Sync Register）
 
-最近同步：2026-11-26（Revision 5 + Companion Water Animation｜Hotfix 1，分支 `test/adventure-v0.4.13-gameplay-polish-qa-rev5`；Revision 4 為 PR #47）
+最近同步：2026-11-26（Adventure v0.4.13｜Gameplay Polish & Cross-Continent Baseline Release 1：Revision 3＋4＋5＋Companion Water Animation｜Hotfix 1 正式整合，PR #48）
 機器可讀版本：`docs/development/cross-continent-sync/manifest.json`
 自動檢查：`node tools/sync-check/check-cross-continent-sync.cjs --archived`（CI：`.github/workflows/cross-continent-sync.yml`）
 
 > 這份文件是人看的清冊；真正擋住回歸的是 manifest 與檢查工具。修改任何共用功能時，請同時更新 manifest 的檢查條件，並跑一次檢查。
 
-## 1. 目前的入口與程式位置
+## 1. 目前的入口與程式位置（Baseline Release 1 起）
 
-| 代號 | 目錄 | 狀態 | 說明 |
+| 代號 | 目錄 | 用途 | 說明 |
 |---|---|---|---|
-| continent1 | `rpg-continent1-universe/` | 正式版（main，PR #45 `c3fabbb`） | 第一大陸正式入口，讀取 repo 根目錄的 `minigames/` |
-| rev5 | `playtest-adventure-gameplay-polish-qa-rev5/` | 第二大陸試玩（本次，Revision 5） | 由 rev4 原樣複製後施工；自帶 `minigames/`、`motion-comic/`、`assets/` 副本 |
-| rev4 | `playtest-adventure-cross-continent-recovery-rev4/` | 封存（PR #47，`b5b2f47`） | 自帶 `minigames/`、`motion-comic/`、`assets/` 副本；`rpg-dual-continent-test/` 是遊戲本體 |
-| dualSource | `rpg-dual-continent-test/`（main） | 已過期，封存 | main 上停在 2026-11-18，沒有第三章水域、骰子 v2、PR #45。之後若要恢復成來源，需從 rev4 回寫 |
-| rev3 | `playtest-adventure-v0.4.13-test-4/` | 封存 | Integration Test 4 快照（2026-11-22）。Revision 3 在這份快照上修改 |
-| 其他 | `playtest-adventure-v0.4.13*/`、`playtest-balloon-dice-v2-test-*/`（PR #43 分支） | 封存 | 歷次獨立試玩快照，不再修改 |
+| continent1 | `rpg-continent1-universe/` | **第一大陸正式入口** | 遊戲宇宙進入的正式版。讀取 repo 根目錄的 `assets/`、`minigames/`、`motion-comic/`。版本 `adventure-v0.4.13-baseline-release-1` |
+| dualSource | `rpg-dual-continent-test/` | **雙大陸唯一的累積開發基準** | Revision 3＋4＋5＋Hotfix 1 全部已驗收成果。讀取 repo 根目錄的 `assets/`、`minigames/`、`motion-comic/`（與第一大陸相同的資產）。存檔寫在自己的 `__c1d__` 命名空間，不讀寫第一大陸存檔。版本 `adventure-v0.4.13-dual-baseline-release-1`。**之後所有第二大陸新功能（重新挑戰制度、3-5、3-6、3-7…）都從這裡開始施工** |
+| rev5 | `playtest-adventure-gameplay-polish-qa-rev5/` | 歷史試玩版本（驗收紀錄） | Revision 5＋Hotfix 1 的獨立試玩包，自帶資產副本與試玩防護。保留作為驗收紀錄，不再作為施工基準 |
+| rev4 | `playtest-adventure-cross-continent-recovery-rev4/` | 歷史試玩版本（驗收紀錄） | Revision 4（PR #47 `b5b2f47`） |
+| rev3 | `playtest-adventure-v0.4.13-test-4/` | 歷史試玩版本（驗收紀錄） | Integration Test 4 ＋ Revision 3 |
+| 其他 | `playtest-*` | 歷史試玩版本（驗收紀錄） | 歷次獨立試玩快照，不再修改 |
+| 舊版 | `rpg-continent2/` | 停用的舊版 | 停在 v0.3.98，沒有入口連到這裡；不在同步範圍 |
+
+規則：
+- 共用功能（背包、商店、HP、骰子、小遊戲、結算…）必須同時改 `rpg-continent1-universe/` 與 `rpg-dual-continent-test/`，並更新本清冊與 manifest。
+- 第二大陸專用的程式（第三章關卡、水域、狗狗游泳 `chapter3-dog-water.js`、QA 測試工具 `qa-test-tool.js`、雨傘購買引導…）只放在 `rpg-dual-continent-test/`；manifest 的禁止項會擋住它們進入第一大陸。
+- 第二大陸仍是開發測試狀態，沒有對一般玩家開放；遊戲宇宙只連到第一大陸正式入口。
 
 ## 2. 共用功能清冊
 
-| 功能 | 正確規格 | 最新正確實作（來源 PR／Commit） | 使用者驗收 | 第一大陸 | 第二大陸（rev4） | 小遊戲版本 | 實際程式／資產位置 | 已知差異及例外 | 最近驗證 |
+| 功能 | 正確規格 | 最新正確實作（來源 PR／Commit） | 使用者驗收 | 第一大陸 | 第二大陸（dualSource，原 rev4／rev5） | 小遊戲版本 | 實際程式／資產位置 | 已知差異及例外 | 最近驗證 |
 |---|---|---|---|---|---|---|---|---|---|
 | 氣球骰子 v2.0 | 260×3＋圓×1；LV1 1 顆／LV2 2 顆；勝 ×2、平 ×1、敗 ×0.5，消耗 1 顆不回滾 | 第一大陸 PR #44 `7177c92`/`bc71d16`/`524b554`；第二大陸 PR #43 `01c07f8` | 第一大陸已上線；第二大陸待驗收 | `balloon-dice.js`、`balloon-dice-interaction.js` | `chapter3-treasure-dice.js`、`chapter3-treasure-interaction.js`、`main.js` | — | 兩套實作（見 §4） | 第一大陸與第二大陸目前是兩份程式，規則相同但未共用模組 | 2026-11-25 rev4 單元 11/11、瀏覽器骰子與寶箱測試通過 |
 | 骰子秘笈 RPG | 首次三句；已讀重玩保留第一及最後一句（recipeReplay） | PR #46 Revision 2 `053dc94` | Revision 2 已驗收 | — | `main.js` RPG_RECIPE_LINES | — | | PR #43 曾用 oncePerPlayer；以 Revision 2 為準 | 2026-11-25 |
@@ -66,5 +72,14 @@
 
 ## 4. 已知差異與後續建議
 
-- 第一大陸（`rpg-continent1-universe/main.js`）與第二大陸（rev5 `main.js`）仍是兩份約 3.4 萬行的分叉程式。本次以 manifest 檢查擋住已知回歸，但沒有把共用模組抽出來（施工通知未批准大規模重構）。建議後續另開工程：先把結算 UI、從頭挑戰、背包、骰子規則抽成共用 JS 檔，兩個大陸都以 `<script>` 載入同一份。
-- 試玩包是整個目錄的副本。每次發佈新試玩包時，跑一次檢查工具即可發現小遊戲或共用 UI 是不是複製到舊版。
+- 第一大陸（`rpg-continent1-universe/main.js`）與雙大陸開發基準（`rpg-dual-continent-test/main.js`）仍是兩份約 3.4 萬行的分叉程式。以 manifest 檢查擋住已知回歸；共用模組集中管理（Revision 4 F-03）總 PM 已採納方向，但目前不批准大規模重構，列為長期待辦。
+- 歷史試玩包是整個目錄的副本，只作驗收紀錄；不要再從試玩包複製程式回來。新功能直接在 `rpg-dual-continent-test/` 施工，需要獨立試玩時再從它打包。
+
+## 5. Revision 4 待決策事項（Baseline Release 1 結案狀態）
+
+| 編號 | 事項 | 狀態 |
+|---|---|---|
+| F-01 | 第一大陸免費 LV2 測試按鈕 | 已結案（Revision 5 A-07 移除，Baseline Release 1 正式發布） |
+| F-02 | 過期的 `rpg-dual-continent-test/` | 已結案（Baseline Release 1 以 Revision 5＋Hotfix 1 更新為雙大陸累積開發基準） |
+| F-03 | 共用模組集中管理 | 長期待辦（方向已採納，未批准重構；待另行安排架構調查） |
+| F-04 | 水池捷徑誤觸發氣球槌教學 | 已結案（Revision 5 C-07；開發基準實測仍正確） |

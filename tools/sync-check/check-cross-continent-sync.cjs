@@ -54,7 +54,8 @@ for (const rule of manifest.contains) {
     const text = read(rel);
     if (text == null) { record('contains', rule.feature, build, false, 'missing file ' + rel); continue; }
     const missing = rule.patterns.filter(p => !text.includes(p));
-    const assetRoot = manifest.builds[build].root === 'rpg-continent1-universe' ? '' : manifest.builds[build].root;
+    const b = manifest.builds[build];
+    const assetRoot = b.assetRoot != null ? b.assetRoot : b.root === 'rpg-continent1-universe' ? '' : b.root;
     const missingAssets = (rule.assets || []).filter(a => !existsSync(join(repo, assetRoot, a)));
     record('contains', rule.feature, build, !missing.length && !missingAssets.length,
       missing.length || missingAssets.length ? rel + ' lacks: ' + [...missing, ...missingAssets].join(' | ') : rel);
