@@ -1,0 +1,190 @@
+{
+  "mode": "full",
+  "rows": [
+    {
+      "n": 1,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 0,
+        "failures": 0,
+        "scenes": 0,
+        "hurtSfx": 0,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2110,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 88,
+        "pose": "hurt",
+        "failures": 1,
+        "hurtSfx": 1,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "playing"
+      },
+      "fresh": []
+    },
+    {
+      "n": 2,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 1,
+        "failures": 1,
+        "scenes": 0,
+        "hurtSfx": 1,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2110,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 89,
+        "pose": "hurt",
+        "failures": 2,
+        "hurtSfx": 2,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "paused"
+      },
+      "fresh": [
+        {
+          "id": "c34_tree_gap_2",
+          "text": "咦！這個峽谷似乎太遠了，好像跳不過去。那我可以怎麼辦呢？"
+        }
+      ]
+    },
+    {
+      "n": 3,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 2,
+        "failures": 2,
+        "scenes": 1,
+        "hurtSfx": 2,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2117,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 88,
+        "pose": "hurt",
+        "failures": 3,
+        "hurtSfx": 3,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "playing"
+      },
+      "fresh": []
+    },
+    {
+      "n": 4,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 3,
+        "failures": 3,
+        "scenes": 1,
+        "hurtSfx": 3,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2110,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 90,
+        "pose": "hurt",
+        "failures": 4,
+        "hurtSfx": 4,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "playing"
+      },
+      "fresh": [
+        {
+          "id": "c34_tree_gap_4",
+          "text": "咦！這邊有棵樹。還是說我可以把樹槌倒當作橋梁呢？"
+        }
+      ]
+    },
+    {
+      "n": 5,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 4,
+        "failures": 4,
+        "scenes": 2,
+        "hurtSfx": 4,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2110,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 90,
+        "pose": "hurt",
+        "failures": 5,
+        "hurtSfx": 5,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "playing"
+      },
+      "fresh": []
+    },
+    {
+      "n": 6,
+      "before": {
+        "hp": 3,
+        "shield": false,
+        "hurts": 5,
+        "failures": 5,
+        "scenes": 2,
+        "hurtSfx": 5,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}"
+      },
+      "at": {
+        "hp": 3,
+        "shield": false,
+        "x": 2110,
+        "feet": 150,
+        "p2Top": 150,
+        "invincible": 90,
+        "pose": "hurt",
+        "failures": 6,
+        "hurtSfx": 6,
+        "hits": "[0,null]",
+        "inv": "{\"balloonDice\":0,\"basicSword\":1,\"basicHammer\":1,\"balloonLollipop\":0,\"balloonUmbrella\":1}",
+        "gameState": "playing"
+      },
+      "fresh": []
+    }
+  ],
+  "end": {
+    "hp": 3,
+    "failures": 6,
+    "x": 2665,
+    "onCanyonTop": true
+  },
+  "errors": []
+}

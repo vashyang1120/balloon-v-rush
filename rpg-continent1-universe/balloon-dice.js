@@ -58,7 +58,11 @@ const balloonDice = (() => {
     } finally { ctx.restore(); }
   }
 
-  function animate(draw, { random = Math.random, nextFrame = requestAnimationFrame } = {}) {
+  // Revision 5（G-04）：傳入 timing 時，兩顆骰子平分骰子音檔的長度，最後一顆在音檔結束時停住並揭曉。
+  //   timing = { totalMs(), elapsed(), finished() }；沒有 timing 時維持原本每顆 1450 ms。
+  //   跳動次數與換面節奏照原本的視覺風格按時間等比例放大（同樣的跳動頻率，只是跳得比較久）。
+  const BASE_SPAN = 1450;
+  function animate(draw, { random = Math.random, nextFrame = requestAnimationFrame, timing = null } = {}) {
     if (typeof draw !== 'function') throw new TypeError('Missing dice renderer');
     let active;
     return function play(final) {
@@ -73,24 +77,39 @@ const balloonDice = (() => {
       function frame(now) {
         try {
           firstTime ??= now;
-          const elapsed = now - firstTime;
-          const t = Math.min(1, elapsed / 1450);
+          let span = BASE_SPAN, dieElapsed, over = false;
+          if (timing) {
+            const total = Math.max(1, timing.totalMs());
+            const el = Math.min(total, Math.max(0, timing.elapsed()));
+            span = total / 2;
+            over = timing.finished() || el >= total;
+            if (die === 'player' && (over || el >= span)) {
+              if (!over) { die = 'spirit'; lastChange = -Infinity; }
+            }
+            if (over) { die = 'spirit'; dieElapsed = span; }
+            else dieElapsed = el - (die === 'player' ? 0 : span);
+          } else dieElapsed = now - firstTime;
+          const k = span / BASE_SPAN;
+          const t = Math.min(1, dieElapsed / span);
           const remaining = 1 - t;
-          if (t < 1 && elapsed - lastChange >= 33 + 220 * t ** 2) {
-            lastChange = elapsed;
+          if (t < 1 && dieElapsed - lastChange >= (33 + 220 * t ** 2) * Math.min(k, 1.6)) {
+            lastChange = dieElapsed;
             face = rollFace(random);
           }
-          const hop = Math.abs(Math.sin(t * 4 * Math.PI)) * remaining ** 2;
-          const squash = Math.cos(t * 8 * Math.PI) * 0.10 * remaining;
+          const hop = Math.abs(Math.sin(t * 4 * k * Math.PI)) * remaining ** 2;
+          const squash = Math.cos(t * 8 * k * Math.PI) * 0.10 * remaining;
           const rolling = t === 1 ? final[die] : face;
           draw(die === 'player' ? { player: rolling, spirit: null } : { player: final.player, spirit: rolling }, {
             die,
             y: -64 * hop,
-            angle: Math.sin(t * 5 * Math.PI) * 0.72 * remaining,
+            angle: Math.sin(t * 5 * k * Math.PI) * 0.72 * remaining,
             scaleX: 1 + squash,
             scaleY: 1 - squash,
           });
-          if (t < 1) nextFrame(frame);
+          if (timing) {
+            if (over) { active = null; finish(final); }
+            else nextFrame(frame);
+          } else if (t < 1) nextFrame(frame);
           else if (die === 'player') {
             die = 'spirit';
             firstTime = undefined;

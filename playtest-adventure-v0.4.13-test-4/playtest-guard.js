@@ -2,10 +2,14 @@
   'use strict';
 
   const previewRoot = new URL('.', document.currentScript.src);
+  const rawHosts = new Set(['raw.githack.com', 'rawcdn.githack.com']);
+  const previewMirror = rawHosts.has(previewRoot.hostname)
+    ? new URL(previewRoot.pathname, 'https://raw.githubusercontent.com')
+    : null;
   if (!location.pathname.startsWith(previewRoot.pathname)) return;
   if (window.adventurePlaytestReady) return;
 
-  const namespace = 'balloon-v-rush:adventure-playtest:v0.4.13-test-4:';
+  const namespace = 'balloon-v-rush:adventure-playtest:second-continent-rpg-revision-3:';
   const save = window.Storage.prototype;
   const { getItem, setItem, removeItem, key } = save;
   const storageLength = Object.getOwnPropertyDescriptor(save, 'length').get;
@@ -47,8 +51,14 @@
   const download = window.fetch;
   window.fetch = async function (input, options = {}) {
     const request = input instanceof Request ? input : null;
-    if (!canRead(request?.url ?? input, options?.method ?? request?.method ?? 'GET')) {
+    const url = new URL(request?.url ?? input, document.baseURI);
+    if (!canRead(url, options?.method ?? request?.method ?? 'GET')) {
       throw new TypeError('Adventure playtest only permits reading its own assets.');
+    }
+    // The preview CDN redirects binary assets to the same commit on GitHub Raw.
+    if (previewMirror && url.origin === previewRoot.origin && /\.(?:png|jpe?g|webp|gif|mp3|ogg|wav|mp4)$/i.test(url.pathname)) {
+      const mirrored = new URL(url.pathname + url.search, previewMirror);
+      input = request ? new Request(mirrored, request) : mirrored;
     }
     return download.call(this, input, { ...options, credentials: 'omit', redirect: 'error' });
   };
@@ -62,7 +72,7 @@
 
   if (location.pathname.startsWith(previewRoot.pathname + 'rpg-dual-continent-test/')) {
     const url = new URL(location.href);
-    for (const name of ['guest', 'sandbox', 'devtools']) url.searchParams.set(name, '1');
+    for (const name of ['guest', 'sandbox']) url.searchParams.set(name, '1');
     url.searchParams.delete('bvPlayerId');
     if (url.href !== location.href) history.replaceState(null, '', url);
   }
