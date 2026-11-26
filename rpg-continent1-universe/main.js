@@ -43,8 +43,8 @@ window.addEventListener('unhandledrejection', function(e) {
 // =============================================
 
 // ── 版本資訊 ──────────────────────────────────
-const GAME_VERSION = 'adventure-v0.4.13-fresh-start-ui-recovery-test-1';
-const BUILD_TIME   = '2026-11-18';
+const GAME_VERSION = 'adventure-v0.4.13-baseline-release-1';
+const BUILD_TIME   = '2026-11-26';
 // 更新版本時同步修改 index.html 的 <script src="main.js?v=...">
 
 // ════════════════════════════════════════════════════════════════════
