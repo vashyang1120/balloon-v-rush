@@ -1,0 +1,21 @@
+{
+  "version": "adventure-v0.4.13-notes-system-test-1",
+  "baseline": "93e3c2dee32c3a94f0d2eef917d15f99c6ce8805",
+  "sources": {
+    "dualSource": "rpg-dual-continent-test",
+    "continent1": "rpg-continent1-universe",
+    "notesModule": "assets/adventure/adventure-notes.js"
+  },
+  "storageNamespace": "balloon-v-rush:adventure-playtest:notes-system-test-1:",
+  "entries": {
+    "home": "index.html",
+    "continent1NoteTest": "rpg-continent1-universe/index.html?notesqa=note23",
+    "continent1HomeNotes": "rpg-continent1-universe/index.html?notesqa=home",
+    "continent1HomeNotesWithBossNote": "rpg-continent1-universe/index.html?notesqa=homeboss",
+    "knowledgeNote34": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qago=note34",
+    "knowledgeNote34Flight": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qago=note34fly",
+    "continent2HomeNotes": "rpg-dual-continent-test/index.html?devtools=1&ch3test=3-1&qago=noteshome",
+    "continent1NoteInDual": "rpg-dual-continent-test/index.html?devtools=1&ch3test=start&qago=note23",
+    "fullAdventure": "rpg-dual-continent-test/index.html"
+  }
+}
