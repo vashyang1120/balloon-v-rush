@@ -37,7 +37,9 @@ test('isolated browser, real chapter and minigame assets', { timeout: 420000, co
   t.after(() => server.close());
   await mkdir(artifacts, { recursive: true });
   await Promise.all(cases.map(({ dir, touch }) => t.test(dir + (touch ? ' touch' : ' PC'), async t => {
-      const continent1 = dir === 'rpg-continent1-universe';
+      // Baseline Release 1: the dual-continent build now runs the same Continent 1 chapter flow (1-2b dog recipe,
+      // hammer crafting before the first whack round) as the release, so both take the Continent 1 checks.
+      const continent1 = dir === 'rpg-continent1-universe' || dir === 'rpg-dual-continent-test';
       const artifactName = dir + (touch ? '-touch' : '-pc');
       const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
       t.after(() => browser.close());

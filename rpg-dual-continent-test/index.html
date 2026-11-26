@@ -4,10 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>氣球小V：派對島大作戰</title>
-  <link rel="stylesheet" href="style.css?v=adventure-v0.4.11-ch3-stage34-layout-fix-test-1" />
+  <link rel="stylesheet" href="style.css?v=adventure-v0.4.13-dual-baseline-release-1" />
   <!-- Firebase SDK（與其他品牌遊戲共用同一 project）-->
   <!-- v0.4.0：不載入舊 Firebase（遊戲宇宙版不讀寫 vparty-rhythm-game 的任何資料）；玩家身份改用遊戲宇宙共用 SDK（同網域、唯讀 API） -->
-  <script src="https://vashyang1120.github.io/balloon-v-universe/universe/shared/universe-sdk.js"></script>
 </head>
 <body>
 
@@ -108,7 +107,7 @@
           <nav class="h2-nav">
             <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-map">世界地圖</button>
             <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-practice">自選關卡練習</button>
-            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge">正式挑戰</button>
+            <button type="button" class="h2-pill h2-pill--yellow" id="h2-nav-challenge">從頭挑戰</button>
             <button type="button" class="h2-pill h2-pill--green h2-go" id="h2-nav-go"><span>出發</span><small id="h2-go-sub"></small></button>
           </nav>
         </main>
@@ -117,7 +116,7 @@
         <aside class="h2-col h2-col--right">
           <section class="h2-card h2-card--fold is-collapsed" id="h2-card-shop">
             <div class="h2-head">
-              <button type="button" class="h2-plank" data-h2-toggle="shop" aria-expanded="false"><img data-h2-icon="coinBag" alt="">商店</button>
+              <button type="button" class="h2-plank" id="umbrella-guide-shop-entry" data-h2-toggle="shop" aria-expanded="false"><img data-h2-icon="coinBag" alt="">商店</button>
               <button type="button" class="h2-arr h2-arr--l" data-h2-act="car" data-car="shop" data-d="-1" aria-label="上一個"></button>
               <button type="button" class="h2-arr h2-arr--r" data-h2-act="car" data-car="shop" data-d="1" aria-label="下一個"></button>
             </div>
@@ -174,7 +173,6 @@
           <div class="h2-sum-body" id="h2-sum-body"></div>
           <div class="h2-sum-btns">
             <button type="button" class="h2-pill h2-pill--green" id="h2-sum-ok">收下獎勵，開始整備</button>
-            <button type="button" class="h2-pill h2-pill--blue h2-pill--sm" id="h2-sum-detail">查看本關詳細結算</button>
           </div>
         </section>
       </div>
@@ -347,7 +345,7 @@
 
       <!-- 版本號（固定底部，header 層級）-->
       <div id="home-version">
-        adventure-v0.4.12-entry-reliability-test-1 · 2026-11-18
+        Second Continent RPG Dialogue &amp; Umbrella Recovery｜Revision 3
       </div>
 
     </div><!-- /#home-panel -->
@@ -509,7 +507,19 @@
   </div><!-- /#game-wrapper -->
 
   <script src="../assets/adventure/entry-reliability.js?v=adventure-v0.4.12-entry-reliability-test-1"></script>
-  <script src="main.js?v=adventure-v0.4.12-entry-reliability-test-1"></script>
+  <script src="chapter3-art-catalog.js?v=adventure-v0.4.13-ch3-water-terrain-integration-test-3"></script>
+  <script src="chapter3-water-art.js?v=batch-d-rev4"></script>
+  <script src="chapter3-hero-water-data.js?v=batch-c3"></script>
+  <script src="chapter3-hero-water.js?v=batch-d-rev4"></script>
+  <script src="chapter3-umbrella-diversion.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="chapter3-water-runtime.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="chapter3-treasure-dice.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="chapter3-treasure-interaction.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="main.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="chapter3-dog-water.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="balloon-dice-audio.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="umbrella-purchase-guide.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
+  <script src="qa-test-tool.js?v=adventure-v0.4.13-dual-baseline-release-1"></script>
   <script>
   // ─────────────────────────────────────────────
   //  所有 UI 邏輯在 main.js 載入後執行（DOM 已存在）
