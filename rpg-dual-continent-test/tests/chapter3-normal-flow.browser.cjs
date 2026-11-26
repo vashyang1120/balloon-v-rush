@@ -34,7 +34,10 @@ test('3-4 ' + mode + ' adventure from crafting to reloaded settlement', { timeou
   const activate = locator => mobile ? locator.tap({ timeout: 5000 }) : locator.click({ timeout: 5000 });
   async function nextDialogue() {
     if (!mobile) return page.keyboard.press('Enter');
-    const next = page.locator('#rpg-overlay.rpg--show [data-act="next"]:visible');
+    // Adventure Notes Test 1: the 3-4 knowledge note (centre showcase) closes only with its "看完了" button,
+    // the same rule as the 2-3 observation note.
+    const done = page.locator('#rpg-overlay.rpg--showcase .rpg-showcase-done:visible');
+    const next = (await done.isVisible()) ? done : page.locator('#rpg-overlay.rpg--show [data-act="next"]:visible');
     if (!await next.isVisible()) return;
     const box = await next.boundingBox();
     if (!box) return;
