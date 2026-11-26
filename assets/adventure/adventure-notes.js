@@ -22,6 +22,7 @@
     .split(',').map(s => Number(s.trim())).filter(n => n > 0);
   const STORE_PREFIX = 'balloonVAdventureHome__notesV1';   // 開頭符合既有冒險存檔規則 → 自動套用正式／開發者副本／測試存檔的隔離
   const STORE_VERSION = 1;
+  const VERSION = 'adventure-notes-system-test-1';
 
   // ── A. 筆記資料表 ───────────────────────────────────────────────────────────────
   const CATEGORIES = [
@@ -206,7 +207,8 @@
       return row({ iconHtml: '<span class="advn-unknown" aria-hidden="true">？</span>', name: '？？？', zero: true,
         desc: esc('尚未找到' + (n.stageName ? '（' + n.stageName.split(' ')[0] + '）' : '')), attr: ' data-advn-row="' + esc(n.id) + '"' });
     }).join('') + '</div>';
-    return tabs + body + '<div class="h2-sub" style="margin-top:0.7em">冒險筆記會永久收藏：從頭挑戰、背包重置或重新開啟遊戲都不會消失，也不佔背包空間。</div>';
+    return tabs + body + '<div class="h2-sub" style="margin-top:0.7em">冒險筆記會永久收藏：從頭挑戰、背包重置或重新開啟遊戲都不會消失，也不佔背包空間。</div>'
+      + '<div class="h2-sub advn-ver" style="margin-top:0.4em;opacity:.6;font-size:.8em">' + VERSION + '</div>';
   }
 
   function injectEntry() {
@@ -345,7 +347,7 @@
   }
 
   const api = {
-    CONTINENTS: CONTINENTS.slice(), CATEGORIES, NOTES, PICKUP_ICONS,
+    VERSION, CONTINENTS: CONTINENTS.slice(), CATEGORIES, NOTES, PICKUP_ICONS,
     byId, available, list, has, collect, read, readWhenReady, openPanel, syncFromInventory, storeKey,
     collected: () => Object.keys(load().notes).filter(id => available(byId(id))),
     record: id => Object.assign({}, load().notes[id] || null),
