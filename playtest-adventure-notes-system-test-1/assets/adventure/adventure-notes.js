@@ -251,7 +251,9 @@
       '#rpg-overlay .advn-scroll{display:contents}',
       '#rpg-overlay .advn-zoom{display:none;margin-top:calc(8px * var(--rk,1));font-size:calc(15px * var(--rk,1));padding:calc(5px * var(--rk,1)) calc(16px * var(--rk,1));cursor:pointer}',
       '#rpg-overlay.advn-reading .advn-zoom{display:inline-block}',
-      '#rpg-overlay .rpg-showcase.advn-zoomed .advn-scroll{display:block;overflow:auto;-webkit-overflow-scrolling:touch;width:96%;height:78%;flex:0 0 auto;touch-action:pan-x pan-y}',
+      /* 讓「放大」「看完了」兩顆按鈕在手機橫向也完整露出：筆記圖最多佔 68% 高度（比例不變） */
+      '#rpg-overlay.advn-reading .rpg-showcase-img{max-height:68%}',
+      '#rpg-overlay .rpg-showcase.advn-zoomed .advn-scroll{display:block;overflow:auto;-webkit-overflow-scrolling:touch;width:96%;height:68%;flex:0 0 auto;touch-action:pan-x pan-y}',
       '#rpg-overlay .rpg-showcase.advn-zoomed .rpg-showcase-img{max-width:none;max-height:none;width:180%;height:auto;display:block;margin:0 auto;animation:none}',
     ].join('\n');
     document.head.appendChild(st);

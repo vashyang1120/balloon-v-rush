@@ -77,6 +77,13 @@ for (const mode of ['keyboard', 'touch']) test('3-4 knowledge note pickup and re
     assert.equal(reading.ui, false);
     assert.ok(reading.showcase && reading.reading);
     assert.notEqual(reading.zoomBtn, 'none');
+    // the accepted original picture, shown whole (no crop / stretch)
+    const pic = await page.evaluate(() => { const i = document.querySelector('.rpg-showcase-img'); const r = i.getBoundingClientRect(); return { nw: i.naturalWidth, nh: i.naturalHeight, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight }; });
+    assert.deepEqual([pic.nw, pic.nh], [1455, 1081]);
+    assert.ok(Math.abs(pic.w / pic.h - 1455 / 1081) < 0.02, 'aspect ratio kept');
+    assert.ok(pic.w <= pic.vw && pic.h <= pic.vh, 'whole picture visible');
+    const btns = await page.evaluate(() => ['.advn-zoom', '.rpg-showcase-done'].map(s => { const r = document.querySelector(s).getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+    assert.deepEqual(btns, [true, true], 'zoom and 看完了 buttons fully on screen');
     assert.equal(reading.rec.src, 'pickup');
     await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => frameCount), reading.fc, 'no game steps while reading (enemies cannot attack)');

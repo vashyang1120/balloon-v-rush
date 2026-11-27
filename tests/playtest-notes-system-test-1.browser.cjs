@@ -95,7 +95,7 @@ test('playtest package entries', { timeout: 600000 }, async t => {
     await shot(page, 'dual-34-reader');
     const st = await page.evaluate(() => ({ gs: gameState, img: (() => { const i = document.querySelector('.rpg-showcase-img'); return { nw: i.naturalWidth, nh: i.naturalHeight, shown: getComputedStyle(i).display !== 'none' }; })() }));
     assert.equal(st.gs, 'paused');
-    t.diagnostic('knowledge note image: ' + JSON.stringify(st.img));
+    assert.deepEqual([st.img.nw, st.img.nh, st.img.shown], [1455, 1081, true]);
     await page.locator('.rpg-showcase-done').click();
     await page.waitForFunction(() => !rpgActive && gameState === 'playing');
     assert.deepEqual(errors, []);
