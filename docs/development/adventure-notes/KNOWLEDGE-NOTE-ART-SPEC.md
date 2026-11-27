@@ -7,6 +7,7 @@
 - 第一份定稿：**風之峽谷的飛行秘密**（使用者已驗收）
 - 原始附件名稱：`風之峽谷的飛行秘密(3).png`
 - 正式檔案：`assets/adventure/notes/knowledge_note_projectile_motion.png`
+- 1455 × 1081 px、RGBA、SHA-256 `24a040fff2abd656eecb4b372ad09ac5dfc3d9fe5607ea6dd677bab5d56cbe89`
 - 遊戲內 ID：`knowledgeNoteProjectileMotion`（3-4 風之峽谷）
 - 定稿以原始 PNG 收錄：不重新生成、不修改字形、圖解、箭頭與飛行軌跡，不裁切、不拉伸、不重新上色、不加編號。
 

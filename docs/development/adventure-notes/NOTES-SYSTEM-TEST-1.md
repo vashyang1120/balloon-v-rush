@@ -101,6 +101,9 @@
 
 - 名稱：風之峽谷的飛行秘密；ID：`knowledgeNoteProjectileMotion`
 - 圖片：`assets/adventure/notes/knowledge_note_projectile_motion.png`（使用者提供的原始 PNG，原封不動）
+  - 收到的附件：2026-11-27 使用者在對話中上傳（附件顯示名稱 `_V________.png`，PM 通知中的原始名稱為 `風之峽谷的飛行秘密(3).png`）
+  - 1455 × 1081 px、RGBA（外框透明）、3,278,507 bytes
+  - SHA-256 `24a040fff2abd656eecb4b372ad09ac5dfc3d9fe5607ea6dd677bab5d56cbe89`（Repository 檔案與上傳檔逐位元相同）
 - 位置：第一平台 P1（導風深淵 A1 對岸）x = `C34_LAY.p1.x + 240`（1860），平台上方 50px。
   - 實測：60° 導風飛行落點 x ≈ 1726～1729（`chapter3-normal-flow` 鍵盤／觸控），燈泡在落點右側 ≈130px → 登岸後往前走自然碰到。
   - 不需要小狗、骰子、付費；不在寶箱岩棚（珍貴寶箱在 x 2902）；離導風裝置（x 1040）與星星墊很遠；在 260 氣球（x 1800）與金幣（x 1920）之間。

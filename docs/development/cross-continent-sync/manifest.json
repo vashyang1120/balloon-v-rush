@@ -620,7 +620,10 @@
       "patterns": [
         "adventure-notes.js?v=adventure-v0.4.13-notes-system-test-1\" data-continents=\"1,2\""
       ],
-      "source": "Dual baseline: Continent 1 notes + the 3-4 knowledge note"
+      "source": "Dual baseline: Continent 1 notes + the 3-4 knowledge note",
+      "assets": [
+        "assets/adventure/notes/knowledge_note_projectile_motion.png"
+      ]
     },
     {
       "feature": "adventure-notes-qa-shortcuts",
