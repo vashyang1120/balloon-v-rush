@@ -6,6 +6,8 @@ on:
       - 'rpg-continent1-universe/**'
       - 'rpg-dual-continent-test/**'
       - 'assets/adventure/entry-reliability.js'
+      - 'assets/adventure/adventure-notes.js'
+      - 'tests/continent1-adventure-notes-test1.browser.cjs'
       - 'tests/entry-reliability*'
       - 'tests/continent1-rc.browser.cjs'
       - 'tests/preview-entry.cjs'
@@ -15,7 +17,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +28,7 @@ jobs:
           node --check rpg-continent1-universe/main.js
           node --check rpg-dual-continent-test/main.js
           node --check assets/adventure/entry-reliability.js
+          node --check assets/adventure/adventure-notes.js
           node --test tests/entry-reliability.test.cjs
           node minigames/whack-a-mole/tests/rules.test.js
       - name: Prepare isolated Chromium
@@ -36,6 +39,10 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
         run: node --test tests/entry-reliability.browser.cjs tests/continent1-rc.browser.cjs
+      - name: Adventure notes (Continent 1 official entry + dual baseline)
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/entry/node_modules/playwright
+        run: node --test --test-concurrency=1 tests/continent1-adventure-notes-test1.browser.cjs rpg-dual-continent-test/tests/adventure-notes-test1.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -582,6 +582,61 @@
         "waterlineBelowNose: 70,"
       ],
       "source": "Companion Water Animation｜Hotfix 1"
+    },
+    {
+      "feature": "adventure-notes-shared-module",
+      "builds": [
+        "continent1",
+        "dualSource"
+      ],
+      "file": "index.html",
+      "patterns": [
+        "../assets/adventure/adventure-notes.js?v=adventure-v0.4.13-notes-system-test-1"
+      ],
+      "assets": [
+        "assets/adventure/adventure-notes.js",
+        "assets/adventure/ui/items/item_knowledge_note_bulb.png",
+        "assets/adventure/rpg/objects/orange_king_weakness_note.png"
+      ],
+      "source": "Adventure Notes System Test 1 — one shared source file for both continents (Batch B/H)"
+    },
+    {
+      "feature": "adventure-notes-continent1-scope",
+      "builds": [
+        "continent1"
+      ],
+      "file": "index.html",
+      "patterns": [
+        "adventure-notes.js?v=adventure-v0.4.13-notes-system-test-1\" data-continents=\"1\""
+      ],
+      "source": "Continent 1: boss notes only; the 3-4 knowledge note is not offered"
+    },
+    {
+      "feature": "adventure-notes-dual-scope",
+      "builds": [
+        "dualSource"
+      ],
+      "file": "index.html",
+      "patterns": [
+        "adventure-notes.js?v=adventure-v0.4.13-notes-system-test-1\" data-continents=\"1,2\""
+      ],
+      "source": "Dual baseline: Continent 1 notes + the 3-4 knowledge note",
+      "assets": [
+        "assets/adventure/notes/knowledge_note_projectile_motion.png"
+      ]
+    },
+    {
+      "feature": "adventure-notes-qa-shortcuts",
+      "builds": [
+        "dualSource"
+      ],
+      "file": "qa-test-tool.js",
+      "patterns": [
+        "key: 'note34'",
+        "key: 'note23'",
+        "key: 'noteshome'"
+      ],
+      "source": "Adventure Notes System Test 1 — QA shortcuts (guest + sandbox + devtools only)"
     }
   ],
   "forbidden": [
@@ -688,6 +743,50 @@
         "Content-Security-Policy"
       ],
       "reason": "The repo-root baseline runs on GitHub Pages paths; the isolated-playtest guard and CSP belong only to playtest-* packages."
+    },
+    {
+      "feature": "adventure-notes-single-source",
+      "builds": [
+        "continent1",
+        "dualSource"
+      ],
+      "files": [
+        "index.html"
+      ],
+      "patterns": [
+        "src=\"adventure-notes.js",
+        "src=\"./adventure-notes.js"
+      ],
+      "reason": "The notes module must be loaded from the shared ../assets/adventure/adventure-notes.js, never from a per-continent copy."
+    },
+    {
+      "feature": "adventure-notes-no-continent2-on-continent1",
+      "builds": [
+        "continent1"
+      ],
+      "files": [
+        "index.html"
+      ],
+      "patterns": [
+        "data-continents=\"1,2\"",
+        "data-continents=\"2\""
+      ],
+      "reason": "Continent 1 must not offer Continent 2 notes (3-4 knowledge note)."
+    },
+    {
+      "feature": "adventure-notes-no-qa-on-continent1",
+      "builds": [
+        "continent1"
+      ],
+      "files": [
+        "index.html",
+        "main.js"
+      ],
+      "patterns": [
+        "qa-test-tool.js",
+        "key: 'note34'"
+      ],
+      "reason": "QA shortcuts stay in the guest-sandbox developer tool of the dual baseline."
     }
   ],
   "cacheTags": [
@@ -752,13 +851,21 @@
         "chapter3-treasure-dice.js",
         "chapter3-treasure-interaction.js",
         "umbrella-purchase-guide.js",
-        "balloon-dice-audio.js",
-        "qa-test-tool.js"
+        "balloon-dice-audio.js"
       ],
       "styles": [
         "style.css"
       ],
       "expected": "adventure-v0.4.13-dual-baseline-release-1"
+    },
+    {
+      "build": "dualSource",
+      "file": "index.html",
+      "scripts": [
+        "qa-test-tool.js"
+      ],
+      "styles": [],
+      "expected": "adventure-v0.4.13-notes-system-test-1"
     }
   ],
   "secondContinentActive": "dualSource"

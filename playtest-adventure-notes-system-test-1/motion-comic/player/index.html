@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>動態漫畫播放器（測試）</title>
+<!--
+  氣球小V・動態漫畫播放器 正式播放頁  motion-comic-v0.3.2.1-audio-loading-fix-test-1（播放核心 motion-comic-player v0.3.2-test-1＋音訊 motion-comic-audio v0.3.2.1-test-1）
+  ＋ v0.3.73 嵌入介面（adventure-v0.3.73-opening-comic-integration-test-1）：只在 ?embed=1 時作用，漫畫內容與播放邏輯不變
+  聲音：手機瀏覽器只允許「使用者點擊之後」才有聲音，所以要先按「▶ 開始故事」。右上角「🔊」可靜音、調整音量（只存在這台裝置）。
+  網址參數：
+    ?range=ready   只播有素材的幕次（預設）
+    ?range=all     播放全部幕次（缺素材的幕會顯示「尚未配置素材」）
+    ?scene=2       只播第 2 個場景（v0.3.0 起共 6 個場景：1 第一幕、2 第二幕、3 第三幕、4 第四幕A、5 第四幕B、6 第五幕）
+    ?source=local  播放編輯器在這台電腦「儲存」的版本（同一個網站來源才讀得到）
+    ?project=../projects/xxx.json   指定專案檔（需要 HTTP 伺服器）
+    ?embed=1&session=…&autostart=1  v0.3.73：嵌入冒險遊戲（iframe）用。只有帶 embed=1 才會：
+                    多一顆「略過整段故事」、不切全螢幕（交給遊戲）、不顯示結尾提示，
+                    播完／略過整段時先停掉所有漫畫聲音，再用 postMessage 通知遊戲（同網站來源＋session 驗證）。
+                    autostart=1：瀏覽器允許出聲時自動開始；不允許時保留「▶ 開始故事」讓玩家點一下開啟聲音。
+                    單獨開啟播放器（沒有 embed）時，行為與 v0.3.2.1 完全相同。
+-->
+<link rel="stylesheet" href="motion-comic-player.css">
+<style>
+  :root { --ui-text: #fff6e8; --ui-bg: rgba(20, 12, 8, 0.42); --ui-border: rgba(255, 236, 200, 0.28); --accent: #ffcf6b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; color: var(--ui-text);
+    font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  body { height: 100dvh; }
+  #host { position: fixed; inset: 0; }
+  .ctrl { position: fixed; z-index: 20; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; opacity: .55; transition: opacity .3s; }
+  .ctrl:hover { opacity: 1; }
+  .btn { font: inherit; font-size: 14px; letter-spacing: .08em; color: var(--ui-text); background: var(--ui-bg);
+    border: 1px solid var(--ui-border); border-radius: 999px; padding: 8px 16px; cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  @media (max-height: 500px) { .ctrl .btn { font-size: 11px; padding: 5px 10px; } }
+  .overlay { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; background: #000; text-align: center; padding: 24px; }
+  .overlay[hidden] { display: none; }
+  .overlay h1 { font-size: clamp(18px, 3.2vw, 28px); font-weight: 600; letter-spacing: .15em; }
+  .overlay p { font-size: 14px; opacity: .75; line-height: 1.7; }
+  #startBtn { font-size: 17px; padding: 12px 34px; background: rgba(255, 207, 107, .14); border-color: rgba(255, 207, 107, .55); }
+  #startBtn:disabled { opacity: .35; }
+  .snd { display: inline-flex; align-items: center; gap: 6px; }
+  .snd[hidden] { display: none; }
+  #volRange { width: 84px; accent-color: var(--accent); }
+  @media (max-height: 500px) { #volRange { width: 64px; } }
+  #soundBtn.off { opacity: .7; }
+  #soundBtn.locked { border-color: rgba(255, 207, 107, .8); }
+  .bar { width: min(260px, 60vw); height: 3px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  #endTag { position: fixed; z-index: 20; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    font-size: 13px; letter-spacing: .2em; padding: 6px 14px; border-radius: 999px; background: var(--ui-bg);
+    border: 1px solid var(--ui-border); opacity: 0; transition: opacity .8s; pointer-events: none; }
+  #endTag.show { opacity: .8; }
+  #rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center;
+    justify-content: center; gap: 16px; background: #000; text-align: center; padding: 24px; }
+  #rotate .phone { width: 46px; height: 76px; border: 3px solid var(--ui-text); border-radius: 9px; animation: turn 1.8s ease-in-out infinite; }
+  @keyframes turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+  /* v0.3.73：嵌入冒險遊戲時才出現 */
+  .embed-only { display: none !important; }
+  body.mc-embed .embed-only { display: inline-block !important; }
+  body.mc-embed #endTag { display: none; }
+  #skipAllStart { font-size: 13px; padding: 7px 18px; opacity: .8; }
+  #startHint { font-size: 13px; opacity: .85; }
+  /* adventure-v0.3.94（#18）：嵌入冒險遊戲時只留一顆「略過故事」＝略過整段五幕（不再有容易誤按的「略過本幕」），按鈕清楚可見 */
+  body.mc-embed #skipBtn { display: none !important; }
+  body.mc-embed .ctrl { opacity: .92; }
+  body.mc-embed #skipAllBtn { font-size: 15px; padding: 10px 20px; background: rgba(40, 24, 10, 0.72); border-color: rgba(255, 207, 107, 0.75); }
+  @media (max-height: 500px) { body.mc-embed #skipAllBtn { font-size: 13px; padding: 8px 14px; } }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<div class="ctrl">
+  <button class="btn embed-only" id="skipAllBtn" type="button" title="略過整段開場故事（五幕），直接開始冒險">略過故事 ⏭⏭</button>
+  <button class="btn" id="skipBtn" type="button">略過本幕 ⏭</button>
+  <button class="btn" id="replayBtn" type="button">重新播放 ↺</button>
+  <button class="btn" id="pauseBtn" type="button">暫停 ⏸</button>
+  <span class="snd" id="sndBox" hidden>
+    <button class="btn" id="soundBtn" type="button" title="聲音開／關">🔊 聲音</button>
+    <input type="range" id="volRange" min="0" max="1" step="0.05" value="1" title="音量" aria-label="音量">
+  </span>
+</div>
+<div id="endTag">開場播放完畢（測試版：之後要接飛行屋地圖／第一關，尚未接通）</div>
+
+<div class="overlay" id="startScreen">
+  <h1 id="title">動態漫畫</h1>
+  <p id="loadMsg">正在讀取專案…</p>
+  <div class="bar"><i id="loadBar"></i></div>
+  <button class="btn" id="startBtn" type="button" disabled>▶ 開始故事</button>
+  <p id="startHint" hidden></p>
+  <button class="btn embed-only" id="skipAllStart" type="button">略過整段故事，直接開始冒險 ⏭⏭</button>
+  <p id="audioMsg" hidden></p>
+</div>
+<div id="rotate"><div class="phone"></div><p>請將手機轉為橫向觀看</p></div>
+
+<script src="motion-comic-player.js"></script>
+<script src="motion-comic-audio.js"></script>
+<script src="../projects/party-island-opening.js"></script>
+<script>
+(async () => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const LS_KEY = 'mc-editor-project-v1';
+  // v0.3.73：嵌入冒險遊戲（iframe）。只有 embed=1 才會啟用；單獨開啟時以下都不作用
+  const EMBED = params.get('embed') === '1' && window.parent !== window;
+  const SESSION = params.get('session') || '';
+  const TARGET = location.origin && location.origin !== 'null' ? location.origin : '*';
+  const post = (event, data) => { if (!EMBED) return; try { window.parent.postMessage(Object.assign({ type: 'mc-embed', session: SESSION, event }, data || {}), TARGET); } catch (_) {} };
+  if (EMBED) { document.body.classList.add('mc-embed'); post('alive'); }
+
+  // adventure-v0.3.94（#18）：嵌入模式的「略過故事」從頁面一打開就能用（原本要等全部圖片載完才接上按鈕 → 載入中按了沒反應）
+  //   略過＝結束整段五幕：停止播放、停掉所有漫畫聲音（BGM／環境音 Loop／音效），再通知遊戲（只通知一次）
+  //   嵌入時鍵盤 Esc／S 也是略過整段（單獨開啟播放器時仍是「略過本幕」，不變）
+  let embedDone = false;
+  const mcRefs = { player: null, audio: null };
+  function finishEmbed(how) {
+    if (!EMBED || embedDone) return;
+    embedDone = true;
+    try { if (mcRefs.player) mcRefs.player.pause(); } catch (_) {}
+    try { const a = mcRefs.audio; if (a) { a.stopAll(0); a._stopPreview(); a.setMuted(true); } } catch (_) {}
+    post('done', { how });
+  }
+  if (EMBED) {
+    $('skipAllBtn').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    $('skipAllStart').addEventListener('click', e => { e.stopPropagation(); finishEmbed('skipped'); });
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' || e.key === 's' || e.key === 'S') { e.preventDefault(); e.stopImmediatePropagation(); finishEmbed('skipped'); }
+    }, true);
+    window.addEventListener('message', e => {   // 遊戲要求停止（例如遊戲要關掉漫畫時）
+      if (e.source !== window.parent || (TARGET !== '*' && e.origin !== location.origin)) return;
+      const d = e.data || {};
+      if (d.type !== 'mc-host' || d.session !== SESSION) return;
+      if (d.cmd === 'stop') { embedDone = true; try { mcRefs.player && mcRefs.player.pause(); mcRefs.audio && mcRefs.audio.stopAll(0); mcRefs.audio && mcRefs.audio.setMuted(true); } catch (_) {} }
+    });
+  }
+
+  // 讀取專案：本機儲存 → 指定 JSON（HTTP）→ 內建專案（file:// 也能用）
+  async function loadProject() {
+    if (params.get('source') === 'local') {
+      try { const s = localStorage.getItem(LS_KEY); if (s) return { p: JSON.parse(s), from: '編輯器儲存的版本' }; } catch (_) {}
+    }
+    const url = params.get('project') || '../projects/party-island-opening.json';
+    if (location.protocol !== 'file:') try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.ok) return { p: await r.json(), from: url };
+    } catch (_) {}
+    return { p: window.MC_PROJECT, from: '內建專案（party-island-opening.js）' };
+  }
+
+  const { p: project, from } = await loadProject();
+  const check = MotionComic.validateProject(project);
+  if (check.errors.length) {
+    $('loadMsg').innerHTML = '專案格式錯誤：<br>' + check.errors.slice(0, 6).join('<br>');
+    post('error', { reason: 'invalid-project' });
+    return;
+  }
+  $('title').textContent = project.title || '動態漫畫';
+
+  const endTag = $('endTag');
+  const player = new MotionComic.Player($('host'), {
+    baseUrl: '../', mode: 'play',
+    onEnd: () => { endTag.classList.add('show'); if (EMBED) finishEmbed('ended'); },
+    onPlayState: p => { $('pauseBtn').textContent = p ? '暫停 ⏸' : '繼續 ▶'; },
+  });
+  window.mcPlayer = player; mcRefs.player = player;
+  // v0.3.2：音訊引擎（專案沒有 audio 時不做任何事）
+  // 播放頁的音量／靜音只存在這台裝置
+  const AKEY = 'mc-player-audio';
+  let pref = { muted: false, volume: 1 };
+  try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(AKEY) || '{}')); } catch (_) {}
+  const savePref = () => { try { localStorage.setItem(AKEY, JSON.stringify(pref)); } catch (_) {} };
+  const audio = new MotionComic.AudioEngine({ onStatus: () => { if (typeof updateSound === 'function') updateSound(); } });
+  window.mcAudio = audio; mcRefs.audio = audio;
+  audio.attach(player);
+  player.setProject(project);
+  // adventure-v0.3.94（#17）：真正的載入進度＝已完成（成功或失敗）的圖片＋聲音檔數 ÷ 全部檔數
+  //   原本：一開始設 30%，等全部圖片載完直接跳 100%，同一瞬間就開始播放 → 畫面上看到停在 30% 就開始故事；聲音沒有算進去
+  //   現在：每 0.1 秒依實際狀態更新；圖片和聲音（本來就同時在背景下載）都完成才顯示 100%，讓 100% 確實畫出來之後才開始故事
+  //   聲音最多再等 20 秒（網路很慢時不讓玩家一直等；沒載完的聲音照原本方式在背景繼續載）
+  const imgIds = Object.keys(project.assets || {});
+  const audIds = Object.keys((project.audio && project.audio.assets) || {});
+  const loadTotal = imgIds.length + audIds.length;
+  const loadDone = () => {
+    let n = 0;
+    imgIds.forEach(id => { const s = player.assetState[id]; if (s && (s.ok || s.failed)) n++; });
+    audIds.forEach(id => { const s = audio.assets && audio.assets[id]; if (s && (s.status === 'ok' || s.status === 'error')) n++; });
+    return n;
+  };
+  const showLoad = () => {
+    const n = loadDone(), pct = loadTotal ? Math.floor(n * 100 / loadTotal) : 100;
+    $('loadBar').style.width = pct + '%';
+    $('loadMsg').textContent = `正在載入故事… ${pct}%（${n} / ${loadTotal}）`;
+    window.mcLoadProgress = { done: n, total: loadTotal, pct };
+    return pct;
+  };
+  showLoad();
+  const loadTick = setInterval(showLoad, 100);
+  const imgJob = player.loadAssets();
+  const audJob = audio.hasAudio() ? audio.loadAssets() : Promise.resolve([]);
+  const report = await imgJob;
+  await Promise.race([audJob, new Promise(r => setTimeout(r, 20000))]);
+  clearInterval(loadTick);
+  const finalPct = showLoad();
+  const failed = report.filter(r => !r.ok);
+  const audRep = audio.hasAudio() ? audio.assetReport() : [];
+  const audOk = audRep.filter(r => r.ok).length;
+  $('loadMsg').innerHTML = (finalPct >= 100 ? '載入完成 100%' : `已載入 ${finalPct}%（聲音在背景繼續載入）`) +
+    `<br>圖片 ${report.length - failed.length} / ${report.length} 張可用` + (audRep.length ? `、聲音 ${audOk} / ${audRep.length} 個可用` : '') +
+    (failed.length ? `<br>缺少：${failed.map(f => f.label).join('、')}` : '') + `<br>來源：${from}`;
+  // 讓最後的進度（100%）確實顯示出來：等進度條動畫（0.25 秒）跑完＋畫面更新兩次
+  await new Promise(r => setTimeout(r, 320));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  window.mcLoadProgress = Object.assign({}, window.mcLoadProgress, { shownAt: performance.now(), barWidth: getComputedStyle($('loadBar')).width, barMax: getComputedStyle($('loadBar').parentElement).width });
+
+  function applyRange() {
+    const sc = parseInt(params.get('scene'), 10);
+    if (sc > 0) player.setRange(player.rangeFor('scene', sc - 1));
+    else if (params.get('range') === 'all') player.setRange(null);
+    else player.setRange(player.rangeFor('ready'));
+  }
+  applyRange();
+  player.seek(player.range ? player.range.from : 0);
+  $('startBtn').disabled = false;
+
+  /* ---------- 聲音（v0.3.2） ---------- */
+  audio.setMuted(pref.muted); audio.setUserVolume(pref.volume);
+  $('volRange').value = pref.volume;
+  function updateSound() {
+    const has = audio.hasAudio();
+    $('sndBox').hidden = !has;
+    if (!has) return;
+    const st = audio.status(), b = $('soundBtn');
+    b.classList.toggle('locked', st === 'locked'); b.classList.toggle('off', pref.muted);
+    b.textContent = st === 'locked' ? '🔈 點我開啟聲音' : (pref.muted ? '🔇 靜音' : '🔊 聲音');
+  }
+  $('soundBtn').addEventListener('click', () => {
+    if (audio.status() === 'locked') { audio.unlock().then(updateSound); pref.muted = false; audio.setMuted(false); savePref(); updateSound(); return; }
+    pref.muted = !pref.muted; audio.setMuted(pref.muted); savePref(); updateSound();
+  });
+  $('volRange').addEventListener('input', e => { pref.volume = +e.target.value; audio.setUserVolume(pref.volume); if (pref.volume > 0 && pref.muted) { pref.muted = false; audio.setMuted(false); } savePref(); updateSound(); });
+  if (audio.hasAudio()) {
+    // 音檔在背景載入，不會擋住圖片與「開始故事」
+    $('audioMsg').hidden = false; $('audioMsg').textContent = '聲音載入中…';
+    audio.loadAssets().then(rep => {
+      const bad = rep.filter(r => !r.ok);
+      $('audioMsg').textContent = `聲音 ${rep.length - bad.length} / ${rep.length} 個可用` + (bad.length ? `（讀不到：${bad.map(b => `${b.label}〔${(MotionComic.AUDIO_ERROR_KINDS || {})[b.kind] || '讀取失敗'}${b.httpStatus ? ' HTTP ' + b.httpStatus : ''}：${b.url}〕`).join('、')}；其他照常播放）` : '');
+      if (bad.length) console.warn('[motion-comic audio] 讀不到的音檔', bad);
+    });
+  }
+  updateSound();
+
+  // v0.3.73：嵌入模式結束（播完 ended／略過整段 skipped）→ finishEmbed（adventure-v0.3.94 起定義在最前面，載入中也能略過）
+  if (embedDone) return;   // 載入中已經略過：不再開始故事
+
+  async function enterMobileLandscape() {
+    if (EMBED) return;   // v0.3.73：嵌入時全螢幕／橫向交給遊戲（iframe 內切全螢幕會讓遊戲離開全螢幕）
+    if (!matchMedia('(pointer: coarse)').matches) return;
+    try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+  }
+  function beginStory() {
+    if (embedDone) return;   // adventure-v0.3.94：已略過整段 → 不開始
+    $('startScreen').hidden = true;
+    endTag.classList.remove('show');
+    player.replay();
+    post('started', { audio: audio.status() });
+  }
+  $('startBtn').addEventListener('click', async () => {
+    $('startBtn').disabled = true;
+    if (audio.hasAudio()) audio.unlock().then(updateSound);   // 必須在點擊當下呼叫（在 await 之前），手機才會允許有聲音
+    await enterMobileLandscape();
+    beginStory();
+  });
+  if (EMBED) {
+    post('ready', { audio: audio.status(), images: report.length - failed.length, imagesTotal: report.length });
+    // autostart：瀏覽器已允許出聲（例如玩家剛在遊戲裡點過）→ 直接開始；否則保留「▶ 開始故事」（點一下才會有聲音，不會無聲播放）
+    if (params.get('autostart') === '1') {
+      const canStart = !audio.hasAudio() ? Promise.resolve(true)
+        : Promise.race([audio.unlock().then(() => audio.status() === 'running'), new Promise(r => setTimeout(() => r(false), 350))]).then(ok => ok || audio.status() === 'running');
+      canStart.then(ok => {
+        if (embedDone || $('startScreen').hidden) return;   // 玩家已經自己按了開始，或已略過整段
+        if (ok) { updateSound(); beginStory(); return; }
+        $('startHint').hidden = false;
+        $('startHint').textContent = '點一下「▶ 開始故事」開始（瀏覽器需要點一下才能播放聲音）';
+        post('needTap');
+      });
+    }
+    try { window.focus(); } catch (_) {}
+  }
+  $('replayBtn').addEventListener('click', () => { endTag.classList.remove('show'); player.replay(); });
+  $('skipBtn').addEventListener('click', () => player.skipScene());
+  $('pauseBtn').addEventListener('click', () => { if (player.t < player._rangeEnd()) player.togglePlay(); });
+  const tryUnlock = () => { if (audio.hasAudio() && audio.status() === 'locked' && $('startScreen').hidden) audio.unlock().then(updateSound); };
+  document.addEventListener('pointerdown', tryUnlock, true);   // 開始後的任何一次點擊／按鍵都會嘗試重新開啟聲音（例如 iPhone 來電中斷後）
+  document.addEventListener('keydown', tryUnlock, true);
+  window.addEventListener('keydown', e => {
+    if (!$('startScreen').hidden) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (player.blocked) player.continueDialogue(); else player.togglePlay();
+    }
+    if (!EMBED && (e.key === 's' || e.key === 'S' || e.key === 'Escape')) player.skipScene();   // 嵌入時 Esc／S＝略過整段（上面已處理）
+    if (e.key === 'r' || e.key === 'R') { endTag.classList.remove('show'); player.replay(); }
+  });
+})();
+</script>
+</body>
+</html>

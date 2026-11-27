@@ -83,3 +83,19 @@
 | F-02 | 過期的 `rpg-dual-continent-test/` | 已結案（Baseline Release 1 以 Revision 5＋Hotfix 1 更新為雙大陸累積開發基準） |
 | F-03 | 共用模組集中管理 | 長期待辦（方向已採納，未批准重構；待另行安排架構調查） |
 | F-04 | 水池捷徑誤觸發氣球槌教學 | 已結案（Revision 5 C-07；開發基準實測仍正確） |
+
+## 6. 冒險筆記系統（Adventure Notes System Test 1）
+
+| 項目 | 第一大陸（`rpg-continent1-universe/`） | 雙大陸基準（`rpg-dual-continent-test/`） |
+|---|---|---|
+| 程式 | `../assets/adventure/adventure-notes.js`（`data-continents="1"`） | 同一個檔案（`data-continents="1,2"`） |
+| Boss 弱點筆記（橘子王觀察筆記，2-3） | 有（沿用既有拾取規則） | 有（同左） |
+| 冒險知識筆記分類 | 有（目前沒有第一大陸知識筆記 → 空狀態） | 有 |
+| 3-4「風之峽谷的飛行秘密」 | **不開放**（不列出、不畫、不拾取） | 有（第一平台 P1，金色燈泡） |
+| 小V之家「冒險筆記」入口 | 有 | 有 |
+| 永久收藏鍵 | `balloonVAdventureHome__notesV1__<playerKey>` → `__c1u__…` | 同一個鍵名 → `__c1d__…`（各自獨立） |
+| QA 捷徑 | 無 | `qa-test-tool.js`：`note34`、`note34fly`、`note23`、`noteshome`、⑤ 收藏設定（僅訪客沙盒＋開發工具） |
+
+- 共用方式是「同一個實體檔案」，不是複本；manifest `adventure-notes-single-source` 禁止任何一邊改用自己的複本。
+- 兩個 `main.js` 都沒有修改；模組只包裝既有全域函式（與 `chapter3-dog-water.js` 相同的做法）。F-03（大規模共用模組重構）仍未批准，本功能不擴大範圍。
+- 新增筆記：只改 `NOTES` 資料＋美術＋拾取位置（見 `docs/development/adventure-notes/KNOWLEDGE-NOTE-ART-SPEC.md`）。

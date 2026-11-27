@@ -150,7 +150,43 @@
     { key: 'dice', name: '骰子音效（寶箱前，骰子 1 顆）', go: () => startAt('3-4', { dog: true, name: '寶箱岩棚（站到寶箱旁，星靈邀請會直接出現）',
       place: () => ({ x: L().chestLedge.x + 30, y: L().y(L().chestLedge.h),
         after: () => { playerInventory.unlockedRecipes.balloonDice = true; playerInventory.craftedItems.balloonDice = Math.max(1, v395Count('balloonDice')); } }) }) },
+    // Adventure Notes System Test 1：冒險筆記
+    { key: 'note34', name: '3-4 冒險知識筆記（第一平台 P1，燈泡在右前方）', go: () => startAt('3-4', { name: '3-4 第一平台 P1（往右走碰燈泡）',
+      place: () => ({ x: L().p1.x + 40, y: L().y(L().p1.h) }) }) },
+    { key: 'note34fly', name: '3-4 導風裝置前（實際飛過深淵 A1 再拿燈泡）', go: () => startAt('3-4', { name: '3-4 導風裝置前（敲星星墊選角度，再走進風裡）',
+      place: () => ({ x: 860, y: GROUND_Y }) }) },
+    { key: 'note23', name: '2-3 橘子王觀察筆記（第一大陸關卡，帶狗）', go: () => startAt('2-3', { dog: true, name: '2-3 筆記前（往右走）',
+      place: () => ({ x: 4980, y: GROUND_Y }) }) },
+    { key: 'noteshome', name: '小V之家「冒險筆記」', go: () => openNotesHome() },
   ];
+  function openNotesHome() {
+    try { if (!(typeof h2IsOpen === 'function' && h2IsOpen())) c34OpenTestHome('3-1'); } catch (e) {}
+    const begun = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - begun > 60000) return clearInterval(timer);
+      try { if (!h2IsOpen() || assetGateActive) return; } catch (e) { return; }
+      clearInterval(timer);
+      try { if (typeof h2HideSummary === 'function') h2HideSummary(); } catch (e) {}
+      try { window.AdvNotes.openPanel(); toast('已打開小V之家「冒險筆記」'); } catch (e) {}
+    }, 200);
+  }
+  // 冒險筆記收藏（只改訪客沙盒的測試收藏）
+  function notesStatus() {
+    const A = window.AdvNotes; if (!A) return [];
+    return A.list().map(n => ({ n, got: A.has(n.id) }));
+  }
+  function setNote(id, got) {
+    const A = window.AdvNotes; if (!A) return;
+    const k = A.storeKey();
+    let d = null; try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+    if (!d || !d.notes) d = { v: 1, notes: {} };
+    if (got) d.notes[id] = d.notes[id] || { id, at: Date.now(), src: 'qaTool' }; else delete d.notes[id];
+    localStorage.setItem(k, JSON.stringify(d));
+    A._resetCache();
+    if (!got && id === 'orangeKingWeaknessNote01') { try { delete playerInventory.keyItems[id]; save(); } catch (e) {} }
+    try { if (h2IsOpen()) h2RenderAll(); } catch (e) {}
+    try { if (H2.panel && H2.panel.kind === 'notes') h2RenderPanel(false); } catch (e) {}
+  }
 
   // ── UI ──────────────────────────────────────────────────────────────────────────
   const css = document.createElement('style');
@@ -199,6 +235,10 @@ ${RES.map(r => `<div class="row"><span class="l">${esc(r.label)}</span><input ty
 <section><h3>④ 快速前往（E-05）</h3>
 ${SHORTCUTS.map((s, i) => `<div class="row"><span class="l">${esc(s.name)}</span><button type="button" data-qa="go" data-k="${i}">前往</button></div>`).join('')}
 <small>前往後照一般遊玩操作即可觸發事件（工具不會直接播放對話）。</small></section>
+<section><h3>⑤ 冒險筆記收藏（Notes Test 1）</h3>
+${notesStatus().map(({ n, got }) => `<div class="row"><span class="l">${esc(n.name)} <span class="st ${got ? 'read' : 'unread'}">${got ? '已收藏' : '未收藏'}</span></span>
+<button type="button" data-qa="note-on" data-k="${esc(n.id)}">設為已收藏</button><button type="button" class="alt" data-qa="note-off" data-k="${esc(n.id)}">清除</button></div>`).join('')}
+<small>只改訪客沙盒的測試收藏。清除橘子王筆記時，也會一起清掉測試背包裡的筆記，方便重新體驗 2-3 拾取。</small></section>
 </div>`;
   }
   function open() {
@@ -214,6 +254,7 @@ ${SHORTCUTS.map((s, i) => `<div class="row"><span class="l">${esc(s.name)}</span
     if (act === 'read' || act === 'unread') { setRpgItem(RPG_ITEMS.find(i => i.key === k), act === 'read'); toast('RPG：' + RPG_ITEMS.find(i => i.key === k).label + ' → ' + (act === 'read' ? '已讀' : '未讀')); }
     if (act === 'treefail') { try { if (c34Is()) { c34.treeFailures = Math.max(0, Math.floor(Number(document.getElementById('qa-tree-fail').value) || 0)); toast('樹峽谷失敗次數 → ' + c34.treeFailures); } else toast('請先進入 3-4'); } catch (err) {} }
     if (act === 'mode') rpgSetMode(k);
+    if (act === 'note-on' || act === 'note-off') { setNote(k, act === 'note-on'); toast('冒險筆記：' + k + (act === 'note-on' ? ' → 已收藏' : ' → 已清除')); }
     if (act === 'umb') return loadUmbrellaScenario(k);
     if (act === 'res' || act === 'res-all') {
       for (const r of RES.filter(r => act === 'res-all' || r.key === k)) {
@@ -255,5 +296,5 @@ ${SHORTCUTS.map((s, i) => `<div class="row"><span class="l">${esc(s.name)}</span
       if (s) s.go(); else open();
     }, 250);
   }
-  window.qaTestTool = { open, close, render, applyUmbrellaScenario, loadUmbrellaScenario, setRpgItem, RPG_ITEMS, SHORTCUTS, umbrellaNumbers };
+  window.qaTestTool = { open, close, render, setNote, openNotesHome, applyUmbrellaScenario, loadUmbrellaScenario, setRpgItem, RPG_ITEMS, SHORTCUTS, umbrellaNumbers };
 })();
